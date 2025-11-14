@@ -1,0 +1,8 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "bundler/setup"
+require "elkrb"
+require "elkrb/cli"
+
+Elkrb::Cli.start(ARGV)

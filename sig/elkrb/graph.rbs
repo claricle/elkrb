@@ -1,0 +1,112 @@
+module Elkrb
+  module Graph
+    class LayoutOptions
+      attr_accessor algorithm: String?
+      attr_accessor direction: String?
+      attr_accessor spacing_node_node: Float?
+      attr_accessor spacing_edge_node: Float?
+      attr_accessor spacing_edge_edge: Float?
+      attr_accessor edge_routing: String?
+      attr_accessor padding: Hash[Symbol, Float]?
+      attr_accessor aspect_ratio: Float?
+
+      def self.from_hash: (Hash[String | Symbol, untyped] hash) -> LayoutOptions
+      def to_json: () -> String
+      def to_yaml: () -> String
+    end
+
+    class Label
+      attr_accessor id: String?
+      attr_accessor text: String?
+      attr_accessor x: Float?
+      attr_accessor y: Float?
+      attr_accessor width: Float?
+      attr_accessor height: Float?
+
+      def self.from_hash: (Hash[String | Symbol, untyped] hash) -> Label
+      def to_json: () -> String
+      def to_yaml: () -> String
+    end
+
+    class Port
+      attr_accessor id: String?
+      attr_accessor x: Float?
+      attr_accessor y: Float?
+      attr_accessor width: Float?
+      attr_accessor height: Float?
+      attr_accessor labels: Array[Label]?
+
+      def self.from_hash: (Hash[String | Symbol, untyped] hash) -> Port
+      def to_json: () -> String
+      def to_yaml: () -> String
+    end
+
+    class EdgeSection
+      attr_accessor id: String?
+      attr_accessor start_point: Hash[String, Float]?
+      attr_accessor end_point: Hash[String, Float]?
+      attr_accessor bend_points: Array[Hash[String, Float]]?
+      attr_accessor incoming_shape: String?
+      attr_accessor outgoing_shape: String?
+
+      def self.from_hash: (Hash[String | Symbol, untyped] hash) -> EdgeSection
+      def to_json: () -> String
+      def to_yaml: () -> String
+    end
+
+    class Edge
+      attr_accessor id: String?
+      attr_accessor sources: Array[String]?
+      attr_accessor targets: Array[String]?
+      attr_accessor labels: Array[Label]?
+      attr_accessor sections: Array[EdgeSection]?
+      attr_accessor layout_options: LayoutOptions?
+      attr_accessor properties: Hash[String, untyped]?
+
+      def self.from_hash: (Hash[String | Symbol, untyped] hash) -> Edge
+      def to_json: () -> String
+      def to_yaml: () -> String
+    end
+
+    class Node
+      attr_accessor id: String?
+      attr_accessor x: Float?
+      attr_accessor y: Float?
+      attr_accessor width: Float?
+      attr_accessor height: Float?
+      attr_accessor labels: Array[Label]?
+      attr_accessor ports: Array[Port]?
+      attr_accessor children: Array[Node]?
+      attr_accessor edges: Array[Edge]?
+      attr_accessor layout_options: LayoutOptions?
+      attr_accessor properties: Hash[String, untyped]?
+
+      def self.from_hash: (Hash[String | Symbol, untyped] hash) -> Node
+      def to_json: () -> String
+      def to_yaml: () -> String
+      def hierarchical?: () -> bool
+      def find_node: (String node_id) -> Node?
+      def all_nodes: () -> Array[Node]
+    end
+
+    class Graph
+      attr_accessor id: String?
+      attr_accessor x: Float?
+      attr_accessor y: Float?
+      attr_accessor width: Float?
+      attr_accessor height: Float?
+      attr_accessor children: Array[Node]?
+      attr_accessor edges: Array[Edge]?
+      attr_accessor layout_options: LayoutOptions?
+      attr_accessor properties: Hash[String, untyped]?
+
+      def self.from_hash: (Hash[String | Symbol, untyped] hash) -> Graph
+      def to_json: () -> String
+      def to_yaml: () -> String
+      def hierarchical?: () -> bool
+      def find_node: (String node_id) -> Node?
+      def all_nodes: () -> Array[Node]
+      def all_edges: () -> Array[Edge]
+    end
+  end
+end

@@ -1,0 +1,54 @@
+{
+  "timestamp": "2025-10-28T05:49:24Z",
+  "summary": {
+    "total_tests": 33,
+    "total_passed": 29,
+    "total_failed": 4,
+    "pass_rate": 87.88
+  },
+  "elkjs": {
+    "passed": 16,
+    "failed": 0,
+    "errors": []
+  },
+  "java_elk": {
+    "passed": 13,
+    "failed": 4,
+    "errors": [
+      {
+        "test_id": "java_elk_sporeOverlap",
+        "error": "Unknown layout algorithm: sporeOverlap",
+        "backtrace": [
+          "/Users/mulgogi/src/mn/elkrb/lib/elkrb/layout/layout_engine.rb:86:in `layout'",
+          "/Users/mulgogi/src/mn/elkrb/lib/elkrb.rb:277:in `layout'",
+          "spec/cross_validation/validation_runner.rb:67:in `block in run_test_case'"
+        ]
+      },
+      {
+        "test_id": "java_elk_sporeCompaction",
+        "error": "Unknown layout algorithm: sporeCompaction",
+        "backtrace": [
+          "/Users/mulgogi/src/mn/elkrb/lib/elkrb/layout/layout_engine.rb:86:in `layout'",
+          "/Users/mulgogi/src/mn/elkrb/lib/elkrb.rb:277:in `layout'",
+          "spec/cross_validation/validation_runner.rb:67:in `block in run_test_case'"
+        ]
+      },
+      {
+        "test_id": "java_elk_labels",
+        "error": "wrong number of arguments (given 1, expected 0)",
+        "backtrace": [
+          "/Users/mulgogi/src/mn/elkrb/lib/elkrb/graph/label.rb:36:in `initialize'",
+          "/Users/mulgogi/.asdf/installs/ruby/3.3.2/lib/ruby/gems/3.3.0/gems/lutaml-model-0.7.7/lib/lutaml/model/serialize.rb:415:in `new'",
+          "/Users/mulgogi/.asdf/installs/ruby/3.3.2/lib/ruby/gems/3.3.0/gems/lutaml-model-0.7.7/lib/lutaml/model/serialize.rb:415:in `apply_mappings'",
+          "/Users/mulgogi/.asdf/installs/ruby/3.3.2/lib/ruby/gems/3.3.0/gems/lutaml-model-0.7.7/lib/lutaml/model/attribute.rb:384:in `cast'",
+          "/Users/mulgogi/.asdf/installs/ruby/3.3.2/lib/ruby/gems/3.3.0/gems/lutaml-model-0.7.7/lib/lutaml/model/attribute.rb:378:in `block in cast'"
+        ]
+      },
+      {
+        "test_id": "java_elk_self_loops",
+        "error": "Stack overflow (likely cycle in graph): stack level too deep",
+        "backtrace": []
+      }
+    ]
+  }
+}

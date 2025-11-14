@@ -1,0 +1,32 @@
+module Elkrb
+  VERSION: String
+
+  class Error < StandardError
+  end
+
+  class UnsupportedConfigurationException < Error
+    attr_reader option: String?
+    attr_reader value: untyped
+
+    def initialize: (String message, ?option: String?, ?value: untyped) -> void
+  end
+
+  class ValidationError < Error
+  end
+
+  class AlgorithmNotFoundError < Error
+    attr_reader algorithm_name: String
+
+    def initialize: (String algorithm_name) -> void
+  end
+
+  def self.layout: (Graph::Graph | Hash[Symbol, untyped] graph, ?Hash[Symbol, untyped] options) -> Graph::Graph
+
+  def self.register_algorithm: (String name, Class algorithm_class, ?Hash[Symbol, untyped] metadata) -> void
+
+  def self.known_layout_algorithms: () -> Array[Hash[Symbol, untyped]]
+
+  def self.known_layout_options: () -> Hash[String, Hash[Symbol, untyped]]
+
+  def self.known_layout_categories: () -> Hash[String, Hash[Symbol, String]]
+end

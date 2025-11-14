@@ -1,0 +1,61 @@
+module Elkrb
+  module Geometry
+    class Point
+      attr_reader x: Float
+      attr_reader y: Float
+
+      def initialize: (Float x, Float y) -> void
+      def +: (Point other) -> Point
+      def -: (Point other) -> Point
+      def *: (Float scalar) -> Point
+      def /: (Float scalar) -> Point
+      def distance_to: (Point other) -> Float
+      def ==: (untyped other) -> bool
+      def to_h: () -> Hash[Symbol, Float]
+    end
+
+    class Dimension
+      attr_reader width: Float
+      attr_reader height: Float
+
+      def initialize: (Float width, Float height) -> void
+      def area: () -> Float
+      def ==: (untyped other) -> bool
+      def to_h: () -> Hash[Symbol, Float]
+    end
+
+    class Rectangle
+      attr_reader x: Float
+      attr_reader y: Float
+      attr_reader width: Float
+      attr_reader height: Float
+
+      def initialize: (Float x, Float y, Float width, Float height) -> void
+      def left: () -> Float
+      def right: () -> Float
+      def top: () -> Float
+      def bottom: () -> Float
+      def center: () -> Point
+      def contains?: (Point | Rectangle point_or_rect) -> bool
+      def intersects?: (Rectangle other) -> bool
+      def ==: (untyped other) -> bool
+      def to_h: () -> Hash[Symbol, Float]
+    end
+
+    class Vector
+      attr_reader x: Float
+      attr_reader y: Float
+
+      def initialize: (Float x, Float y) -> void
+      def +: (Vector other) -> Vector
+      def -: (Vector other) -> Vector
+      def *: (Float scalar) -> Vector
+      def /: (Float scalar) -> Vector
+      def magnitude: () -> Float
+      def normalize: () -> Vector
+      def dot: (Vector other) -> Float
+      def ==: (untyped other) -> bool
+      def to_h: () -> Hash[Symbol, Float]
+    end
+  end
+end

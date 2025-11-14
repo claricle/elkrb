@@ -1,0 +1,114 @@
+# Type signatures for ElkRb layout constraints
+
+module Elkrb
+  module Graph
+    # Relative offset for positioning
+    class RelativeOffset < Lutaml::Model::Serializable
+      attr_accessor x: Float
+      attr_accessor y: Float
+
+      def initialize: (?x: Float, ?y: Float) -> void
+    end
+
+    # Node positioning constraints
+    class NodeConstraints < Lutaml::Model::Serializable
+      attr_accessor fixed_position: bool
+      attr_accessor layer: Integer?
+      attr_accessor align_group: String?
+      attr_accessor align_direction: String?
+      attr_accessor relative_to: String?
+      attr_accessor relative_offset: RelativeOffset?
+      attr_accessor position_priority: Integer
+
+      HORIZONTAL: String
+      VERTICAL: String
+      ALIGN_DIRECTIONS: Array[String]
+
+      def initialize: (
+        ?fixed_position: bool,
+        ?layer: Integer?,
+        ?align_group: String?,
+        ?align_direction: String?,
+        ?relative_to: String?,
+        ?relative_offset: RelativeOffset?,
+        ?position_priority: Integer
+      ) -> void
+
+      def align_direction=: (String? value) -> String?
+    end
+  end
+
+  module Layout
+    module Constraints
+      # Base constraint class
+      class BaseConstraint
+        def apply: (Graph::Graph graph) -> Graph::Graph
+        def validate: (Graph::Graph graph) -> Array[String]
+        def applies_to?: (Graph::Node node) -> bool
+
+        private
+
+        def find_node: (Graph::Graph graph, String node_id) -> Graph::Node?
+        def all_nodes: (Graph::Graph graph) -> Array[Graph::Node]
+      end
+
+      # Fixed position constraint
+      class FixedPositionConstraint < BaseConstraint
+        def apply: (Graph::Graph graph) -> Graph::Graph
+        def validate: (Graph::Graph graph) -> Array[String]
+        def restore_fixed_positions: (Graph::Graph graph) -> Graph::Graph
+      end
+
+      # Alignment constraint
+      class AlignmentConstraint < BaseConstraint
+        def apply: (Graph::Graph graph) -> Graph::Graph
+        def validate: (Graph::Graph graph) -> Array[String]
+
+        private
+
+        def group_by_alignment: (Array[Graph::Node] nodes) -> Hash[[String, String], Array[Graph::Node]]
+        def align_nodes: (Array[Graph::Node] nodes, String direction) -> void
+        def align_horizontally: (Array[Graph::Node] nodes) -> void
+        def align_vertically: (Array[Graph::Node] nodes) -> void
+        def validate_group_alignment: (Array[Graph::Node] nodes, String group_name, String direction) -> Array[String]
+      end
+
+      # Layer constraint
+      class LayerConstraint < BaseConstraint
+        def apply: (Graph::Graph graph) -> Graph::Graph
+        def validate: (Graph::Graph graph) -> Array[String]
+      end
+
+      # Relative position constraint
+      class RelativePositionConstraint < BaseConstraint
+        def apply: (Graph::Graph graph) -> Graph::Graph
+        def validate: (Graph::Graph graph) -> Array[String]
+
+        private
+
+        def apply_relative_position: (Graph::Node node, Graph::Graph graph) -> void
+      end
+
+      # Constraint processor
+      class ConstraintProcessor
+        PRE_LAYOUT_CONSTRAINTS: Array[singleton(BaseConstraint)]
+        POST_LAYOUT_CONSTRAINTS: Array[singleton(BaseConstraint)]
+
+        @pre_constraints: Array[BaseConstraint]
+        @post_constraints: Array[BaseConstraint]
+        @all_constraints: Array[BaseConstraint]
+
+        def initialize: () -> void
+        def apply_pre_layout: (Graph::Graph graph) -> Graph::Graph
+        def enforce_post_layout: (Graph::Graph graph) -> Graph::Graph
+        def apply_all: (Graph::Graph graph) -> Graph::Graph
+        def validate_all: (Graph::Graph graph) -> Array[String]
+        def has_constraints?: (Graph::Graph graph) -> bool
+
+        private
+
+        def has_constraints_recursive?: (Graph::Node node) -> bool
+      end
+    end
+  end
+end

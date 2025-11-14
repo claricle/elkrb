@@ -1,0 +1,280 @@
+{
+  "small_simple": {
+    "layered": {
+      "avg": 7.433500001206994,
+      "min": 6.854000006569549,
+      "max": 8.520000003045425,
+      "memory": 2368
+    },
+    "force": {
+      "avg": 127.22110000177054,
+      "min": 49.12799999874551,
+      "max": 782.6429999986431,
+      "memory": 1856
+    },
+    "stress": {
+      "avg": 18.048900002031587,
+      "min": 15.010000002803281,
+      "max": 23.14100001240149,
+      "memory": 288
+    },
+    "box": {
+      "avg": 6.4161000031162985,
+      "min": 5.8969999954570085,
+      "max": 6.9420000072568655,
+      "memory": 448
+    },
+    "random": {
+      "avg": 38.642400002572685,
+      "min": 6.706000000122003,
+      "max": 132.673000000068,
+      "memory": 128
+    },
+    "fixed": {
+      "avg": 15.259099996183068,
+      "min": 6.213999993633479,
+      "max": 80.09200000378769,
+      "memory": 16
+    },
+    "mrtree": {
+      "error": "Stack overflow (graph has cycles)"
+    },
+    "radial": {
+      "avg": 6.609599998046178,
+      "min": 5.982999995467253,
+      "max": 7.303000005776994,
+      "memory": 176
+    },
+    "rectpacking": {
+      "avg": 75.61830000486225,
+      "min": 6.420000005164184,
+      "max": 323.69800000742543,
+      "memory": 32
+    },
+    "disco": {
+      "avg": 11.099700002523605,
+      "min": 7.312999994610436,
+      "max": 19.619000013335608,
+      "memory": 64
+    },
+    "sporeOverlap": {
+      "error": "Unknown layout algorithm: sporeOverlap"
+    },
+    "sporeCompaction": {
+      "error": "Unknown layout algorithm: sporeCompaction"
+    },
+    "topdownpacking": {
+      "avg": 6.6470000019762665,
+      "min": 6.047000002581626,
+      "max": 7.645000005140901,
+      "memory": 192
+    },
+    "libavoid": {
+      "avg": 71.8007999996189,
+      "min": 29.284000003826804,
+      "max": 183.2050000084564,
+      "memory": 16
+    },
+    "vertiflex": {
+      "avg": 6.495000002905726,
+      "min": 6.106000000727363,
+      "max": 7.274999996297993,
+      "memory": 0
+    }
+  },
+  "medium_hierarchical": {
+    "layered": {
+      "error": "nil can't be coerced into Float"
+    },
+    "force": {
+      "error": "undefined method `+' for nil"
+    },
+    "stress": {
+      "error": "nil can't be coerced into Float"
+    },
+    "box": {
+      "error": "undefined method `+' for nil"
+    },
+    "random": {
+      "error": "undefined method `+' for nil"
+    },
+    "fixed": {
+      "error": "nil can't be coerced into Float"
+    },
+    "mrtree": {
+      "error": "undefined method `+' for nil"
+    },
+    "radial": {
+      "error": "nil can't be coerced into Integer"
+    },
+    "rectpacking": {
+      "error": "undefined method `-@' for nil"
+    },
+    "disco": {
+      "error": "nil can't be coerced into Float"
+    },
+    "sporeOverlap": {
+      "error": "Unknown layout algorithm: sporeOverlap"
+    },
+    "sporeCompaction": {
+      "error": "Unknown layout algorithm: sporeCompaction"
+    },
+    "topdownpacking": {
+      "error": "nil can't be coerced into Integer"
+    },
+    "libavoid": {
+      "error": "undefined method `+' for nil"
+    },
+    "vertiflex": {
+      "error": "undefined method `+' for nil"
+    }
+  },
+  "large_complex": {
+    "layered": {
+      "avg": 229.20739999826765,
+      "min": 216.13099999376573,
+      "max": 276.89000000827946,
+      "memory": 2448
+    },
+    "force": {
+      "error": "Timeout"
+    },
+    "stress": {
+      "error": "Timeout"
+    },
+    "box": {
+      "avg": 330.15480000176467,
+      "min": 149.9130000011064,
+      "max": 925.889999998617,
+      "memory": 256
+    },
+    "random": {
+      "avg": 211.05680000182474,
+      "min": 148.6330000043381,
+      "max": 580.1270000083605,
+      "memory": 352
+    },
+    "fixed": {
+      "avg": 215.3812000004109,
+      "min": 146.1669999989681,
+      "max": 722.7609999972628,
+      "memory": 1152
+    },
+    "mrtree": {
+      "error": "Stack overflow (graph has cycles)"
+    },
+    "radial": {
+      "avg": 245.07840000005672,
+      "min": 145.85999998962507,
+      "max": 760.4060000012396,
+      "memory": 288
+    },
+    "rectpacking": {
+      "avg": 426.3377000010223,
+      "min": 147.25500000349712,
+      "max": 1149.898999996367,
+      "memory": 160
+    },
+    "disco": {
+      "avg": 347.8637999985949,
+      "min": 271.66199999919627,
+      "max": 955.4760000028182,
+      "memory": 144
+    },
+    "sporeOverlap": {
+      "error": "Unknown layout algorithm: sporeOverlap"
+    },
+    "sporeCompaction": {
+      "error": "Unknown layout algorithm: sporeCompaction"
+    },
+    "topdownpacking": {
+      "avg": 166.12010000244481,
+      "min": 149.74500000244007,
+      "max": 237.6079999958165,
+      "memory": 48
+    },
+    "libavoid": {
+      "error": "Timeout"
+    },
+    "vertiflex": {
+      "avg": 288.4548999980325,
+      "min": 162.87099999317434,
+      "max": 799.9410000047646,
+      "memory": 176
+    }
+  },
+  "dense_network": {
+    "layered": {
+      "avg": 426.88989999878686,
+      "min": 188.48299999081064,
+      "max": 798.5009999974864,
+      "memory": 16
+    },
+    "force": {
+      "error": "Timeout"
+    },
+    "stress": {
+      "error": "Timeout"
+    },
+    "box": {
+      "avg": 368.0181999996421,
+      "min": 143.31399998627603,
+      "max": 869.9789999955101,
+      "memory": 144
+    },
+    "random": {
+      "avg": 259.617500002787,
+      "min": 150.44500000658445,
+      "max": 697.4970000010217,
+      "memory": 16
+    },
+    "fixed": {
+      "avg": 345.68620000063675,
+      "min": 148.51800000178628,
+      "max": 777.6560000056634,
+      "memory": 0
+    },
+    "mrtree": {
+      "error": "Stack overflow (graph has cycles)"
+    },
+    "radial": {
+      "avg": 323.07310000032885,
+      "min": 154.51900000334717,
+      "max": 1149.6579999948153,
+      "memory": 48
+    },
+    "rectpacking": {
+      "avg": 238.30970000271918,
+      "min": 154.08700000261888,
+      "max": 729.6930000011344,
+      "memory": -2864
+    },
+    "disco": {
+      "avg": 294.9923999971361,
+      "min": 224.77599998819642,
+      "max": 809.6569999906933,
+      "memory": 0
+    },
+    "sporeOverlap": {
+      "error": "Unknown layout algorithm: sporeOverlap"
+    },
+    "sporeCompaction": {
+      "error": "Unknown layout algorithm: sporeCompaction"
+    },
+    "topdownpacking": {
+      "avg": 202.70830000081332,
+      "min": 149.26500000001397,
+      "max": 604.8569999984466,
+      "memory": 0
+    },
+    "libavoid": {
+      "error": "Timeout"
+    },
+    "vertiflex": {
+      "avg": 197.8210000001127,
+      "min": 148.06800000951625,
+      "max": 396.78599999751896,
+      "memory": -192
+    }
+  }
+}

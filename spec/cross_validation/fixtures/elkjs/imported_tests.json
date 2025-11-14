@@ -1,0 +1,1732 @@
+[
+  {
+    "id": "elkjs_basic_simple_graph",
+    "source": "elkjs",
+    "category": "basic",
+    "algorithm": "layered",
+    "graph": {
+      "id": "root",
+      "children": [
+        {
+          "id": "n1",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n2",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n3",
+          "width": 100,
+          "height": 60
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n2"
+          ]
+        },
+        {
+          "id": "e2",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n3"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "elkjs_basic_hierarchical",
+    "source": "elkjs",
+    "category": "basic",
+    "algorithm": "layered",
+    "graph": {
+      "id": "root",
+      "children": [
+        {
+          "id": "parent",
+          "width": 200,
+          "height": 150,
+          "children": [
+            {
+              "id": "child1",
+              "width": 50,
+              "height": 30
+            },
+            {
+              "id": "child2",
+              "width": 50,
+              "height": 30
+            }
+          ],
+          "edges": [
+            {
+              "id": "e1",
+              "sources": [
+                "child1"
+              ],
+              "targets": [
+                "child2"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "elkjs_bug-63",
+    "source": "elkjs",
+    "category": "bug_regression",
+    "algorithm": "layered",
+    "graph": {
+      "id": "root",
+      "children": [
+        {
+          "id": "n1",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n2",
+          "width": 100,
+          "height": 60
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n2"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "elkjs_bug-7",
+    "source": "elkjs",
+    "category": "bug_regression",
+    "algorithm": "layered",
+    "graph": {
+      "id": "root",
+      "children": [
+        {
+          "id": "n1",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n2",
+          "width": 100,
+          "height": 60
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n2"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "elkjs_bug-8",
+    "source": "elkjs",
+    "category": "bug_regression",
+    "algorithm": "layered",
+    "graph": {
+      "id": "root",
+      "children": [
+        {
+          "id": "n1",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n2",
+          "width": 100,
+          "height": 60
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n2"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "elkjs_bug-klay-22",
+    "source": "elkjs",
+    "category": "bug_regression",
+    "algorithm": "layered",
+    "graph": {
+      "id": "root",
+      "children": [
+        {
+          "id": "n1",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n2",
+          "width": 100,
+          "height": 60
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n2"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "elkjs_bug-klay-23",
+    "source": "elkjs",
+    "category": "bug_regression",
+    "algorithm": "layered",
+    "graph": {
+      "id": "root",
+      "children": [
+        {
+          "id": "n1",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n2",
+          "width": 100,
+          "height": 60
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n2"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "elkjs_layouters_layered",
+    "source": "elkjs",
+    "category": "layouters",
+    "algorithm": "layered",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered"
+      },
+      "children": [
+        {
+          "id": "n1",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n2",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n3",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n4",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n5",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n6",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n7",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n8",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n9",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n10",
+          "width": 100,
+          "height": 60
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n2"
+          ]
+        },
+        {
+          "id": "e2",
+          "sources": [
+            "n2"
+          ],
+          "targets": [
+            "n3"
+          ]
+        },
+        {
+          "id": "e3",
+          "sources": [
+            "n3"
+          ],
+          "targets": [
+            "n4"
+          ]
+        },
+        {
+          "id": "e4",
+          "sources": [
+            "n4"
+          ],
+          "targets": [
+            "n5"
+          ]
+        },
+        {
+          "id": "e5",
+          "sources": [
+            "n5"
+          ],
+          "targets": [
+            "n6"
+          ]
+        },
+        {
+          "id": "e6",
+          "sources": [
+            "n6"
+          ],
+          "targets": [
+            "n7"
+          ]
+        },
+        {
+          "id": "e7",
+          "sources": [
+            "n7"
+          ],
+          "targets": [
+            "n8"
+          ]
+        },
+        {
+          "id": "e8",
+          "sources": [
+            "n8"
+          ],
+          "targets": [
+            "n9"
+          ]
+        },
+        {
+          "id": "e9",
+          "sources": [
+            "n9"
+          ],
+          "targets": [
+            "n10"
+          ]
+        },
+        {
+          "id": "e10",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n5"
+          ]
+        },
+        {
+          "id": "e11",
+          "sources": [
+            "n3"
+          ],
+          "targets": [
+            "n7"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "elkjs_layouters_force",
+    "source": "elkjs",
+    "category": "layouters",
+    "algorithm": "force",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "force"
+      },
+      "children": [
+        {
+          "id": "n1",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n2",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n3",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n4",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n5",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n6",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n7",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n8",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n9",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n10",
+          "width": 100,
+          "height": 60
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n2"
+          ]
+        },
+        {
+          "id": "e2",
+          "sources": [
+            "n2"
+          ],
+          "targets": [
+            "n3"
+          ]
+        },
+        {
+          "id": "e3",
+          "sources": [
+            "n3"
+          ],
+          "targets": [
+            "n4"
+          ]
+        },
+        {
+          "id": "e4",
+          "sources": [
+            "n4"
+          ],
+          "targets": [
+            "n5"
+          ]
+        },
+        {
+          "id": "e5",
+          "sources": [
+            "n5"
+          ],
+          "targets": [
+            "n6"
+          ]
+        },
+        {
+          "id": "e6",
+          "sources": [
+            "n6"
+          ],
+          "targets": [
+            "n7"
+          ]
+        },
+        {
+          "id": "e7",
+          "sources": [
+            "n7"
+          ],
+          "targets": [
+            "n8"
+          ]
+        },
+        {
+          "id": "e8",
+          "sources": [
+            "n8"
+          ],
+          "targets": [
+            "n9"
+          ]
+        },
+        {
+          "id": "e9",
+          "sources": [
+            "n9"
+          ],
+          "targets": [
+            "n10"
+          ]
+        },
+        {
+          "id": "e10",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n5"
+          ]
+        },
+        {
+          "id": "e11",
+          "sources": [
+            "n3"
+          ],
+          "targets": [
+            "n7"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "elkjs_layouters_stress",
+    "source": "elkjs",
+    "category": "layouters",
+    "algorithm": "stress",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "stress"
+      },
+      "children": [
+        {
+          "id": "n1",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n2",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n3",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n4",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n5",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n6",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n7",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n8",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n9",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n10",
+          "width": 100,
+          "height": 60
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n2"
+          ]
+        },
+        {
+          "id": "e2",
+          "sources": [
+            "n2"
+          ],
+          "targets": [
+            "n3"
+          ]
+        },
+        {
+          "id": "e3",
+          "sources": [
+            "n3"
+          ],
+          "targets": [
+            "n4"
+          ]
+        },
+        {
+          "id": "e4",
+          "sources": [
+            "n4"
+          ],
+          "targets": [
+            "n5"
+          ]
+        },
+        {
+          "id": "e5",
+          "sources": [
+            "n5"
+          ],
+          "targets": [
+            "n6"
+          ]
+        },
+        {
+          "id": "e6",
+          "sources": [
+            "n6"
+          ],
+          "targets": [
+            "n7"
+          ]
+        },
+        {
+          "id": "e7",
+          "sources": [
+            "n7"
+          ],
+          "targets": [
+            "n8"
+          ]
+        },
+        {
+          "id": "e8",
+          "sources": [
+            "n8"
+          ],
+          "targets": [
+            "n9"
+          ]
+        },
+        {
+          "id": "e9",
+          "sources": [
+            "n9"
+          ],
+          "targets": [
+            "n10"
+          ]
+        },
+        {
+          "id": "e10",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n5"
+          ]
+        },
+        {
+          "id": "e11",
+          "sources": [
+            "n3"
+          ],
+          "targets": [
+            "n7"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "elkjs_layouters_box",
+    "source": "elkjs",
+    "category": "layouters",
+    "algorithm": "box",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "box"
+      },
+      "children": [
+        {
+          "id": "n1",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n2",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n3",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n4",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n5",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n6",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n7",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n8",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n9",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n10",
+          "width": 100,
+          "height": 60
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n2"
+          ]
+        },
+        {
+          "id": "e2",
+          "sources": [
+            "n2"
+          ],
+          "targets": [
+            "n3"
+          ]
+        },
+        {
+          "id": "e3",
+          "sources": [
+            "n3"
+          ],
+          "targets": [
+            "n4"
+          ]
+        },
+        {
+          "id": "e4",
+          "sources": [
+            "n4"
+          ],
+          "targets": [
+            "n5"
+          ]
+        },
+        {
+          "id": "e5",
+          "sources": [
+            "n5"
+          ],
+          "targets": [
+            "n6"
+          ]
+        },
+        {
+          "id": "e6",
+          "sources": [
+            "n6"
+          ],
+          "targets": [
+            "n7"
+          ]
+        },
+        {
+          "id": "e7",
+          "sources": [
+            "n7"
+          ],
+          "targets": [
+            "n8"
+          ]
+        },
+        {
+          "id": "e8",
+          "sources": [
+            "n8"
+          ],
+          "targets": [
+            "n9"
+          ]
+        },
+        {
+          "id": "e9",
+          "sources": [
+            "n9"
+          ],
+          "targets": [
+            "n10"
+          ]
+        },
+        {
+          "id": "e10",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n5"
+          ]
+        },
+        {
+          "id": "e11",
+          "sources": [
+            "n3"
+          ],
+          "targets": [
+            "n7"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "elkjs_layouters_random",
+    "source": "elkjs",
+    "category": "layouters",
+    "algorithm": "random",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "random"
+      },
+      "children": [
+        {
+          "id": "n1",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n2",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n3",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n4",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n5",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n6",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n7",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n8",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n9",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n10",
+          "width": 100,
+          "height": 60
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n2"
+          ]
+        },
+        {
+          "id": "e2",
+          "sources": [
+            "n2"
+          ],
+          "targets": [
+            "n3"
+          ]
+        },
+        {
+          "id": "e3",
+          "sources": [
+            "n3"
+          ],
+          "targets": [
+            "n4"
+          ]
+        },
+        {
+          "id": "e4",
+          "sources": [
+            "n4"
+          ],
+          "targets": [
+            "n5"
+          ]
+        },
+        {
+          "id": "e5",
+          "sources": [
+            "n5"
+          ],
+          "targets": [
+            "n6"
+          ]
+        },
+        {
+          "id": "e6",
+          "sources": [
+            "n6"
+          ],
+          "targets": [
+            "n7"
+          ]
+        },
+        {
+          "id": "e7",
+          "sources": [
+            "n7"
+          ],
+          "targets": [
+            "n8"
+          ]
+        },
+        {
+          "id": "e8",
+          "sources": [
+            "n8"
+          ],
+          "targets": [
+            "n9"
+          ]
+        },
+        {
+          "id": "e9",
+          "sources": [
+            "n9"
+          ],
+          "targets": [
+            "n10"
+          ]
+        },
+        {
+          "id": "e10",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n5"
+          ]
+        },
+        {
+          "id": "e11",
+          "sources": [
+            "n3"
+          ],
+          "targets": [
+            "n7"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "elkjs_layouters_fixed",
+    "source": "elkjs",
+    "category": "layouters",
+    "algorithm": "fixed",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "fixed"
+      },
+      "children": [
+        {
+          "id": "n1",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n2",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n3",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n4",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n5",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n6",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n7",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n8",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n9",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n10",
+          "width": 100,
+          "height": 60
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n2"
+          ]
+        },
+        {
+          "id": "e2",
+          "sources": [
+            "n2"
+          ],
+          "targets": [
+            "n3"
+          ]
+        },
+        {
+          "id": "e3",
+          "sources": [
+            "n3"
+          ],
+          "targets": [
+            "n4"
+          ]
+        },
+        {
+          "id": "e4",
+          "sources": [
+            "n4"
+          ],
+          "targets": [
+            "n5"
+          ]
+        },
+        {
+          "id": "e5",
+          "sources": [
+            "n5"
+          ],
+          "targets": [
+            "n6"
+          ]
+        },
+        {
+          "id": "e6",
+          "sources": [
+            "n6"
+          ],
+          "targets": [
+            "n7"
+          ]
+        },
+        {
+          "id": "e7",
+          "sources": [
+            "n7"
+          ],
+          "targets": [
+            "n8"
+          ]
+        },
+        {
+          "id": "e8",
+          "sources": [
+            "n8"
+          ],
+          "targets": [
+            "n9"
+          ]
+        },
+        {
+          "id": "e9",
+          "sources": [
+            "n9"
+          ],
+          "targets": [
+            "n10"
+          ]
+        },
+        {
+          "id": "e10",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n5"
+          ]
+        },
+        {
+          "id": "e11",
+          "sources": [
+            "n3"
+          ],
+          "targets": [
+            "n7"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "elkjs_layouters_mrtree",
+    "source": "elkjs",
+    "category": "layouters",
+    "algorithm": "mrtree",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "mrtree"
+      },
+      "children": [
+        {
+          "id": "n1",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n2",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n3",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n4",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n5",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n6",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n7",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n8",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n9",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n10",
+          "width": 100,
+          "height": 60
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n2"
+          ]
+        },
+        {
+          "id": "e2",
+          "sources": [
+            "n2"
+          ],
+          "targets": [
+            "n3"
+          ]
+        },
+        {
+          "id": "e3",
+          "sources": [
+            "n3"
+          ],
+          "targets": [
+            "n4"
+          ]
+        },
+        {
+          "id": "e4",
+          "sources": [
+            "n4"
+          ],
+          "targets": [
+            "n5"
+          ]
+        },
+        {
+          "id": "e5",
+          "sources": [
+            "n5"
+          ],
+          "targets": [
+            "n6"
+          ]
+        },
+        {
+          "id": "e6",
+          "sources": [
+            "n6"
+          ],
+          "targets": [
+            "n7"
+          ]
+        },
+        {
+          "id": "e7",
+          "sources": [
+            "n7"
+          ],
+          "targets": [
+            "n8"
+          ]
+        },
+        {
+          "id": "e8",
+          "sources": [
+            "n8"
+          ],
+          "targets": [
+            "n9"
+          ]
+        },
+        {
+          "id": "e9",
+          "sources": [
+            "n9"
+          ],
+          "targets": [
+            "n10"
+          ]
+        },
+        {
+          "id": "e10",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n5"
+          ]
+        },
+        {
+          "id": "e11",
+          "sources": [
+            "n3"
+          ],
+          "targets": [
+            "n7"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "elkjs_layouters_radial",
+    "source": "elkjs",
+    "category": "layouters",
+    "algorithm": "radial",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "radial"
+      },
+      "children": [
+        {
+          "id": "n1",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n2",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n3",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n4",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n5",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n6",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n7",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n8",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n9",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n10",
+          "width": 100,
+          "height": 60
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n2"
+          ]
+        },
+        {
+          "id": "e2",
+          "sources": [
+            "n2"
+          ],
+          "targets": [
+            "n3"
+          ]
+        },
+        {
+          "id": "e3",
+          "sources": [
+            "n3"
+          ],
+          "targets": [
+            "n4"
+          ]
+        },
+        {
+          "id": "e4",
+          "sources": [
+            "n4"
+          ],
+          "targets": [
+            "n5"
+          ]
+        },
+        {
+          "id": "e5",
+          "sources": [
+            "n5"
+          ],
+          "targets": [
+            "n6"
+          ]
+        },
+        {
+          "id": "e6",
+          "sources": [
+            "n6"
+          ],
+          "targets": [
+            "n7"
+          ]
+        },
+        {
+          "id": "e7",
+          "sources": [
+            "n7"
+          ],
+          "targets": [
+            "n8"
+          ]
+        },
+        {
+          "id": "e8",
+          "sources": [
+            "n8"
+          ],
+          "targets": [
+            "n9"
+          ]
+        },
+        {
+          "id": "e9",
+          "sources": [
+            "n9"
+          ],
+          "targets": [
+            "n10"
+          ]
+        },
+        {
+          "id": "e10",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n5"
+          ]
+        },
+        {
+          "id": "e11",
+          "sources": [
+            "n3"
+          ],
+          "targets": [
+            "n7"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "elkjs_layouters_disco",
+    "source": "elkjs",
+    "category": "layouters",
+    "algorithm": "disco",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "disco"
+      },
+      "children": [
+        {
+          "id": "n1",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n2",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n3",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n4",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n5",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n6",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n7",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n8",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n9",
+          "width": 100,
+          "height": 60
+        },
+        {
+          "id": "n10",
+          "width": 100,
+          "height": 60
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n2"
+          ]
+        },
+        {
+          "id": "e2",
+          "sources": [
+            "n2"
+          ],
+          "targets": [
+            "n3"
+          ]
+        },
+        {
+          "id": "e3",
+          "sources": [
+            "n3"
+          ],
+          "targets": [
+            "n4"
+          ]
+        },
+        {
+          "id": "e4",
+          "sources": [
+            "n4"
+          ],
+          "targets": [
+            "n5"
+          ]
+        },
+        {
+          "id": "e5",
+          "sources": [
+            "n5"
+          ],
+          "targets": [
+            "n6"
+          ]
+        },
+        {
+          "id": "e6",
+          "sources": [
+            "n6"
+          ],
+          "targets": [
+            "n7"
+          ]
+        },
+        {
+          "id": "e7",
+          "sources": [
+            "n7"
+          ],
+          "targets": [
+            "n8"
+          ]
+        },
+        {
+          "id": "e8",
+          "sources": [
+            "n8"
+          ],
+          "targets": [
+            "n9"
+          ]
+        },
+        {
+          "id": "e9",
+          "sources": [
+            "n9"
+          ],
+          "targets": [
+            "n10"
+          ]
+        },
+        {
+          "id": "e10",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n5"
+          ]
+        },
+        {
+          "id": "e11",
+          "sources": [
+            "n3"
+          ],
+          "targets": [
+            "n7"
+          ]
+        }
+      ]
+    }
+  }
+]

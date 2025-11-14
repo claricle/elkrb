@@ -1,0 +1,107 @@
+module Elkrb
+  module Layout
+    type algorithmMetadata = {
+      name: String,
+      description: String,
+      category: String?,
+      supports_hierarchy: bool?
+    }
+
+    type algorithmInfo = {
+      id: String,
+      name: String,
+      description: String,
+      category: String,
+      supports_hierarchy: bool
+    }
+
+    class AlgorithmRegistry
+      def self.register: (String name, singleton(Algorithms::BaseAlgorithm) algorithm_class, ?algorithmMetadata metadata) -> void
+      def self.get: (String name) -> singleton(Algorithms::BaseAlgorithm)?
+      def self.available_algorithms: () -> Array[String]
+      def self.algorithm_info: (String name) -> algorithmInfo?
+      def self.all_algorithm_info: () -> Array[algorithmInfo]
+
+      private
+
+      def self.normalize_name: (String name) -> String
+    end
+
+    class LayoutEngine
+      def self.layout: (Hash[String | Symbol, untyped] | Graph::Graph graph, Hash[String | Symbol, untyped] options) -> Graph::Graph
+      def self.known_layout_algorithms: () -> Array[algorithmInfo]
+      def self.known_layout_options: () -> Array[untyped]
+
+      private
+
+      def self.convert_to_graph: (Hash[String | Symbol, untyped] hash) -> Graph::Graph
+    end
+
+    module Algorithms
+      class BaseAlgorithm
+        attr_reader options: Hash[String | Symbol, untyped]
+
+        def initialize: (Hash[String | Symbol, untyped] options) -> void
+        def layout: (Graph::Graph graph) -> Graph::Graph
+
+        private
+
+        def option: (String | Symbol key, ?untyped default) -> untyped
+        def node_spacing: () -> Float
+        def padding: () -> Hash[Symbol, Float]
+        def calculate_bounding_box: (Array[Graph::Node] nodes) -> Geometry::Rectangle
+        def apply_padding: (Graph::Graph graph) -> void
+      end
+
+      class Random < BaseAlgorithm
+        def layout: (Graph::Graph graph) -> Graph::Graph
+      end
+
+      class Fixed < BaseAlgorithm
+        def layout: (Graph::Graph graph) -> Graph::Graph
+      end
+
+      class Box < BaseAlgorithm
+        def layout: (Graph::Graph graph) -> Graph::Graph
+      end
+
+      class Force < BaseAlgorithm
+        DEFAULT_ITERATIONS: Integer
+        DEFAULT_REPULSION: Float
+        DEFAULT_TEMPERATURE: Float
+
+        def layout: (Graph::Graph graph) -> Graph::Graph
+
+        private
+
+        def iterations: () -> Integer
+        def repulsion: () -> Float
+        def temperature: () -> Float
+        def collect_edges: (Graph::Graph graph) -> Array[Graph::Edge]
+        def initialize_positions: (Graph::Graph graph) -> void
+        def apply_forces: (Graph::Graph graph, Float repulsion, Float temperature, Integer iteration, Integer total_iterations) -> void
+        def calculate_repulsive_forces: (Array[Graph::Node] nodes, Float repulsion) -> Hash[String, Geometry::Vector]
+        def calculate_attractive_forces: (Array[Graph::Edge] edges, Float temperature) -> Hash[String, Geometry::Vector]
+        def apply_displacement: (Array[Graph::Node] nodes, Hash[String, Geometry::Vector] forces, Float cooling_factor) -> void
+      end
+
+      class Stress < BaseAlgorithm
+        DEFAULT_ITERATIONS: Integer
+        DEFAULT_EPSILON: Float
+
+        def layout: (Graph::Graph graph) -> Graph::Graph
+
+        private
+
+        def iterations: () -> Integer
+        def epsilon: () -> Float
+        def collect_edges: (Graph::Graph graph) -> Array[Graph::Edge]
+        def initialize_positions: (Graph::Graph graph) -> void
+        def calculate_distances: (Graph::Graph graph) -> Hash[String, Hash[String, Float]]
+        def calculate_stress: (Graph::Graph graph, Hash[String, Hash[String, Float]] distances) -> Float
+        def optimize_positions: (Graph::Graph graph, Hash[String, Hash[String, Float]] distances) -> void
+        def euclidean_distance: (Graph::Node n1, Graph::Node n2) -> Float
+      end
+    end
+  end
+end

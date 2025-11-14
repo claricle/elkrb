@@ -1,0 +1,81 @@
+# frozen_string_literal: true
+
+module Elkrb
+  module Options
+    class ElkPadding
+      attr_reader left: Float
+      attr_reader top: Float
+      attr_reader right: Float
+      attr_reader bottom: Float
+
+      def initialize: (?left: Numeric, ?top: Numeric, ?right: Numeric, ?bottom: Numeric) -> void
+
+      def self.parse: (String | Hash[Symbol | String, Numeric] | ElkPadding value) -> ElkPadding
+
+      def self.from_hash: (Hash[Symbol | String, Numeric] hash) -> ElkPadding
+
+      def self.from_string: (String str) -> ElkPadding
+
+      def to_h: () -> Hash[Symbol, Float]
+
+      def to_s: () -> String
+
+      def ==: (untyped other) -> bool
+    end
+
+    class KVector
+      attr_reader x: Float
+      attr_reader y: Float
+
+      def initialize: (Numeric x, Numeric y) -> void
+
+      def self.parse: (String | Hash[Symbol | String, Numeric] | Array[Numeric] | KVector value) -> KVector
+
+      def self.from_hash: (Hash[Symbol | String, Numeric] hash) -> KVector
+
+      def self.from_array: (Array[Numeric] array) -> KVector
+
+      def self.from_string: (String str) -> KVector
+
+      def to_h: () -> Hash[Symbol, Float]
+
+      def to_a: () -> Array[Float]
+
+      def to_s: () -> String
+
+      def ==: (untyped other) -> bool
+    end
+
+    class KVectorChain
+      attr_reader vectors: Array[KVector]
+
+      def initialize: (?Array[Array[Numeric] | Hash[Symbol | String, Numeric] | KVector] vectors) -> void
+
+      def self.parse: (String | Array[Array[Numeric] | Hash[Symbol | String, Numeric] | KVector] | KVectorChain value) -> KVectorChain
+
+      def self.from_array: (Array[Array[Numeric] | Hash[Symbol | String, Numeric] | KVector] array) -> KVectorChain
+
+      def self.from_string: (String str) -> KVectorChain
+
+      def add: (Array[Numeric] | Hash[Symbol | String, Numeric] | KVector vector) -> self
+
+      alias << add
+
+      def []: (Integer index) -> KVector?
+
+      def size: () -> Integer
+
+      alias length size
+
+      def empty?: () -> bool
+
+      def each: () { (KVector) -> void } -> void
+
+      def to_a: () -> Array[KVector]
+
+      def to_s: () -> String
+
+      def ==: (untyped other) -> bool
+    end
+  end
+end
