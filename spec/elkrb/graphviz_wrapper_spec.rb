@@ -9,9 +9,10 @@ RSpec.describe Elkrb::GraphvizWrapper do
   describe "#available?" do
     it "returns true when Graphviz is found" do
       allow(File).to receive(:executable?).and_return(false)
-      allow(wrapper).to receive(:system).and_return(true)
+      allow_any_instance_of(described_class).to receive(:system).and_return(true)
 
-      expect(wrapper.available?).to be true
+      test_wrapper = described_class.new
+      expect(test_wrapper.available?).to be true
     end
 
     it "returns false when Graphviz is not found" do
