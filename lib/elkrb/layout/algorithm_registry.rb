@@ -8,14 +8,13 @@ module Elkrb
 
       class << self
         def register(name, algorithm_class, metadata = {})
-          name_str = name.to_s
+          name_str = normalize_name(name)
           @algorithms[name_str] = algorithm_class
           @metadata[name_str] = metadata
         end
 
         def get(name)
-          algorithm_name = normalize_name(name)
-          @algorithms[algorithm_name]
+          @algorithms[resolve_key(name)]
         end
 
         def available_algorithms
@@ -23,10 +22,10 @@ module Elkrb
         end
 
         def algorithm_info(name)
-          algorithm_class = get(name)
+          name_str = resolve_key(name)
+          algorithm_class = @algorithms[name_str]
           return nil unless algorithm_class
 
-          name_str = normalize_name(name)
           metadata = @metadata[name_str] || {}
 
           {
@@ -35,6 +34,7 @@ module Elkrb
             description: metadata[:description] || "",
             category: metadata[:category] || "general",
             supports_hierarchy: metadata[:supports_hierarchy] || false,
+            supported_options: Options::Registry.for_algorithm(name_str),
           }
         end
 
@@ -44,9 +44,30 @@ module Elkrb
 
         private
 
+        # Used by #get and #algorithm_info to find the key actually
+        # registered for `name`: try the properly snake_cased form first,
+        # then fall back to the plain downcased form for the handful of
+        # legacy run-together registrations ("mrtree", "libavoid", ...)
+        # that predate word-boundary folding. Falls back to the folded
+        # form even when unregistered, so callers always get a single,
+        # well-defined key back rather than nil.
+        def resolve_key(name)
+          folded = normalize_name(name)
+          return folded if @algorithms.key?(folded)
+
+          legacy = legacy_normalize_name(name)
+          @algorithms.key?(legacy) ? legacy : folded
+        end
+
         def normalize_name(name)
-          # Support both full names and short names
-          # e.g., "org.eclipse.elk.layered" -> "layered"
+          # "org.eclipse.elk.sporeOverlap" / "sporeOverlap" / "spore_overlap"
+          # all fold to the same "spore_overlap" key.
+          name = name.to_s
+          name = name.split(".").last if name.include?(".")
+          name.gsub(/([a-z\d])([A-Z])/, '\1_\2').downcase
+        end
+
+        def legacy_normalize_name(name)
           name = name.to_s
           name = name.split(".").last if name.include?(".")
           name.downcase
