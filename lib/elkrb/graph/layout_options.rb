@@ -1,246 +1,195 @@
 # frozen_string_literal: true
 
-require "lutaml/model"
-
 module Elkrb
   module Graph
-    class LayoutOptions < Lutaml::Model::Serializable
-      attribute :algorithm, :string
-      attribute :direction, :string
-      attribute :spacing_node_node, :float
-      attribute :spacing_edge_node, :float
-      attribute :spacing_edge_edge, :float
-      attribute :spacing_node_label, :float
-      attribute :edge_routing, :string
-      attribute :spline_curvature, :float
-      attribute :spline_segments, :integer
-      attribute :hierarchical, :boolean
-      attribute :interactive_layout, :boolean
-      attribute :aspect_ratio, :float
-      attribute :node_placement_strategy, :string
-      attribute :crossing_minimization_strategy, :string
-      attribute :layer_constraint, :string
-      attribute :cycle_breaking_strategy, :string
-      attribute :properties, :hash
+    # Constructor shim for the pre-2.0 typed `LayoutOptions.new(...)` call
+    # sites (spec/example only — no lib/ call site remains after S3).
+    # `attribute :layout_options, :hash` on Graph/Node/Edge/Port/Label casts
+    # whatever's assigned down to a plain ::Hash, so each model's
+    # `layout_options=` re-wraps the cast result through .wrap. That keeps
+    # #[]= normalizing the in-place writes a caller makes afterwards.
+    #
+    # Every dotted / ELK-style key survives the round trip; the bare keys
+    # `text` and `elements` are reserved by lutaml-model and are not
+    # supported inside layoutOptions (see spec/elkrb/graph/layout_options_spec.rb).
+    #
+    # @deprecated Migration shim for 1.x call sites; removed in S3b — pass
+    #   a plain Hash instead (`{"elk.x" => 1}` or `layoutOptions: {...}`).
+    class LayoutOptions < ::Hash
+      # Old typed `LayoutOptions.new(edge_routing: ...)` keyword names,
+      # mapped to the ELK id a caller should switch to. Symbol keys only —
+      # this mirrors the OLD class's own behaviour: only the bare keyword
+      # form ever routed through typed-attribute assignment; a positional
+      # Hash (braced or braceless, Symbol or String keys) always went
+      # straight to the untyped properties store, never through this
+      # translation, so it doesn't go through it here either.
+      LEGACY_KWARG_ELK_KEYS = {
+        algorithm: "elk.algorithm",
+        direction: "elk.direction",
+        spacing_node_node: "elk.spacing.nodeNode",
+        spacing_edge_node: "elk.spacing.edgeNode",
+        spacing_edge_edge: "elk.spacing.edgeEdge",
+        spacing_node_label: "elk.spacing.labelNode",
+        edge_routing: "elk.edgeRouting",
+        spline_curvature: "elk.spline.curvature",
+        spline_segments: "elk.spline.segments",
+        interactive_layout: "elk.interactiveLayout",
+        aspect_ratio: "elk.aspectRatio",
+        node_placement_strategy: "elk.layered.nodePlacement.strategy",
+        crossing_minimization_strategy: "elk.layered.crossingMinimization.strategy",
+        layer_constraint: "elk.layered.layering.layerConstraint",
+        cycle_breaking_strategy: "elk.layered.cycleBreaking.strategy",
+      }.freeze
+      private_constant :LEGACY_KWARG_ELK_KEYS
 
-      json do
-        map "algorithm", to: :algorithm
-        map "direction", to: :direction
-        map "spacing.nodeNode", to: :spacing_node_node
-        map "spacing.edgeNode", to: :spacing_edge_node
-        map "spacing.edgeEdge", to: :spacing_edge_edge
-        map "spacing.nodeLabel", to: :spacing_node_label
-        map "edgeRouting", to: :edge_routing
-        map "elk.edgeRouting", to: :edge_routing
-        map "spline.curvature", to: :spline_curvature
-        map "elk.spline.curvature", to: :spline_curvature
-        map "spline.segments", to: :spline_segments
-        map "elk.spline.segments", to: :spline_segments
-        map "hierarchical", to: :hierarchical
-        map "interactiveLayout", to: :interactive_layout
-        map "aspectRatio", to: :aspect_ratio
-        map "nodePlacement.strategy", to: :node_placement_strategy
-        map "crossingMinimization.strategy",
-            to: :crossing_minimization_strategy
-        map "layerConstraint", to: :layer_constraint
-        map "cycleBreaking.strategy", to: :cycle_breaking_strategy
-        map "properties", to: :properties
-      end
-
-      yaml do
-        map "algorithm", to: :algorithm
-        map "direction", to: :direction
-        map "spacing_node_node", to: :spacing_node_node
-        map "spacing_edge_node", to: :spacing_edge_node
-        map "spacing_edge_edge", to: :spacing_edge_edge
-        map "spacing_node_label", to: :spacing_node_label
-        map "edge_routing", to: :edge_routing
-        map "spline_curvature", to: :spline_curvature
-        map "spline_segments", to: :spline_segments
-        map "hierarchical", to: :hierarchical
-        map "interactive_layout", to: :interactive_layout
-        map "aspect_ratio", to: :aspect_ratio
-        map "node_placement_strategy", to: :node_placement_strategy
-        map "crossing_minimization_strategy",
-            to: :crossing_minimization_strategy
-        map "layer_constraint", to: :layer_constraint
-        map "cycle_breaking_strategy", to: :cycle_breaking_strategy
-        map "properties", to: :properties
-      end
-
-      def initialize(hash_or_attrs = {}, **attributes)
-        # Handle both hash argument and keyword arguments
-        if hash_or_attrs.is_a?(Hash) && attributes.empty?
-          # Plain hash passed as first argument
-          # Skip calling super and set defaults manually
-          @properties = hash_or_attrs.transform_keys(&:to_s)
-          @algorithm = nil
-          @direction = nil
-          @spacing_node_node = nil
-          @spacing_edge_node = nil
-          @spacing_edge_edge = nil
-          @spacing_node_label = nil
-          @edge_routing = nil
-          @spline_curvature = nil
-          @spline_segments = nil
-          @hierarchical = nil
-          @interactive_layout = nil
-          @aspect_ratio = nil
-          @node_placement_strategy = nil
-          @crossing_minimization_strategy = nil
-          @layer_constraint = nil
-          @cycle_breaking_strategy = nil
-        else
-          # Keyword arguments
-          super(**attributes)
-          @properties ||= {}
-        end
-      end
-
-      def []=(key, value)
-        (@properties ||= {})[key.to_s] = value
+      def initialize(hash = {}, **kw)
+        super()
+        (hash || {}).each { |k, v| self[k] = v }
+        kw.each { |k, v| assign_kwarg(k, v) }
       end
 
       def [](key)
-        (@properties || {})[key.to_s]
+        super(key.to_s)
       end
 
-      def merge(other_options)
-        return self unless other_options
+      def []=(key, value)
+        super(key.to_s, value)
+      end
 
-        other_options.each do |key, value|
-          self[key] = value
+      # Mutates self and returns self, matching the pre-S3 LayoutOptions#merge
+      # (unlike ::Hash#merge, which returns a new Hash and leaves self untouched).
+      def merge(other)
+        return self unless other
+
+        other.each { |key, value| self[key] = value }
+        self
+      end
+
+      # ::Hash's own writers store the key unchanged, bypassing #[]=. Route
+      # them through it so a Symbol key normalizes whichever writer a caller
+      # reaches for, not just the subscript one. These are the whole set of
+      # ::Hash methods that introduce a key in place.
+      def store(key, value)
+        self[key] = value
+      end
+
+      # Honours ::Hash#merge!'s conflict block: for a key already present the
+      # block picks the value, and only its result is stored.
+      def merge!(*others)
+        others.each do |other|
+          other.each do |key, value|
+            string_key = key.to_s
+            self[string_key] =
+              if block_given? && key?(string_key)
+                yield(string_key, self[string_key], value)
+              else
+                value
+              end
+          end
+        end
+        self
+      end
+      alias update merge!
+
+      # `other` may be self, so the pairs come out before the clear —
+      # ::Hash#replace(self) is a no-op and this has to match it. The source's
+      # default travels with the pairs, the way ::Hash#replace carries it.
+      def replace(other)
+        pairs = other.to_a
+        source_default = other.default
+        source_default_proc = other.default_proc
+        refill(pairs)
+        if source_default_proc
+          self.default_proc = source_default_proc
+        else
+          self.default = source_default
         end
         self
       end
 
-      # Port constraint options
+      # ::Hash#transform_keys! answers an Enumerator and mutates nothing when
+      # it gets neither a block nor a mapping hash, so match that before
+      # touching self — otherwise every key maps to nil. Refills in place
+      # rather than going through #replace, which would take its default from
+      # the plain Hash #to_h hands back and drop ours.
+      def transform_keys!(*args, &block)
+        return enum_for(:transform_keys!) if args.empty? && block.nil?
 
-      # Get port constraints setting
-      #
-      # Port constraint values:
-      # - "UNDEFINED" - No constraints (default)
-      # - "FIXED_SIDE" - Port sides are fixed
-      # - "FIXED_ORDER" - Port sides and order are fixed
-      # - "FIXED_POS" - Port positions are completely fixed
-      #
-      # @return [String] The port constraints setting
-      def port_constraints
-        self["elk.portConstraints"] ||
-          self["portConstraints"] ||
-          "UNDEFINED"
+        refill(to_h.transform_keys(*args, &block).to_a)
+        self
       end
 
-      # Set port constraints
-      #
-      # @param value [String] The port constraints value
-      def port_constraints=(value)
-        self["elk.portConstraints"] = value
+      private
+
+      # #clear keeps the default, so a refill only swaps the pairs, and
+      # every one of them goes back in through #[]=.
+      def refill(pairs)
+        clear
+        pairs.each { |key, value| self[key] = value }
       end
 
-      # Get port side assignment setting
-      #
-      # Port side assignment values:
-      # - "AUTOMATIC" - Auto-detect from position (default)
-      # - "MANUAL" - Use explicitly specified sides
-      #
-      # @return [String] The port side assignment setting
-      def port_side_assignment
-        self["elk.portSideAssignment"] ||
-          self["portSideAssignment"] ||
-          "AUTOMATIC"
+      # Canonical-over-deprecated: a legacy kwarg name only translates and
+      # writes its ELK key when that key isn't already present in this
+      # options map — an explicit canonical key (from the positional Hash,
+      # or an earlier kwarg in the same call) always wins over a same-call
+      # legacy alias, regardless of which one appears first in the call.
+      def assign_kwarg(key, value)
+        # 1.x's typed class parked every unmapped option in a `properties`
+        # Hash, so a `properties:` kwarg IS the options map, not an option
+        # named "properties". Flatten it, or a 1.x caller's options all
+        # nest one level down and every read silently falls back to a default.
+        if key == :properties
+          self.class.warn_legacy_kwarg_once(key, "a plain Hash of options")
+          return merge!(value || {})
+        end
+
+        elk_key = LEGACY_KWARG_ELK_KEYS[key]
+        return self[key] = value unless elk_key
+        return if key?(elk_key)
+
+        self.class.warn_legacy_kwarg_once(key, %("#{elk_key}" => ...))
+        self[elk_key] = value
       end
 
-      # Set port side assignment
-      #
-      # @param value [String] The port side assignment value
-      def port_side_assignment=(value)
-        self["elk.portSideAssignment"] = value
-      end
+      class << self
+        # `attribute :layout_options, :hash` casts to a plain ::Hash, so a
+        # value arriving through lutaml has to be re-wrapped for #[]= to keep
+        # normalizing the in-place writes a caller makes afterwards.
+        #
+        # lutaml reads a bare `text` or `elements` key as its own wrapper and
+        # casts the map down to that key's value, so anything but a Hash here
+        # means the caller used a reserved key. Say that, rather than letting
+        # the constructor fail on a String with a bare NoMethodError.
+        # ::Hash.[] builds through allocation, not #[]=, so it would seed the
+        # map with un-normalized keys. Build the plain Hash its own way, then
+        # let #initialize put every pair through #[]=.
+        def [](*args)
+          new(::Hash[*args])
+        end
 
-      # Get port ordering setting
-      #
-      # Port ordering values:
-      # - "DEFAULT" - Algorithm-specific default
-      # - "INDEX" - Use port index attribute
-      # - "OFFSET" - Use port offset/position
-      #
-      # @return [String] The port ordering setting
-      def port_ordering
-        self["elk.portOrdering"] ||
-          self["portOrdering"] ||
-          "DEFAULT"
-      end
+        def wrap(value)
+          return value if value.nil? || value.is_a?(self)
 
-      # Set port ordering
-      #
-      # @param value [String] The port ordering value
-      def port_ordering=(value)
-        self["elk.portOrdering"] = value
-      end
+          unless value.is_a?(::Hash)
+            raise Elkrb::ValidationError,
+                  "layoutOptions cannot use `text` or `elements` as a key; " \
+                  "both are reserved by lutaml-model"
+          end
 
-      # Self-loop options
+          new(value)
+        end
 
-      # Get self-loop side setting
-      #
-      # Self-loop side values:
-      # - "EAST" - Loop extends to the right (default)
-      # - "WEST" - Loop extends to the left
-      # - "NORTH" - Loop extends upward
-      # - "SOUTH" - Loop extends downward
-      #
-      # @return [String] The self-loop side setting
-      def self_loop_side
-        self["elk.selfLoopSide"] ||
-          self["selfLoopSide"] ||
-          "EAST"
-      end
+        # Deprecation-diagnostic dedup only (not business state — never
+        # read by layout logic), so a rare double-warn under concurrent
+        # first-use is harmless; matches the "once per process" contract
+        # a plain Mutex would only protect against for no practical gain.
+        def warn_legacy_kwarg_once(key, replacement)
+          @warned_legacy_kwargs ||= {}
+          return if @warned_legacy_kwargs.key?(key)
 
-      # Set self-loop side
-      #
-      # @param value [String] The self-loop side value
-      def self_loop_side=(value)
-        self["elk.selfLoopSide"] = value
-      end
-
-      # Get self-loop offset setting
-      #
-      # Controls the base distance the self-loop extends from the node.
-      # Multiple self-loops on the same node will use increasing offsets.
-      #
-      # @return [Float] The self-loop offset (default: 20.0)
-      def self_loop_offset
-        (self["elk.selfLoopOffset"] ||
-         self["selfLoopOffset"] ||
-         20.0).to_f
-      end
-
-      # Set self-loop offset
-      #
-      # @param value [Float] The self-loop offset value
-      def self_loop_offset=(value)
-        self["elk.selfLoopOffset"] = value
-      end
-
-      # Get self-loop routing style
-      #
-      # Self-loop routing values:
-      # - "ORTHOGONAL" - Rectangular path with 90-degree corners (default)
-      # - "SPLINES" - Smooth curved path using Bezier curves
-      # - "POLYLINE" - Simple polyline path
-      #
-      # @return [String] The self-loop routing style
-      def self_loop_routing
-        self["elk.selfLoopRouting"] ||
-          self["selfLoopRouting"] ||
-          "ORTHOGONAL"
-      end
-
-      # Set self-loop routing style
-      #
-      # @param value [String] The self-loop routing style value
-      def self_loop_routing=(value)
-        self["elk.selfLoopRouting"] = value
+          @warned_legacy_kwargs[key] = true
+          warn "deprecated LayoutOptions.new(#{key}:) — use #{replacement}"
+        end
       end
     end
   end

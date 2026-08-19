@@ -620,9 +620,7 @@ RSpec.describe "Self-loop Support" do
         id: "g1",
         children: [node],
         edges: [edge],
-        layout_options: Elkrb::Graph::LayoutOptions.new(
-          edge_routing: "SPLINES",
-        ),
+        layout_options: { "elk.edgeRouting" => "SPLINES" },
       )
 
       result = algorithm.layout(graph)

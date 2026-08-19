@@ -12,10 +12,10 @@ module Elkrb
       attribute :height, :float
       attribute :children, Node, collection: true
       attribute :edges, Edge, collection: true
-      attribute :layout_options, LayoutOptions
+      attribute :layout_options, :hash
       attribute :properties, :hash
 
-      json do
+      key_value do
         map "id", to: :id
         map "x", to: :x
         map "y", to: :y
@@ -50,6 +50,18 @@ module Elkrb
         @edges ||= []
         @properties ||= {}
         @layout_options ||= LayoutOptions.new
+      end
+
+
+      # Normalizes a Symbol key however the options arrive — a constructor,
+      # a plain setter, or lutaml's own deserialization, which routes through
+      # here too. This is the single normalization point: a :hash-typed
+      # attribute otherwise stores a raw, unnormalized Hash.
+      def layout_options=(value)
+        value_set_for(:layout_options)
+        attr = self.class.attributes(lutaml_register)[:layout_options]
+        cast = attr.cast_value(DeepStringifyKeys.call(value), lutaml_register)
+        instance_variable_set(:@layout_options, LayoutOptions.wrap(cast))
       end
 
       def find_node(node_id)

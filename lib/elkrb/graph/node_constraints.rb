@@ -15,7 +15,7 @@ module Elkrb
       attribute :x, :float, default: -> { 0.0 }
       attribute :y, :float, default: -> { 0.0 }
 
-      json do
+      key_value do
         map "x", to: :x
         map "y", to: :y
       end
@@ -68,7 +68,7 @@ module Elkrb
       attribute :relative_offset, RelativeOffset
       attribute :position_priority, :integer, default: -> { 0 }
 
-      json do
+      key_value do
         map "fixedPosition", to: :fixed_position
         map "layer", to: :layer
         map "alignGroup", to: :align_group

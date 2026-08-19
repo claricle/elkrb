@@ -16,7 +16,10 @@ Gem::Specification.new do |spec|
 
   spec.homepage = "https://github.com/claricle/elkrb"
   spec.license = "BSD-2-Clause"
-  spec.required_ruby_version = ">= 3.0.0"
+  # lutaml-model 0.8 needs Ruby 3.2 to parse at all: 66 of its files are
+  # syntax errors on 3.0 and 15 on 3.1, none on 3.2. Its own gemspec
+  # understates this as >= 3.0.0, so the floor has to be declared here.
+  spec.required_ruby_version = ">= 3.2.0"
 
   spec.metadata["homepage_uri"] = spec.homepage
   spec.metadata["source_code_uri"] = "https://github.com/claricle/elkrb"
@@ -33,7 +36,9 @@ Gem::Specification.new do |spec|
   spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
   spec.require_paths = ["lib"]
 
-  spec.add_dependency "lutaml-model", "~> 0.7"
+  # 0.8 is the floor: the layout_options setters call the instance-level
+  # lutaml_register, which 0.7.x does not define.
+  spec.add_dependency "lutaml-model", "~> 0.8"
   spec.add_dependency "rbs", "~> 3.0"
   spec.add_dependency "thor", "~> 1.4"
 end
