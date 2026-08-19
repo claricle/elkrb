@@ -11,8 +11,9 @@ module Elkrb
         class LayerAssigner
           attr_reader :layers
 
-          def initialize(graph)
+          def initialize(graph, index)
             @graph = graph
+            @index = index
             @layers = []
             @node_layers = {}
           end
@@ -30,7 +31,7 @@ module Elkrb
             @layers = Array.new(max_layer + 1) { [] }
 
             @node_layers.each do |node_id, layer|
-              node = @graph.find_node(node_id)
+              node = @index.node(node_id)
               @layers[layer] << node if node
             end
 
@@ -58,7 +59,7 @@ module Elkrb
                 source_id = edge.sources.first
                 next 0 unless source_id
 
-                source = @graph.find_node(source_id)
+                source = @index.node(source_id)
                 next 0 unless source
 
                 calculate_layer(source)
@@ -77,7 +78,7 @@ module Elkrb
             @graph.edges&.each do |edge|
               next if self_loop_edge?(edge)
 
-              edges << edge if edge.targets&.include?(node.id)
+              edges << edge if @index.endpoint_nodes(edge.targets).include?(node)
             end
 
             # Also check edges from other nodes
@@ -87,16 +88,23 @@ module Elkrb
               other_node.edges.each do |edge|
                 next if self_loop_edge?(edge)
 
-                edges << edge if edge.targets&.include?(node.id)
+                edges << edge if @index.endpoint_nodes(edge.targets).include?(node)
               end
             end
 
             edges
           end
 
+          # Compares resolved OWNERS, not raw ids: two different port ids
+          # on the same node (e.g. "p1" -> "p2") are still a self-loop.
+          # Comparing raw ids here would leave a port-to-port self-loop
+          # looking like real incoming traffic once get_incoming_edges
+          # above resolves targets through the index, and
+          # calculate_layer would recurse on the same node forever
+          # before it is memoized (SystemStackError).
           def self_loop_edge?(edge)
-            sources = edge.sources || []
-            targets = edge.targets || []
+            sources = @index.endpoint_nodes(edge.sources)
+            targets = @index.endpoint_nodes(edge.targets)
 
             return false if sources.empty? || targets.empty?
 

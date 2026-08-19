@@ -9,8 +9,9 @@ module Elkrb
         # This is the first phase of the Sugiyama framework.
         # Uses a greedy approach to reverse edges that create cycles.
         class CycleBreaker
-          def initialize(graph)
+          def initialize(graph, index)
             @graph = graph
+            @index = index
             @visited = {}
             @in_stack = {}
             @edges_to_reverse = []
@@ -41,7 +42,7 @@ module Elkrb
               target_id = edge.targets.first
               next unless target_id
 
-              target = @graph.find_node(target_id)
+              target = @index.node(target_id)
               next unless target
 
               if @in_stack[target.id]
@@ -63,7 +64,7 @@ module Elkrb
 
             # Get edges from the graph that have this node as source
             @graph.edges&.each do |edge|
-              edges << edge if edge.sources&.include?(node.id)
+              edges << edge if @index.endpoint_nodes(edge.sources).include?(node)
             end
 
             edges
