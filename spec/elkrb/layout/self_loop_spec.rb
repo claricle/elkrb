@@ -701,3 +701,34 @@ RSpec.describe "Self-loop Support" do
     end
   end
 end
+
+RSpec.describe "Self-loop layering (regression)" do
+  let(:graph) do
+    Elkrb::Graph::Graph.new(
+      id: "g",
+      children: [Elkrb::Graph::Node.new(id: "a", width: 10.0, height: 10.0)],
+      edges: [Elkrb::Graph::Edge.new(id: "e", sources: ["a"], targets: ["a"])],
+    )
+  end
+
+  it "lays out a self-loop with the layered algorithm without SystemStackError" do
+    expect { Elkrb.layout(graph, algorithm: "layered") }
+      .not_to raise_error
+  end
+
+  it "still routes the self-loop edge" do
+    result = Elkrb.layout(graph, algorithm: "layered")
+    edge = result.edges.first
+
+    expect(edge.sections).not_to be_empty
+    expect(edge.sections.first.bend_points).not_to be_empty
+  end
+
+  it "lays out a self-loop parsed from a hash without SystemStackError" do
+    parsed = Elkrb::Graph::Graph.from_hash(
+      { id: "r", children: [{ id: "a", width: 10.0, height: 10.0 }],
+        edges: [{ id: "e", sources: ["a"], targets: ["a"] }] },
+    )
+    expect { Elkrb.layout(parsed, algorithm: "layered") }.not_to raise_error
+  end
+end

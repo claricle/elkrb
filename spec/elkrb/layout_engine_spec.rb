@@ -139,5 +139,77 @@ RSpec.describe Elkrb::Layout::LayoutEngine do
         end.to raise_error(Elkrb::Error, /Unknown layout algorithm/)
       end
     end
+
+    context "with a node missing width and height" do
+      it "treats missing size as 0 and does not raise" do
+        graph = { id: "r", children: [{ id: "a" }] }
+
+        expect { described_class.layout(graph, algorithm: "layered") }
+          .not_to raise_error
+      end
+
+      it "does not raise for box" do
+        graph = { id: "r", children: [{ id: "a" }, { id: "b" }] }
+
+        expect { described_class.layout(graph, algorithm: "box") }
+          .not_to raise_error
+      end
+
+      it "does not raise for random" do
+        graph = { id: "r", children: [{ id: "a" }, { id: "b" }] }
+
+        expect { described_class.layout(graph, algorithm: "random") }
+          .not_to raise_error
+      end
+
+      it "does not raise for force" do
+        graph = { id: "r", children: [{ id: "a" }, { id: "b" }] }
+
+        expect { described_class.layout(graph, algorithm: "force") }
+          .not_to raise_error
+      end
+
+      it "does not raise for stress" do
+        graph = { id: "r", children: [{ id: "a" }, { id: "b" }] }
+
+        expect { described_class.layout(graph, algorithm: "stress") }
+          .not_to raise_error
+      end
+    end
+
+    context "with a size-less compound (container) node" do
+      it "does not raise" do
+        graph = {
+          id: "r",
+          children: [
+            { id: "a", children: [{ id: "a1", width: 5.0, height: 5.0 }] },
+          ],
+        }
+
+        expect do
+          described_class.layout(
+            graph, algorithm: "layered", hierarchical: true
+          )
+        end.not_to raise_error
+      end
+    end
+
+    context "with an empty root graph (no children/edges keys)" do
+      Elkrb::Layout::AlgorithmRegistry.available_algorithms.each do |algo|
+        it "does not raise for #{algo}" do
+          expect { described_class.layout({ id: "root" }, algorithm: algo) }
+            .not_to raise_error
+        end
+      end
+    end
+
+    context "with children but no edges key, using disco" do
+      it "does not raise" do
+        graph = { id: "r", children: [{ id: "a", width: 10, height: 10 }] }
+
+        expect { described_class.layout(graph, algorithm: "disco") }
+          .not_to raise_error
+      end
+    end
   end
 end

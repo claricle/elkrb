@@ -69,21 +69,15 @@ module Elkrb
       end
 
       def all_edges
-        edges = @edges.dup
-        @children.each do |child|
-          edges.concat(child.edges) if child.respond_to?(:edges)
-          next unless child.respond_to?(:children)
-
-          child.children.each do |grandchild|
-            edges.concat(grandchild.all_edges) if
-              grandchild.respond_to?(:all_edges)
-          end
+        edges = (@edges || []).dup
+        (@children || []).each do |child|
+          edges.concat(child.edges) if child.edges
         end
         edges
       end
 
       def hierarchical?
-        @children.any?(&:hierarchical?)
+        (@children || []).any?(&:hierarchical?)
       end
     end
   end

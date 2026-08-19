@@ -56,7 +56,7 @@ module Elkrb
               component[:nodes] << current
 
               # Find connected nodes through edges
-              connected_edges = graph.edges.select do |edge|
+              connected_edges = (graph.edges || []).select do |edge|
                 edge_nodes = []
                 edge.sources&.each do |port|
                   edge_nodes << (port.respond_to?(:node) ? port.node : port)

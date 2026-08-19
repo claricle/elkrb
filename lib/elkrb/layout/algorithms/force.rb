@@ -48,7 +48,7 @@ module Elkrb
         def initialize_positions(graph)
           # Calculate approximate area needed
           total_area = graph.children.sum do |n|
-            (n.width + 20) * (n.height + 20)
+            ((n.width || 0.0) + 20) * ((n.height || 0.0) + 20)
           end
           side = Math.sqrt(total_area)
 

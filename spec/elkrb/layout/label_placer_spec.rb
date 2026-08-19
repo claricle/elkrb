@@ -266,6 +266,141 @@ RSpec.describe Elkrb::Layout::LabelPlacer do
         expect(placer.send(:label_margin_option, node)).to eq(8)
       end
     end
+
+    # Label.new(text: "A") runs Label#initialize, which defaults width/height
+    # to 0.0 even without deserialization, so a test built that way passes on
+    # the current, unfixed code and proves nothing. Label.from_hash bypasses
+    # #initialize exactly like from_json does, which is what actually
+    # reproduces the crash.
+    context "with a label that has only text (no width/height)" do
+      it "treats missing label size as 0x0 in the default center placement" do
+        label = Elkrb::Graph::Label.from_hash({ text: "A" })
+        node = Elkrb::Graph::Node.new(
+          id: "n1", x: 0, y: 0, width: 10, height: 10, labels: [label],
+        )
+        graph = Elkrb::Graph::Graph.new(children: [node])
+
+        expect { placer.send(:place_labels, graph) }.not_to raise_error
+        expect(label.x).to eq(5.0)
+        expect(label.y).to eq(5.0)
+      end
+
+      it "treats missing label size as 0x0 in an INSIDE TOP placement" do
+        label = Elkrb::Graph::Label.from_hash({ text: "A" })
+        layout_opts = Elkrb::Graph::LayoutOptions.new
+        layout_opts["node.label.placement"] = "INSIDE TOP"
+        node = Elkrb::Graph::Node.new(
+          id: "n1", x: 0, y: 0, width: 10, height: 10,
+          labels: [label], layout_options: layout_opts,
+        )
+        graph = Elkrb::Graph::Graph.new(children: [node])
+
+        expect { placer.send(:place_labels, graph) }.not_to raise_error
+      end
+
+      it "treats missing label size as 0x0 in an INSIDE BOTTOM placement" do
+        label = Elkrb::Graph::Label.from_hash({ text: "A" })
+        layout_opts = Elkrb::Graph::LayoutOptions.new
+        layout_opts["node.label.placement"] = "INSIDE BOTTOM"
+        node = Elkrb::Graph::Node.new(
+          id: "n1", x: 0, y: 0, width: 10, height: 10,
+          labels: [label], layout_options: layout_opts,
+        )
+        graph = Elkrb::Graph::Graph.new(children: [node])
+
+        expect { placer.send(:place_labels, graph) }.not_to raise_error
+      end
+
+      it "treats missing label size as 0x0 in an INSIDE LEFT placement" do
+        label = Elkrb::Graph::Label.from_hash({ text: "A" })
+        layout_opts = Elkrb::Graph::LayoutOptions.new
+        layout_opts["node.label.placement"] = "INSIDE LEFT"
+        node = Elkrb::Graph::Node.new(
+          id: "n1", x: 0, y: 0, width: 10, height: 10,
+          labels: [label], layout_options: layout_opts,
+        )
+        graph = Elkrb::Graph::Graph.new(children: [node])
+
+        expect { placer.send(:place_labels, graph) }.not_to raise_error
+      end
+
+      it "treats missing label size as 0x0 in an INSIDE RIGHT placement" do
+        label = Elkrb::Graph::Label.from_hash({ text: "A" })
+        layout_opts = Elkrb::Graph::LayoutOptions.new
+        layout_opts["node.label.placement"] = "INSIDE RIGHT"
+        node = Elkrb::Graph::Node.new(
+          id: "n1", x: 0, y: 0, width: 10, height: 10,
+          labels: [label], layout_options: layout_opts,
+        )
+        graph = Elkrb::Graph::Graph.new(children: [node])
+
+        expect { placer.send(:place_labels, graph) }.not_to raise_error
+      end
+
+      it "treats missing label size as 0x0 in an OUTSIDE RIGHT placement" do
+        label = Elkrb::Graph::Label.from_hash({ text: "A" })
+        layout_opts = Elkrb::Graph::LayoutOptions.new
+        layout_opts["node.label.placement"] = "OUTSIDE RIGHT"
+        node = Elkrb::Graph::Node.new(
+          id: "n1", x: 0, y: 0, width: 10, height: 10,
+          labels: [label], layout_options: layout_opts,
+        )
+        graph = Elkrb::Graph::Graph.new(children: [node])
+
+        expect { placer.send(:place_labels, graph) }.not_to raise_error
+      end
+    end
+
+    context "with a port label that has only text (no width/height)" do
+      it "treats missing label size as 0x0 in the default (OUTSIDE) placement" do
+        # The node also needs its own (properly sized) label: place_port_labels
+        # is only invoked from inside place_node_labels' "node has labels"
+        # branch — a node with only port labels and no node-level label never
+        # reaches port-label placement at all (pre-existing control-flow
+        # quirk, out of scope, not a crash).
+        node_label = Elkrb::Graph::Label.new(text: "N", width: 5, height: 5)
+        port_label = Elkrb::Graph::Label.from_hash({ text: "P" })
+        port = Elkrb::Graph::Port.new(id: "p1", x: 0, y: 50, labels: [port_label])
+        node = Elkrb::Graph::Node.new(
+          id: "n1", x: 50, y: 50, width: 100, height: 100,
+          labels: [node_label], ports: [port],
+        )
+        graph = Elkrb::Graph::Graph.new(children: [node])
+
+        expect { placer.send(:place_labels, graph) }.not_to raise_error
+        expect(port_label.x).not_to be_nil
+      end
+
+      it "treats missing label size as 0x0 in an INSIDE placement" do
+        node_label = Elkrb::Graph::Label.new(text: "N", width: 5, height: 5)
+        port_label = Elkrb::Graph::Label.from_hash({ text: "P" })
+        port_opts = Elkrb::Graph::LayoutOptions.new
+        port_opts["port.label.placement"] = "INSIDE"
+        port = Elkrb::Graph::Port.new(
+          id: "p1", x: 0, y: 50, labels: [port_label], layout_options: port_opts,
+        )
+        node = Elkrb::Graph::Node.new(
+          id: "n1", x: 50, y: 50, width: 100, height: 100,
+          labels: [node_label], ports: [port],
+        )
+        graph = Elkrb::Graph::Graph.new(children: [node])
+
+        expect { placer.send(:place_labels, graph) }.not_to raise_error
+        expect(port_label.x).not_to be_nil
+      end
+    end
+
+    context "with an edge label that has only text (no width/height)" do
+      it "treats missing label size as 0x0 once the edge is routed" do
+        graph = Elkrb::Graph::Graph.from_json(
+          '{"id":"r","children":[{"id":"a","width":10,"height":10},' \
+          '{"id":"b","width":10,"height":10}],"edges":[{"id":"e",' \
+          '"sources":["a"],"targets":["b"],"labels":[{"text":"E"}]}]}',
+        )
+
+        expect { Elkrb.layout(graph) }.not_to raise_error
+      end
+    end
   end
 
   describe "integration with algorithms" do

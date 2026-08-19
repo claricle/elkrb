@@ -24,8 +24,8 @@ module Elkrb
           cols = [cols, 1].max
 
           # Find maximum node dimensions for uniform grid
-          max_width = graph.children.map(&:width).max
-          max_height = graph.children.map(&:height).max
+          max_width = graph.children.map { |n| n.width || 0.0 }.max
+          max_height = graph.children.map { |n| n.height || 0.0 }.max
 
           # Position nodes in grid
           graph.children.each_with_index do |node, i|

@@ -43,6 +43,8 @@ module Elkrb
           nodes_with_incoming = Set.new
 
           graph.edges&.each do |edge|
+            next if self_loop_edge?(edge)
+
             targets = edge.targets || []
             targets.each do |target_id|
               nodes_with_incoming.add(target_id)
@@ -52,23 +54,22 @@ module Elkrb
           graph.children.reject { |node| nodes_with_incoming.include?(node.id) }
         end
 
-        def build_tree(root, graph)
-          tree = {
-            node: root,
-            children: [],
-            level: 0,
-          }
+        def self_loop_edge?(edge)
+          sources = edge.sources || []
+          targets = edge.targets || []
 
-          # Find children (nodes connected by outgoing edges)
-          children = find_children(root, graph)
-          tree[:children] = children.map do |child|
-            build_subtree(child, graph, 1)
-          end
+          return false if sources.empty? || targets.empty?
 
-          tree
+          sources.first == targets.first
         end
 
-        def build_subtree(node, graph, level)
+        def build_tree(root, graph)
+          build_subtree(root, graph, 0, Set.new)
+        end
+
+        def build_subtree(node, graph, level, visited)
+          visited = visited | [node.id]
+
           tree = {
             node: node,
             children: [],
@@ -76,8 +77,9 @@ module Elkrb
           }
 
           children = find_children(node, graph)
+                     .reject { |child| visited.include?(child.id) }
           tree[:children] = children.map do |child|
-            build_subtree(child, graph, level + 1)
+            build_subtree(child, graph, level + 1, visited)
           end
 
           tree

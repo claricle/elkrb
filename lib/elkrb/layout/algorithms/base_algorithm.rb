@@ -42,11 +42,16 @@ module Elkrb
           # Apply pre-layout constraints (marks nodes)
           apply_pre_layout_constraints(graph)
 
-          # Perform layout
-          if option("hierarchical", false) || graph.hierarchical?
-            layout_hierarchical(graph, @options)
-          else
-            layout_flat(graph, @options)
+          # Perform layout. Only nil (children key absent from deserialized
+          # input) skips dispatch — an explicit empty array still reaches
+          # layout_flat, preserving its documented NotImplementedError
+          # contract for subclasses that don't override it.
+          if graph.children
+            if option("hierarchical", false) || graph.hierarchical?
+              layout_hierarchical(graph, @options)
+            else
+              layout_flat(graph, @options)
+            end
           end
 
           # Enforce post-layout constraints (adjust positions)
@@ -116,10 +121,10 @@ module Elkrb
         def calculate_bounding_box(nodes)
           return Elkrb::Geometry::Rectangle.new(0, 0, 0, 0) if nodes.empty?
 
-          min_x = nodes.map(&:x).min
-          min_y = nodes.map(&:y).min
-          max_x = nodes.map { |n| n.x + n.width }.max
-          max_y = nodes.map { |n| n.y + n.height }.max
+          min_x = nodes.map { |n| n.x || 0.0 }.min
+          min_y = nodes.map { |n| n.y || 0.0 }.min
+          max_x = nodes.map { |n| (n.x || 0.0) + (n.width || 0.0) }.max
+          max_y = nodes.map { |n| (n.y || 0.0) + (n.height || 0.0) }.max
 
           Elkrb::Geometry::Rectangle.new(
             min_x,

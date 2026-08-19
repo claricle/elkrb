@@ -19,7 +19,7 @@ module Elkrb
 
           # Calculate total area needed
           total_area = graph.children.sum do |node|
-            (node.width + spacing) * (node.height + spacing)
+            ((node.width || 0.0) + spacing) * ((node.height || 0.0) + spacing)
           end
 
           # Calculate bounds
@@ -28,8 +28,8 @@ module Elkrb
 
           # Position nodes randomly
           graph.children.each do |node|
-            node.x = rand * (width - node.width)
-            node.y = rand * (height - node.height)
+            node.x = rand * (width - (node.width || 0.0))
+            node.y = rand * (height - (node.height || 0.0))
           end
 
           # Apply padding and set graph dimensions

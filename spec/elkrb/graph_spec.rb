@@ -94,4 +94,29 @@ RSpec.describe Elkrb::Graph::Graph do
       expect(node).to be_nil
     end
   end
+
+  describe "#hierarchical? on a graph with no children key" do
+    it "returns false instead of raising" do
+      graph = described_class.from_hash({ id: "r" })
+
+      expect { graph.hierarchical? }.not_to raise_error
+      expect(graph.hierarchical?).to be false
+    end
+  end
+
+  describe "#all_edges on a graph with no children/edges keys" do
+    it "returns an empty array instead of raising" do
+      graph = described_class.from_hash({ id: "r" })
+
+      expect(graph.all_edges).to eq([])
+    end
+  end
+
+  describe "#all_edges on a graph whose child has no edges key" do
+    it "returns an empty array instead of raising" do
+      graph = described_class.from_hash({ id: "r", children: [{ id: "a" }] })
+
+      expect(graph.all_edges).to eq([])
+    end
+  end
 end

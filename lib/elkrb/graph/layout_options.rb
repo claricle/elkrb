@@ -98,11 +98,11 @@ module Elkrb
       end
 
       def []=(key, value)
-        @properties[key.to_s] = value
+        (@properties ||= {})[key.to_s] = value
       end
 
       def [](key)
-        @properties[key.to_s]
+        (@properties || {})[key.to_s]
       end
 
       def merge(other_options)
@@ -126,8 +126,8 @@ module Elkrb
       #
       # @return [String] The port constraints setting
       def port_constraints
-        properties["elk.portConstraints"] ||
-          properties["portConstraints"] ||
+        self["elk.portConstraints"] ||
+          self["portConstraints"] ||
           "UNDEFINED"
       end
 
@@ -135,7 +135,7 @@ module Elkrb
       #
       # @param value [String] The port constraints value
       def port_constraints=(value)
-        properties["elk.portConstraints"] = value
+        self["elk.portConstraints"] = value
       end
 
       # Get port side assignment setting
@@ -146,8 +146,8 @@ module Elkrb
       #
       # @return [String] The port side assignment setting
       def port_side_assignment
-        properties["elk.portSideAssignment"] ||
-          properties["portSideAssignment"] ||
+        self["elk.portSideAssignment"] ||
+          self["portSideAssignment"] ||
           "AUTOMATIC"
       end
 
@@ -155,7 +155,7 @@ module Elkrb
       #
       # @param value [String] The port side assignment value
       def port_side_assignment=(value)
-        properties["elk.portSideAssignment"] = value
+        self["elk.portSideAssignment"] = value
       end
 
       # Get port ordering setting
@@ -167,8 +167,8 @@ module Elkrb
       #
       # @return [String] The port ordering setting
       def port_ordering
-        properties["elk.portOrdering"] ||
-          properties["portOrdering"] ||
+        self["elk.portOrdering"] ||
+          self["portOrdering"] ||
           "DEFAULT"
       end
 
@@ -176,7 +176,7 @@ module Elkrb
       #
       # @param value [String] The port ordering value
       def port_ordering=(value)
-        properties["elk.portOrdering"] = value
+        self["elk.portOrdering"] = value
       end
 
       # Self-loop options
@@ -191,8 +191,8 @@ module Elkrb
       #
       # @return [String] The self-loop side setting
       def self_loop_side
-        properties["elk.selfLoopSide"] ||
-          properties["selfLoopSide"] ||
+        self["elk.selfLoopSide"] ||
+          self["selfLoopSide"] ||
           "EAST"
       end
 
@@ -200,7 +200,7 @@ module Elkrb
       #
       # @param value [String] The self-loop side value
       def self_loop_side=(value)
-        properties["elk.selfLoopSide"] = value
+        self["elk.selfLoopSide"] = value
       end
 
       # Get self-loop offset setting
@@ -210,8 +210,8 @@ module Elkrb
       #
       # @return [Float] The self-loop offset (default: 20.0)
       def self_loop_offset
-        (properties["elk.selfLoopOffset"] ||
-         properties["selfLoopOffset"] ||
+        (self["elk.selfLoopOffset"] ||
+         self["selfLoopOffset"] ||
          20.0).to_f
       end
 
@@ -219,7 +219,7 @@ module Elkrb
       #
       # @param value [Float] The self-loop offset value
       def self_loop_offset=(value)
-        properties["elk.selfLoopOffset"] = value
+        self["elk.selfLoopOffset"] = value
       end
 
       # Get self-loop routing style
@@ -231,8 +231,8 @@ module Elkrb
       #
       # @return [String] The self-loop routing style
       def self_loop_routing
-        properties["elk.selfLoopRouting"] ||
-          properties["selfLoopRouting"] ||
+        self["elk.selfLoopRouting"] ||
+          self["selfLoopRouting"] ||
           "ORTHOGONAL"
       end
 
@@ -240,7 +240,7 @@ module Elkrb
       #
       # @param value [String] The self-loop routing style value
       def self_loop_routing=(value)
-        properties["elk.selfLoopRouting"] = value
+        self["elk.selfLoopRouting"] = value
       end
     end
   end

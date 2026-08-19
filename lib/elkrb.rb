@@ -376,15 +376,7 @@ module Elkrb
   #   force_algorithms = Elkrb.known_layout_algorithms
   #     .select { |alg| alg[:category] == "force" }
   def self.known_layout_algorithms
-    Layout::AlgorithmRegistry.all.map do |name, data|
-      {
-        id: name,
-        name: data[:metadata][:name] || name.capitalize,
-        description: data[:metadata][:description] || "",
-        category: data[:metadata][:category] || "general",
-        supports_hierarchy: data[:metadata][:supports_hierarchy] || false,
-      }
-    end
+    Layout::AlgorithmRegistry.all_algorithm_info
   end
 
   # Returns metadata for all supported layout options.
@@ -414,7 +406,7 @@ module Elkrb
         type: "string",
         description: "The layout algorithm to use",
         default: "layered",
-        values: Layout::AlgorithmRegistry.all.keys,
+        values: Layout::AlgorithmRegistry.available_algorithms,
       },
       "elk.direction" => {
         type: "string",

@@ -23,6 +23,16 @@ module Elkrb
 
       private
 
+      # ELK treats a missing width/height as 0 (compound nodes and
+      # deserialized labels commonly omit size).
+      def width_of(element)
+        element.width || 0.0
+      end
+
+      def height_of(element)
+        element.height || 0.0
+      end
+
       # Place labels for all nodes in the graph.
       def place_node_labels(graph)
         graph.children.each do |node|
@@ -75,40 +85,40 @@ module Elkrb
 
         case placement.upcase
         when /TOP/
-          label.x = node.x + ((node.width - label.width) / 2.0)
-          label.y = node.y - label.height - margin
+          label.x = node.x + ((width_of(node) - width_of(label)) / 2.0)
+          label.y = node.y - height_of(label) - margin
         when /BOTTOM/
-          label.x = node.x + ((node.width - label.width) / 2.0)
-          label.y = node.y + node.height + margin
+          label.x = node.x + ((width_of(node) - width_of(label)) / 2.0)
+          label.y = node.y + height_of(node) + margin
         when /LEFT/
-          label.x = node.x - label.width - margin
-          label.y = node.y + ((node.height - label.height) / 2.0)
+          label.x = node.x - width_of(label) - margin
+          label.y = node.y + ((height_of(node) - height_of(label)) / 2.0)
         when /RIGHT/
-          label.x = node.x + node.width + margin
-          label.y = node.y + ((node.height - label.height) / 2.0)
+          label.x = node.x + width_of(node) + margin
+          label.y = node.y + ((height_of(node) - height_of(label)) / 2.0)
         end
       end
 
       # Place label at various inside positions.
       def place_label_inside_top(node, label, index)
         padding = label_padding_option(node)
-        y_offset = index * (label.height + padding)
+        y_offset = index * (height_of(label) + padding)
 
-        label.x = node.x + ((node.width - label.width) / 2.0)
+        label.x = node.x + ((width_of(node) - width_of(label)) / 2.0)
         label.y = node.y + padding + y_offset
       end
 
       def place_label_inside_bottom(node, label, index)
         padding = label_padding_option(node)
-        y_offset = index * (label.height + padding)
+        y_offset = index * (height_of(label) + padding)
 
-        label.x = node.x + ((node.width - label.width) / 2.0)
-        label.y = node.y + node.height - label.height - padding - y_offset
+        label.x = node.x + ((width_of(node) - width_of(label)) / 2.0)
+        label.y = node.y + height_of(node) - height_of(label) - padding - y_offset
       end
 
       def place_label_inside_left(node, label, index)
         padding = label_padding_option(node)
-        y_offset = index * (label.height + padding)
+        y_offset = index * (height_of(label) + padding)
 
         label.x = node.x + padding
         label.y = node.y + padding + y_offset
@@ -116,15 +126,15 @@ module Elkrb
 
       def place_label_inside_right(node, label, index)
         padding = label_padding_option(node)
-        y_offset = index * (label.height + padding)
+        y_offset = index * (height_of(label) + padding)
 
-        label.x = node.x + node.width - label.width - padding
+        label.x = node.x + width_of(node) - width_of(label) - padding
         label.y = node.y + padding + y_offset
       end
 
       def place_label_center(node, label)
-        label.x = node.x + ((node.width - label.width) / 2.0)
-        label.y = node.y + ((node.height - label.height) / 2.0)
+        label.x = node.x + ((width_of(node) - width_of(label)) / 2.0)
+        label.y = node.y + ((height_of(node) - height_of(label)) / 2.0)
       end
 
       # Place labels for all ports on a node.
@@ -152,8 +162,8 @@ module Elkrb
         case placement.upcase
         when /INSIDE/
           # Place inside port (if port is large enough)
-          label.x = port_x + ((port.width - label.width) / 2.0)
-          label.y = port_y + ((port.height - label.height) / 2.0)
+          label.x = port_x + ((width_of(port) - width_of(label)) / 2.0)
+          label.y = port_y + ((height_of(port) - height_of(label)) / 2.0)
         else
           # Default: outside, positioned based on port side
           side = port_side(node, port)
@@ -168,9 +178,9 @@ module Elkrb
 
         # Check which edge the port is closest to
         left_dist = port_x
-        right_dist = node.width - port_x
+        right_dist = width_of(node) - port_x
         top_dist = port_y
-        bottom_dist = node.height - port_y
+        bottom_dist = height_of(node) - port_y
 
         min_dist = [left_dist, right_dist, top_dist, bottom_dist].min
 
@@ -186,17 +196,17 @@ module Elkrb
       def place_port_label_by_side(label, port_x, port_y, port, side, margin)
         case side
         when :left
-          label.x = port_x - label.width - margin
-          label.y = port_y + ((port.height - label.height) / 2.0)
+          label.x = port_x - width_of(label) - margin
+          label.y = port_y + ((height_of(port) - height_of(label)) / 2.0)
         when :right
-          label.x = port_x + port.width + margin
-          label.y = port_y + ((port.height - label.height) / 2.0)
+          label.x = port_x + width_of(port) + margin
+          label.y = port_y + ((height_of(port) - height_of(label)) / 2.0)
         when :top
-          label.x = port_x + ((port.width - label.width) / 2.0)
-          label.y = port_y - label.height - margin
+          label.x = port_x + ((width_of(port) - width_of(label)) / 2.0)
+          label.y = port_y - height_of(label) - margin
         when :bottom
-          label.x = port_x + ((port.width - label.width) / 2.0)
-          label.y = port_y + port.height + margin
+          label.x = port_x + ((width_of(port) - width_of(label)) / 2.0)
+          label.y = port_y + height_of(port) + margin
         end
       end
 
@@ -229,18 +239,18 @@ module Elkrb
 
         placement = "CENTER" # Could be configurable
 
-        offset = index * (label.height + 2) # Stack multiple labels
+        offset = index * (height_of(label) + 2) # Stack multiple labels
 
         case placement.upcase
         when /CENTER/
-          label.x = center[:x] - (label.width / 2.0)
-          label.y = center[:y] - (label.height / 2.0) + offset
+          label.x = center[:x] - (width_of(label) / 2.0)
+          label.y = center[:y] - (height_of(label) / 2.0) + offset
         when /HEAD/
-          label.x = section.end_point.x - (label.width / 2.0)
-          label.y = section.end_point.y - label.height - 5 + offset
+          label.x = section.end_point.x - (width_of(label) / 2.0)
+          label.y = section.end_point.y - height_of(label) - 5 + offset
         when /TAIL/
-          label.x = section.start_point.x - (label.width / 2.0)
-          label.y = section.start_point.y - label.height - 5 + offset
+          label.x = section.start_point.x - (width_of(label) / 2.0)
+          label.y = section.start_point.y - height_of(label) - 5 + offset
         end
       end
 

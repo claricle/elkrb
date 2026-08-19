@@ -180,5 +180,63 @@ RSpec.describe Elkrb::Layout::Algorithms::MRTree do
         end
       end
     end
+
+    context "with a self-loop" do
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "root",
+          layout_options: Elkrb::Graph::LayoutOptions.new(
+            "algorithm" => "mrtree",
+          ),
+        )
+      end
+
+      before do
+        graph.children = [
+          Elkrb::Graph::Node.new(id: "a", width: 50, height: 30),
+        ]
+        graph.edges = [
+          Elkrb::Graph::Edge.new(id: "e", sources: ["a"], targets: ["a"]),
+        ]
+      end
+
+      it "lays out without SystemStackError" do
+        expect { algorithm.layout(graph) }.not_to raise_error
+      end
+    end
+
+    context "with a self-loop alongside a real edge" do
+      # Codex round-1 diff finding: the self-loop must not make its own
+      # node look like it "has an incoming edge" — that made both nodes
+      # register as roots and lose the parent/child relationship entirely.
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "root",
+          layout_options: Elkrb::Graph::LayoutOptions.new(
+            "algorithm" => "mrtree",
+          ),
+        )
+      end
+
+      before do
+        graph.children = [
+          Elkrb::Graph::Node.new(id: "a", width: 10, height: 10),
+          Elkrb::Graph::Node.new(id: "b", width: 10, height: 10),
+        ]
+        graph.edges = [
+          Elkrb::Graph::Edge.new(id: "e0", sources: ["a"], targets: ["a"]),
+          Elkrb::Graph::Edge.new(id: "e1", sources: ["a"], targets: ["b"]),
+        ]
+      end
+
+      it "still treats b as a's child, not a second root" do
+        algorithm.layout(graph)
+
+        a = graph.children.find { |n| n.id == "a" }
+        b = graph.children.find { |n| n.id == "b" }
+
+        expect(b.y).to be > a.y
+      end
+    end
   end
 end

@@ -75,6 +75,8 @@ module Elkrb
 
             # Get all edges that target this node
             @graph.edges&.each do |edge|
+              next if self_loop_edge?(edge)
+
               edges << edge if edge.targets&.include?(node.id)
             end
 
@@ -83,11 +85,22 @@ module Elkrb
               next unless other_node.edges
 
               other_node.edges.each do |edge|
+                next if self_loop_edge?(edge)
+
                 edges << edge if edge.targets&.include?(node.id)
               end
             end
 
             edges
+          end
+
+          def self_loop_edge?(edge)
+            sources = edge.sources || []
+            targets = edge.targets || []
+
+            return false if sources.empty? || targets.empty?
+
+            sources.first == targets.first
           end
         end
       end
