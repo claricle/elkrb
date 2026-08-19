@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "base_algorithm"
+require_relative "../node_index"
 
 module Elkrb
   module Layout
@@ -71,16 +72,21 @@ module Elkrb
           n.times { |i| distances[i][i] = 0 }
 
           # Set edge distances
+          index = NodeIndex.build(graph)
+          positions = graph.children.each_with_index.to_h { |node, i| [node.id, i] }
+
           all_edges = collect_all_edges(graph)
           all_edges.each do |edge|
             source_id = edge.sources&.first
             target_id = edge.targets&.first
             next unless source_id && target_id
 
-            i = graph.children.index { |n| n.id == source_id }
-            j = graph.children.index { |n| n.id == target_id }
+            source_node = index.node(source_id)
+            target_node = index.node(target_id)
+            next unless source_node && target_node
 
-            next unless i && j
+            i = positions[source_node.id]
+            j = positions[target_node.id]
 
             distances[i][j] = 1.0
             distances[j][i] = 1.0

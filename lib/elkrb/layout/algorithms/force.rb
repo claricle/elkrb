@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "base_algorithm"
+require_relative "../node_index"
 
 module Elkrb
   module Layout
@@ -32,9 +33,14 @@ module Elkrb
           # Initialize positions randomly if not set
           initialize_positions(graph)
 
+          # Resolve edge endpoints to force-array positions once, before
+          # the iteration loop (not per edge per iteration)
+          resolved_edges = resolve_edge_positions(graph)
+
           # Run force simulation
           iterations.times do |i|
-            apply_forces(graph, repulsion, temperature, i, iterations)
+            apply_forces(graph, resolved_edges, repulsion, temperature, i,
+                        iterations)
           end
 
           # Apply padding and set graph dimensions
@@ -61,13 +67,33 @@ module Elkrb
           end
         end
 
-        def apply_forces(graph, repulsion, temperature, iteration,
-                         max_iterations)
+        # Resolves each edge's source/target ids (which may be port ids)
+        # to their owning node's position in graph.children, once, so
+        # the iteration loop below never re-scans ids per edge.
+        def resolve_edge_positions(graph)
+          index = NodeIndex.build(graph)
+          positions = graph.children.each_with_index.to_h { |n, i| [n.id, i] }
+
+          collect_all_edges(graph).filter_map do |edge|
+            source_id = edge.sources&.first
+            target_id = edge.targets&.first
+            next unless source_id && target_id
+
+            source_node = index.node(source_id)
+            target_node = index.node(target_id)
+            next unless source_node && target_node
+
+            [positions[source_node.id], positions[target_node.id]]
+          end
+        end
+
+        def apply_forces(graph, resolved_edges, repulsion, temperature,
+                         iteration, max_iterations)
           # Calculate temperature decay
           temp = temperature * (1.0 - (iteration.to_f / max_iterations))
 
           # Calculate forces for each node
-          forces = calculate_forces(graph, repulsion)
+          forces = calculate_forces(graph, resolved_edges, repulsion)
 
           # Apply forces with temperature
           graph.children.each_with_index do |node, i|
@@ -83,7 +109,7 @@ module Elkrb
           end
         end
 
-        def calculate_forces(graph, repulsion)
+        def calculate_forces(graph, resolved_edges, repulsion)
           forces = graph.children.map { { x: 0.0, y: 0.0 } }
 
           # Repulsive forces between all pairs
@@ -97,18 +123,7 @@ module Elkrb
           end
 
           # Attractive forces for edges
-          all_edges = collect_all_edges(graph)
-          all_edges.each do |edge|
-            source_id = edge.sources&.first
-            target_id = edge.targets&.first
-
-            next unless source_id && target_id
-
-            source_idx = graph.children.index { |n| n.id == source_id }
-            target_idx = graph.children.index { |n| n.id == target_id }
-
-            next unless source_idx && target_idx
-
+          resolved_edges.each do |source_idx, target_idx|
             apply_attractive_force(
               graph.children[source_idx],
               graph.children[target_idx],
