@@ -152,11 +152,28 @@ module Elkrb
 
         # Returns metadata for all supported layout options.
         #
-        # @return [Array<Hash>] Array of option metadata
-        # @note Currently returns an empty array. Full implementation planned.
+        # @return [Hash{String => Hash}] Same shape and content as
+        #   Elkrb.known_layout_options, keyed by canonical id.
         def known_layout_options
-          # TODO: Build from all algorithms' supported options
-          []
+          parsers = {
+            padding: "Elkrb::Options::ElkPadding",
+            kvector: "Elkrb::Options::KVector",
+            kvector_chain: "Elkrb::Options::KVectorChain",
+          }
+
+          rendered = Options::Registry.all.each_with_object({}) do |(id, entry), hash|
+            hash[id] = {
+              type: entry[:type],
+              description: entry[:description],
+              default: entry[:default],
+              values: entry[:values],
+              parser: parsers[entry[:type]],
+              status: entry[:status],
+            }
+          end
+
+          rendered["elk.algorithm"][:values] = AlgorithmRegistry.available_algorithms
+          rendered
         end
 
         private

@@ -20,11 +20,18 @@ RSpec.describe Elkrb do
   end
 
   describe ".known_layout_options" do
-    it "returns option metadata whose algorithm values list is populated" do
+    it "returns option metadata rendered from the registry, keyed by canonical id" do
       result = described_class.known_layout_options
 
-      expect(result["algorithm"][:values]).to include("layered", "force")
-      expect(result["elk.direction"][:values]).to eq(%w[UP DOWN LEFT RIGHT])
+      expect(result["elk.algorithm"][:values]).to include("layered", "force")
+      expect(result["elk.direction"][:values]).to include("RIGHT")
+      expect(result["elk.spacing.nodeNode"][:type]).to eq(:float)
+      expect(result["elk.padding"][:parser]).to eq("Elkrb::Options::ElkPadding")
+      expect(result.key?("elk.spacing.nodeNode")).to be(true)
+    end
+
+    it "matches LayoutEngine.known_layout_options exactly" do
+      expect(Elkrb::Layout::LayoutEngine.known_layout_options).to eq(described_class.known_layout_options)
     end
   end
 end

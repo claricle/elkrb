@@ -380,18 +380,19 @@ module Elkrb
     Layout::AlgorithmRegistry.all_algorithm_info
   end
 
-  # Returns metadata for all supported layout options.
+  # Returns metadata for all supported layout options, sourced from
+  # Elkrb::Options::Registry (the single source of truth every algorithm
+  # and the CLI eventually read from).
   #
-  # This includes common options like algorithm selection, spacing,
-  # direction, and padding, as well as algorithm-specific options.
-  #
-  # @return [Hash{String => Hash}] Hash mapping option names to metadata.
+  # @return [Hash{String => Hash}] Hash mapping canonical option ids to metadata.
   #   Each metadata hash contains:
-  #   - :type (String) - Option value type
+  #   - :type (Symbol) - Option value type (:string, :float, :integer,
+  #     :boolean, :enum, :padding, :kvector, :kvector_chain)
   #   - :description (String) - Brief description
   #   - :default - Default value
   #   - :values (Array, nil) - Allowed values for enum types
   #   - :parser (String, nil) - Parser class for complex types
+  #   - :status (Symbol) - :honoured, :partial, :accepted, or :unsupported
   #
   # @example Query options
   #   options = Elkrb.known_layout_options
@@ -400,45 +401,27 @@ module Elkrb
   #
   # @example Get allowed values
   #   directions = Elkrb.known_layout_options["elk.direction"][:values]
-  #   # => ["UP", "DOWN", "LEFT", "RIGHT"]
+  #   # => ["UNDEFINED", "RIGHT", "LEFT", "DOWN", "UP"]
   def self.known_layout_options
-    {
-      "algorithm" => {
-        type: "string",
-        description: "The layout algorithm to use",
-        default: "layered",
-        values: Layout::AlgorithmRegistry.available_algorithms,
-      },
-      "elk.direction" => {
-        type: "string",
-        description: "Overall direction of layout",
-        default: "RIGHT",
-        values: %w[UP DOWN LEFT RIGHT],
-      },
-      "elk.spacing.nodeNode" => {
-        type: "float",
-        description: "Spacing between nodes",
-        default: 20.0,
-      },
-      "elk.padding" => {
-        type: "ElkPadding",
-        description: "Padding around the graph",
-        default: "[left=12, top=12, right=12, bottom=12]",
-        parser: "Elkrb::Options::ElkPadding",
-      },
-      "position" => {
-        type: "KVector",
-        description: "Fixed position for nodes (when using fixed algorithm)",
-        default: nil,
-        parser: "Elkrb::Options::KVector",
-      },
-      "bendPoints" => {
-        type: "KVectorChain",
-        description: "Bend points for edges",
-        default: nil,
-        parser: "Elkrb::Options::KVectorChain",
-      },
+    parsers = {
+      padding: "Elkrb::Options::ElkPadding",
+      kvector: "Elkrb::Options::KVector",
+      kvector_chain: "Elkrb::Options::KVectorChain",
     }
+
+    rendered = Options::Registry.all.each_with_object({}) do |(id, entry), hash|
+      hash[id] = {
+        type: entry[:type],
+        description: entry[:description],
+        default: entry[:default],
+        values: entry[:values],
+        parser: parsers[entry[:type]],
+        status: entry[:status],
+      }
+    end
+
+    rendered["elk.algorithm"][:values] = Layout::AlgorithmRegistry.available_algorithms
+    rendered
   end
 
   # Returns metadata for layout option categories.
