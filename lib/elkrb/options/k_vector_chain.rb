@@ -37,30 +37,22 @@ module Elkrb
 
       # Parse from string
       #
-      # @param str [String] String like "( {1,2}, {3,4} )"
+      # Mirrors ELK's own KVectorChain parser: split on any run of comma,
+      # semicolon, and bracket/brace/paren characters (plus whitespace),
+      # then group the resulting numeric tokens into pairs. Accepts every
+      # bracket style elkrb previously emitted as well as ELK's own
+      # canonical "(x,y; x,y)" output.
+      #
+      # @param str [String] e.g. "(1,2; 3,4)", "({1,2},{3,4})", "(1,2),(3,4)"
       # @return [KVectorChain] Parsed coordinate chain object
       def self.from_string(str)
-        # Remove outer parentheses
-        content = str.strip.gsub(/^\(\s*|\s*\)$/, "")
+        tokens = str.split(/[,;()\[\]{}\s]+/).reject(&:empty?)
 
-        # Split by },{  or } , {
-        parts = content.split(/\}\s*,\s*\{/)
-
-        # Clean up first and last parts
-        parts[0] = parts[0].sub(/^\{/, "") if parts[0]
-        parts[-1] = parts[-1].sub(/\}$/, "") if parts[-1]
-
-        # Parse each coordinate pair
-        vectors = parts.map do |part|
-          coords = part.split(",").map(&:strip)
-          unless coords.size == 2
-            raise ArgumentError,
-                  "Invalid coordinate pair: #{part}"
-          end
-
-          KVector.new(coords[0], coords[1])
+        if tokens.size.odd?
+          raise ArgumentError, "Invalid KVectorChain format: #{str}"
         end
 
+        vectors = tokens.each_slice(2).map { |x, y| KVector.new(x, y) }
         new(vectors)
       end
 

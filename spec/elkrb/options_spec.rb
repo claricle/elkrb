@@ -176,6 +176,22 @@ RSpec.describe "Elkrb::Options" do
         expect(chain[1].y).to eq(8.0)
       end
 
+      it "parses ELK's own canonical format with a semicolon separator" do
+        chain = described_class.parse("(1,2; 3,4)")
+        expect(chain.size).to eq(2)
+        expect(chain[0].x).to eq(1.0)
+        expect(chain[0].y).to eq(2.0)
+        expect(chain[1].x).to eq(3.0)
+        expect(chain[1].y).to eq(4.0)
+      end
+
+      it "parses a plain parenthesised comma-separated format" do
+        chain = described_class.parse("(1,2),(3,4)")
+        expect(chain.size).to eq(2)
+        expect(chain[0].x).to eq(1.0)
+        expect(chain[1].y).to eq(4.0)
+      end
+
       it "parses chain from array of arrays" do
         chain = described_class.parse([[10, 20], [30, 40]])
         expect(chain.size).to eq(2)
