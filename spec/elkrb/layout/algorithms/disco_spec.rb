@@ -211,5 +211,73 @@ RSpec.describe Elkrb::Layout::Algorithms::Disco do
         expect(result.children.all? { |n| n.x && n.y }).to be true
       end
     end
+
+    context "with a JSON graph: a-b connected, c isolated" do
+      it "finds exactly two components" do
+        graph = Elkrb::Graph::Graph.from_hash(
+          "id" => "r",
+          "children" => [
+            { "id" => "a", "width" => 30, "height" => 30 },
+            { "id" => "b", "width" => 30, "height" => 30 },
+            { "id" => "c", "width" => 30, "height" => 30 },
+          ],
+          "edges" => [
+            { "id" => "e1", "sources" => ["a"], "targets" => ["b"] },
+          ],
+        )
+
+        components = algorithm.send(:find_connected_components, graph)
+
+        expect(components.size).to eq(2)
+        ab_component = components.find { |c| c[:nodes].size == 2 }
+        expect(ab_component[:nodes].map(&:id)).to contain_exactly("a", "b")
+      end
+    end
+
+    context "with a two-node cycle" do
+      it "does not duplicate the cycle's edges into the component" do
+        graph = Elkrb::Graph::Graph.from_hash(
+          "id" => "r",
+          "children" => [
+            { "id" => "a", "width" => 30, "height" => 30 },
+            { "id" => "b", "width" => 30, "height" => 30 },
+          ],
+          "edges" => [
+            { "id" => "e1", "sources" => ["a"], "targets" => ["b"] },
+            { "id" => "e2", "sources" => ["b"], "targets" => ["a"] },
+          ],
+        )
+
+        components = algorithm.send(:find_connected_components, graph)
+
+        expect(components.first[:edges].map(&:id))
+          .to contain_exactly("e1", "e2")
+      end
+
+      # Codex round-1 finding: a version of find_connected_components
+      # that adds `connected_edges` to the component every time a node
+      # is DEQUEUED (rather than once, after the whole component's node
+      # set is known) records each edge twice — once from its source
+      # side, once from its target side. Passed into a layered
+      # sub-layout, cycle_breaker.rb then reverses that same back-edge
+      # twice (swapping it back to its original direction), so the cycle
+      # is never actually broken and layer assignment recurses forever.
+      # Reproduced directly against that version (SystemStackError).
+      it "lays out the cyclic component without raising" do
+        graph = Elkrb::Graph::Graph.from_hash(
+          "id" => "r",
+          "children" => [
+            { "id" => "a", "width" => 30, "height" => 30 },
+            { "id" => "b", "width" => 30, "height" => 30 },
+          ],
+          "edges" => [
+            { "id" => "e1", "sources" => ["a"], "targets" => ["b"] },
+            { "id" => "e2", "sources" => ["b"], "targets" => ["a"] },
+          ],
+        )
+
+        expect { algorithm.layout(graph) }.not_to raise_error
+      end
+    end
   end
 end

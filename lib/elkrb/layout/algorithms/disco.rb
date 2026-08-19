@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "../node_index"
+
 module Elkrb
   module Layout
     module Algorithms
@@ -14,7 +16,8 @@ module Elkrb
           return graph if graph.children.empty?
 
           # Find connected components
-          components = find_connected_components(graph)
+          index = NodeIndex.build(graph)
+          components = find_connected_components(graph, index)
 
           # Layout each component independently
           component_algo = graph.layout_options&.[]("disco.componentAlgorithm") || "layered"
@@ -34,54 +37,48 @@ module Elkrb
 
         private
 
-        def find_connected_components(graph)
+        # `index` defaults so specs can call this directly with just a
+        # graph; layout_flat above always passes the index it already
+        # built, so production never builds it twice.
+        def find_connected_components(graph, index = NodeIndex.build(graph))
           visited = Set.new
           components = []
 
           graph.children.each do |node|
-            next if visited.include?(node)
+            next if visited.include?(node.id)
 
-            component = {
-              nodes: [],
-              edges: [],
-            }
+            nodes = []
 
             # BFS to find all connected nodes
             queue = [node]
             while queue.any?
               current = queue.shift
-              next if visited.include?(current)
+              next if visited.include?(current.id)
 
-              visited.add(current)
-              component[:nodes] << current
+              visited.add(current.id)
+              nodes << current
 
-              # Find connected nodes through edges
-              connected_edges = (graph.edges || []).select do |edge|
-                edge_nodes = []
-                edge.sources&.each do |port|
-                  edge_nodes << (port.respond_to?(:node) ? port.node : port)
-                end
-                edge.targets&.each do |port|
-                  edge_nodes << (port.respond_to?(:node) ? port.node : port)
-                end
-                edge_nodes.include?(current)
-              end
+              (graph.edges || []).each do |edge|
+                endpoints = index.endpoint_nodes(edge.sources) +
+                  index.endpoint_nodes(edge.targets)
+                next unless endpoints.include?(current)
 
-              component[:edges].concat(connected_edges)
-
-              connected_edges.each do |edge|
-                nodes = []
-                edge.sources&.each do |port|
-                  nodes << (port.respond_to?(:node) ? port.node : port)
-                end
-                edge.targets&.each do |port|
-                  nodes << (port.respond_to?(:node) ? port.node : port)
-                end
-                nodes.each { |n| queue << n unless visited.include?(n) }
+                endpoints.each { |n| queue << n unless visited.include?(n.id) }
               end
             end
 
-            components << component
+            # Compute this component's edges once the whole node set is
+            # known, rather than per visited node — accumulating them
+            # incrementally during the walk records each edge twice
+            # (once from its source side, once from its target side).
+            node_ids = nodes.map(&:id)
+            edges = (graph.edges || []).select do |edge|
+              endpoints = index.endpoint_nodes(edge.sources) +
+                index.endpoint_nodes(edge.targets)
+              endpoints.any? { |n| node_ids.include?(n.id) }
+            end
+
+            components << { nodes: nodes, edges: edges }
           end
 
           components
