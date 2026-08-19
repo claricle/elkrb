@@ -25,6 +25,7 @@ require_relative "elkrb/serializers/dot_serializer"
 require_relative "elkrb/options/elk_padding"
 require_relative "elkrb/options/k_vector"
 require_relative "elkrb/options/k_vector_chain"
+require_relative "elkrb/options/registry"
 
 # Layout constraints
 require_relative "elkrb/layout/constraints/base_constraint"
