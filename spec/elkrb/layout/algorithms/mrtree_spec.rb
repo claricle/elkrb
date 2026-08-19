@@ -238,5 +238,84 @@ RSpec.describe Elkrb::Layout::Algorithms::MRTree do
         expect(b.y).to be > a.y
       end
     end
+
+    context "with a port-id edge" do
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "root",
+          layout_options: Elkrb::Graph::LayoutOptions.new(
+            "algorithm" => "mrtree",
+          ),
+        )
+      end
+
+      before do
+        a = Elkrb::Graph::Node.new(
+          id: "a",
+          width: 10,
+          height: 10,
+          ports: [Elkrb::Graph::Port.new(id: "p1")],
+        )
+        b = Elkrb::Graph::Node.new(id: "b", width: 10, height: 10)
+
+        graph.children = [a, b]
+        graph.edges = [
+          Elkrb::Graph::Edge.new(id: "e", sources: ["p1"], targets: ["b"]),
+        ]
+      end
+
+      it "builds b below a, resolving the port id to its owning node" do
+        algorithm.layout(graph)
+
+        a = graph.children.find { |n| n.id == "a" }
+        b = graph.children.find { |n| n.id == "b" }
+
+        expect(b.y).to be > a.y
+      end
+    end
+
+    context "with a two-port self-loop alongside a real edge" do
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "root",
+          layout_options: Elkrb::Graph::LayoutOptions.new(
+            "algorithm" => "mrtree",
+          ),
+        )
+      end
+
+      before do
+        a = Elkrb::Graph::Node.new(
+          id: "a",
+          width: 10,
+          height: 10,
+          ports: [
+            Elkrb::Graph::Port.new(id: "p1"),
+            Elkrb::Graph::Port.new(id: "p2"),
+          ],
+        )
+        b = Elkrb::Graph::Node.new(id: "b", width: 10, height: 10)
+
+        graph.children = [a, b]
+        graph.edges = [
+          Elkrb::Graph::Edge.new(id: "loop", sources: ["p1"], targets: ["p2"]),
+          Elkrb::Graph::Edge.new(id: "real", sources: ["a"], targets: ["b"]),
+        ]
+      end
+
+      # Regression guard for the same class of bug as layered's
+      # self_loop_edge? fix (Task 3): a raw-id comparison here would
+      # count "loop" as real incoming traffic to "a" (since "p2" now
+      # resolves to "a" via the index) and wrongly drop "a" from
+      # `roots`, losing it from the tree.
+      it "still treats a as a root and b as its child" do
+        algorithm.layout(graph)
+
+        a = graph.children.find { |n| n.id == "a" }
+        b = graph.children.find { |n| n.id == "b" }
+
+        expect(b.y).to be > a.y
+      end
+    end
   end
 end

@@ -2,6 +2,7 @@
 
 require "set"
 require_relative "base_algorithm"
+require_relative "../node_index"
 
 module Elkrb
   module Layout
@@ -13,14 +14,16 @@ module Elkrb
         def layout_flat(graph, _options = {})
           return graph if graph.children.empty?
 
+          index = NodeIndex.build(graph)
+
           # Identify root nodes (nodes with no incoming edges)
-          roots = find_root_nodes(graph)
+          roots = find_root_nodes(graph, index)
 
           # If no roots found, treat all nodes as roots
           roots = graph.children if roots.empty?
 
           # Build tree structure from roots
-          trees = roots.map { |root| build_tree(root, graph) }
+          trees = roots.map { |root| build_tree(root, graph, index) }
 
           # Calculate positions for each tree
           spacing_val = node_spacing
@@ -39,35 +42,40 @@ module Elkrb
 
         private
 
-        def find_root_nodes(graph)
+        def find_root_nodes(graph, index)
           nodes_with_incoming = Set.new
 
           graph.edges&.each do |edge|
-            next if self_loop_edge?(edge)
+            next if self_loop_edge?(edge, index)
 
-            targets = edge.targets || []
-            targets.each do |target_id|
-              nodes_with_incoming.add(target_id)
+            index.endpoint_nodes(edge.targets).each do |target|
+              nodes_with_incoming.add(target.id)
             end
           end
 
           graph.children.reject { |node| nodes_with_incoming.include?(node.id) }
         end
 
-        def self_loop_edge?(edge)
-          sources = edge.sources || []
-          targets = edge.targets || []
+        # Compares resolved OWNERS, not raw ids: two different port ids
+        # on the same node (e.g. "p1" -> "p2") are still a self-loop.
+        # Comparing raw ids here would leave a port-to-port self-loop
+        # looking like real incoming traffic once find_root_nodes above
+        # resolves targets through the index, which can wrongly exclude
+        # a true root from `roots` whenever it also carries such a loop.
+        def self_loop_edge?(edge, index)
+          sources = index.endpoint_nodes(edge.sources)
+          targets = index.endpoint_nodes(edge.targets)
 
           return false if sources.empty? || targets.empty?
 
           sources.first == targets.first
         end
 
-        def build_tree(root, graph)
-          build_subtree(root, graph, 0, Set.new)
+        def build_tree(root, graph, index)
+          build_subtree(root, graph, index, 0, Set.new)
         end
 
-        def build_subtree(node, graph, level, visited)
+        def build_subtree(node, graph, index, level, visited)
           visited = visited | [node.id]
 
           tree = {
@@ -76,29 +84,23 @@ module Elkrb
             level: level,
           }
 
-          children = find_children(node, graph)
+          children = find_children(node, graph, index)
                      .reject { |child| visited.include?(child.id) }
           tree[:children] = children.map do |child|
-            build_subtree(child, graph, level + 1, visited)
+            build_subtree(child, graph, index, level + 1, visited)
           end
 
           tree
         end
 
-        def find_children(node, graph)
+        def find_children(node, graph, index)
           children = []
           edges = graph.edges || []
 
           edges.each do |edge|
-            sources = edge.sources || []
-            targets = edge.targets || []
+            next unless index.endpoint_nodes(edge.sources).include?(node)
 
-            next unless sources.include?(node.id)
-
-            targets.each do |target_id|
-              child = graph.children.find { |n| n.id == target_id }
-              children << child if child
-            end
+            children.concat(index.endpoint_nodes(edge.targets))
           end
 
           children
