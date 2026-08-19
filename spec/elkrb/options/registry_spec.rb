@@ -89,11 +89,8 @@ RSpec.describe Elkrb::Options::Registry do
       expect(padding.to_h).to eq(top: 7.0, left: 7.0, bottom: 7.0, right: 7.0)
     end
 
-    it "parses a KVectorChain" do
-      # Uses the brace form KVectorChain already accepts today — Task 2
-      # is what teaches it ELK's "(x,y; x,y)" format, and hasn't run yet
-      # at this point in the plan, so this spec must not depend on it.
-      chain = described_class.coerce("elk.bendPoints", "({1,2},{3,4})")
+    it "parses a KVectorChain in ELK's own canonical format" do
+      chain = described_class.coerce("elk.bendPoints", "(1,2; 3,4)")
       expect(chain.vectors.size).to eq(2)
     end
   end

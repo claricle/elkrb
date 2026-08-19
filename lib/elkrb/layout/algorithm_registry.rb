@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "../options/registry"
+
 module Elkrb
   module Layout
     class AlgorithmRegistry

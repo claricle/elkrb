@@ -47,10 +47,7 @@ module Elkrb
       # @return [KVectorChain] Parsed coordinate chain object
       def self.from_string(str)
         tokens = str.split(/[,;()\[\]{}\s]+/).reject(&:empty?)
-
-        if tokens.size.odd?
-          raise ArgumentError, "Invalid KVectorChain format: #{str}"
-        end
+        raise ArgumentError, "Invalid KVectorChain format: #{str}" if tokens.size.odd?
 
         vectors = tokens.each_slice(2).map { |x, y| KVector.new(x, y) }
         new(vectors)

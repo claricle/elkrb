@@ -1,5 +1,9 @@
 # frozen_string_literal: true
 
+require_relative "elk_padding"
+require_relative "k_vector"
+require_relative "k_vector_chain"
+
 module Elkrb
   module Options
     # Single source of truth for ELK/elkrb layout option metadata: id,
@@ -31,7 +35,7 @@ module Elkrb
         "elk.edgeLabels.placement" => { type: :string, default: "CENTER", algorithms: :all, status: :honoured, description: "Edge label placement" },
         "elk.position" => { type: :kvector, default: nil, aliases: %w[position], algorithms: %w[fixed], status: :honoured, description: "Fixed position for a node (fixed algorithm)" },
         "elk.bendPoints" => { type: :kvector_chain, default: nil, aliases: %w[bendPoints], algorithms: :all, status: :honoured, description: "Manual bend points for an edge" },
-        "elk.layered.spacing.nodeNodeBetweenLayers" => { type: :float, default: 60.0, aliases: %w[layer_spacing layered.spacing.nodeNodeBetweenLayers], algorithms: %w[layered], status: :honoured, description: "Spacing between layers (S9 changes the default to 20.0)" },
+        "elk.layered.spacing.nodeNodeBetweenLayers" => { type: :float, default: 60.0, aliases: %w[layer_spacing layered.spacing.nodeNodeBetweenLayers], algorithms: %w[layered], status: :honoured, description: "Spacing between layers (ELK's own default is 20.0; elkrb currently defaults to 60.0)" },
         "elk.force.iterations" => { type: :integer, default: 300, aliases: %w[iterations], algorithms: %w[force], status: :honoured, description: "Force simulation iteration count" },
         "elk.force.repulsion" => { type: :float, default: 5.0, aliases: %w[repulsion], algorithms: %w[force], status: :honoured, description: "Force simulation repulsion strength" },
         "elk.force.temperature" => { type: :float, default: 0.001, aliases: %w[temperature], algorithms: %w[force], status: :honoured, description: "Force simulation cooling temperature" },
@@ -128,8 +132,13 @@ module Elkrb
           OPTIONS.dig(canonical(id) || id.to_s, :note)
         end
 
+        # Membership, not truthfulness: an id's presence here means it's
+        # scoped to this algorithm, regardless of whether it's currently
+        # honoured, accepted, or unsupported — cross-reference #status(id)
+        # for that.
+        #
         # @param name [String] a normalised algorithm name (e.g. "layered")
-        # @return [Array<String>] canonical ids that algorithm reads
+        # @return [Array<String>] canonical ids scoped to that algorithm
         def for_algorithm(name)
           OPTIONS.select do |_id, entry|
             entry[:algorithms] == :all || Array(entry[:algorithms]).include?(name)

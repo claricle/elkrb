@@ -24,6 +24,16 @@ RSpec.describe Elkrb::Layout::AlgorithmRegistry do
   end
 
   describe ".register" do
+    # AlgorithmRegistry holds process-wide state; registering a test
+    # double must not leak into every other example in the suite.
+    around do |example|
+      algorithms_before = described_class.instance_variable_get(:@algorithms).dup
+      metadata_before = described_class.instance_variable_get(:@metadata).dup
+      example.run
+      described_class.instance_variable_set(:@algorithms, algorithms_before)
+      described_class.instance_variable_set(:@metadata, metadata_before)
+    end
+
     it "normalises the registered name the same way .get does" do
       described_class.register("MyTestAlgo", Elkrb::Layout::Algorithms::Box)
 
