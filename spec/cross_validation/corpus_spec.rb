@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "json"
 require "tmpdir"
 require_relative "corpus_runner"
 
@@ -10,21 +11,26 @@ RSpec.describe "Elkrb layout corpus" do
   # [case id, check] => RC id. A listed check is `pending`; the guard
   # example at the bottom fails if a listed check now passes, forcing
   # this ledger to be edited when a slice fixes the underlying bug.
+  # Re-authored against origin/v2 (slice 1, a008889: nil-safe LayoutOptions,
+  # self-loop fixes in layered/mrtree, size-less nodes/labels treated as 0
+  # at read sites, nil collections). self_loop, java_elk_self_loops, and
+  # compound_unsized no longer crash AND now produce finite invariants
+  # (compound sizing is computed from children, so removed outright).
+  # sizeless_node, labelled_only_text, and no_children_key no longer crash
+  # (removed from "no_crash"), but the element that never had a declared
+  # size still carries a nil width/height on the object itself -- slice 1
+  # is a read-site guard (arithmetic treats nil as 0), not an attribute
+  # default (verified: lib/elkrb/layout/label_placer.rb's width_of/
+  # height_of helpers), so "invariants" still fails for real. That is
+  # decision 5 of the remediation plan ("output omits width/height for
+  # nodes that never had them"), tracked here as D5 until S0a's
+  # `omit_size_for_unsized_input` matcher lands to assert it correctly.
   KNOWN_FAILURES = {
-    ["self_loop", "no_crash"] => "RC4",
-    ["self_loop", "invariants"] => "RC4",
-    ["sizeless_node", "no_crash"] => "RC4",
-    ["sizeless_node", "invariants"] => "RC4",
-    ["no_children_key", "no_crash"] => "RC4",
-    ["no_children_key", "invariants"] => "RC4",
+    ["sizeless_node", "invariants"] => "D5",
+    ["no_children_key", "invariants"] => "D5",
     ["duplicate_ids", "no_crash"] => "RC4",
     ["duplicate_ids", "invariants"] => "RC4",
-    ["labelled_only_text", "no_crash"] => "RC4",
-    ["labelled_only_text", "invariants"] => "RC4",
-    ["compound_unsized", "no_crash"] => "RC4",
-    ["compound_unsized", "invariants"] => "RC4",
-    ["java_elk_self_loops", "no_crash"] => "RC4",
-    ["java_elk_self_loops", "invariants"] => "RC4",
+    ["labelled_only_text", "invariants"] => "D5",
     ["java_elk_sporeOverlap", "no_crash"] => "RC14",
     ["java_elk_sporeOverlap", "invariants"] => "RC14",
     ["java_elk_sporeCompaction", "no_crash"] => "RC14",
@@ -51,13 +57,12 @@ RSpec.describe "Elkrb layout corpus" do
   def assert_node_invariants(node, label)
     assert_finite_point(node, label)
     assert_finite_size(node, label)
-    (node.labels || []).each_with_index do |l, i|
-      assert_finite_point(l, "#{label}.labels[#{i}]")
-      assert_finite_size(l, "#{label}.labels[#{i}]")
-    end
+    assert_labels(node.labels, label)
     (node.ports || []).each_with_index do |p, i|
-      assert_finite_point(p, "#{label}.ports[#{i}]")
-      assert_finite_size(p, "#{label}.ports[#{i}]")
+      port_label = "#{label}.ports[#{i}]"
+      assert_finite_point(p, port_label)
+      assert_finite_size(p, port_label)
+      assert_labels(p.labels, port_label)
     end
     (node.children || []).each_with_index do |c, i|
       assert_node_invariants(c, "#{label}.children[#{i}]")
@@ -68,13 +73,23 @@ RSpec.describe "Elkrb layout corpus" do
   end
 
   def assert_edge_invariants(edge, label)
+    assert_labels(edge.labels, label)
     (edge.sections || []).each_with_index do |section, i|
       section_label = "#{label}.sections[#{i}]"
-      assert_finite_point(section.start_point, "#{section_label}.start") if section.start_point
-      assert_finite_point(section.end_point, "#{section_label}.end") if section.end_point
+      expect(section.start_point).not_to be_nil, "#{section_label}.start is nil"
+      expect(section.end_point).not_to be_nil, "#{section_label}.end is nil"
+      assert_finite_point(section.start_point, "#{section_label}.start")
+      assert_finite_point(section.end_point, "#{section_label}.end")
       (section.bend_points || []).each_with_index do |bp, j|
         assert_finite_point(bp, "#{section_label}.bend[#{j}]")
       end
+    end
+  end
+
+  def assert_labels(labels, owner_label)
+    (labels || []).each_with_index do |l, i|
+      assert_finite_point(l, "#{owner_label}.labels[#{i}]")
+      assert_finite_size(l, "#{owner_label}.labels[#{i}]")
     end
   end
 
@@ -87,11 +102,11 @@ RSpec.describe "Elkrb layout corpus" do
 
   def assert_finite_size(element, label)
     expect(element.width).to be_a(Float), "#{label}.width is #{element.width.inspect}, not a Float"
-    expect(element.width).to be_finite
-    expect(element.width).to be >= 0
+    expect(element.width).to be_finite, "#{label}.width=#{element.width} is not finite"
+    expect(element.width).to be >= 0, "#{label}.width=#{element.width} is negative"
     expect(element.height).to be_a(Float), "#{label}.height is #{element.height.inspect}, not a Float"
-    expect(element.height).to be_finite
-    expect(element.height).to be >= 0
+    expect(element.height).to be_finite, "#{label}.height=#{element.height} is not finite"
+    expect(element.height).to be >= 0, "#{label}.height=#{element.height} is negative"
   end
 
   def known_failure_reason(id, check)
@@ -119,6 +134,10 @@ RSpec.describe "Elkrb layout corpus" do
 
   it "keeps the KNOWN_FAILURES ledger honest" do
     cases_by_id = CASES.to_h { |kase| [kase.id, kase] }
+
+    stale_ids = KNOWN_FAILURES.keys.map(&:first).uniq - cases_by_id.keys
+    expect(stale_ids).to be_empty,
+      "KNOWN_FAILURES references case ids that no longer exist in the corpus: #{stale_ids.inspect}"
 
     now_passing = KNOWN_FAILURES.keys.reject do |id, check|
       entry_still_fails?(cases_by_id.fetch(id), check)
@@ -154,7 +173,7 @@ RSpec.describe "Elkrb layout corpus" do
 
       slow_algorithm = Class.new(Elkrb::Layout::Algorithms::BaseAlgorithm) do
         def layout_flat(_graph, _options = {})
-          sleep 0.05
+          sleep 0.15
         end
       end
       Elkrb::Layout::AlgorithmRegistry.register("corpus_runner_spec_slow", slow_algorithm)
@@ -166,7 +185,7 @@ RSpec.describe "Elkrb layout corpus" do
       allow(CorpusRunner).to receive(:cases).and_return([ok_case, error_case, timeout_case])
 
       Dir.mktmpdir do |dir|
-        summary = CorpusRunner.run(dir, timeout: 0.01)
+        summary = CorpusRunner.run(dir, timeout: 0.02)
 
         expect(summary["total"]).to eq(3)
         expect(summary["ok"]).to eq(1)
