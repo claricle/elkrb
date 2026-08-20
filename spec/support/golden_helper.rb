@@ -33,6 +33,23 @@ module GoldenComparator
     value["error"]
   end
 
+  # elkjs's message is Java-flavored ("...IllegalArgumentException: Passed
+  # edge is not 'simple'.") and elkrb's own eventual message (once it
+  # raises `Elkrb::UnsupportedConfigurationException`, per Decision 10)
+  # will be worded differently in Ruby — comparing the full sentence would
+  # never match. The condition elkjs names is the single-quoted term in
+  # its message ('simple' here); requiring the actual message to name
+  # that same term (case-insensitively) checks WHICH rejection happened
+  # without demanding identical wording, so "an error happened" isn't
+  # treated as proof of "the RIGHT error happened". No quoted term in the
+  # expected message falls back to requiring an exact match.
+  def same_error_condition?(expected_message, actual_message)
+    quoted = expected_message[/'([^']+)'/, 1]
+    return expected_message == actual_message unless quoted
+
+    actual_message.downcase.include?(quoted.downcase)
+  end
+
   # Round-trips the model through its own `json do` mapping. A NaN/Infinity
   # coordinate (RC8: a zero-length section can produce one) makes `to_json`
   # raise `JSON::GeneratorError` deep inside lutaml — re-raised here with a
@@ -205,8 +222,24 @@ module GoldenComparator
     end
   end
 
+  # Sections are matched POSITIONALLY within an edge (by index), never by
+  # raw id: elkjs writes "e1_s0", elkrb writes "e1_section_0" today (S11
+  # renames elkrb's ids to the elkjs shape) — id-based matching (the
+  # earlier `diff_by_id`-based version of this method) means no section
+  # ever has a common id on both sides, so the geometry comparison below
+  # would silently never run. The comparator must not depend on elkrb
+  # eventually adopting elkjs's id convention.
   def diff_sections(expected_edge, actual_edge, path)
-    diff_by_id(expected_edge["sections"], actual_edge["sections"], "#{path}/sections") do |e_sec, a_sec, sec_path|
+    expected_sections = expected_edge["sections"] || []
+    actual_sections = actual_edge["sections"] || []
+
+    if expected_sections.size != actual_sections.size
+      return ["#{path}/sections: expected #{expected_sections.size}, got #{actual_sections.size}"]
+    end
+
+    expected_sections.each_with_index.flat_map do |e_sec, i|
+      a_sec = actual_sections[i]
+      sec_path = "#{path}/sections[#{i}]"
       diffs = diff_point(e_sec["startPoint"], a_sec["startPoint"], "#{sec_path}/startPoint")
       diffs.concat(diff_point(e_sec["endPoint"], a_sec["endPoint"], "#{sec_path}/endPoint"))
       diffs.concat(diff_bend_points(e_sec["bendPoints"], a_sec["bendPoints"], "#{sec_path}/bendPoints"))
@@ -236,12 +269,14 @@ module GoldenComparator
     diff_own_numeric(expected_point, actual_point, path, POINT_FIELDS)
   end
 
-  # Structural tier: graph size within 1px, every edge section clipped to
+  # Structural tier: graph size within 1px, every matched node's OWN
+  # size/position (`diff_node_geometry`), every edge section clipped to
   # its endpoint node/port border within 1px, per-layer membership/order
   # equal (grouped by rounded x for RIGHT/LEFT direction, y for UP/DOWN).
   def diff_structural(expected, actual)
     diffs = []
     diffs.concat(diff_graph_size(expected, actual))
+    diffs.concat(diff_node_geometry(expected, actual, ""))
     diffs.concat(diff_section_borders(expected, actual))
     diffs.concat(diff_layer_membership(expected, actual))
     diffs
@@ -256,6 +291,75 @@ module GoldenComparator
 
       "graph/#{key}: expected #{e}, got #{a} (>1px)" if (e - a).abs > 1
     end
+  end
+
+  # Every OTHER structural check (id sets, section borders, layer
+  # membership) can pass while every node is stacked on the origin,
+  # permuted with its siblings, or a compound is sized nothing like its
+  # declared size — none of them look at a node's OWN width/height/
+  # position against the golden's. This is the check that does:
+  #
+  # - width/height within 1px, UNCONDITIONALLY (not gated by algorithm or
+  #   direction) — a compound's declared size is not "loose", it is the
+  #   one thing structural tier exists to prove for hierarchy (RC5).
+  # - position, compared as a FRACTION of the containing level's own
+  #   bounding box (each side normalised against ITS OWN width/height),
+  #   not raw coordinates — different algorithms use different absolute
+  #   coordinate conventions even for a correct layout (RIGHT vs DOWN,
+  #   padding choices), so raw-coordinate comparison would be stricter
+  #   than structural tier is meant to be. POSITION_TOLERANCE_FRACTION
+  #   (0.15 — a node more than 15% of the graph's own span away from
+  #   where it belongs) is coarse on purpose: it must not demand
+  #   byte-identical placement, only catch a node stacked at the origin,
+  #   swapped with a sibling, or otherwise clearly out of place.
+  #
+  # Matched by `diff_by_id`, the same canonical by-id pairing every other
+  # owner-child comparison in this file uses — which also means a node
+  # present on only one side is reported here (structural tier had no
+  # other check that would catch a node vanishing or appearing outright).
+  # Recurses into every matched child, treating that child as the new
+  # bounding box for ITS OWN children — the same per-level frame
+  # `check_level_sections` and `rect_index` already use elsewhere in this
+  # file.
+  POSITION_TOLERANCE_FRACTION = 0.15
+
+  def diff_node_geometry(expected_level, actual_level, path)
+    expected_box_width = numeric_or_zero(expected_level, "width")
+    expected_box_height = numeric_or_zero(expected_level, "height")
+    actual_box_width = numeric_or_zero(actual_level, "width")
+    actual_box_height = numeric_or_zero(actual_level, "height")
+
+    diff_by_id(expected_level["children"], actual_level["children"], path) do |e_node, a_node, node_path|
+      diffs = %w[width height].filter_map do |key|
+        e = numeric_or_zero(e_node, key)
+        a = numeric_or_zero(a_node, key)
+        "#{node_path}/#{key}: expected #{e}, got #{a} (>1px)" if (e - a).abs > 1
+      end
+      diffs.concat(diff_normalised_position(e_node, expected_box_width, expected_box_height,
+                                             a_node, actual_box_width, actual_box_height, node_path))
+      diffs.concat(diff_node_geometry(e_node, a_node, node_path))
+      diffs
+    end
+  end
+
+  def diff_normalised_position(e_node, e_box_width, e_box_height, a_node, a_box_width, a_box_height, path)
+    return [] if e_box_width <= 0 || e_box_height <= 0 || a_box_width <= 0 || a_box_height <= 0
+
+    e_fx = numeric_or_zero(e_node, "x") / e_box_width
+    e_fy = numeric_or_zero(e_node, "y") / e_box_height
+    a_fx = numeric_or_zero(a_node, "x") / a_box_width
+    a_fy = numeric_or_zero(a_node, "y") / a_box_height
+
+    diffs = []
+    if (e_fx - a_fx).abs > POSITION_TOLERANCE_FRACTION
+      diffs << "#{path}/x: normalised position expected #{e_fx.round(3)}, got #{a_fx.round(3)} " \
+                "(off by more than #{POSITION_TOLERANCE_FRACTION} of the graph's own width)"
+    end
+    if (e_fy - a_fy).abs > POSITION_TOLERANCE_FRACTION
+      diffs << "#{path}/y: normalised position expected #{e_fy.round(3)}, got #{a_fy.round(3)} " \
+                "(off by more than #{POSITION_TOLERANCE_FRACTION} of the graph's own height)"
+    end
+    diffs
   end
 
   # Every edge section's start/end point lies on the border (within 1px) of
@@ -297,6 +401,19 @@ module GoldenComparator
     (expected_level["edges"] || []).each do |edge|
       actual_edge = actual_edges[edge["id"]]
       next unless actual_edge # already recorded above as missing
+
+      # Checked BEFORE using `actual_edge`'s own sources/targets as the
+      # geometry reference below: without this, an edge silently rewired
+      # to different endpoints (elkrb connecting the wrong nodes) would
+      # still pass, because the border check only asks "does the section
+      # land on ACTUAL's own (rewired) endpoint's border" — trivially
+      # true, since that endpoint IS what routed it. Which nodes an edge
+      # connects is itself a structural fact, not just where its section
+      # happens to land.
+      if edge["sources"] != actual_edge["sources"] || edge["targets"] != actual_edge["targets"]
+        diffs << "#{path}/edges/#{edge['id']}: endpoints changed from " \
+                 "#{edge['sources']}->#{edge['targets']} to #{actual_edge['sources']}->#{actual_edge['targets']}"
+      end
 
       sections = actual_edge["sections"] || []
       next diffs << "#{path}/edges/#{edge['id']}: no sections in actual" if sections.empty?
@@ -557,7 +674,14 @@ RSpec::Matchers.define :match_elkjs_golden do |name, tier:, fields: %i[nodes sec
   define_method(:error_diffs) do |expected, actual|
     expected_error = GoldenComparator.error_hash?(expected)
     actual_error = GoldenComparator.error_hash?(actual)
-    return [] if expected_error && actual_error
+
+    if expected_error && actual_error
+      expected_message = GoldenComparator.error_message(expected)
+      actual_message = GoldenComparator.error_message(actual)
+      return [] if GoldenComparator.same_error_condition?(expected_message, actual_message)
+
+      return ["expected an error naming the same condition as #{expected_message.inspect}, got #{actual_message.inspect}"]
+    end
 
     if expected_error
       ["expected an elkjs-style error, got a successful layout"]

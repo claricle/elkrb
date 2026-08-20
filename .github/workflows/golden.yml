@@ -23,4 +23,12 @@ jobs:
           # want persisted across runs.
           bundler-cache: false
       - run: bundle install
-      - run: bundle exec rspec spec/elkrb/golden_spec.rb spec/cross_validation
+      # spec/cross_validation has no specs on this branch (S0b, which owns
+      # it, isn't merged yet) and every golden_spec.rb example is
+      # `pending` today -- neither can currently fail from a real
+      # comparator bug, so this job would prove nothing. spec/support is
+      # where the comparator's OWN specs live (golden_helper_spec.rb, the
+      # invariant specs) -- they are NOT pending and DO fail on a real
+      # regression, which is what makes this job worth running. Re-add
+      # spec/cross_validation once S0b merges and it has specs of its own.
+      - run: bundle exec rspec spec/elkrb/golden_spec.rb spec/support
