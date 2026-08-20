@@ -367,6 +367,7 @@ module Elkrb
   #   - :description (String) - Brief description
   #   - :category (String) - Algorithm category
   #   - :supports_hierarchy (Boolean) - Whether it supports nested graphs
+  #   - :supported_options (Array<String>) - Canonical option ids scoped to this algorithm
   #
   # @example List all algorithms
   #   Elkrb.known_layout_algorithms.each do |alg|

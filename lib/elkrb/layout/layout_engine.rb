@@ -104,6 +104,7 @@ module Elkrb
         #   - :description (String) - Brief description
         #   - :category (String, nil) - Algorithm category (e.g., "hierarchical", "force")
         #   - :supports_hierarchy (Boolean, nil) - Whether it supports hierarchical graphs
+        #   - :supported_options (Array<String>) - Canonical option ids scoped to this algorithm
         #
         # @example List all algorithms
         #   algorithms = Elkrb::Layout::LayoutEngine.known_layout_algorithms
