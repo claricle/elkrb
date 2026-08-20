@@ -7,7 +7,6 @@ This directory contains the cross-validation test suite for validating ElkRb aga
 The cross-validation suite:
 - Imports test cases from elkjs and Java ELK
 - Runs them through ElkRb's layout engine
-- Validates outputs and generates compatibility reports
 - Helps ensure ElkRb maintains compatibility with reference implementations
 
 ## Directory Structure
@@ -17,9 +16,8 @@ spec/cross_validation/
 ├── README.md                           # This file
 ├── elkjs_test_importer.rb             # Imports test cases from elkjs
 ├── java_elk_test_importer.rb          # Imports test cases from Java ELK
-├── validation_runner.rb                # Runs validation tests
-├── generate_validation_report.rb       # Generates AsciiDoc report
-├── validation_report.json              # JSON validation results
+├── corpus_runner.rb                    # Runs corpus cases, writes canonical dumps
+├── corpus_spec.rb                      # Asserts corpus invariants
 └── fixtures/
     ├── elkjs/
     │   └── imported_tests.json        # Imported elkjs test cases
@@ -48,29 +46,16 @@ rake validate:import_all
 
 ### Run Validation
 
-Run cross-validation tests:
+Run cross-validation cases:
 ```bash
 rake validate:run
 ```
 
 This will:
 - Load imported test cases
-- Run each test through ElkRb
-- Validate outputs
-- Generate validation_report.json
-
-### Generate Report
-
-Generate AsciiDoc validation report:
-```bash
-rake validate:report
-```
-
-This creates `docs/VALIDATION_REPORT.adoc` with:
-- Summary statistics
-- Per-source compatibility rates
-- Failed test details
-- Recommendations
+- Lay out each corpus case through ElkRb
+- Write one canonical JSON file per case plus `summary.json` to the
+  output directory (`tmp/corpus` for this task)
 
 ### Full Pipeline
 
@@ -82,7 +67,6 @@ rake validate:all
 This executes:
 1. Import all test cases
 2. Run validation
-3. Generate report (optional: add `rake validate:report` after)
 
 ## Test Importers
 
@@ -114,16 +98,15 @@ If not found, generates sample test cases for:
 - Self-loops
 - Compound graphs
 
-## Validation Runner
+## Corpus Runner
 
-Located at: `spec/cross_validation/validation_runner.rb`
+Located at: `spec/cross_validation/corpus_runner.rb`
 
 Features:
-- Timeout protection (5s per test) to prevent infinite loops
+- Timeout protection (30s per case) to prevent infinite loops
 - Stack overflow detection for cycle detection
 - Detailed error reporting
-- Progress indicators (. = pass, F = fail)
-- JSON report generation
+- Writes one canonical JSON file per case plus a summary
 
 ## Current Results
 
@@ -191,7 +174,6 @@ Add to CI pipeline:
   run: |
     bundle exec rake validate:import_all
     bundle exec rake validate:run
-    bundle exec rake validate:report
 ```
 
 ## Contributing
