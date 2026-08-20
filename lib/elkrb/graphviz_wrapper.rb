@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "open3"
+
 module Elkrb
   # Wrapper for optional Graphviz integration
   # Provides graceful degradation when Graphviz is not installed
@@ -28,14 +30,14 @@ module Elkrb
 
       dpi = options[:dpi] || 96
 
-      cmd = build_command(engine, format, dot_file, output_file, dpi)
-      execute_command(cmd)
+      argv = build_command(engine, format, dot_file, output_file, dpi)
+      execute_command(argv)
     end
 
     def version
       return nil unless available?
 
-      output = `#{@dot_path} -V 2>&1`
+      output, = Open3.capture2e(@dot_path, "-V")
       output.match(/version\s+([\d.]+)/i)&.captures&.first
     end
 
@@ -49,49 +51,35 @@ module Elkrb
 
     private
 
+    # Finds the Graphviz `dot` executable.
+    #
+    # @return [String, nil] the path to `dot`, or nil if not found
+    #
+    # ENV["ELKRB_DOT"], if set, is the sole candidate — no PATH fallback if
+    # it doesn't point at a real executable. Otherwise every `dot` on PATH
+    # is tried in order.
     def find_graphviz
-      # Try common locations
-      candidates = [
-        "dot",
-        "/usr/bin/dot",
-        "/usr/local/bin/dot",
-        "/opt/homebrew/bin/dot",
-        "/opt/local/bin/dot",
-      ]
+      candidates = ENV["ELKRB_DOT"] ? [ENV["ELKRB_DOT"]] : path_dot_candidates
+      candidates.find { |candidate| valid_executable?(candidate) }
+    end
 
-      candidates.each do |path|
-        if File.executable?(path)
-          return path
-        elsif system("which #{path} > /dev/null 2>&1")
-          return path
-        end
-      end
+    def path_dot_candidates
+      ENV.fetch("PATH", "").split(File::PATH_SEPARATOR).map { |dir| File.join(dir, "dot") }
+    end
 
-      nil
+    def valid_executable?(path)
+      File.file?(path) && File.executable?(path)
     end
 
     def build_command(engine, format, input_file, output_file, dpi)
-      cmd_parts = [
-        @dot_path,
-        "-K#{engine}",
-        "-T#{format}",
-        "-Gdpi=#{dpi}",
-      ]
-
-      cmd_parts << "-o#{output_file}" if output_file
-      cmd_parts << input_file
-
-      cmd_parts.join(" ")
+      [@dot_path, "-K#{engine}", "-T#{format}", "-Gdpi=#{dpi}", "-o", output_file, input_file]
     end
 
-    def execute_command(cmd)
-      success = system(cmd)
-      unless success
-        raise GraphvizNotFoundError,
-              "Graphviz command failed: #{cmd}"
-      end
+    def execute_command(argv)
+      success = system(*argv)
+      return success if success
 
-      success
+      raise GraphvizNotFoundError, "Graphviz command failed: #{argv.join(' ')}"
     end
 
     def validate_format!(format)
@@ -127,6 +115,8 @@ module Elkrb
 
         Alternatively, export to DOT format and render manually:
           elkrb diagram input.json -o output.dot
+
+        If Graphviz is installed but not on PATH, set ELKRB_DOT=/path/to/dot
       MSG
     end
   end

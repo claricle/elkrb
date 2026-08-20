@@ -1,150 +1,256 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "tmpdir"
+require "fileutils"
+require "support/fake_dot"
 require_relative "../../lib/elkrb/graphviz_wrapper"
 
 RSpec.describe Elkrb::GraphvizWrapper do
+  include FakeDot
+
   let(:wrapper) { described_class.new }
 
-  describe "#available?" do
-    it "returns true when Graphviz is found" do
-      allow(File).to receive(:executable?).and_return(false)
-      allow_any_instance_of(described_class).to receive(:system).and_return(true)
+  def with_path_only(dir)
+    original_path = ENV.fetch("PATH", nil)
+    original_elkrb_dot = ENV.fetch("ELKRB_DOT", nil)
+    ENV["PATH"] = dir
+    ENV.delete("ELKRB_DOT")
+    yield
+  ensure
+    ENV["PATH"] = original_path
+    ENV["ELKRB_DOT"] = original_elkrb_dot
+  end
 
-      test_wrapper = described_class.new
-      expect(test_wrapper.available?).to be true
+  def with_empty_path
+    Dir.mktmpdir("empty_path") { |dir| with_path_only(dir) { yield } }
+  end
+
+  def fake_dot_executable(log_path)
+    File.join(File.dirname(log_path), "dot")
+  end
+
+  def logged_argv(log_path)
+    File.readlines(log_path).first.chomp.split("\0")
+  end
+
+  def write_fake_input(dir)
+    input = File.join(dir, "input.dot")
+    File.write(input, "digraph{a->b}")
+    input
+  end
+
+  describe "#available?" do
+    it "returns true when dot is on PATH" do
+      with_fake_dot do
+        expect(described_class.new.available?).to be true
+      end
     end
 
-    it "returns false when Graphviz is not found" do
-      allow(File).to receive(:executable?).and_return(false)
-      allow_any_instance_of(described_class).to receive(:system).and_return(false)
+    it "returns false when dot is nowhere on PATH" do
+      with_empty_path do
+        expect(described_class.new.available?).to be false
+      end
+    end
 
-      wrapper_without_graphviz = described_class.new
-      expect(wrapper_without_graphviz.available?).to be false
+    it "returns true when ELKRB_DOT points at an executable, even with an empty PATH" do
+      with_fake_dot do |log_path|
+        with_empty_path do
+          ENV["ELKRB_DOT"] = fake_dot_executable(log_path)
+          expect(described_class.new.available?).to be true
+        end
+      end
+    end
+
+    it "does not fall back to PATH when ELKRB_DOT is set but invalid" do
+      with_fake_dot do
+        ENV["ELKRB_DOT"] = "/nonexistent/path/to/dot"
+        expect(described_class.new.available?).to be false
+      end
+    end
+
+    it "does not treat an executable directory named dot as the executable" do
+      Dir.mktmpdir do |dir|
+        dot_dir = File.join(dir, "dot")
+        FileUtils.mkdir_p(dot_dir)
+        FileUtils.chmod(0o755, dot_dir)
+
+        with_path_only(dir) do
+          expect(described_class.new.available?).to be false
+        end
+      end
     end
   end
 
   describe "#render" do
-    before do
-      allow(wrapper).to receive(:available?).and_return(true)
-      allow(File).to receive(:exist?).and_return(true)
+    it "runs Graphviz via argv, with no shell involved" do
+      with_fake_dot do |log_path|
+        Dir.mktmpdir do |dir|
+          input = write_fake_input(dir)
+          output = File.join(dir, "output.png")
+
+          wrapper.render(input, output, :png)
+
+          expect(logged_argv(log_path)).to eq(
+            ["-Kdot", "-Tpng", "-Gdpi=96", "-o", output, input]
+          )
+        end
+      end
     end
 
-    it "renders DOT file to PNG" do
-      expect(wrapper).to receive(:system).and_return(true)
+    it "passes the requested engine" do
+      with_fake_dot do |log_path|
+        Dir.mktmpdir do |dir|
+          input = write_fake_input(dir)
+          output = File.join(dir, "output.png")
 
-      wrapper.render("input.dot", "output.png", :png)
+          wrapper.render(input, output, :png, engine: "neato")
+
+          expect(logged_argv(log_path)).to include("-Kneato")
+        end
+      end
     end
 
-    it "renders DOT file to SVG" do
-      expect(wrapper).to receive(:system).and_return(true)
+    it "passes the requested DPI" do
+      with_fake_dot do |log_path|
+        Dir.mktmpdir do |dir|
+          input = write_fake_input(dir)
+          output = File.join(dir, "output.png")
 
-      wrapper.render("input.dot", "output.svg", :svg)
+          wrapper.render(input, output, :png, dpi: 150)
+
+          expect(logged_argv(log_path)).to include("-Gdpi=150")
+        end
+      end
     end
 
-    it "renders DOT file to PDF" do
-      expect(wrapper).to receive(:system).and_return(true)
+    it "never lets shell metacharacters in the output path execute" do
+      with_fake_dot do |log_path|
+        Dir.mktmpdir do |dir|
+          input = write_fake_input(dir)
+          malicious_output = File.join(dir, "a;touch PWNED;.png")
 
-      wrapper.render("input.dot", "output.pdf", :pdf)
-    end
+          # Confines any accidental shell execution to `dir`, which
+          # Dir.mktmpdir cleans up regardless — under the vulnerable
+          # string-form implementation "touch PWNED" would otherwise run
+          # with the process's real cwd, not `dir`.
+          Dir.chdir(dir) do
+            wrapper.render(input, malicious_output, :png)
+          end
 
-    it "uses specified engine" do
-      expect(wrapper).to receive(:system)
-        .with(/neato/)
-        .and_return(true)
-
-      wrapper.render("input.dot", "output.png", :png, engine: "neato")
-    end
-
-    it "uses specified DPI" do
-      expect(wrapper).to receive(:system)
-        .with(/dpi=150/)
-        .and_return(true)
-
-      wrapper.render("input.dot", "output.png", :png, dpi: 150)
+          expect(logged_argv(log_path)).to include(malicious_output)
+          expect(File.exist?(File.join(dir, "PWNED"))).to be(false)
+        end
+      end
     end
 
     it "raises error when Graphviz is not available" do
-      allow(wrapper).to receive(:available?).and_return(false)
-
-      expect do
-        wrapper.render("input.dot", "output.png", :png)
-      end.to raise_error(Elkrb::GraphvizWrapper::GraphvizNotFoundError,
-                         /Graphviz is required/)
+      with_empty_path do
+        expect do
+          described_class.new.render("input.dot", "output.png", :png)
+        end.to raise_error(Elkrb::GraphvizWrapper::GraphvizNotFoundError,
+                            /Graphviz is required/)
+      end
     end
 
     it "raises error for unsupported format" do
-      expect do
-        wrapper.render("input.dot", "output.xyz", :xyz)
-      end.to raise_error(ArgumentError, /Unsupported format/)
+      with_fake_dot do
+        expect do
+          wrapper.render("input.dot", "output.xyz", :xyz)
+        end.to raise_error(ArgumentError, /Unsupported format/)
+      end
     end
 
     it "raises error for unsupported engine" do
-      expect do
-        wrapper.render("input.dot", "output.png", :png, engine: "invalid")
-      end.to raise_error(ArgumentError, /Unsupported engine/)
+      with_fake_dot do
+        Dir.mktmpdir do |dir|
+          input = write_fake_input(dir)
+
+          expect do
+            wrapper.render(input, File.join(dir, "output.png"), :png, engine: "invalid")
+          end.to raise_error(ArgumentError, /Unsupported engine/)
+        end
+      end
     end
 
     it "raises error when input file does not exist" do
-      allow(File).to receive(:exist?).with("missing.dot").and_return(false)
-
-      expect do
-        wrapper.render("missing.dot", "output.png", :png)
-      end.to raise_error(ArgumentError, /Input file not found/)
+      with_fake_dot do
+        expect do
+          wrapper.render("missing.dot", "output.png", :png)
+        end.to raise_error(ArgumentError, /Input file not found/)
+      end
     end
 
-    it "raises error when command fails" do
-      allow(wrapper).to receive(:system).and_return(false)
+    it "raises error when the render command itself fails, with no system stub" do
+      Dir.mktmpdir do |dir|
+        failing_dot = File.join(dir, "dot")
+        File.write(failing_dot, "#!/bin/sh\nexit 1\n")
+        FileUtils.chmod(0o755, failing_dot)
+        input = write_fake_input(dir)
 
-      expect do
-        wrapper.render("input.dot", "output.png", :png)
-      end.to raise_error(Elkrb::GraphvizWrapper::GraphvizNotFoundError,
-                         /command failed/)
+        with_path_only(dir) do
+          expect do
+            described_class.new.render(input, File.join(dir, "output.png"), :png)
+          end.to raise_error(Elkrb::GraphvizWrapper::GraphvizNotFoundError, /command failed/)
+        end
+      end
     end
   end
 
   describe "#version" do
-    it "returns Graphviz version when available" do
-      allow(wrapper).to receive(:available?).and_return(true)
-      allow(wrapper).to receive(:`).and_return("dot - graphviz version 2.44.1 (20200629.0846)")
-
-      expect(wrapper.version).to eq("2.44.1")
+    it "parses the version dot -V prints" do
+      with_fake_dot do |log_path|
+        expect(described_class.new.version).to eq("2.44.1")
+        expect(logged_argv(log_path)).to eq(["-V"])
+      end
     end
 
     it "returns nil when Graphviz is not available" do
-      allow(wrapper).to receive(:available?).and_return(false)
+      with_empty_path do
+        expect(described_class.new.version).to be_nil
+      end
+    end
 
-      expect(wrapper.version).to be_nil
+    it "runs dot via Open3, not a shell string (a path containing a space works)" do
+      with_fake_dot do |log_path|
+        spaced_dir = File.join(File.dirname(log_path), "with space")
+        FileUtils.mkdir_p(spaced_dir)
+        spaced_dot = File.join(spaced_dir, "dot")
+        FileUtils.cp(fake_dot_executable(log_path), spaced_dot)
+        FileUtils.chmod(0o755, spaced_dot)
+
+        ENV["ELKRB_DOT"] = spaced_dot
+        # Old `` `#{@dot_path} -V 2>&1` `` interpolation would split this
+        # path on the space and fail to find `dot` at all; Open3.capture2e
+        # passes it as one argv element and succeeds.
+        expect(described_class.new.version).to eq("2.44.1")
+      end
     end
   end
 
   describe "#supported_formats" do
     it "returns list of supported formats" do
-      formats = wrapper.supported_formats
-
-      expect(formats).to include(:png, :svg, :pdf, :ps, :eps)
+      expect(wrapper.supported_formats).to include(:png, :svg, :pdf, :ps, :eps)
     end
   end
 
   describe "#supported_engines" do
     it "returns list of supported engines" do
-      engines = wrapper.supported_engines
-
-      expect(engines).to include("dot", "neato", "fdp", "sfdp", "twopi",
-                                 "circo")
+      expect(wrapper.supported_engines).to include(
+        "dot", "neato", "fdp", "sfdp", "twopi", "circo"
+      )
     end
   end
 
   describe "error messages" do
     it "provides helpful installation instructions" do
-      allow(wrapper).to receive(:available?).and_return(false)
-
-      begin
-        wrapper.render("input.dot", "output.png", :png)
+      with_empty_path do
+        described_class.new.render("input.dot", "output.png", :png)
       rescue Elkrb::GraphvizWrapper::GraphvizNotFoundError => e
         expect(e.message).to include("brew install graphviz")
         expect(e.message).to include("apt-get install graphviz")
         expect(e.message).to include("elkrb diagram")
+        expect(e.message).to include("ELKRB_DOT")
       end
     end
   end
