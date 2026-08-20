@@ -174,5 +174,21 @@ RSpec.describe Elkrb::Commands::ConvertCommand do
 
       expect { command.run }.to raise_error(ArgumentError, /Unable to parse input file/)
     end
+
+    it "preserves options-only ELKT content that also parses as valid (hollow) YAML" do
+      input_file = File.join(temp_dir, "options_only.noext")
+      output_file = File.join(temp_dir, "output.json")
+      # Valid YAML on its own (succeeds silently with an empty/hollow
+      # model), so this only reaches ElktParser via the empty-graph guard.
+      # Proves the guard doesn't just avoid raising -- the option itself
+      # survives the parse.
+      File.write(input_file, "algorithm: layered\n")
+
+      command = described_class.new(input_file, { output: output_file })
+      command.run
+
+      result = JSON.parse(File.read(output_file))
+      expect(result["layoutOptions"]).to eq({ "elk.algorithm" => "layered" })
+    end
   end
 end

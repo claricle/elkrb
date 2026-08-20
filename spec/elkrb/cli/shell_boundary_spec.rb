@@ -59,15 +59,34 @@ RSpec.describe "elkrb CLI shell boundary" do
 
     it "exits 0 for an ELKT file with only a layout option, no nodes" do
       Dir.mktmpdir do |dir|
-        file = File.join(dir, "options_only.elkt")
-        # "a: b" after the first colon is not valid YAML, so this falls
-        # through to ElktParser, which reads it as a property line — the
-        # empty-graph guard must not reject it just because it has no nodes.
-        File.write(file, "custom: a: b\n")
+        file = File.join(dir, "options_only.noext")
+        # Valid YAML (a one-key mapping with no recognized Graph fields),
+        # so from_yaml succeeds silently with an empty/hollow model. The
+        # guard must still fall through to ElktParser rather than treating
+        # that hollow "success" as a real (if empty) graph.
+        File.write(file, "algorithm: layered\n")
 
         _stdout, _stderr, status = run_elkrb("layout", file)
 
         expect(status.exitstatus).to eq(0)
+      end
+    end
+
+    it "exits 1 for a YAML mapping with no recognized graph or ELKT content" do
+      Dir.mktmpdir do |dir|
+        file = File.join(dir, "garbage_mapping.noext")
+        # Also valid (if pointless) YAML: succeeds silently as a hollow
+        # model, same as the case above. The hyphen keeps it from matching
+        # ElktParser's `key: value` property regex too (\w excludes "-"),
+        # so unlike "algorithm: layered" this really is garbage all the
+        # way down -- must be rejected, not returned as an empty "success".
+        File.write(file, "unknown-key: value\n")
+
+        stdout, stderr, status = run_elkrb("layout", file)
+
+        expect(status.exitstatus).to eq(1)
+        expect(stdout).to eq("")
+        expect(stderr).not_to eq("")
       end
     end
   end
