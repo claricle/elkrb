@@ -20,12 +20,17 @@ RSpec.configure { |c| c.include GoldenHelper }
 module GoldenComparator
   module_function
 
+  # Both construction sites for an error hash in this diff (golden_spec.rb's
+  # rescue clauses) use a String "error" key -- `JSON.parse` (how
+  # `golden_expected` reads the other side) never produces Symbol keys
+  # either, since nothing here passes `symbolize_names: true`. One
+  # convention, not defended against a Symbol-keyed hash nothing produces.
   def error_hash?(value)
-    value.is_a?(Hash) && (value.key?("error") || value.key?(:error))
+    value.is_a?(Hash) && value.key?("error")
   end
 
   def error_message(value)
-    value["error"] || value[:error]
+    value["error"]
   end
 
   # Round-trips the model through its own `json do` mapping. A NaN/Infinity
@@ -60,6 +65,7 @@ module GoldenComparator
     keys.filter_map do |key|
       e = numeric_or_zero(expected, key)
       a = numeric_or_zero(actual, key)
+      next "#{path}/#{key}: expected is non-finite (#{expected[key].inspect})" unless e.finite?
       next "#{path}/#{key}: actual is non-finite (#{actual[key].inspect})" unless a.finite?
 
       "#{path}/#{key}: expected #{e}, got #{a}" if (e - a).abs > 1e-6
@@ -245,6 +251,7 @@ module GoldenComparator
     %w[width height].filter_map do |key|
       e = numeric_or_zero(expected, key)
       a = numeric_or_zero(actual, key)
+      next "graph/#{key}: expected is non-finite (#{expected[key].inspect})" unless e.finite?
       next "graph/#{key}: actual is non-finite (#{actual[key].inspect})" unless a.finite?
 
       "graph/#{key}: expected #{e}, got #{a} (>1px)" if (e - a).abs > 1

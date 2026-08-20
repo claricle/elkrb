@@ -17,6 +17,10 @@ jobs:
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.4"
+          # No Gemfile.lock is committed in this gem (ground rule: resolves
+          # fresh every run) -- bundler-cache keys off a committed lockfile,
+          # so it would either no-op or cache a lockfile this repo doesn't
+          # want persisted across runs.
           bundler-cache: false
       - run: bundle install
       - run: bundle exec rspec spec/elkrb/golden_spec.rb spec/cross_validation
