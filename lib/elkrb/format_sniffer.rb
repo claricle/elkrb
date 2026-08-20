@@ -30,11 +30,16 @@ module Elkrb
       private
 
       def safely_sniff(content)
-        if content.lstrip.start_with?("{", "[")
-          Elkrb::Graph::Graph.from_json(content)
-        else
-          Elkrb::Graph::Graph.from_yaml(content)
-        end
+        result = if content.lstrip.start_with?("{", "[")
+                   Elkrb::Graph::Graph.from_json(content)
+                 else
+                   Elkrb::Graph::Graph.from_yaml(content)
+                 end
+        # A top-level JSON/YAML sequence (`[]`, `[{}]`, `- id: g`) parses
+        # without raising but returns an Array, not a Graph -- treat that
+        # the same as a failed parse rather than let hollow_model? call
+        # #id on it.
+        result.is_a?(Elkrb::Graph::Graph) ? result : nil
       rescue Lutaml::Model::InvalidFormatError
         nil
       end

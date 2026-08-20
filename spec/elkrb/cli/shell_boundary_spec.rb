@@ -89,6 +89,36 @@ RSpec.describe "elkrb CLI shell boundary" do
         expect(stderr).not_to eq("")
       end
     end
+
+    it "exits 1 for a top-level JSON sequence, not a NoMethodError" do
+      Dir.mktmpdir do |dir|
+        file = File.join(dir, "sequence.noext")
+        # Parses without raising (Lutaml returns an Array for a top-level
+        # JSON sequence), so this only fails via the type check, not the
+        # InvalidFormatError rescue -- must not leak "undefined method
+        # 'id' for an instance of Array" from hollow_model?.
+        File.write(file, "[]")
+
+        stdout, stderr, status = run_elkrb("layout", file)
+
+        expect(status.exitstatus).to eq(1)
+        expect(stdout).to eq("")
+        expect(stderr).to eq("Error: Unable to parse input file. Supported formats: JSON, YAML, ELKT\n")
+      end
+    end
+
+    it "exits 1 for a top-level YAML sequence, not a NoMethodError" do
+      Dir.mktmpdir do |dir|
+        file = File.join(dir, "sequence.noext")
+        File.write(file, "- id: g\n")
+
+        stdout, stderr, status = run_elkrb("layout", file)
+
+        expect(status.exitstatus).to eq(1)
+        expect(stdout).to eq("")
+        expect(stderr).to eq("Error: Unable to parse input file. Supported formats: JSON, YAML, ELKT\n")
+      end
+    end
   end
 
   describe "batch" do
