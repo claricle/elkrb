@@ -48,14 +48,16 @@ module Elkrb
           graph.edges&.each do |edge|
             sources = index.endpoint_nodes(edge.sources)
 
-            # Skip a target that resolves to one of the edge's own
-            # sources: real self-loops ("p1" -> "p2" on one node), and
-            # the self-referencing leg of a mixed hyperedge
-            # (a -> [a's port, b]), are not incoming traffic from
-            # elsewhere. The edge's other, genuinely different targets
-            # still count.
+            # Count a target as having incoming traffic only when at
+            # least one resolved source is a DIFFERENT node: a real
+            # self-loop ("p1" -> "p2" on one node) and the
+            # self-referencing leg of a mixed hyperedge
+            # (a -> [a's port, b]) are not incoming traffic from
+            # elsewhere, but a target that ALSO appears among the
+            # sources (e.g. [a, b] -> b) still has genuine incoming
+            # traffic from the other source.
             index.endpoint_nodes(edge.targets).each do |target|
-              next if sources.include?(target)
+              next unless sources.any? { |source| source != target }
 
               nodes_with_incoming.add(target.id)
             end

@@ -54,5 +54,35 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
       expect { Elkrb.layout(graph, algorithm: "layered") }
         .not_to raise_error
     end
+
+    it "does not stack-overflow on a hyperedge mixing a self-referencing " \
+       "target and a real child" do
+      # Codex diff-review finding (round 2): CycleBreaker's dfs used
+      # `edge.targets.first` unconditionally; for this edge the first
+      # target ("ap") resolves back to the source node "a" itself, so
+      # dfs treated a's own in-progress DFS frame as a cycle and
+      # reversed the edge, corrupting it before LayerAssigner ever saw
+      # it -> SystemStackError there. Confirmed against the pre-fix
+      # code, and confirmed this exact graph does NOT raise on
+      # origin/v2 (port-id blindness there means the edge is invisible
+      # to cycle-breaking entirely, so no crash) -- a genuine
+      # regression this diff must not ship.
+      graph = {
+        id: "r",
+        children: [
+          {
+            id: "a", width: 10, height: 10,
+            ports: [{ id: "ap" }],
+          },
+          { id: "b", width: 10, height: 10 },
+        ],
+        edges: [
+          { id: "e", sources: ["a"], targets: %w[ap b] },
+        ],
+      }
+
+      expect { Elkrb.layout(graph, algorithm: "layered") }
+        .not_to raise_error
+    end
   end
 end

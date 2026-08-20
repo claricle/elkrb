@@ -76,9 +76,7 @@ module Elkrb
 
             # Get all edges that target this node
             @graph.edges&.each do |edge|
-              next if self_loop_edge?(edge)
-
-              edges << edge if @index.endpoint_nodes(edge.targets).include?(node)
+              edges << edge if incoming_to?(edge, node)
             end
 
             # Also check edges from other nodes
@@ -86,37 +84,33 @@ module Elkrb
               next unless other_node.edges
 
               other_node.edges.each do |edge|
-                next if self_loop_edge?(edge)
-
-                edges << edge if @index.endpoint_nodes(edge.targets).include?(node)
+                edges << edge if incoming_to?(edge, node)
               end
             end
 
             edges
           end
 
-          # Compares resolved OWNERS, not raw ids: two different port ids
-          # on the same node (e.g. "p1" -> "p2") are still a self-loop.
-          # Comparing raw ids here would leave a port-to-port self-loop
-          # looking like real incoming traffic once get_incoming_edges
-          # above resolves targets through the index, and
-          # calculate_layer would recurse on the same node forever
-          # before it is memoized (SystemStackError).
-          #
-          # Checks EVERY resolved source/target, not just the first pair:
-          # comparing only the first source against the first target
-          # would misclassify a hyperedge whose first target happens to
-          # be the source's own port (e.g. a -> [a's port, b]) as an
-          # entire self-loop, hiding the real a -> b edge from
-          # get_incoming_edges. S8 will reject hyperedges before phase 1
-          # runs; until then this keeps the check correct.
-          def self_loop_edge?(edge)
-            sources = @index.endpoint_nodes(edge.sources)
+          # True when `node` is a genuine target of `edge`: `node` is
+          # one of its resolved targets AND at least one resolved
+          # source is a DIFFERENT node. The second half excludes a
+          # self-loop ("p1" -> "p2" on one node) and the
+          # self-referencing leg of a mixed hyperedge
+          # (a -> [a's port, b]) from counting as incoming, while still
+          # counting a target's genuine incoming edges from elsewhere
+          # (e.g. [a, c] -> b). Comparing raw ids, or only the first
+          # source against the first target, both let a self-loop or a
+          # self-referencing hyperedge leg look like real incoming
+          # traffic, and calculate_layer recurses on the same node
+          # forever before it is memoized (SystemStackError). S8 will
+          # reject hyperedges before phase 1 runs; until then this
+          # keeps the check correct.
+          def incoming_to?(edge, node)
             targets = @index.endpoint_nodes(edge.targets)
+            return false unless targets.include?(node)
 
-            return false if sources.empty? || targets.empty?
-
-            (sources + targets).uniq.size == 1
+            sources = @index.endpoint_nodes(edge.sources)
+            sources.any? { |source| source != node }
           end
         end
       end
