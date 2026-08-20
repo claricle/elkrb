@@ -53,12 +53,16 @@ RSpec.describe Elkrb::GraphvizWrapper do
       end
     end
 
-    it "returns true when ELKRB_DOT points at an executable, even with an empty PATH" do
+    it "returns true when ELKRB_DOT points at an executable, overriding whatever else is on PATH" do
       with_fake_dot do |log_path|
-        with_empty_path do
-          ENV["ELKRB_DOT"] = fake_dot_executable(log_path)
-          expect(described_class.new.available?).to be true
-        end
+        ENV["ELKRB_DOT"] = fake_dot_executable(log_path)
+        wrapper = described_class.new
+
+        expect(wrapper.available?).to be true
+        # Proves the *fake* dot was actually selected via ELKRB_DOT, not
+        # whatever dot (real or fake) is reachable via PATH: the fake
+        # reports a distinctive version no real host dot would print.
+        expect(wrapper.version).to eq("2.44.1")
       end
     end
 
@@ -245,12 +249,14 @@ RSpec.describe Elkrb::GraphvizWrapper do
   describe "error messages" do
     it "provides helpful installation instructions" do
       with_empty_path do
-        described_class.new.render("input.dot", "output.png", :png)
-      rescue Elkrb::GraphvizWrapper::GraphvizNotFoundError => e
-        expect(e.message).to include("brew install graphviz")
-        expect(e.message).to include("apt-get install graphviz")
-        expect(e.message).to include("elkrb diagram")
-        expect(e.message).to include("ELKRB_DOT")
+        expect do
+          described_class.new.render("input.dot", "output.png", :png)
+        end.to raise_error(Elkrb::GraphvizWrapper::GraphvizNotFoundError) do |e|
+          expect(e.message).to include("brew install graphviz")
+          expect(e.message).to include("apt-get install graphviz")
+          expect(e.message).to include("elkrb diagram")
+          expect(e.message).to include("ELKRB_DOT")
+        end
       end
     end
   end

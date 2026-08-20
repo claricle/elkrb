@@ -56,6 +56,20 @@ RSpec.describe "elkrb CLI shell boundary" do
         expect(status.exitstatus).to eq(0)
       end
     end
+
+    it "exits 0 for an ELKT file with only a layout option, no nodes" do
+      Dir.mktmpdir do |dir|
+        file = File.join(dir, "options_only.elkt")
+        # "a: b" after the first colon is not valid YAML, so this falls
+        # through to ElktParser, which reads it as a property line — the
+        # empty-graph guard must not reject it just because it has no nodes.
+        File.write(file, "custom: a: b\n")
+
+        _stdout, _stderr, status = run_elkrb("layout", file)
+
+        expect(status.exitstatus).to eq(0)
+      end
+    end
   end
 
   describe "batch" do

@@ -228,15 +228,17 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
       expect { YAML.safe_load(content) }.not_to raise_error
     end
 
-    it "loads a JSON file with no recognized extension" do
+    it "loads a YAML file with no recognized extension" do
       input_file = File.join(temp_dir, "graph.noext")
       output_file = File.join(temp_dir, "output.dot")
-      File.write(input_file, graph_data.to_json)
+      File.write(input_file, graph_data.to_yaml)
 
       command = described_class.new(input_file, { output: output_file })
       command.run
 
-      expect(File.exist?(output_file)).to be true
+      content = File.read(output_file)
+      expect(content).to include("n1")
+      expect(content).to include("n2")
     end
 
     it "raises for unparsable content with no recognized extension" do

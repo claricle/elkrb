@@ -146,9 +146,9 @@ RSpec.describe Elkrb::Commands::ValidateCommand do
       expect { command.run }.to raise_error(ArgumentError, /File not found/)
     end
 
-    it "loads a JSON file with no recognized extension" do
+    it "loads a YAML file with no recognized extension" do
       input_file = File.join(temp_dir, "graph.noext")
-      File.write(input_file, valid_graph.to_json)
+      File.write(input_file, valid_graph.to_yaml)
 
       command = described_class.new(input_file, {})
 

@@ -72,7 +72,7 @@ module Elkrb
 
       def parse_elkt_or_fail(content)
         graph = parse_elkt!(content)
-        return graph unless graph[:children].empty? && graph[:edges].empty?
+        return graph unless graph[:children].empty? && graph[:edges].empty? && graph[:layoutOptions].empty?
 
         raise ArgumentError,
               "Unable to parse input file. Supported formats: JSON, YAML, ELKT"
