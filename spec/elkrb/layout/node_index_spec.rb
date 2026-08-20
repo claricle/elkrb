@@ -106,6 +106,15 @@ RSpec.describe Elkrb::Layout::NodeIndex do
         .to raise_error(Elkrb::ValidationError, /shared/)
     end
 
+    it "raises Elkrb::ValidationError for a node without an id" do
+      graph = Elkrb::Graph::Graph.new(
+        children: [Elkrb::Graph::Node.new(width: 10, height: 10)],
+      )
+
+      expect { described_class.build(graph) }
+        .to raise_error(Elkrb::ValidationError, /node without id/)
+    end
+
     it "allows the same id to repeat at a different level" do
       parent = graph_from(
         "id" => "r",

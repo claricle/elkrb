@@ -74,12 +74,13 @@ module Elkrb
               # Root node - assign to layer 0
               @node_layers[node.id] = 0
             else
-              # Assign to one layer below the maximum of predecessors
-              max_pred_layer = incoming.filter_map do |edge|
-                source = first_other_source(edge, node)
-                next 0 unless source
-
-                calculate_layer(source)
+              # Assign to one layer below the maximum of predecessors.
+              # first_other_source cannot return nil here: every edge
+              # in `incoming` already passed incoming_to?, which only
+              # admits edges with at least one resolved source
+              # different from `node` -- the same one this looks for.
+              max_pred_layer = incoming.map do |edge|
+                calculate_layer(first_other_source(edge, node))
               end.max || 0
 
               @node_layers[node.id] = max_pred_layer + 1

@@ -43,8 +43,13 @@ module Elkrb
               next unless target
 
               if @in_stack[target.id]
-                # Found a cycle - mark this edge for reversal
-                @edges_to_reverse << edge
+                # Found a cycle - mark this edge for reversal. An edge
+                # can appear in get_outgoing_edges via both node.edges
+                # and @graph.edges (or be walked from more than one
+                # in-stack frame for a hyperedge); reversing it twice
+                # would swap it back to its original direction and
+                # leave the cycle unbroken.
+                @edges_to_reverse << edge unless @edges_to_reverse.include?(edge)
               elsif !@visited[target.id]
                 dfs(target)
               end

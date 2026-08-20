@@ -1,11 +1,15 @@
 # frozen_string_literal: true
 
+require_relative "../errors"
+
 module Elkrb
   module Layout
     # Resolves node and port ids to their owning node, for ONE hierarchy
     # level. Node ids and port ids share one namespace at a level; the
     # same id may legitimately repeat at a different level (build a
     # fresh index per level, never reused across `layout_flat` calls).
+    #
+    # `.build` is the entry point; construct every index through it.
     class NodeIndex
       def self.build(graph)
         new(graph)
@@ -32,6 +36,8 @@ module Elkrb
       end
 
       def add(id, node)
+        raise Elkrb::ValidationError, "node without id" if id.nil?
+
         if @nodes_by_id.key?(id)
           raise Elkrb::ValidationError, "duplicate id: #{id}"
         end
