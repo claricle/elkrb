@@ -46,6 +46,8 @@ module Elkrb
         puts ""
         puts "✓ Processed #{success_count} file(s) → #{@options[:output_dir]}"
         puts "⚠ #{error_count} error(s)" if error_count.positive?
+
+        raise Elkrb::Error, "#{error_count} of #{files.size} file(s) failed" if error_count.positive?
       end
 
       private
