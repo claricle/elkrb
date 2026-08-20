@@ -404,26 +404,7 @@ module Elkrb
   #   directions = Elkrb.known_layout_options["elk.direction"][:values]
   #   # => ["UNDEFINED", "RIGHT", "LEFT", "DOWN", "UP"]
   def self.known_layout_options
-    parsers = {
-      padding: "Elkrb::Options::ElkPadding",
-      kvector: "Elkrb::Options::KVector",
-      kvector_chain: "Elkrb::Options::KVectorChain",
-    }
-
-    rendered = Options::Registry.all.each_with_object({}) do |(id, entry), hash|
-      hash[id] = {
-        type: entry[:type],
-        description: entry[:description],
-        default: entry[:default],
-        values: entry[:values],
-        parser: parsers[entry[:type]],
-        status: entry[:status],
-        note: entry[:note],
-      }
-    end
-
-    rendered["elk.algorithm"][:values] = Layout::AlgorithmRegistry.available_algorithms
-    rendered
+    Options::Registry.render_known_options(algorithm_values: Layout::AlgorithmRegistry.available_algorithms)
   end
 
   # Returns metadata for layout option categories.

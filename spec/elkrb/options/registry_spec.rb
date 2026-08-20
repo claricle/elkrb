@@ -103,6 +103,39 @@ RSpec.describe Elkrb::Options::Registry do
       chain = described_class.coerce("elk.bendPoints", "(1,2; 3,4)")
       expect(chain.vectors.size).to eq(2)
     end
+
+    it "upcases a string to match its enum values" do
+      expect(described_class.coerce("elk.direction", "right")).to eq("RIGHT")
+    end
+
+    it "passes booleans through and parses the literal string true (any case)" do
+      expect(described_class.coerce("hierarchical", true)).to be(true)
+      expect(described_class.coerce("hierarchical", false)).to be(false)
+      expect(described_class.coerce("hierarchical", "true")).to be(true)
+      expect(described_class.coerce("hierarchical", "TRUE")).to be(true)
+    end
+
+    it "treats non-'true' strings as false, including '1' and 'yes' (strict, no numeric/word aliases)" do
+      expect(described_class.coerce("hierarchical", "1")).to be(false)
+      expect(described_class.coerce("hierarchical", "yes")).to be(false)
+    end
+
+    it "coerces a numeric string to Integer" do
+      expect(described_class.coerce("elk.port.index", "3")).to eq(3)
+    end
+
+    it "parses a KVector" do
+      vector = described_class.coerce("elk.position", [1, 2])
+      expect(vector.to_h).to eq(x: 1.0, y: 2.0)
+    end
+
+    it "passes the value through unchanged for an unknown id" do
+      expect(described_class.coerce("nope_unknown_id", "raw")).to eq("raw")
+    end
+
+    it "resolves an alias before coercing" do
+      expect(described_class.coerce("spacing_node_node", "50")).to eq(50.0)
+    end
   end
 
   describe ".default" do
@@ -112,6 +145,14 @@ RSpec.describe Elkrb::Options::Registry do
 
     it "returns nil for an id with no default" do
       expect(described_class.default("elk.position")).to be_nil
+    end
+
+    it "returns false, not nil, for a boolean id whose default is literally false" do
+      expect(described_class.default("label.placement.disabled")).to be(false)
+    end
+
+    it "returns an ElkPadding for elk.padding's default" do
+      expect(described_class.default("elk.padding")).to be_a(Elkrb::Options::ElkPadding)
     end
   end
 
@@ -190,6 +231,24 @@ RSpec.describe Elkrb::Options::Registry do
     it "excludes algorithms: :all ids when include_all is false" do
       expect(described_class.for_algorithm("box", include_all: false)).not_to include("elk.padding")
       expect(described_class.for_algorithm("box", include_all: false)).to include("elk.aspectRatio")
+    end
+  end
+
+  describe ".render_known_options" do
+    it "renders the documented shape and patches in the given algorithm values" do
+      rendered = described_class.render_known_options(algorithm_values: %w[layered force])
+
+      expect(rendered["elk.algorithm"][:values]).to eq(%w[layered force])
+      expect(rendered["elk.spacing.nodeNode"]).to eq(
+        type: :float,
+        description: "Spacing between nodes",
+        default: 20.0,
+        values: nil,
+        parser: nil,
+        status: :honoured,
+        note: nil,
+      )
+      expect(rendered["elk.padding"][:parser]).to eq("Elkrb::Options::ElkPadding")
     end
   end
 end

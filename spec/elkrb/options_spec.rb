@@ -192,6 +192,24 @@ RSpec.describe "Elkrb::Options" do
         expect(chain[1].y).to eq(4.0)
       end
 
+      it "raises ArgumentError naming the input for an odd number of coordinate values" do
+        expect { described_class.parse("(1,2,3)") }.to raise_error(ArgumentError, /\(1,2,3\)/)
+      end
+
+      it "parses an empty or whitespace-only chain as empty, not an error (intended)" do
+        expect(described_class.parse("").size).to eq(0)
+        expect(described_class.parse("( )").size).to eq(0)
+      end
+
+      it "re-pairs tokens by flat position, ignoring the original (mismatched) brace grouping (intended)" do
+        # ELK's own splitter (which this mirrors) tokenizes on every
+        # delimiter and pairs flatly — it does not track brace-group
+        # boundaries — so a malformed "3 values in one group" input still
+        # yields 3 well-formed vectors rather than raising.
+        chain = described_class.parse("({1,2},{3,4,5,6})")
+        expect(chain.to_a.map(&:to_a)).to eq([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+      end
+
       it "parses chain from array of arrays" do
         chain = described_class.parse([[10, 20], [30, 40]])
         expect(chain.size).to eq(2)

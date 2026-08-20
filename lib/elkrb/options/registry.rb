@@ -15,9 +15,10 @@ module Elkrb
       ELK_PREFIX = "org.eclipse.elk."
       private_constant :ELK_PREFIX
 
-      # OPTIONS is intentionally not part of the public API — callers read
-      # it through .all, .canonical, .coerce, .default, .status, .note, and
-      # .for_algorithm below. Rows are sorted by id; insert new rows in
+      # The OPTIONS constant name/path is private; .all below returns
+      # this same frozen object, so use .all (or .canonical/.coerce/
+      # .default/.status/.note/.for_algorithm) rather than reaching for
+      # the constant directly. Rows are sorted by id; insert new rows in
       # sorted position, never at the end.
       # rubocop:disable Layout/LineLength
       OPTIONS = {
@@ -36,7 +37,7 @@ module Elkrb
         "elk.force.repulsion" => { type: :float, default: 5.0, aliases: %w[repulsion], algorithms: %w[force], status: :honoured, description: "Force simulation repulsion strength" },
         "elk.force.temperature" => { type: :float, default: 0.001, aliases: %w[temperature], algorithms: %w[force], status: :honoured, description: "Force simulation cooling temperature" },
         "elk.hierarchyHandling" => { type: :enum, values: %w[INHERIT INCLUDE_CHILDREN SEPARATE_CHILDREN], default: "INHERIT", algorithms: :all, status: :partial, note: "cross-level edges are routed; no cross-level layering", description: "Whether a compound node's children are laid out separately or together with it" },
-        "elk.layered.compaction.postCompaction.strategy" => { type: :enum, default: "NONE", algorithms: %w[layered], status: :accepted, description: "Post-layout compaction strategy; not honoured today" },
+        "elk.layered.compaction.postCompaction.strategy" => { type: :enum, values: %w[NONE LEFT RIGHT LEFT_RIGHT_CONSTRAINT_LOCKING LEFT_RIGHT_CONNECTION_LOCKING EDGE_LENGTH], default: "NONE", algorithms: %w[layered], status: :accepted, description: "Post-layout compaction strategy; not honoured today" },
         "elk.layered.considerModelOrder.strategy" => { type: :enum, values: %w[NONE NODES_AND_EDGES], default: "NONE", algorithms: %w[layered], status: :accepted, description: "Whether to preserve model node/edge order as a crossing-minimization tie-break; not honoured today" },
         "elk.layered.crossingMinimization.strategy" => { type: :enum, values: %w[LAYER_SWEEP INTERACTIVE NONE], default: "LAYER_SWEEP", algorithms: %w[layered], status: :accepted, description: "Crossing minimization strategy; LAYER_SWEEP honoured from S25a" },
         "elk.layered.layering.layerConstraint" => { type: :enum, values: %w[NONE FIRST FIRST_SEPARATE LAST LAST_SEPARATE], default: "NONE", algorithms: %w[layered], status: :accepted, description: "Forces a node to a specific layer position; honoured from S19" },
@@ -49,7 +50,7 @@ module Elkrb
         "elk.portConstraints" => { type: :enum, values: %w[UNDEFINED FREE FIXED_SIDE FIXED_ORDER FIXED_RATIO FIXED_POS], default: "UNDEFINED", aliases: %w[portConstraints], algorithms: :all, status: :honoured, description: "How strictly port positions are respected" },
         "elk.portLabels.placement" => { type: :string, default: "OUTSIDE", aliases: %w[port.label.placement], algorithms: :all, status: :honoured, description: "Port label placement" },
         "elk.position" => { type: :kvector, default: nil, aliases: %w[position], algorithms: %w[fixed], status: :honoured, description: "Fixed position for a node (fixed algorithm)" },
-        "elk.radial.centerOnRoot" => { type: :boolean, default: true, algorithms: %w[radial], status: :accepted, description: "Whether the root node is placed at the centre; not honoured today" },
+        "elk.radial.centerOnRoot" => { type: :boolean, default: false, algorithms: %w[radial], status: :accepted, description: "Whether the root node is placed at the centre; not honoured today (ELK default is false; radial.rb does not centre any node today either)" },
         "elk.radial.radius" => { type: :float, default: 100.0, algorithms: %w[radial], status: :honoured, description: "Radius for radial layout" },
         "elk.randomSeed" => { type: :integer, default: 1, aliases: %w[randomSeed], algorithms: %w[force random], status: :honoured, description: "Seed for algorithms with random behaviour" },
         "elk.selfLoopOffset" => { type: :float, default: 20.0, aliases: %w[selfLoopOffset], namespace: :elkrb, algorithms: :all, status: :accepted, description: "elkrb-private: self-loop offset (not yet wired; hardcoded today)" },
@@ -116,7 +117,7 @@ module Elkrb
         # @param value [Object] the raw value to coerce
         # @return [Object] value coerced to the id's registered type
         def coerce(id, value)
-          entry = OPTIONS[canonical(id) || id.to_s]
+          entry = entry_for(id)
           return value unless entry
 
           coerce_typed(entry[:type], value, entry)
@@ -125,23 +126,23 @@ module Elkrb
         # @param id [String, Symbol] any id or alias
         # @return [Object, nil] the id's default, coerced to its type
         def default(id)
-          entry = OPTIONS[canonical(id) || id.to_s]
+          entry = entry_for(id)
           return nil unless entry
           return nil if entry[:default].nil?
 
-          coerce(id, entry[:default])
+          coerce_typed(entry[:type], entry[:default], entry)
         end
 
         # @param id [String, Symbol] any id or alias
         # @return [Symbol, nil] :honoured, :partial, :accepted, :unsupported, or nil if unknown
         def status(id)
-          OPTIONS.dig(canonical(id) || id.to_s, :status)
+          entry_for(id)&.[](:status)
         end
 
         # @param id [String, Symbol] any id or alias
         # @return [String, nil] explanatory note for a :partial id
         def note(id)
-          OPTIONS.dig(canonical(id) || id.to_s, :note)
+          entry_for(id)&.[](:note)
         end
 
         # Membership, not truthfulness: an id's presence here means it's
@@ -165,7 +166,49 @@ module Elkrb
           OPTIONS
         end
 
+        # Renders OPTIONS into the documented shape Elkrb.known_layout_options
+        # and LayoutEngine.known_layout_options both return. The single
+        # owner of that rendering — the two callers are one-line
+        # delegators, mirroring how they already both delegate straight to
+        # AlgorithmRegistry.all_algorithm_info for known_layout_algorithms.
+        #
+        # @param algorithm_values [Array<String>] registered algorithm ids,
+        #   patched onto the elk.algorithm row's :values. Passed in rather
+        #   than read from AlgorithmRegistry directly, so Options never
+        #   depends on Layout.
+        # @return [Hash{String => Hash}] canonical id => {type:, description:,
+        #   default:, values:, parser:, status:, note:}
+        def render_known_options(algorithm_values:)
+          parsers = {
+            padding: "Elkrb::Options::ElkPadding",
+            kvector: "Elkrb::Options::KVector",
+            kvector_chain: "Elkrb::Options::KVectorChain",
+          }
+
+          rendered = OPTIONS.each_with_object({}) do |(id, entry), hash|
+            hash[id] = {
+              type: entry[:type],
+              description: entry[:description],
+              default: entry[:default],
+              values: entry[:values],
+              parser: parsers[entry[:type]],
+              status: entry[:status],
+              note: entry[:note],
+            }
+          end
+
+          rendered["elk.algorithm"][:values] = algorithm_values
+          rendered
+        end
+
         private
+
+        # canonical(id) already checks OPTIONS.key?(key_str) as its very
+        # first step, so when it returns nil, OPTIONS[id.to_s] is
+        # provably nil too — no `|| id.to_s` fallback needed here.
+        def entry_for(id)
+          OPTIONS[canonical(id)]
+        end
 
         def suffix_match(key_str)
           matches = OPTIONS.keys.select { |id| id.end_with?(".#{key_str}") }
@@ -186,6 +229,11 @@ module Elkrb
           end
         end
 
+        # Strict: only the literal "true" (any case) coerces to true.
+        # "1", "yes", and anything else — including malformed input —
+        # coerce to false, same as Ruby's own truthiness would treat a
+        # non-boolean string if you had to pick one: no numeric/word
+        # aliases for "true" are recognised.
         def coerce_boolean(value)
           return value if value == true || value == false
 

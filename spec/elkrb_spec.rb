@@ -27,11 +27,7 @@ RSpec.describe Elkrb do
       expect(result["elk.direction"][:values]).to include("RIGHT")
       expect(result["elk.spacing.nodeNode"][:type]).to eq(:float)
       expect(result["elk.padding"][:parser]).to eq("Elkrb::Options::ElkPadding")
-      expect(result.key?("elk.spacing.nodeNode")).to be(true)
-    end
-
-    it "matches LayoutEngine.known_layout_options exactly" do
-      expect(Elkrb::Layout::LayoutEngine.known_layout_options).to eq(described_class.known_layout_options)
+      expect(result["elk.hierarchyHandling"][:note]).to eq("cross-level edges are routed; no cross-level layering")
     end
   end
 end

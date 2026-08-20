@@ -156,26 +156,7 @@ module Elkrb
         # @return [Hash{String => Hash}] Same shape and content as
         #   Elkrb.known_layout_options, keyed by canonical id.
         def known_layout_options
-          parsers = {
-            padding: "Elkrb::Options::ElkPadding",
-            kvector: "Elkrb::Options::KVector",
-            kvector_chain: "Elkrb::Options::KVectorChain",
-          }
-
-          rendered = Options::Registry.all.each_with_object({}) do |(id, entry), hash|
-            hash[id] = {
-              type: entry[:type],
-              description: entry[:description],
-              default: entry[:default],
-              values: entry[:values],
-              parser: parsers[entry[:type]],
-              status: entry[:status],
-              note: entry[:note],
-            }
-          end
-
-          rendered["elk.algorithm"][:values] = AlgorithmRegistry.available_algorithms
-          rendered
+          Options::Registry.render_known_options(algorithm_values: AlgorithmRegistry.available_algorithms)
         end
 
         private
