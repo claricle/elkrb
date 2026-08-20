@@ -1,0 +1,122 @@
+{
+  "id": "root",
+  "children": [
+    {
+      "id": "a",
+      "width": 30,
+      "height": 30,
+      "x": 12,
+      "y": 18
+    },
+    {
+      "id": "b",
+      "width": 30,
+      "height": 30,
+      "x": 62,
+      "y": 23
+    },
+    {
+      "id": "c",
+      "width": 30,
+      "height": 30,
+      "x": 112,
+      "y": 18
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "sources": [
+        "a"
+      ],
+      "targets": [
+        "b"
+      ],
+      "sections": [
+        {
+          "id": "e1_s0",
+          "startPoint": {
+            "x": 42,
+            "y": 38
+          },
+          "endPoint": {
+            "x": 62,
+            "y": 38
+          },
+          "incomingShape": "a",
+          "outgoingShape": "b"
+        }
+      ]
+    },
+    {
+      "id": "e2",
+      "sources": [
+        "b"
+      ],
+      "targets": [
+        "c"
+      ],
+      "sections": [
+        {
+          "id": "e2_s0",
+          "startPoint": {
+            "x": 92,
+            "y": 38
+          },
+          "endPoint": {
+            "x": 112,
+            "y": 38
+          },
+          "incomingShape": "b",
+          "outgoingShape": "c"
+        }
+      ]
+    },
+    {
+      "id": "e3",
+      "sources": [
+        "a"
+      ],
+      "targets": [
+        "c"
+      ],
+      "sections": [
+        {
+          "id": "e3_s0",
+          "startPoint": {
+            "x": 42,
+            "y": 28
+          },
+          "endPoint": {
+            "x": 112,
+            "y": 28
+          },
+          "bendPoints": [
+            {
+              "x": 52,
+              "y": 28
+            },
+            {
+              "x": 52,
+              "y": 12
+            },
+            {
+              "x": 102,
+              "y": 12
+            },
+            {
+              "x": 102,
+              "y": 28
+            }
+          ],
+          "incomingShape": "a",
+          "outgoingShape": "c"
+        }
+      ]
+    }
+  ],
+  "x": 0,
+  "y": 0,
+  "width": 154,
+  "height": 65
+}
