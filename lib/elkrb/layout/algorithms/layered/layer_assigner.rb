@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "set"
+
 module Elkrb
   module Layout
     module Algorithms
@@ -16,6 +18,7 @@ module Elkrb
             @index = index
             @layers = []
             @node_layers = {}
+            @in_progress = Set.new
           end
 
           def assign_layers
@@ -47,6 +50,19 @@ module Elkrb
           def calculate_layer(node)
             return @node_layers[node.id] if @node_layers.key?(node.id)
 
+            # A cycle that CycleBreaker did not resolve (only a
+            # genuine hyperedge, > 1 target, can still reach this --
+            # S8 rejects those outright before phase 1 runs; until
+            # then, a node revisited while still being computed has no
+            # further predecessor to contribute, so treat it as one
+            # without them rather than recursing forever
+            # (SystemStackError, confirmed for a hyperedge whose
+            # secondary target closes a cycle CycleBreaker's
+            # single-target-per-edge detection cannot see).
+            return 0 if @in_progress.include?(node.id)
+
+            @in_progress << node.id
+
             # Find incoming edges
             incoming = get_incoming_edges(node)
 
@@ -65,6 +81,7 @@ module Elkrb
               @node_layers[node.id] = max_pred_layer + 1
             end
 
+            @in_progress.delete(node.id)
             @node_layers[node.id]
           end
 

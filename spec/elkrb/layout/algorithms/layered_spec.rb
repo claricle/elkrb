@@ -106,5 +106,45 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
       expect { Elkrb.layout(graph, algorithm: "layered") }
         .not_to raise_error
     end
+
+    it "does not stack-overflow on a cycle CycleBreaker's single-target " \
+       "detection cannot see" do
+      # Codex diff-review finding (round 4): a's hyperedge fans out to
+      # three ports; CycleBreaker's first_other_target only follows ONE
+      # of them ("b"), so the real a -> c -> a cycle (via c's edge back
+      # to a's port) is never visited during cycle-breaking and stays
+      # unbroken. calculate_layer then recurses between a and c
+      # forever. Confirmed against the pre-fix code, and confirmed this
+      # exact graph does NOT raise on origin/v2 (port ids are invisible
+      # there, so the cycle is invisible too -- a genuine regression
+      # this diff must not ship). A general re-entrancy guard in
+      # calculate_layer (return 0 for a node already being computed,
+      # rather than recursing into it again) closes this without
+      # needing full multi-target cycle detection, which is S8's job.
+      graph = {
+        id: "r",
+        children: [
+          {
+            id: "a", width: 10, height: 10,
+            ports: [{ id: "ap" }],
+          },
+          {
+            id: "b", width: 10, height: 10,
+            ports: [{ id: "bp" }],
+          },
+          {
+            id: "c", width: 10, height: 10,
+            ports: [{ id: "cp" }],
+          },
+        ],
+        edges: [
+          { id: "e1", sources: ["a"], targets: %w[ap bp cp] },
+          { id: "e2", sources: ["cp"], targets: ["ap"] },
+        ],
+      }
+
+      expect { Elkrb.layout(graph, algorithm: "layered") }
+        .not_to raise_error
+    end
   end
 end
