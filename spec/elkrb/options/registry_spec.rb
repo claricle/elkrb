@@ -174,5 +174,12 @@ RSpec.describe Elkrb::Options::Registry do
         "elk.layered.spacing.nodeNodeBetweenLayers"
       )
     end
+
+    it "scopes aspectRatio to box/random and randomSeed to force/random, excluding stress" do
+      expect(described_class.for_algorithm("box")).to include("elk.aspectRatio")
+      expect(described_class.for_algorithm("random")).to include("elk.aspectRatio", "elk.randomSeed")
+      expect(described_class.for_algorithm("force")).to include("elk.randomSeed")
+      expect(described_class.for_algorithm("stress")).not_to include("elk.aspectRatio", "elk.randomSeed")
+    end
   end
 end

@@ -3,6 +3,16 @@
 require "spec_helper"
 
 RSpec.describe Elkrb::Layout::AlgorithmRegistry do
+  # AlgorithmRegistry holds process-wide state; any example that
+  # registers a test double must not leak into the rest of the suite.
+  around do |example|
+    algorithms_before = described_class.instance_variable_get(:@algorithms).dup
+    metadata_before = described_class.instance_variable_get(:@metadata).dup
+    example.run
+    described_class.instance_variable_set(:@algorithms, algorithms_before)
+    described_class.instance_variable_set(:@metadata, metadata_before)
+  end
+
   describe ".get" do
     it "resolves camelCase, snake_case, and the ELK-prefixed form to the same class" do
       camel = described_class.get("sporeOverlap")
@@ -24,16 +34,6 @@ RSpec.describe Elkrb::Layout::AlgorithmRegistry do
   end
 
   describe ".register" do
-    # AlgorithmRegistry holds process-wide state; registering a test
-    # double must not leak into every other example in the suite.
-    around do |example|
-      algorithms_before = described_class.instance_variable_get(:@algorithms).dup
-      metadata_before = described_class.instance_variable_get(:@metadata).dup
-      example.run
-      described_class.instance_variable_set(:@algorithms, algorithms_before)
-      described_class.instance_variable_set(:@metadata, metadata_before)
-    end
-
     it "normalises the registered name the same way .get does" do
       described_class.register("MyTestAlgo", Elkrb::Layout::Algorithms::Box)
 
@@ -56,6 +56,14 @@ RSpec.describe Elkrb::Layout::AlgorithmRegistry do
       expect(info[:id]).to eq("mrtree")
       expect(info[:name]).to eq("Multi-Rooted Tree")
       expect(info[:description]).not_to eq("")
+    end
+
+    it "excludes core (algorithms: :all) options for a compatible-interface registration that does not inherit BaseAlgorithm" do
+      described_class.register("compat_test", String)
+
+      info = described_class.algorithm_info("compat_test")
+
+      expect(info[:supported_options]).not_to include("elk.padding", "elk.spacing.nodeNode")
     end
   end
 end

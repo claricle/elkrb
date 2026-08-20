@@ -36,7 +36,7 @@ module Elkrb
             description: metadata[:description] || "",
             category: metadata[:category] || "general",
             supports_hierarchy: metadata[:supports_hierarchy] || false,
-            supported_options: Options::Registry.for_algorithm(name_str),
+            supported_options: supported_options_for(name_str, algorithm_class),
           }
         end
 
@@ -45,6 +45,24 @@ module Elkrb
         end
 
         private
+
+        # Core (algorithms: :all) registry ids apply generically through
+        # BaseAlgorithm's shared mixins (padding, spacing, labels, ports,
+        # self-loops). A custom registration using the "compatible
+        # interface" escape hatch documented on .register_algorithm (not
+        # inheriting BaseAlgorithm) does not get those mixins for free,
+        # so it advertises only its own algorithm-specific ids. Checked
+        # via `defined?` rather than a require: base_algorithm.rb pulls
+        # in the full Graph model chain, which this file must not require
+        # just to be usable on its own (this class works standalone) —
+        # by the time any real caller invokes #algorithm_info, the gem's
+        # normal load order has already defined BaseAlgorithm anyway.
+        def supported_options_for(name_str, algorithm_class)
+          base = Algorithms::BaseAlgorithm if defined?(Algorithms::BaseAlgorithm)
+          return Options::Registry.for_algorithm(name_str) if base.nil? || algorithm_class <= base
+
+          Options::Registry.all.select { |_id, entry| Array(entry[:algorithms]).include?(name_str) }.keys
+        end
 
         # Used by #get and #algorithm_info to find the key actually
         # registered for `name`: try the properly snake_cased form first,
