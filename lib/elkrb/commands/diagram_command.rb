@@ -68,28 +68,31 @@ module Elkrb
       def detect_and_parse(content)
         require_relative "../graph/graph"
 
-        # Try JSON first
+        # Try JSON or YAML, chosen by the first non-whitespace character
         begin
-          return Elkrb::Graph::Graph.from_json(content)
-        rescue JSON::ParserError
-          # Not JSON
+          looks_like_json = content.lstrip.start_with?("{", "[")
+          return looks_like_json ? Elkrb::Graph::Graph.from_json(content) : Elkrb::Graph::Graph.from_yaml(content)
+        rescue Lutaml::Model::InvalidFormatError
+          # Not JSON or YAML
         end
 
-        # Try YAML
-        begin
-          return Elkrb::Graph::Graph.from_yaml(content)
-        rescue Psych::SyntaxError
-          # Not YAML
-        end
+        parse_elkt_or_fail(content)
+      end
 
-        # Try ELKT
-        begin
-          require_relative "../parsers/elkt_parser"
-          Elkrb::Parsers::ElktParser.parse(content)
-        rescue StandardError
-          raise ArgumentError,
-                "Unable to parse input file. Supported formats: JSON, YAML, ELKT"
-        end
+      def parse_elkt_or_fail(content)
+        graph = parse_elkt!(content)
+        return graph unless graph[:children].empty? && graph[:edges].empty?
+
+        raise ArgumentError,
+              "Unable to parse input file. Supported formats: JSON, YAML, ELKT"
+      end
+
+      def parse_elkt!(content)
+        require_relative "../parsers/elkt_parser"
+        Elkrb::Parsers::ElktParser.parse(content)
+      rescue StandardError
+        raise ArgumentError,
+              "Unable to parse input file. Supported formats: JSON, YAML, ELKT"
       end
 
       def build_layout_options

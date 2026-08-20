@@ -152,5 +152,26 @@ RSpec.describe Elkrb::Commands::ConvertCommand do
         command.run
       end.to raise_error(ArgumentError, /Cannot detect output format/)
     end
+
+    it "loads a JSON file with no recognized extension" do
+      input_file = File.join(temp_dir, "graph.noext")
+      output_file = File.join(temp_dir, "output.json")
+      File.write(input_file, graph_data.to_json)
+
+      command = described_class.new(input_file, { output: output_file })
+      command.run
+
+      expect(File.exist?(output_file)).to be true
+    end
+
+    it "raises for unparsable content with no recognized extension" do
+      input_file = File.join(temp_dir, "graph.noext")
+      output_file = File.join(temp_dir, "output.json")
+      File.write(input_file, "this is not a graph, just garbage!!! {{{ ]]] ###")
+
+      command = described_class.new(input_file, { output: output_file })
+
+      expect { command.run }.to raise_error(ArgumentError, /Unable to parse input file/)
+    end
   end
 end
