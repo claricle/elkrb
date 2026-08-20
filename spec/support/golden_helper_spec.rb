@@ -70,6 +70,34 @@ RSpec.describe GoldenComparator do
     expect(diffs).to be_empty
   end
 
+  it "flags a changed port side" do
+    expected = { "id" => "root", "children" => [{ "id" => "n1", "ports" => [{ "id" => "p1", "side" => "EAST" }] }] }
+    actual = { "id" => "root", "children" => [{ "id" => "n1", "ports" => [{ "id" => "p1", "side" => "WEST" }] }] }
+    diffs = described_class.diff_exact(expected, actual, %i[ports])
+    expect(diffs.join).to include("/side:")
+  end
+
+  it "flags a bumped port index" do
+    expected = { "id" => "root", "children" => [{ "id" => "n1", "ports" => [{ "id" => "p1", "index" => 0 }] }] }
+    actual = { "id" => "root", "children" => [{ "id" => "n1", "ports" => [{ "id" => "p1", "index" => 1 }] }] }
+    diffs = described_class.diff_exact(expected, actual, %i[ports])
+    expect(diffs.join).to include("/index:")
+  end
+
+  it "flags a shifted port offset" do
+    expected = { "id" => "root", "children" => [{ "id" => "n1", "ports" => [{ "id" => "p1", "offset" => 0.0 }] }] }
+    actual = { "id" => "root", "children" => [{ "id" => "n1", "ports" => [{ "id" => "p1", "offset" => 5.0 }] }] }
+    diffs = described_class.diff_exact(expected, actual, %i[ports])
+    expect(diffs.join).to include("/offset:")
+  end
+
+  it "flags a changed port geometry (x/y/width/height)" do
+    expected = { "id" => "root", "children" => [{ "id" => "n1", "ports" => [{ "id" => "p1", "x" => 0.0, "width" => 6.0 }] }] }
+    actual = { "id" => "root", "children" => [{ "id" => "n1", "ports" => [{ "id" => "p1", "x" => 3.0, "width" => 6.0 }] }] }
+    diffs = described_class.diff_exact(expected, actual, %i[ports])
+    expect(diffs.join).to include("/x:")
+  end
+
   it "detects a same-layer top/bottom swap that alphabetical id order would miss" do
     expected = { "id" => "root",
                  "children" => [{ "id" => "a", "x" => 0.0, "y" => 0.0 },
@@ -147,6 +175,16 @@ RSpec.describe GoldenComparator do
     expect(diffs.join).to include("unexpected in actual")
   end
 
+  it "reports a node missing from actual symmetrically (structural tier)" do
+    kept = { "id" => "a", "x" => 0.0, "y" => 0.0, "width" => 10.0, "height" => 10.0 }
+    dropped = { "id" => "b", "x" => 20.0, "y" => 0.0, "width" => 10.0, "height" => 10.0 }
+    expected = { "id" => "root", "width" => 30.0, "height" => 10.0, "children" => [kept, dropped] }
+    actual = { "id" => "root", "width" => 30.0, "height" => 10.0, "children" => [kept] }
+
+    diffs = described_class.diff_structural(expected, actual)
+    expect(diffs.join).to include("missing from actual")
+  end
+
   it "compares a port endpoint to its own border, like a node, not a centre point" do
     # Confirmed against the real committed `ports_simple` golden: elkjs
     # anchors the edge at the port's right BORDER (node.x + port.x +
@@ -186,7 +224,7 @@ RSpec.describe "every committed golden self-matches at its assigned tier" do
   # caught a real bug once already (structural tier's port-anchor check
   # rejected `ports_simple`'s own real elkjs data before that check was
   # fixed to use the port's border instead of its centre).
-  TIER_BY_CASE = {
+  tier_by_case = {
     "chain2" => :exact, "chain3" => :exact, "fan_out" => :structural, "fan_in" => :structural,
     "diamond" => :structural, "cycle3" => :structural, "self_loop" => :structural,
     "long_edge" => :structural, "ports_simple" => :structural, "labeled_node" => :exact,
@@ -198,7 +236,7 @@ RSpec.describe "every committed golden self-matches at its assigned tier" do
     "random3" => :structural, "spore_overlap4" => :structural,
   }.freeze
 
-  TIER_BY_CASE.each do |name, tier|
+  tier_by_case.each do |name, tier|
     it "#{name} (#{tier})" do
       expected = golden_expected(name)
       diffs =
@@ -209,5 +247,57 @@ RSpec.describe "every committed golden self-matches at its assigned tier" do
 
       expect(diffs).to be_empty
     end
+  end
+end
+
+RSpec.describe "every committed golden's perturbed copy is caught" do
+  # The self-match examples above prove the comparator accepts a CORRECT
+  # copy; they are tautological about whether it can also REJECT a wrong
+  # one (comparing an object with itself proves nothing about that). One
+  # mutation per case, chosen to exercise the property most relevant to
+  # its tier: exact tier gets a node shifted past the 1e-6 tolerance;
+  # structural tier gets an edge deleted if the case has one (exercises
+  # the symmetric "missing from actual" check), otherwise a node shifted
+  # past `POSITION_TOLERANCE_FRACTION` of the graph's own size (exercises
+  # `diff_node_geometry` on an edge-less case like `rect6`/
+  # `spore_overlap4`). Local variable, not a constant, so it can't collide
+  # with the same-named table in the previous `RSpec.describe` block.
+  tier_by_case = {
+    "chain2" => :exact, "chain3" => :exact, "fan_out" => :structural, "fan_in" => :structural,
+    "diamond" => :structural, "cycle3" => :structural, "self_loop" => :structural,
+    "long_edge" => :structural, "ports_simple" => :structural, "labeled_node" => :exact,
+    "labeled_node_placement" => :exact, "compound_chain" => :exact, "compound_nested" => :structural,
+    "direction_down" => :exact, "spacing_override" => :exact, "sizeless" => :exact,
+    "two_components" => :structural, "box3" => :exact, "box_mixed" => :exact, "box_aspect" => :exact,
+    "fixed2" => :exact, "mrtree3" => :exact, "mrtree7" => :structural, "radial_star5" => :structural,
+    "rect6" => :structural, "force_tri" => :structural, "stress_path4" => :structural,
+    "random3" => :structural, "spore_overlap4" => :structural,
+  }.freeze
+
+  tier_by_case.each do |name, tier|
+    it "#{name} (#{tier})" do
+      expected = golden_expected(name)
+      mutated = Marshal.load(Marshal.dump(expected))
+
+      case tier
+      when :exact
+        mutated["children"].first["x"] = numeric_or_zero(mutated["children"].first, "x") + 2.0
+        diffs = GoldenComparator.diff_exact(expected, mutated, %i[nodes sections labels ports graph])
+      when :structural
+        if mutated["edges"]&.any?
+          mutated["edges"].shift
+        else
+          node = mutated["children"].first
+          node["x"] = numeric_or_zero(node, "x") + (numeric_or_zero(mutated, "width") * 0.5)
+        end
+        diffs = GoldenComparator.diff_structural(expected, mutated)
+      end
+
+      expect(diffs).not_to be_empty
+    end
+  end
+
+  def numeric_or_zero(hash, key)
+    (hash[key] || 0.0).to_f
   end
 end
