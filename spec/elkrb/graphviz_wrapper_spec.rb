@@ -85,6 +85,13 @@ RSpec.describe Elkrb::GraphvizWrapper do
       end
     end
 
+    it "treats an empty ELKRB_DOT as unset and falls back to PATH" do
+      with_fake_dot do
+        ENV["ELKRB_DOT"] = ""
+        expect(described_class.new.available?).to be true
+      end
+    end
+
     it "does not treat an executable directory named dot as the executable" do
       Dir.mktmpdir do |dir|
         dot_dir = File.join(dir, "dot")
@@ -194,6 +201,18 @@ RSpec.describe Elkrb::GraphvizWrapper do
         expect do
           wrapper.render("missing.dot", "output.png", :png)
         end.to raise_error(ArgumentError, /Input file not found/)
+      end
+    end
+
+    it "raises a clear error instead of crashing when output_file is nil" do
+      with_fake_dot do
+        Dir.mktmpdir do |dir|
+          input = write_fake_input(dir)
+
+          expect do
+            wrapper.render(input, nil, :png)
+          end.to raise_error(ArgumentError, /Output file path is required/)
+        end
       end
     end
 

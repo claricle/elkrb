@@ -24,6 +24,7 @@ module Elkrb
 
       validate_format!(format)
       validate_file_exists!(dot_file)
+      validate_output_file!(output_file)
 
       engine = options[:engine] || "dot"
       validate_engine!(engine)
@@ -55,11 +56,13 @@ module Elkrb
     #
     # @return [String, nil] the path to `dot`, or nil if not found
     #
-    # ENV["ELKRB_DOT"], if set, is the sole candidate — no PATH fallback if
-    # it doesn't point at a real executable. Otherwise every `dot` on PATH
-    # is tried in order.
+    # ENV["ELKRB_DOT"], if set to a non-empty value, is the sole candidate —
+    # no PATH fallback if it doesn't point at a real executable. An unset or
+    # empty ELKRB_DOT is treated as no override: every `dot` on PATH is
+    # tried in order.
     def find_graphviz
-      candidates = ENV["ELKRB_DOT"] ? [ENV["ELKRB_DOT"]] : path_dot_candidates
+      override = ENV["ELKRB_DOT"]
+      candidates = override.nil? || override.empty? ? path_dot_candidates : [override]
       candidates.find { |candidate| valid_executable?(candidate) }
     end
 
@@ -101,6 +104,12 @@ module Elkrb
       return if File.exist?(file)
 
       raise ArgumentError, "Input file not found: #{file}"
+    end
+
+    def validate_output_file!(output_file)
+      return if output_file
+
+      raise ArgumentError, "Output file path is required"
     end
 
     def installation_message
