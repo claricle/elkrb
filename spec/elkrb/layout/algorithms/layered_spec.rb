@@ -84,5 +84,27 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
       expect { Elkrb.layout(graph, algorithm: "layered") }
         .not_to raise_error
     end
+
+    it "does not stack-overflow on a hyperedge whose first source is " \
+       "the target itself" do
+      # Codex diff-review finding (round 3): [a, b] -> a is genuine
+      # incoming traffic to "a" from "b" (incoming_to? correctly counts
+      # it), but calculate_layer picked edge.sources.first unconditionally
+      # -- for this edge that is "a" itself, so it recursed on "a" again
+      # before memoizing it. Confirmed against the pre-fix code.
+      graph = {
+        id: "r",
+        children: [
+          { id: "a", width: 10, height: 10 },
+          { id: "b", width: 10, height: 10 },
+        ],
+        edges: [
+          { id: "e", sources: %w[a b], targets: ["a"] },
+        ],
+      }
+
+      expect { Elkrb.layout(graph, algorithm: "layered") }
+        .not_to raise_error
+    end
   end
 end

@@ -16,8 +16,7 @@ module Elkrb
           return graph if graph.children.empty?
 
           # Find connected components
-          index = NodeIndex.build(graph)
-          components = find_connected_components(graph, index)
+          components = find_connected_components(graph)
 
           # Layout each component independently
           component_algo = graph.layout_options&.[]("disco.componentAlgorithm") || "layered"
@@ -37,10 +36,8 @@ module Elkrb
 
         private
 
-        # `index` defaults so specs can call this directly with just a
-        # graph; layout_flat above always passes the index it already
-        # built, so production never builds it twice.
-        def find_connected_components(graph, index = NodeIndex.build(graph))
+        def find_connected_components(graph)
+          index = NodeIndex.build(graph)
           visited = Set.new
           components = []
 

@@ -56,10 +56,7 @@ module Elkrb
             else
               # Assign to one layer below the maximum of predecessors
               max_pred_layer = incoming.filter_map do |edge|
-                source_id = edge.sources.first
-                next 0 unless source_id
-
-                source = @index.node(source_id)
+                source = first_other_source(edge, node)
                 next 0 unless source
 
                 calculate_layer(source)
@@ -111,6 +108,18 @@ module Elkrb
 
             sources = @index.endpoint_nodes(edge.sources)
             sources.any? { |source| source != node }
+          end
+
+          # The first resolved source that is NOT `node` itself. Plain
+          # `edge.sources.first` breaks for a hyperedge whose first
+          # source happens to be the target itself (e.g. [a, b] -> a,
+          # already known to have incoming traffic from b via
+          # incoming_to? above): resolving straight back to `a` would
+          # recurse calculate_layer on the same node forever before it
+          # is memoized (SystemStackError, confirmed by direct
+          # reproduction).
+          def first_other_source(edge, node)
+            @index.endpoint_nodes(edge.sources).find { |source| source != node }
           end
         end
       end
