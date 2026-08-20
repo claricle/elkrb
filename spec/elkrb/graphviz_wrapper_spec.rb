@@ -55,14 +55,26 @@ RSpec.describe Elkrb::GraphvizWrapper do
 
     it "returns true when ELKRB_DOT points at an executable, overriding whatever else is on PATH" do
       with_fake_dot do |log_path|
-        ENV["ELKRB_DOT"] = fake_dot_executable(log_path)
-        wrapper = described_class.new
+        Dir.mktmpdir("decoy_dot") do |decoy_dir|
+          decoy_dot = File.join(decoy_dir, "dot")
+          File.write(decoy_dot, "#!/bin/sh\necho 'dot - graphviz version 9.9.9 (decoy)'\n")
+          FileUtils.chmod(0o755, decoy_dot)
 
-        expect(wrapper.available?).to be true
-        # Proves the *fake* dot was actually selected via ELKRB_DOT, not
-        # whatever dot (real or fake) is reachable via PATH: the fake
-        # reports a distinctive version no real host dot would print.
-        expect(wrapper.version).to eq("2.44.1")
+          original_path = ENV.fetch("PATH", nil)
+          # The decoy goes first on PATH: if ELKRB_DOT were ignored, a
+          # plain PATH scan would find the decoy (9.9.9) before the real
+          # fake (2.44.1), so the version assertion below would catch it.
+          ENV["PATH"] = [decoy_dir, original_path].compact.join(File::PATH_SEPARATOR)
+          begin
+            ENV["ELKRB_DOT"] = fake_dot_executable(log_path)
+            wrapper = described_class.new
+
+            expect(wrapper.available?).to be true
+            expect(wrapper.version).to eq("2.44.1")
+          ensure
+            ENV["PATH"] = original_path
+          end
+        end
       end
     end
 
