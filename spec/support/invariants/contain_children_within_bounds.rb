@@ -1,0 +1,33 @@
+# spec/support/invariants/contain_children_within_bounds.rb
+# frozen_string_literal: true
+
+require_relative "../invariants"
+
+RSpec::Matchers.define :contain_children_within_bounds do |padding = 0|
+  match do |graph|
+    @violations = []
+    check_level(graph, padding)
+    @violations.empty?
+  end
+
+  failure_message { @violations.join("\n") }
+
+  # Same `|| 0.0` convention as `have_no_overlapping_siblings`: correct
+  # for width/height (Decision 5), a robustness convenience (not a
+  # correctness claim) for x/y — `have_finite_coordinates` owns flagging a
+  # genuinely missing position.
+  define_method(:check_level) do |node, pad|
+    width = node.width || 0.0
+    height = node.height || 0.0
+    (node.children || []).each do |child|
+      cx, cy = child.x || 0.0, child.y || 0.0
+      cw, ch = child.width || 0.0, child.height || 0.0
+      out_of_bounds = cx < pad || cy < pad || (cx + cw) > (width - pad) || (cy + ch) > (height - pad)
+      @violations << "#{child.id} escapes #{node.id}'s bounds" if out_of_bounds
+
+      check_level(child, pad)
+    end
+  end
+end
+
+INVARIANTS << :contain_children_within_bounds
