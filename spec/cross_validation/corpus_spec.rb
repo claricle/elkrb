@@ -2,6 +2,7 @@
 
 require "spec_helper"
 require "json"
+require "timeout"
 require "tmpdir"
 require_relative "corpus_runner"
 
@@ -113,20 +114,27 @@ RSpec.describe "Elkrb layout corpus" do
     KNOWN_FAILURES[[id, check]]
   end
 
+  # Corpus fixtures can regress into a hang, not just a crash; without
+  # this, a single case would stall the whole suite instead of failing
+  # it. corpus_runner.rb has the same 30s guard for the same reason.
+  def layout_with_timeout(kase)
+    Timeout.timeout(30) { Elkrb.layout(kase.graph, algorithm: kase.algorithm) }
+  end
+
   CASES.each do |kase|
     describe kase.id do
       it "does not raise" do
         reason = known_failure_reason(kase.id, "no_crash")
         pending(reason) if reason
 
-        expect { Elkrb.layout(kase.graph, algorithm: kase.algorithm) }.not_to raise_error
+        expect { layout_with_timeout(kase) }.not_to raise_error
       end
 
       it "keeps layout invariants" do
         reason = known_failure_reason(kase.id, "invariants") || known_failure_reason(kase.id, "no_crash")
         pending(reason) if reason
 
-        result = Elkrb.layout(kase.graph, algorithm: kase.algorithm)
+        result = layout_with_timeout(kase)
         assert_layout_invariants(result)
       end
     end
@@ -148,7 +156,7 @@ RSpec.describe "Elkrb layout corpus" do
   end
 
   def entry_still_fails?(kase, check)
-    result = Elkrb.layout(kase.graph, algorithm: kase.algorithm)
+    result = layout_with_timeout(kase)
     assert_layout_invariants(result) if check == "invariants"
     false
   rescue StandardError, SystemStackError, RSpec::Expectations::ExpectationNotMetError
@@ -156,6 +164,13 @@ RSpec.describe "Elkrb layout corpus" do
   end
 
   describe CorpusRunner, ".run" do
+    it "has no unexpected failures over the real corpus" do
+      Dir.mktmpdir do |dir|
+        summary = CorpusRunner.run(dir)
+        expect(summary["unexpected_failures"]).to be(false)
+      end
+    end
+
     it "writes a canonical file per case, records errors and timeouts, and totals a summary" do
       ok_case = CorpusRunner::Case.new(
         id: "ok",
@@ -205,7 +220,41 @@ RSpec.describe "Elkrb layout corpus" do
         expect(timeout_payload).to eq("error" => "Timeout")
 
         expect(JSON.parse(File.read(File.join(dir, "summary.json")))).to eq(summary)
+
+        # Canonical means deep-sorted keys, floats rounded to 6 places,
+        # and stable across repeated runs -- not just "some JSON got
+        # written". Parsing the raw text (not a fresh Hash literal)
+        # preserves the file's actual on-disk key order.
+        ok_text = File.read(File.join(dir, "ok.json"))
+        assert_deep_sorted_keys(JSON.parse(ok_text))
+        assert_rounded_floats(JSON.parse(ok_text))
+
+        Dir.mktmpdir do |second_dir|
+          CorpusRunner.run(second_dir, timeout: 0.02)
+          expect(File.read(File.join(second_dir, "ok.json"))).to eq(ok_text)
+        end
       end
+    end
+  end
+
+  def assert_deep_sorted_keys(value)
+    case value
+    when Hash
+      expect(value.keys).to eq(value.keys.sort), "keys not sorted: #{value.keys.inspect}"
+      value.each_value { |v| assert_deep_sorted_keys(v) }
+    when Array
+      value.each { |v| assert_deep_sorted_keys(v) }
+    end
+  end
+
+  def assert_rounded_floats(value)
+    case value
+    when Hash
+      value.each_value { |v| assert_rounded_floats(v) }
+    when Array
+      value.each { |v| assert_rounded_floats(v) }
+    when Float
+      expect(value.round(6)).to eq(value), "#{value} has more than 6 decimal places"
     end
   end
 end

@@ -16,6 +16,15 @@ require_relative "../../lib/elkrb"
 # spec/cross_validation/fixtures/*/imported_tests.json file. This is the
 # single enumeration every later slice's execution-diff gate diffs
 # against, so `.cases` is the one place that logic lives.
+#
+# Every case's file is always written, regardless of outcome -- `run`'s
+# own exit status (via the CLI entrypoint below) is informational only,
+# never something a caller chains on; XD compares dump directories, not
+# exit codes. A case's wrapper may carry "expect": "error" to mark a
+# deliberate, permanent crasher (tracked by its own RC/decision id
+# elsewhere, e.g. corpus_spec.rb's KNOWN_FAILURES) rather than a fresh
+# regression -- the CLI entrypoint's exit code reflects only failures
+# that were NOT declared expected.
 class CorpusRunner
   ROOT = File.expand_path("../..", __dir__)
   TIMEOUT_SECONDS = 30
@@ -38,7 +47,12 @@ class CorpusRunner
     File.join(ROOT, "spec/cross_validation/fixtures"),
   ].freeze
 
-  Case = Struct.new(:id, :algorithm, :graph, keyword_init: true)
+  # `expect` is nil for every ordinary case; a corpus wrapper (or an
+  # imported_tests.json entry) may set "expect": "error" to mark a
+  # deliberate, permanent crasher (duplicate_ids: RC4/S7; the two SPOrE
+  # cases: RC14 registry normalisation) so a healthy dump's exit status
+  # reflects unexpected regressions, not known, already-tracked bugs.
+  Case = Struct.new(:id, :algorithm, :graph, :expect, keyword_init: true)
 
   class << self
     def cases
@@ -53,15 +67,21 @@ class CorpusRunner
       refuse_source_directory!(outdir)
       FileUtils.mkdir_p(outdir)
       summary = { "total" => 0, "ok" => 0, "error" => 0, "timeout" => 0, "cases" => [] }
+      unexpected_failures = false
 
       cases.each do |kase|
         status, payload = run_case(kase, timeout)
         summary["total"] += 1
         summary[status] += 1
-        summary["cases"] << { "id" => kase.id, "algorithm" => kase.algorithm, "status" => status }
+        expected = status != "ok" && kase.expect == status
+        unexpected_failures ||= status != "ok" && !expected
+        case_entry = { "id" => kase.id, "algorithm" => kase.algorithm, "status" => status }
+        case_entry["expected"] = true if expected
+        summary["cases"] << case_entry
         File.write(File.join(outdir, "#{kase.id}.json"), JSON.pretty_generate(payload))
       end
 
+      summary["unexpected_failures"] = unexpected_failures
       File.write(File.join(outdir, "summary.json"), JSON.pretty_generate(summary))
       summary
     end
@@ -110,7 +130,8 @@ class CorpusRunner
         Case.new(
           id: File.basename(path, ".json"),
           algorithm: wrapper.fetch("algorithm", "layered"),
-          graph: wrapper.fetch("graph")
+          graph: wrapper.fetch("graph"),
+          expect: wrapper["expect"]
         )
       end
     end
@@ -121,7 +142,8 @@ class CorpusRunner
           Case.new(
             id: entry.fetch("id"),
             algorithm: entry.fetch("algorithm", "layered"),
-            graph: entry.fetch("graph")
+            graph: entry.fetch("graph"),
+            expect: entry["expect"]
           )
         end
       end
@@ -134,5 +156,10 @@ if __FILE__ == $PROGRAM_NAME
   summary = CorpusRunner.run(outdir)
   puts "corpus: #{summary['ok']} ok, #{summary['error']} error, " \
        "#{summary['timeout']} timeout (#{summary['total']} total)"
-  exit 1 if summary["error"].positive? || summary["timeout"].positive?
+  # Every case's dump is always written first, regardless of outcome --
+  # the exit status is a convenience signal, not something XD (or any
+  # caller) should chain on: it distinguishes a genuine regression from
+  # the corpus's permanent, individually-tracked known crashers (each
+  # marked "expect": "error" in its own wrapper).
+  exit 1 if summary["unexpected_failures"]
 end

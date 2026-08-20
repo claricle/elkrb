@@ -86,7 +86,12 @@ RSpec.describe "elkrb CLI" do
 
           pending("RC10")
 
-          expect(log_entries).to include(malicious_output)
+          # Accept either argv shape a real fix might land: a separate
+          # "-o" token pair, or today's "-o<path>" suffix kept but built
+          # via system(*argv) instead of a shell string. Either way the
+          # malicious path must survive as one argv element, not get
+          # split by a shell.
+          expect(log_entries).to include(malicious_output).or include("-o#{malicious_output}")
           expect(File.exist?(File.join(dir, "PWNED"))).to be(false)
         end
       end
