@@ -1,0 +1,22 @@
+name: golden
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [master, main, v2]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  golden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+          bundler-cache: false
+      - run: bundle install
+      - run: bundle exec rspec spec/elkrb/golden_spec.rb spec/cross_validation
