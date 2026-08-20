@@ -199,8 +199,28 @@ RSpec.describe Elkrb::Options::Registry do
       end
     end
 
+    it "describes elk.disco.componentCompaction.strategy with ELK's contract, not the arrangement values" do
+      id = "elk.disco.componentCompaction.strategy"
+
+      expect(described_class.default(id)).to eq("POLYOMINO")
+      expect(described_class.all[id][:values]).to eq(%w[POLYOMINO])
+      expect(described_class.default("disco.componentArrangement")).to eq("row")
+    end
+
     it "sorts every row by canonical id" do
       expect(described_class.all.keys).to eq(described_class.all.keys.sort)
+    end
+
+    it "pins the real ELK enum values for the three layered strategy rows (verified against elkjs's enum construction order)" do
+      expect(described_class.all["elk.layered.considerModelOrder.strategy"][:values]).to eq(
+        %w[NONE NODES_AND_EDGES PREFER_EDGES PREFER_NODES]
+      )
+      expect(described_class.all["elk.layered.crossingMinimization.strategy"][:values]).to eq(
+        %w[LAYER_SWEEP MEDIAN_LAYER_SWEEP INTERACTIVE NONE]
+      )
+      expect(described_class.all["elk.layered.nodePlacement.strategy"][:values]).to eq(
+        %w[SIMPLE INTERACTIVE LINEAR_SEGMENTS BRANDES_KOEPF NETWORK_SIMPLEX]
+      )
     end
   end
 

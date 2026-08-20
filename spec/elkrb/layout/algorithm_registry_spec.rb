@@ -40,6 +40,17 @@ RSpec.describe Elkrb::Layout::AlgorithmRegistry do
       expect(described_class.get("MyTestAlgo")).to eq(Elkrb::Layout::Algorithms::Box)
       expect(described_class.get("my_test_algo")).to eq(Elkrb::Layout::Algorithms::Box)
     end
+
+    it "replaces a legacy run-together registration instead of adding a second entry" do
+      count_before = described_class.available_algorithms.size
+
+      described_class.register("mrTree", Elkrb::Layout::Algorithms::Box)
+
+      expect(described_class.available_algorithms.size).to eq(count_before)
+      expect(described_class.available_algorithms.grep(/mr/)).to eq(["mrtree"])
+      expect(described_class.get("mrTree")).to eq(Elkrb::Layout::Algorithms::Box)
+      expect(described_class.get("mrtree")).to eq(Elkrb::Layout::Algorithms::Box)
+    end
   end
 
   describe ".algorithm_info" do
@@ -64,6 +75,13 @@ RSpec.describe Elkrb::Layout::AlgorithmRegistry do
       info = described_class.algorithm_info("compat_test")
 
       expect(info[:supported_options]).not_to include("elk.padding", "elk.spacing.nodeNode")
+    end
+
+    it "still advertises the selector for a compatible-interface registration, which LayoutEngine honours" do
+      described_class.register("selector_test", String)
+
+      expect(described_class.algorithm_info("selector_test")[:supported_options])
+        .to include("elk.algorithm")
     end
   end
 end

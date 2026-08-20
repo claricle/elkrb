@@ -9,8 +9,11 @@ module Elkrb
       @metadata = {}
 
       class << self
+        # Resolves the same way #get does, so re-registering an algorithm
+        # under another spelling replaces it instead of standing up a second
+        # entry beside it under the folded key.
         def register(name, algorithm_class, metadata = {})
-          name_str = normalize_name(name)
+          name_str = resolve_key(name)
           @algorithms[name_str] = algorithm_class
           @metadata[name_str] = metadata
         end
@@ -59,7 +62,9 @@ module Elkrb
         # normal load order has already defined BaseAlgorithm anyway.
         def supported_options_for(name_str, algorithm_class)
           base = ::Elkrb::Layout::Algorithms::BaseAlgorithm if defined?(::Elkrb::Layout::Algorithms::BaseAlgorithm)
-          include_all = base.nil? || algorithm_class <= base
+          # Class#<= answers nil, not false, for an unrelated class, so the
+          # escape-hatch path would otherwise hand a nil down as a flag.
+          include_all = !base.nil? && algorithm_class <= base ? true : false
           Options::Registry.for_algorithm(name_str, include_all: include_all)
         end
 

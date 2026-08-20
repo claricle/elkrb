@@ -30,7 +30,7 @@ module Elkrb
         "elk.bendPoints" => { type: :kvector_chain, default: nil, aliases: %w[bendPoints], algorithms: :all, status: :honoured, description: "Manual bend points for an edge" },
         "elk.box.packingMode" => { type: :enum, values: %w[SIMPLE GROUP_DEC GROUP_MIXED GROUP_INC], default: "SIMPLE", algorithms: %w[box], status: :accepted, description: "Box layout packing mode; not honoured today (S16 implements SIMPLE, others fall back to it)" },
         "elk.direction" => { type: :enum, values: %w[UNDEFINED RIGHT LEFT DOWN UP], default: "UNDEFINED", aliases: %w[direction], algorithms: %w[layered mrtree], status: :honoured, description: "Overall direction of layout" },
-        "elk.disco.componentCompaction.strategy" => { type: :enum, values: %w[NONE ROW COLUMN GRID], default: "NONE", namespace: :elkrb, algorithms: %w[disco], status: :accepted, description: "elkrb-private: component arrangement strategy; disco.componentArrangement is the id actually read today" },
+        "elk.disco.componentCompaction.strategy" => { type: :enum, values: %w[POLYOMINO], default: "POLYOMINO", algorithms: %w[disco], status: :accepted, description: "DisCo component compaction; not honoured today. Arrangement is a separate concern elkrb reads as disco.componentArrangement" },
         "elk.edgeLabels.placement" => { type: :string, default: "CENTER", algorithms: :all, status: :honoured, description: "Edge label placement" },
         "elk.edgeRouting" => { type: :enum, values: %w[UNDEFINED POLYLINE ORTHOGONAL SPLINES], default: "UNDEFINED", aliases: %w[edgeRouting edge_routing edge.routing], algorithms: :all, status: :honoured, description: "Edge routing style" },
         "elk.force.iterations" => { type: :integer, default: 300, aliases: %w[iterations], algorithms: %w[force], status: :honoured, description: "Force simulation iteration count" },
@@ -38,10 +38,10 @@ module Elkrb
         "elk.force.temperature" => { type: :float, default: 0.001, aliases: %w[temperature], algorithms: %w[force], status: :honoured, description: "Force simulation cooling temperature" },
         "elk.hierarchyHandling" => { type: :enum, values: %w[INHERIT INCLUDE_CHILDREN SEPARATE_CHILDREN], default: "INHERIT", algorithms: :all, status: :partial, note: "cross-level edges are routed; no cross-level layering", description: "Whether a compound node's children are laid out separately or together with it" },
         "elk.layered.compaction.postCompaction.strategy" => { type: :enum, values: %w[NONE LEFT RIGHT LEFT_RIGHT_CONSTRAINT_LOCKING LEFT_RIGHT_CONNECTION_LOCKING EDGE_LENGTH], default: "NONE", algorithms: %w[layered], status: :accepted, description: "Post-layout compaction strategy; not honoured today" },
-        "elk.layered.considerModelOrder.strategy" => { type: :enum, values: %w[NONE NODES_AND_EDGES], default: "NONE", algorithms: %w[layered], status: :accepted, description: "Whether to preserve model node/edge order as a crossing-minimization tie-break; not honoured today" },
-        "elk.layered.crossingMinimization.strategy" => { type: :enum, values: %w[LAYER_SWEEP INTERACTIVE NONE], default: "LAYER_SWEEP", algorithms: %w[layered], status: :accepted, description: "Crossing minimization strategy; LAYER_SWEEP honoured from S25a" },
+        "elk.layered.considerModelOrder.strategy" => { type: :enum, values: %w[NONE NODES_AND_EDGES PREFER_EDGES PREFER_NODES], default: "NONE", algorithms: %w[layered], status: :accepted, description: "Whether to preserve model node/edge order as a crossing-minimization tie-break; not honoured today" },
+        "elk.layered.crossingMinimization.strategy" => { type: :enum, values: %w[LAYER_SWEEP MEDIAN_LAYER_SWEEP INTERACTIVE NONE], default: "LAYER_SWEEP", algorithms: %w[layered], status: :accepted, description: "Crossing minimization strategy; LAYER_SWEEP honoured from S25a" },
         "elk.layered.layering.layerConstraint" => { type: :enum, values: %w[NONE FIRST FIRST_SEPARATE LAST LAST_SEPARATE], default: "NONE", algorithms: %w[layered], status: :accepted, description: "Forces a node to a specific layer position; honoured from S19" },
-        "elk.layered.nodePlacement.strategy" => { type: :enum, values: %w[SIMPLE BRANDES_KOEPF NETWORK_SIMPLEX], default: "SIMPLE", algorithms: %w[layered], status: :accepted, description: "Node placement strategy; not honoured today (elkrb implements SIMPLE only, others fall back to it)" },
+        "elk.layered.nodePlacement.strategy" => { type: :enum, values: %w[SIMPLE INTERACTIVE LINEAR_SEGMENTS BRANDES_KOEPF NETWORK_SIMPLEX], default: "SIMPLE", algorithms: %w[layered], status: :accepted, description: "Node placement strategy; not honoured today (elkrb implements SIMPLE only, others fall back to it)" },
         "elk.layered.spacing.nodeNodeBetweenLayers" => { type: :float, default: 60.0, aliases: %w[layer_spacing layered.spacing.nodeNodeBetweenLayers], algorithms: %w[layered], status: :honoured, description: "Spacing between layers (ELK's own default is 20.0; elkrb currently defaults to 60.0)" },
         "elk.nodeLabels.placement" => { type: :string, default: "INSIDE CENTER", aliases: %w[node.label.placement label.placement], algorithms: :all, status: :honoured, description: "Node label placement" },
         "elk.padding" => { type: :padding, default: "[top=12,left=12,bottom=12,right=12]", aliases: %w[padding], algorithms: :all, status: :honoured, description: "Padding around the graph" },
@@ -83,6 +83,12 @@ module Elkrb
       }.freeze
       # rubocop:enable Layout/LineLength
       private_constant :OPTIONS
+
+      # LayoutEngine, not the algorithm, honours the selector — so it applies
+      # to every registration, including a custom class that inherits no
+      # BaseAlgorithm mixins and therefore gets none of the shared ids.
+      ENGINE_OPTIONS = %w[elk.algorithm].freeze
+      private_constant :ENGINE_OPTIONS
 
       OPTIONS.each_value do |entry|
         entry.freeze
@@ -156,8 +162,10 @@ module Elkrb
         #   does not inherit BaseAlgorithm, so does not get those for free)
         # @return [Array<String>] canonical ids scoped to that algorithm
         def for_algorithm(name, include_all: true)
-          OPTIONS.select do |_id, entry|
-            (include_all && entry[:algorithms] == :all) || Array(entry[:algorithms]).include?(name)
+          OPTIONS.select do |id, entry|
+            ENGINE_OPTIONS.include?(id) ||
+              (include_all && entry[:algorithms] == :all) ||
+              Array(entry[:algorithms]).include?(name)
           end.keys
         end
 
@@ -229,11 +237,10 @@ module Elkrb
           end
         end
 
-        # Strict: only the literal "true" (any case) coerces to true.
-        # "1", "yes", and anything else — including malformed input —
-        # coerce to false, same as Ruby's own truthiness would treat a
-        # non-boolean string if you had to pick one: no numeric/word
-        # aliases for "true" are recognised.
+        # Strict boolean-env semantics: only true itself, or the literal
+        # string "true" (case-insensitive), coerces to true. "1", "yes",
+        # and everything else — including malformed input — coerce to
+        # false; no numeric or word aliases for "true" are recognised.
         def coerce_boolean(value)
           return value if value == true || value == false
 

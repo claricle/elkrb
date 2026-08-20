@@ -196,6 +196,18 @@ RSpec.describe "Elkrb::Options" do
         expect { described_class.parse("(1,2,3)") }.to raise_error(ArgumentError, /\(1,2,3\)/)
       end
 
+      it "raises ArgumentError for a non-numeric token rather than coercing it through to_f" do
+        expect { described_class.parse("(1x,2; 3,4)") }.to raise_error(ArgumentError, /1x/)
+        expect { described_class.parse("(1,2; nope,4)") }.to raise_error(ArgumentError, /nope/)
+      end
+
+      it "still accepts signed, decimal and exponent notation" do
+        chain = described_class.parse("(-1.5,2e3)")
+
+        expect(chain[0].x).to eq(-1.5)
+        expect(chain[0].y).to eq(2000.0)
+      end
+
       it "parses an empty or whitespace-only chain as empty, not an error (intended)" do
         expect(described_class.parse("").size).to eq(0)
         expect(described_class.parse("( )").size).to eq(0)
