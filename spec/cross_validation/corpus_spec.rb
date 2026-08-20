@@ -172,19 +172,41 @@ RSpec.describe "Elkrb layout corpus" do
     end
 
     it "writes a canonical file per case, records errors and timeouts, and totals a summary" do
+      # width/height 10/3 forces layered's own arithmetic (centring,
+      # padding) to produce a Float with far more than 6 decimal digits
+      # before canonicalize rounds it -- a 1.0/1.0 node never exercises
+      # rounding at all, since layered never needs to divide it further.
       ok_case = CorpusRunner::Case.new(
         id: "ok",
         algorithm: "layered",
         graph: {
           "id" => "root",
           "children" => [
-            { "id" => "a", "width" => 1.0, "height" => 1.0 },
-            { "id" => "b", "width" => 1.0, "height" => 1.0 },
+            { "id" => "a", "width" => 10.0 / 3, "height" => 10.0 / 3 },
+            { "id" => "b", "width" => 10.0 / 3, "height" => 10.0 / 3 },
           ],
           "edges" => [{ "id" => "e1", "sources" => ["a"], "targets" => ["b"] }],
         }
       )
       error_case = CorpusRunner::Case.new(id: "boom", algorithm: "layered", graph: nil)
+
+      # force calls Kernel#rand; only a case that actually consumes
+      # randomness can prove the per-case srand reseed makes two runs
+      # agree -- a layered-only corpus would pass "stable across two
+      # runs" even with the reseed deleted, since layered never calls
+      # rand at all.
+      force_case = CorpusRunner::Case.new(
+        id: "force",
+        algorithm: "force",
+        graph: {
+          "id" => "root",
+          "children" => [
+            { "id" => "a", "width" => 10.0, "height" => 10.0 },
+            { "id" => "b", "width" => 10.0, "height" => 10.0 },
+          ],
+          "edges" => [{ "id" => "e1", "sources" => ["a"], "targets" => ["b"] }],
+        }
+      )
 
       slow_algorithm = Class.new(Elkrb::Layout::Algorithms::BaseAlgorithm) do
         def layout_flat(_graph, _options = {})
@@ -197,15 +219,20 @@ RSpec.describe "Elkrb layout corpus" do
         graph: { "id" => "root", "children" => [], "edges" => [] }
       )
 
-      allow(CorpusRunner).to receive(:cases).and_return([ok_case, error_case, timeout_case])
+      allow(CorpusRunner).to receive(:cases).and_return([ok_case, error_case, force_case, timeout_case])
 
       Dir.mktmpdir do |dir|
         summary = CorpusRunner.run(dir, timeout: 0.02)
 
-        expect(summary["total"]).to eq(3)
-        expect(summary["ok"]).to eq(1)
+        expect(summary["total"]).to eq(4)
+        expect(summary["ok"]).to eq(2)
         expect(summary["error"]).to eq(1)
         expect(summary["timeout"]).to eq(1)
+        # error_case and timeout_case both carry expect: nil, so neither
+        # matches its own outcome -- this corpus must be flagged, and
+        # the CLI entrypoint must exit non-zero for it.
+        expect(summary["unexpected_failures"]).to be(true)
+        expect(CorpusRunner.exit_code(summary)).to eq(1)
 
         ok_payload = JSON.parse(File.read(File.join(dir, "ok.json")))
         expect(ok_payload).to include("id" => "root")
@@ -226,12 +253,15 @@ RSpec.describe "Elkrb layout corpus" do
         # written". Parsing the raw text (not a fresh Hash literal)
         # preserves the file's actual on-disk key order.
         ok_text = File.read(File.join(dir, "ok.json"))
+        force_text = File.read(File.join(dir, "force.json"))
         assert_deep_sorted_keys(JSON.parse(ok_text))
         assert_rounded_floats(JSON.parse(ok_text))
+        assert_rounded_floats(JSON.parse(force_text))
 
         Dir.mktmpdir do |second_dir|
           CorpusRunner.run(second_dir, timeout: 0.02)
           expect(File.read(File.join(second_dir, "ok.json"))).to eq(ok_text)
+          expect(File.read(File.join(second_dir, "force.json"))).to eq(force_text)
         end
       end
     end

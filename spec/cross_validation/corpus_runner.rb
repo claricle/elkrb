@@ -86,6 +86,14 @@ class CorpusRunner
       summary
     end
 
+    # 1 when `summary` has a failure that was not declared "expect" on
+    # its wrapper, 0 otherwise. Extracted so the CLI entrypoint's exit
+    # decision is directly testable -- calling `exit` from inside an
+    # example would end the test run, not just the example.
+    def exit_code(summary)
+      summary["unexpected_failures"] ? 1 : 0
+    end
+
     private
 
     def refuse_source_directory!(outdir)
@@ -161,5 +169,5 @@ if __FILE__ == $PROGRAM_NAME
   # caller) should chain on: it distinguishes a genuine regression from
   # the corpus's permanent, individually-tracked known crashers (each
   # marked "expect": "error" in its own wrapper).
-  exit 1 if summary["unexpected_failures"]
+  exit CorpusRunner.exit_code(summary)
 end
