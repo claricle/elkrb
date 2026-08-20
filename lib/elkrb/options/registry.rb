@@ -36,6 +36,8 @@ module Elkrb
         "elk.position" => { type: :kvector, default: nil, aliases: %w[position], algorithms: %w[fixed], status: :honoured, description: "Fixed position for a node (fixed algorithm)" },
         "elk.bendPoints" => { type: :kvector_chain, default: nil, aliases: %w[bendPoints], algorithms: :all, status: :honoured, description: "Manual bend points for an edge" },
         "elk.layered.spacing.nodeNodeBetweenLayers" => { type: :float, default: 60.0, aliases: %w[layer_spacing layered.spacing.nodeNodeBetweenLayers], algorithms: %w[layered], status: :honoured, description: "Spacing between layers (ELK's own default is 20.0; elkrb currently defaults to 60.0)" },
+        "elk.spacing.edgeNode" => { type: :float, default: 10.0, algorithms: %w[layered], status: :accepted, description: "Spacing between an edge and a node it does not connect to (candidate for S25b long-edge spacing; not honoured today)" },
+        "elk.spacing.edgeEdge" => { type: :float, default: 10.0, algorithms: %w[layered], status: :accepted, description: "Spacing between two edges (candidate for S25b long-edge spacing; not honoured today)" },
         "elk.force.iterations" => { type: :integer, default: 300, aliases: %w[iterations], algorithms: %w[force], status: :honoured, description: "Force simulation iteration count" },
         "elk.force.repulsion" => { type: :float, default: 5.0, aliases: %w[repulsion], algorithms: %w[force], status: :honoured, description: "Force simulation repulsion strength" },
         "elk.force.temperature" => { type: :float, default: 0.001, aliases: %w[temperature], algorithms: %w[force], status: :honoured, description: "Force simulation cooling temperature" },
