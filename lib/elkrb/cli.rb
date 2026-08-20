@@ -10,6 +10,8 @@ module Elkrb
   # Provides commands for laying out graphs from the command line.
   # Supports JSON and YAML input/output formats.
   class Cli < Thor
+    def self.exit_on_failure? = true
+
     class_option :verbose, type: :boolean, default: false,
                            desc: "Enable verbose output"
 
@@ -167,13 +169,34 @@ module Elkrb
       when ".yml", ".yaml"
         Elkrb::Graph::Graph.from_yaml(content)
       else
-        # Try JSON first, then YAML
-        begin
-          Elkrb::Graph::Graph.from_json(content)
-        rescue JSON::ParserError
-          Elkrb::Graph::Graph.from_yaml(content)
-        end
+        parse_by_sniffing(content)
       end
+    end
+
+    def parse_by_sniffing(content)
+      if content.lstrip.start_with?("{", "[")
+        Elkrb::Graph::Graph.from_json(content)
+      else
+        Elkrb::Graph::Graph.from_yaml(content)
+      end
+    rescue Lutaml::Model::InvalidFormatError
+      parse_elkt_or_fail(content)
+    end
+
+    def parse_elkt_or_fail(content)
+      graph = parse_elkt!(content)
+      return graph unless graph[:children].empty? && graph[:edges].empty?
+
+      raise ArgumentError,
+            "Unable to parse input file. Supported formats: JSON, YAML, ELKT"
+    end
+
+    def parse_elkt!(content)
+      require_relative "parsers/elkt_parser"
+      Elkrb::Parsers::ElktParser.parse(content)
+    rescue StandardError
+      raise ArgumentError,
+            "Unable to parse input file. Supported formats: JSON, YAML, ELKT"
     end
 
     def build_layout_options
@@ -214,11 +237,13 @@ module Elkrb
     end
 
     def verbose_output(message)
-      say message, :yellow if options[:verbose]
+      return unless options[:verbose]
+
+      say_error message, :yellow
     end
 
     def error_output(message)
-      say message, :red
+      $stderr.puts message
     end
   end
 end

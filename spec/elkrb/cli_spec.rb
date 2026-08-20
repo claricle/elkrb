@@ -36,8 +36,6 @@ RSpec.describe "elkrb CLI" do
     end
 
     it "prints only JSON to stdout with --verbose" do
-      pending("RC10")
-
       stdout, _stderr, status = run_elkrb(
         "layout", "spec/fixtures/simple_graph.json", "--verbose"
       )
@@ -47,16 +45,12 @@ RSpec.describe "elkrb CLI" do
     end
 
     it "exits non-zero when FILE is missing from the command line" do
-      pending("RC10")
-
       _stdout, _stderr, status = run_elkrb("layout")
 
       expect(status.exitstatus).not_to eq(0)
     end
 
     it "reports a missing file on stderr, not stdout" do
-      pending("RC10")
-
       stdout, stderr, status = run_elkrb("layout", "missing.json")
 
       expect(stdout).to eq("")
@@ -83,8 +77,6 @@ RSpec.describe "elkrb CLI" do
             line.chomp.split("\0")
           end
           expect(log_entries).not_to be_empty
-
-          pending("RC10")
 
           expect(log_entries).to include(malicious_output)
           expect(File.exist?(File.join(dir, "PWNED"))).to be(false)
