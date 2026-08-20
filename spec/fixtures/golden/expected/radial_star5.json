@@ -1,0 +1,137 @@
+{
+  "id": "root",
+  "layoutOptions": {
+    "elk.algorithm": "radial"
+  },
+  "children": [
+    {
+      "id": "center",
+      "width": 30,
+      "height": 30,
+      "x": 42,
+      "y": 42
+    },
+    {
+      "id": "n1",
+      "width": 30,
+      "height": 30,
+      "x": 72,
+      "y": 72
+    },
+    {
+      "id": "n2",
+      "width": 30,
+      "height": 30,
+      "x": 12,
+      "y": 72
+    },
+    {
+      "id": "n3",
+      "width": 30,
+      "height": 30,
+      "x": 12,
+      "y": 12
+    },
+    {
+      "id": "n4",
+      "width": 30,
+      "height": 30,
+      "x": 72,
+      "y": 12
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "sources": [
+        "center"
+      ],
+      "targets": [
+        "n1"
+      ],
+      "sections": [
+        {
+          "id": "e1_s0",
+          "startPoint": {
+            "x": 72,
+            "y": 72
+          },
+          "endPoint": {
+            "x": 72,
+            "y": 72
+          }
+        }
+      ]
+    },
+    {
+      "id": "e2",
+      "sources": [
+        "center"
+      ],
+      "targets": [
+        "n2"
+      ],
+      "sections": [
+        {
+          "id": "e2_s0",
+          "startPoint": {
+            "x": 42,
+            "y": 72
+          },
+          "endPoint": {
+            "x": 42,
+            "y": 72
+          }
+        }
+      ]
+    },
+    {
+      "id": "e3",
+      "sources": [
+        "center"
+      ],
+      "targets": [
+        "n3"
+      ],
+      "sections": [
+        {
+          "id": "e3_s0",
+          "startPoint": {
+            "x": 42,
+            "y": 42
+          },
+          "endPoint": {
+            "x": 42,
+            "y": 42
+          }
+        }
+      ]
+    },
+    {
+      "id": "e4",
+      "sources": [
+        "center"
+      ],
+      "targets": [
+        "n4"
+      ],
+      "sections": [
+        {
+          "id": "e4_s0",
+          "startPoint": {
+            "x": 72,
+            "y": 42
+          },
+          "endPoint": {
+            "x": 72,
+            "y": 42
+          }
+        }
+      ]
+    }
+  ],
+  "x": 0,
+  "y": 0,
+  "width": 114,
+  "height": 114
+}

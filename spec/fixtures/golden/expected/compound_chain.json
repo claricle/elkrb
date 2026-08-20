@@ -1,0 +1,91 @@
+{
+  "id": "root",
+  "children": [
+    {
+      "id": "p",
+      "children": [
+        {
+          "id": "c1",
+          "width": 30,
+          "height": 30,
+          "x": 12,
+          "y": 12
+        },
+        {
+          "id": "c2",
+          "width": 30,
+          "height": 30,
+          "x": 62,
+          "y": 12
+        }
+      ],
+      "edges": [
+        {
+          "id": "ie1",
+          "sources": [
+            "c1"
+          ],
+          "targets": [
+            "c2"
+          ],
+          "sections": [
+            {
+              "id": "ie1_s0",
+              "startPoint": {
+                "x": 42,
+                "y": 27
+              },
+              "endPoint": {
+                "x": 62,
+                "y": 27
+              },
+              "incomingShape": "c1",
+              "outgoingShape": "c2"
+            }
+          ]
+        }
+      ],
+      "x": 12,
+      "y": 12,
+      "width": 104,
+      "height": 54
+    },
+    {
+      "id": "q",
+      "width": 30,
+      "height": 30,
+      "x": 136,
+      "y": 24
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "sources": [
+        "p"
+      ],
+      "targets": [
+        "q"
+      ],
+      "sections": [
+        {
+          "id": "e1_s0",
+          "startPoint": {
+            "x": 116,
+            "y": 39
+          },
+          "endPoint": {
+            "x": 136,
+            "y": 39
+          },
+          "incomingShape": "p",
+          "outgoingShape": "q"
+        }
+      ]
+    }
+  ],
+  "x": 0,
+  "y": 0,
+  "width": 178,
+  "height": 78
+}

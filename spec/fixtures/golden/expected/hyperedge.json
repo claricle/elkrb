@@ -1,0 +1,3 @@
+{
+  "error": "java.lang.IllegalArgumentException: Passed edge is not 'simple'."
+}
