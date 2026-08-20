@@ -12,14 +12,14 @@ RSpec.describe "match_elkjs_golden" do
       File.write(
         File.join(dir, "expected", "synthetic.json"),
         JSON.generate({ "id" => "root",
-                         "children" => [{ "id" => "n1", "x" => 10.0, "y" => 0.0 }] }),
+                         "children" => [{ "id" => "n1", "x" => 10.0, "y" => 0.0, "width" => 10.0, "height" => 10.0 }] }),
       )
       example.run
     end
   end
 
   let(:actual) do
-    { "id" => "root", "children" => [{ "id" => "n1", "x" => 10.5, "y" => 0.0 }] }
+    { "id" => "root", "children" => [{ "id" => "n1", "x" => 10.5, "y" => 0.0, "width" => 10.0, "height" => 10.0 }] }
   end
 
   it "fails at exact tier on a 0.5px delta" do
@@ -30,6 +30,34 @@ RSpec.describe "match_elkjs_golden" do
   it "passes at structural tier despite the same delta" do
     matcher = match_elkjs_golden("synthetic", tier: :structural, dir: @golden_dir)
     expect(matcher.matches?(actual)).to be true
+  end
+end
+
+RSpec.describe "match_elkjs_golden error matching" do
+  around do |example|
+    Dir.mktmpdir do |dir|
+      @golden_dir = dir
+      FileUtils.mkdir_p(File.join(dir, "expected"))
+      File.write(
+        File.join(dir, "expected", "synthetic_error.json"),
+        JSON.generate({ "error" => "IllegalArgumentException: Passed edge is not 'simple'." }),
+      )
+      example.run
+    end
+  end
+
+  # `tier:` is required by the matcher but unused on this path -- both
+  # sides being error hashes routes straight to `error_diffs`.
+  it "matches an actual error naming the same condition" do
+    actual = { "error" => "Elkrb::UnsupportedConfigurationException: edge is not SIMPLE" }
+    matcher = match_elkjs_golden("synthetic_error", tier: :exact, dir: @golden_dir)
+    expect(matcher.matches?(actual)).to be true
+  end
+
+  it "rejects an actual error naming a DIFFERENT condition" do
+    actual = { "error" => "Elkrb::UnsupportedConfigurationException: unrelated failure" }
+    matcher = match_elkjs_golden("synthetic_error", tier: :exact, dir: @golden_dir)
+    expect(matcher.matches?(actual)).to be false
   end
 end
 
@@ -98,6 +126,17 @@ RSpec.describe GoldenComparator do
     expect(diffs.join).to include("/x:")
   end
 
+  it "flags a reversed edge even though sections/labels/ports still match (exact tier)" do
+    expected = { "id" => "root", "children" => [{ "id" => "n1" }, { "id" => "n2" }],
+                 "edges" => [{ "id" => "e1", "sources" => ["n1"], "targets" => ["n2"] }] }
+    reversed = Marshal.load(Marshal.dump(expected))
+    reversed["edges"][0]["sources"] = ["n2"]
+    reversed["edges"][0]["targets"] = ["n1"]
+
+    diffs = described_class.diff_exact(expected, reversed, %i[nodes sections labels ports graph])
+    expect(diffs.join).to include("endpoints changed")
+  end
+
   it "detects a same-layer top/bottom swap that alphabetical id order would miss" do
     expected = { "id" => "root",
                  "children" => [{ "id" => "a", "x" => 0.0, "y" => 0.0 },
@@ -131,8 +170,9 @@ RSpec.describe GoldenComparator do
   end
 
   it "does not require the root's own position at any tier" do
-    expected = { "id" => "root", "children" => [{ "id" => "n1", "x" => 0.0, "y" => 0.0 }] }
-    actual = { "id" => "root", "children" => [{ "id" => "n1", "x" => 0.0, "y" => 0.0 }] } # no root x/y
+    node = { "id" => "n1", "x" => 0.0, "y" => 0.0, "width" => 10.0, "height" => 10.0 }
+    expected = { "id" => "root", "children" => [node] }
+    actual = { "id" => "root", "children" => [node] } # no root x/y
 
     expect(described_class.diff_smoke(expected, actual)).to be_empty
     expect(described_class.diff_structural(expected, actual)).to be_empty
@@ -153,6 +193,14 @@ RSpec.describe GoldenComparator do
 
     diffs = described_class.diff_graph_size(expected, actual)
     expect(diffs).not_to be_empty
+  end
+
+  it "still flags a missing child position when the container box is zero-width" do
+    e_node = { "id" => "n1", "x" => 5.0, "y" => 0.0, "width" => 10.0, "height" => 10.0 }
+    a_node = { "id" => "n1", "y" => 0.0, "width" => 10.0, "height" => 10.0 } # no x at all
+
+    diffs = described_class.diff_normalised_position(e_node, 0.0, 100.0, a_node, 0.0, 100.0, "/n1")
+    expect(diffs.join).to include("missing")
   end
 
   it "reports an unexpected extra actual node symmetrically (exact tier)" do
@@ -183,6 +231,22 @@ RSpec.describe GoldenComparator do
 
     diffs = described_class.diff_structural(expected, actual)
     expect(diffs.join).to include("missing from actual")
+  end
+
+  it "reports a structurally rewired edge (structural tier)" do
+    a = { "id" => "a", "x" => 0.0, "y" => 0.0, "width" => 10.0, "height" => 10.0 }
+    b = { "id" => "b", "x" => 20.0, "y" => 0.0, "width" => 10.0, "height" => 10.0 }
+    expected = { "id" => "root", "children" => [a, b],
+                 "edges" => [{ "id" => "e1", "sources" => ["a"], "targets" => ["b"],
+                                "sections" => [{ "startPoint" => { "x" => 10.0, "y" => 5.0 },
+                                                 "endPoint" => { "x" => 20.0, "y" => 5.0 },
+                                                 "incomingShape" => "a", "outgoingShape" => "b" }] }] }
+    rewired = Marshal.load(Marshal.dump(expected))
+    rewired["edges"][0]["sources"] = ["b"]
+    rewired["edges"][0]["targets"] = ["a"]
+
+    diffs = described_class.diff_structural(expected, rewired)
+    expect(diffs.join).to include("endpoints changed")
   end
 
   it "compares a port endpoint to its own border, like a node, not a centre point" do
