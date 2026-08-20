@@ -216,10 +216,47 @@ module GoldenComparator
 
   def diff_edges(expected_owner, actual_owner, fields, path)
     diff_by_id(expected_owner["edges"], actual_owner["edges"], "#{path}/edges") do |e_edge, a_edge, edge_path|
-      diffs = fields.include?(:sections) ? diff_sections(e_edge, a_edge, edge_path) : []
+      diffs = diff_edge_endpoints(e_edge, a_edge, edge_path)
+      diffs.concat(diff_sections(e_edge, a_edge, edge_path)) if fields.include?(:sections)
       diffs.concat(diff_labels(e_edge, a_edge, edge_path)) if fields.include?(:labels)
       diffs
     end
+  end
+
+  # Which nodes/ports an edge connects -- the coarse sources/targets
+  # array, and, where elkjs annotates it, each section's own
+  # incomingShape/outgoingShape -- is one structural fact, checked
+  # identically by BOTH tiers through this one helper so they can't
+  # diverge on it. This used to live only in the structural path
+  # (`check_level_sections`): exact tier is supposed to be the STRICTER
+  # of the two, so a rewired edge silently passing `diff_exact` while
+  # structural caught it had that backwards. `incomingShape`/
+  # `outgoingShape` are only set by layered and its relatives (confirmed
+  # empirically -- force/stress/random/radial goldens carry neither on
+  # any section), so a section with no EXPECTED value for one is skipped
+  # rather than compared.
+  def diff_edge_endpoints(expected_edge, actual_edge, path)
+    diffs = []
+    if expected_edge["sources"] != actual_edge["sources"] || expected_edge["targets"] != actual_edge["targets"]
+      diffs << "#{path}: endpoints changed from " \
+               "#{expected_edge['sources']}->#{expected_edge['targets']} to " \
+               "#{actual_edge['sources']}->#{actual_edge['targets']}"
+    end
+
+    expected_sections = expected_edge["sections"] || []
+    actual_sections = actual_edge["sections"] || []
+    expected_sections.each_with_index do |e_sec, i|
+      a_sec = actual_sections[i]
+      next unless a_sec
+
+      %w[incomingShape outgoingShape].each do |shape_key|
+        next unless e_sec[shape_key]
+        next if e_sec[shape_key] == a_sec[shape_key]
+
+        diffs << "#{path}/sections[#{i}]/#{shape_key}: expected #{e_sec[shape_key].inspect}, got #{a_sec[shape_key].inspect}"
+      end
+    end
+    diffs
   end
 
   # Sections are matched POSITIONALLY within an edge (by index), never by
@@ -228,7 +265,9 @@ module GoldenComparator
   # earlier `diff_by_id`-based version of this method) means no section
   # ever has a common id on both sides, so the geometry comparison below
   # would silently never run. The comparator must not depend on elkrb
-  # eventually adopting elkjs's id convention.
+  # eventually adopting elkjs's id convention. Purely geometric (points,
+  # bend points) -- which shape a section connects to is
+  # `diff_edge_endpoints`'s job, not this method's.
   def diff_sections(expected_edge, actual_edge, path)
     expected_sections = expected_edge["sections"] || []
     actual_sections = actual_edge["sections"] || []
@@ -243,12 +282,6 @@ module GoldenComparator
       diffs = diff_point(e_sec["startPoint"], a_sec["startPoint"], "#{sec_path}/startPoint")
       diffs.concat(diff_point(e_sec["endPoint"], a_sec["endPoint"], "#{sec_path}/endPoint"))
       diffs.concat(diff_bend_points(e_sec["bendPoints"], a_sec["bendPoints"], "#{sec_path}/bendPoints"))
-      if e_sec["incomingShape"] != a_sec["incomingShape"]
-        diffs << "#{sec_path}/incomingShape: expected #{e_sec['incomingShape'].inspect}, got #{a_sec['incomingShape'].inspect}"
-      end
-      if e_sec["outgoingShape"] != a_sec["outgoingShape"]
-        diffs << "#{sec_path}/outgoingShape: expected #{e_sec['outgoingShape'].inspect}, got #{a_sec['outgoingShape'].inspect}"
-      end
       diffs
     end
   end
@@ -311,7 +344,16 @@ module GoldenComparator
   #   (0.15 — a node more than 15% of the graph's own span away from
   #   where it belongs) is coarse on purpose: it must not demand
   #   byte-identical placement, only catch a node stacked at the origin,
-  #   swapped with a sibling, or otherwise clearly out of place.
+  #   swapped with a sibling, or otherwise clearly out of place. Being a
+  #   DEADBAND rather than an absolute distance, it has known blind spots:
+  #   a uniform small translation of every node (confirmed on `rect6`,
+  #   +20px slips through, +30px is caught) or a swap between two
+  #   siblings that already sat within 15% of each other both read as "no
+  #   diff". Both are inherent to comparing normalised fractions rather
+  #   than raw coordinates, and acceptable here (exact tier is where
+  #   byte-identical placement is enforced) — but this is NOT a general
+  #   "layout is right" proof, and a later slice tightening this
+  #   tolerance should know that going in.
   #
   # Matched by `diff_by_id`, the same canonical by-id pairing every other
   # owner-child comparison in this file uses — which also means a node
@@ -323,6 +365,24 @@ module GoldenComparator
   # file.
   POSITION_TOLERANCE_FRACTION = 0.15
 
+  # Unlike `numeric_or_zero` ("missing reads as 0.0" — real for elkjs's
+  # own width:0 quirk, checked by `diff_own_numeric` on exact-tier
+  # fields), a node missing its OWN position/size entirely here is
+  # exactly the class of bug this check exists to catch: elkrb emitting
+  # no geometry at all. Coercing that to 0.0 would let such a node
+  # compare equal to a golden node that legitimately sits at the origin.
+  # Returns [value, error] — value is nil whenever error is present, so a
+  # caller can short-circuit on the error instead of computing with nil.
+  def strict_numeric(hash, key, path, side)
+    value = hash[key]
+    return [nil, "#{path}/#{key}: #{side} is missing or not numeric (#{value.inspect})"] unless value.is_a?(Numeric)
+
+    value = value.to_f
+    return [nil, "#{path}/#{key}: #{side} is non-finite (#{value})"] unless value.finite?
+
+    [value, nil]
+  end
+
   def diff_node_geometry(expected_level, actual_level, path)
     expected_box_width = numeric_or_zero(expected_level, "width")
     expected_box_height = numeric_or_zero(expected_level, "height")
@@ -330,11 +390,7 @@ module GoldenComparator
     actual_box_height = numeric_or_zero(actual_level, "height")
 
     diff_by_id(expected_level["children"], actual_level["children"], path) do |e_node, a_node, node_path|
-      diffs = %w[width height].filter_map do |key|
-        e = numeric_or_zero(e_node, key)
-        a = numeric_or_zero(a_node, key)
-        "#{node_path}/#{key}: expected #{e}, got #{a} (>1px)" if (e - a).abs > 1
-      end
+      diffs = %w[width height].flat_map { |key| diff_strict_dimension(e_node, a_node, node_path, key) }
       diffs.concat(diff_normalised_position(e_node, expected_box_width, expected_box_height,
                                              a_node, actual_box_width, actual_box_height, node_path))
       diffs.concat(diff_node_geometry(e_node, a_node, node_path))
@@ -342,24 +398,36 @@ module GoldenComparator
     end
   end
 
+  def diff_strict_dimension(e_node, a_node, path, key)
+    e, e_error = strict_numeric(e_node, key, path, "expected")
+    a, a_error = strict_numeric(a_node, key, path, "actual")
+    return [e_error, a_error].compact if e_error || a_error
+
+    (e - a).abs > 1 ? ["#{path}/#{key}: expected #{e}, got #{a} (>1px)"] : []
+  end
+
   def diff_normalised_position(e_node, e_box_width, e_box_height, a_node, a_box_width, a_box_height, path)
-    return [] if e_box_width <= 0 || e_box_height <= 0 || a_box_width <= 0 || a_box_height <= 0
+    diff_strict_axis_position(e_node, e_box_width, a_node, a_box_width, path, "x", "width") +
+      diff_strict_axis_position(e_node, e_box_height, a_node, a_box_height, path, "y", "height")
+  end
 
-    e_fx = numeric_or_zero(e_node, "x") / e_box_width
-    e_fy = numeric_or_zero(e_node, "y") / e_box_height
-    a_fx = numeric_or_zero(a_node, "x") / a_box_width
-    a_fy = numeric_or_zero(a_node, "y") / a_box_height
+  # The box-dimension guard lives HERE, per axis, after `strict_numeric` --
+  # not as one combined guard in the caller covering both axes. A
+  # degenerate box on one axis (e.g. a zero-height container) is a reason
+  # to skip THAT axis's fraction, not a reason to also skip strict
+  # validation of the OTHER axis's x/y, or to skip validating x/y at all.
+  def diff_strict_axis_position(e_node, e_box, a_node, a_box, path, key, box_label)
+    e, e_error = strict_numeric(e_node, key, path, "expected")
+    a, a_error = strict_numeric(a_node, key, path, "actual")
+    return [e_error, a_error].compact if e_error || a_error
+    return [] if e_box <= 0 || a_box <= 0
 
-    diffs = []
-    if (e_fx - a_fx).abs > POSITION_TOLERANCE_FRACTION
-      diffs << "#{path}/x: normalised position expected #{e_fx.round(3)}, got #{a_fx.round(3)} " \
-                "(off by more than #{POSITION_TOLERANCE_FRACTION} of the graph's own width)"
-    end
-    if (e_fy - a_fy).abs > POSITION_TOLERANCE_FRACTION
-      diffs << "#{path}/y: normalised position expected #{e_fy.round(3)}, got #{a_fy.round(3)} " \
-                "(off by more than #{POSITION_TOLERANCE_FRACTION} of the graph's own height)"
-    end
-    diffs
+    e_fraction = e / e_box
+    a_fraction = a / a_box
+    return [] unless (e_fraction - a_fraction).abs > POSITION_TOLERANCE_FRACTION
+
+    ["#{path}/#{key}: normalised position expected #{e_fraction.round(3)}, got #{a_fraction.round(3)} " \
+     "(off by more than #{POSITION_TOLERANCE_FRACTION} of the graph's own #{box_label})"]
   end
 
   # Every edge section's start/end point lies on the border (within 1px) of
@@ -407,13 +475,10 @@ module GoldenComparator
       # to different endpoints (elkrb connecting the wrong nodes) would
       # still pass, because the border check only asks "does the section
       # land on ACTUAL's own (rewired) endpoint's border" — trivially
-      # true, since that endpoint IS what routed it. Which nodes an edge
-      # connects is itself a structural fact, not just where its section
-      # happens to land.
-      if edge["sources"] != actual_edge["sources"] || edge["targets"] != actual_edge["targets"]
-        diffs << "#{path}/edges/#{edge['id']}: endpoints changed from " \
-                 "#{edge['sources']}->#{edge['targets']} to #{actual_edge['sources']}->#{actual_edge['targets']}"
-      end
+      # true, since that endpoint IS what routed it. `diff_edge_endpoints`
+      # is the same helper exact tier's `diff_edges` calls, so the two
+      # tiers can't diverge on what counts as a rewired edge.
+      diffs.concat(diff_edge_endpoints(edge, actual_edge, "#{path}/edges/#{edge['id']}"))
 
       sections = actual_edge["sections"] || []
       next diffs << "#{path}/edges/#{edge['id']}: no sections in actual" if sections.empty?
