@@ -79,24 +79,42 @@ RSpec::Matchers.define :omit_size_for_unsized_input do |input_hash|
   end
 
   # Shared by node-owned, port-owned, and edge-owned labels — a label
-  # carries no compound exemption of its own; an id-less input label is
-  # matched positionally, same order as emitted.
+  # carries no compound exemption of its own. Named (has an "id") and
+  # id-less labels are matched separately: named by id, id-less
+  # positionally WITHIN THE ID-LESS SUBSET of each side — not by their
+  # index in the combined array, which would misalign as soon as a named
+  # and an id-less label sit on the same owner (an earlier version of
+  # this method did exactly that).
   define_method(:check_labels) do |input_labels, actual_labels, owner_id|
+    input_labels ||= []
     actual_labels ||= []
-    actual_by_id = actual_labels.to_h { |l| [l.id, l] }
+    input_named, input_unnamed = input_labels.partition { |l| l["id"] }
+    actual_named, actual_unnamed = actual_labels.partition(&:id)
+    actual_by_id = actual_named.to_h { |l| [l.id, l] }
 
-    (input_labels || []).each_with_index do |input_label, i|
-      actual_label = input_label["id"] ? actual_by_id[input_label["id"]] : actual_labels[i]
+    input_named.each do |input_label|
+      actual_label = actual_by_id[input_label["id"]]
       unless actual_label
-        @violations << "#{owner_id}/labels[#{i}]: missing from actual result"
+        @violations << "#{owner_id}/labels/#{input_label['id']}: missing from actual result"
         next
       end
-      next if input_label.key?("width") || input_label.key?("height")
+      check_label_size(input_label, actual_label, "#{owner_id}/labels/#{input_label['id']}")
+    end
 
-      if actual_label.width || actual_label.height
-        @violations << "#{owner_id}/labels[#{i}] gained a size " \
-                        "(#{actual_label.width}x#{actual_label.height})"
+    if input_unnamed.size != actual_unnamed.size
+      @violations << "#{owner_id}: expected #{input_unnamed.size} id-less label(s), got #{actual_unnamed.size}"
+    else
+      input_unnamed.each_with_index do |input_label, i|
+        check_label_size(input_label, actual_unnamed[i], "#{owner_id}/labels[#{i}]")
       end
+    end
+  end
+
+  define_method(:check_label_size) do |input_label, actual_label, path|
+    return if input_label.key?("width") || input_label.key?("height")
+
+    if actual_label.width || actual_label.height
+      @violations << "#{path} gained a size (#{actual_label.width}x#{actual_label.height})"
     end
   end
 end
