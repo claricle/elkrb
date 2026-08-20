@@ -2,7 +2,7 @@
 
 require "elkrb"
 
-Dir[File.join(__dir__, "support/**/*.rb")].reject { |f| f.end_with?("_spec.rb") }.each { |f| require f }
+Dir[File.join(__dir__, "support/**/*.rb")].sort.reject { |f| f.end_with?("_spec.rb") }.each { |f| require f }
 
 RSpec.configure do |config|
   config.expect_with :rspec do |expectations|

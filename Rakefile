@@ -85,6 +85,11 @@ namespace :golden do
     system("node", "#{ELKJS_DIR}/generate.js", dir, exception: true)
   rescue Errno::ENOENT
     abort "node not found on PATH (generated tree, if any, left at #{dir})"
+  rescue RuntimeError => e
+    # `exception: true` raises plain RuntimeError on a non-zero exit --
+    # generate.js already printed its own specific reason to stderr above
+    # this, so the abort just adds where to look, not a duplicate reason.
+    abort "generate.js failed (#{e.message}); see its output above (generated tree, if any, left at #{dir})"
   end
 
   desc "Regenerate the committed elkjs golden expected files"
@@ -114,6 +119,10 @@ namespace :golden do
     tmp = Dir.mktmpdir
     generate_into(tmp)
 
+    unless File.exist?("#{GOLDEN_DIR}/MANIFEST.json")
+      abort "#{GOLDEN_DIR}/MANIFEST.json missing — run 'rake golden:generate' first (generated tree left at #{tmp})"
+    end
+
     fresh_manifest = JSON.parse(File.read(File.join(tmp, "MANIFEST.json")))
     committed_manifest = JSON.parse(File.read("#{GOLDEN_DIR}/MANIFEST.json"))
     # "generated" is a timestamp and "node" is machine-specific — only the
@@ -131,6 +140,8 @@ namespace :golden do
     ok = system("diff", "-r", "-x", "MANIFEST.json", "#{GOLDEN_DIR}/expected", tmp)
     if ok
       FileUtils.remove_entry(tmp)
+    elsif ok.nil?
+      abort "'diff' not found on PATH (generated tree left at #{tmp} for inspection)"
     else
       abort "golden drift detected (see diff above; generated tree left at #{tmp} for inspection)"
     end
