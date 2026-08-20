@@ -58,7 +58,7 @@ module Elkrb
         # by the time any real caller invokes #algorithm_info, the gem's
         # normal load order has already defined BaseAlgorithm anyway.
         def supported_options_for(name_str, algorithm_class)
-          base = Algorithms::BaseAlgorithm if defined?(Algorithms::BaseAlgorithm)
+          base = ::Elkrb::Layout::Algorithms::BaseAlgorithm if defined?(::Elkrb::Layout::Algorithms::BaseAlgorithm)
           return Options::Registry.for_algorithm(name_str) if base.nil? || algorithm_class <= base
 
           Options::Registry.all.select { |_id, entry| Array(entry[:algorithms]).include?(name_str) }.keys
