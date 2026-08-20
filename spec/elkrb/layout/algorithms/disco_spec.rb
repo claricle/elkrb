@@ -254,15 +254,15 @@ RSpec.describe Elkrb::Layout::Algorithms::Disco do
           .to contain_exactly("e1", "e2")
       end
 
-      # Codex round-1 finding: a version of find_connected_components
-      # that adds `connected_edges` to the component every time a node
-      # is DEQUEUED (rather than once, after the whole component's node
+      # Regression guard: a version of find_connected_components that
+      # adds `connected_edges` to the component every time a node is
+      # DEQUEUED (rather than once, after the whole component's node
       # set is known) records each edge twice — once from its source
       # side, once from its target side. Passed into a layered
       # sub-layout, cycle_breaker.rb then reverses that same back-edge
       # twice (swapping it back to its original direction), so the cycle
-      # is never actually broken and layer assignment recurses forever.
-      # Reproduced directly against that version (SystemStackError).
+      # is never actually broken and layer assignment recurses forever
+      # (SystemStackError).
       it "lays out the cyclic component without raising" do
         graph = Elkrb::Graph::Graph.from_hash(
           "id" => "r",

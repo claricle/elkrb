@@ -50,16 +50,20 @@ module Elkrb
           def calculate_layer(node)
             return @node_layers[node.id] if @node_layers.key?(node.id)
 
-            # A cycle that CycleBreaker did not resolve (only a
-            # genuine hyperedge, > 1 target, can still reach this --
-            # S8 rejects those outright before phase 1 runs; until
-            # then, a node revisited while still being computed has no
-            # further predecessor to contribute, so treat it as one
-            # without them rather than recursing forever
+            # A cycle CycleBreaker did not resolve (only a genuine
+            # hyperedge, > 1 target, can still reach this -- S8 will
+            # reject those outright before phase 1 runs; this diff
+            # does not). A node revisited while still being computed
+            # has no further predecessor to contribute, so treat it as
+            # one without them rather than recursing forever
             # (SystemStackError, confirmed for a hyperedge whose
             # secondary target closes a cycle CycleBreaker's
             # single-target-per-edge detection cannot see).
-            return 0 if @in_progress.include?(node.id)
+            if @in_progress.include?(node.id)
+              warn "Layered: cycle through #{node.id} not fully broken " \
+                   "(hyperedge); treating as a root for this branch"
+              return 0
+            end
 
             @in_progress << node.id
 

@@ -68,7 +68,7 @@ module Elkrb
             # known, rather than per visited node — accumulating them
             # incrementally during the walk records each edge twice
             # (once from its source side, once from its target side).
-            node_ids = nodes.map(&:id)
+            node_ids = Set.new(nodes.map(&:id))
             edges = (graph.edges || []).select do |edge|
               endpoints = index.endpoint_nodes(edge.sources) +
                 index.endpoint_nodes(edge.targets)

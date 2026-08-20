@@ -304,10 +304,10 @@ RSpec.describe Elkrb::Layout::Algorithms::MRTree do
       end
 
       # Regression guard for the same class of bug as layered's
-      # self_loop_edge? fix (Task 3): a raw-id comparison here would
-      # count "loop" as real incoming traffic to "a" (since "p2" now
-      # resolves to "a" via the index) and wrongly drop "a" from
-      # `roots`, losing it from the tree.
+      # self-loop fix: a raw-id comparison here would count "loop" as
+      # real incoming traffic to "a" (since "p2" now resolves to "a"
+      # via the index) and wrongly drop "a" from `roots`, losing it
+      # from the tree.
       it "still treats a as a root and b as its child" do
         algorithm.layout(graph)
 
@@ -320,11 +320,11 @@ RSpec.describe Elkrb::Layout::Algorithms::MRTree do
 
     context "with a hyperedge mixing a self-referencing target and a " \
             "real child" do
-      # Codex diff-review finding: comparing only the first resolved
+      # Regression guard: comparing only the first resolved
       # source/target treated this whole edge as a self-loop (since
       # "ap" resolves to "a", same as the first source), which hid the
       # real a -> b connection and made b a second root instead of a's
-      # child. Reproduced directly against the pre-fix code.
+      # child.
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",

@@ -27,15 +27,14 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
     end
 
     it "does not stack-overflow on a two-port self-loop beside a real edge" do
-      # Regression guard, not a red/green case on its own: a naive
-      # version of Step 4 that resolves get_incoming_edges' target check
-      # through the index but leaves self_loop_edge? comparing RAW ids
-      # (sources.first == targets.first, "p1" != "p2") makes this edge
-      # look like an incoming edge from node "a" to itself, and
+      # Regression guard: resolving get_incoming_edges' target check
+      # through the index while leaving self_loop_edge? comparing RAW
+      # ids (sources.first == targets.first, "p1" != "p2") makes this
+      # edge look like an incoming edge from node "a" to itself, and
       # calculate_layer recurses on "a" again before it is memoized ->
-      # SystemStackError. Confirmed by reproducing that naive version.
-      # Step 4 below fixes self_loop_edge? to compare resolved owners,
-      # so this example is green from the first run of Step 6.
+      # SystemStackError. Confirmed by reproducing that version;
+      # incoming_to? below compares resolved owners instead, so this
+      # example is green.
       graph = {
         id: "r",
         children: [
@@ -57,16 +56,16 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
 
     it "does not stack-overflow on a hyperedge mixing a self-referencing " \
        "target and a real child" do
-      # Codex diff-review finding (round 2): CycleBreaker's dfs used
-      # `edge.targets.first` unconditionally; for this edge the first
-      # target ("ap") resolves back to the source node "a" itself, so
-      # dfs treated a's own in-progress DFS frame as a cycle and
-      # reversed the edge, corrupting it before LayerAssigner ever saw
-      # it -> SystemStackError there. Confirmed against the pre-fix
-      # code, and confirmed this exact graph does NOT raise on
-      # origin/v2 (port-id blindness there means the edge is invisible
-      # to cycle-breaking entirely, so no crash) -- a genuine
-      # regression this diff must not ship.
+      # Regression guard: CycleBreaker's dfs used `edge.targets.first`
+      # unconditionally; for this edge the first target ("ap") resolves
+      # back to the source node "a" itself, so dfs treated a's own
+      # in-progress DFS frame as a cycle and reversed the edge,
+      # corrupting it before LayerAssigner ever saw it ->
+      # SystemStackError there. Confirmed against that version, and
+      # confirmed this exact graph does NOT raise on origin/v2
+      # (port-id blindness there means the edge is invisible to
+      # cycle-breaking entirely, so no crash) -- a genuine regression
+      # this diff must not ship.
       graph = {
         id: "r",
         children: [
@@ -87,11 +86,12 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
 
     it "does not stack-overflow on a hyperedge whose first source is " \
        "the target itself" do
-      # Codex diff-review finding (round 3): [a, b] -> a is genuine
-      # incoming traffic to "a" from "b" (incoming_to? correctly counts
-      # it), but calculate_layer picked edge.sources.first unconditionally
-      # -- for this edge that is "a" itself, so it recursed on "a" again
-      # before memoizing it. Confirmed against the pre-fix code.
+      # Regression guard: [a, b] -> a is genuine incoming traffic to
+      # "a" from "b" (incoming_to? correctly counts it), but
+      # calculate_layer picked edge.sources.first unconditionally --
+      # for this edge that is "a" itself, so it recursed on "a" again
+      # before memoizing it. first_other_source below picks the other
+      # one instead.
       graph = {
         id: "r",
         children: [
@@ -109,7 +109,7 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
 
     it "does not stack-overflow on a cycle CycleBreaker's single-target " \
        "detection cannot see" do
-      # Codex diff-review finding (round 4): a's hyperedge fans out to
+      # Regression guard: a's hyperedge fans out to
       # three ports; CycleBreaker's first_other_target only follows ONE
       # of them ("b"), so the real a -> c -> a cycle (via c's edge back
       # to a's port) is never visited during cycle-breaking and stays
