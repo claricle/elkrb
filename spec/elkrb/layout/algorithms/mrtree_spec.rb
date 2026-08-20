@@ -358,5 +358,41 @@ RSpec.describe Elkrb::Layout::Algorithms::MRTree do
         expect(b.y).to be > a.y
       end
     end
+
+    context "with a multi-source edge whose sources include the target" do
+      # find_root_nodes' skip condition (sources.any? { |s| s != target })
+      # is untested on its own: this edge's target ("b") is ALSO its
+      # FIRST source, with the genuinely different source ("a") listed
+      # second, so b still has real incoming traffic and must not be a
+      # root -- a version that only checked sources.first would miss
+      # this and wrongly treat b as a root too.
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "root",
+          layout_options: Elkrb::Graph::LayoutOptions.new(
+            "algorithm" => "mrtree",
+          ),
+        )
+      end
+
+      before do
+        graph.children = [
+          Elkrb::Graph::Node.new(id: "a", width: 10, height: 10),
+          Elkrb::Graph::Node.new(id: "b", width: 10, height: 10),
+        ]
+        graph.edges = [
+          Elkrb::Graph::Edge.new(id: "e", sources: %w[b a], targets: ["b"]),
+        ]
+      end
+
+      it "treats a as the root and b as its child" do
+        algorithm.layout(graph)
+
+        a = graph.children.find { |n| n.id == "a" }
+        b = graph.children.find { |n| n.id == "b" }
+
+        expect(b.y).to be > a.y
+      end
+    end
   end
 end

@@ -23,7 +23,7 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
       }
 
       expect { Elkrb.layout(graph, algorithm: "layered") }
-        .to raise_error(Elkrb::ValidationError, /a/)
+        .to raise_error(Elkrb::ValidationError, /duplicate id: a/)
     end
 
     it "does not stack-overflow on a two-port self-loop beside a real edge" do
@@ -50,8 +50,13 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
         ],
       }
 
-      expect { Elkrb.layout(graph, algorithm: "layered") }
-        .not_to raise_error
+      result = Elkrb.layout(graph, algorithm: "layered")
+
+      a = result.children.find { |n| n.id == "a" }
+      b = result.children.find { |n| n.id == "b" }
+
+      # Pins S7's interim behaviour; S8 replaces with hyperedge raise.
+      expect(b.y).to be > a.y
     end
 
     it "does not stack-overflow on a hyperedge mixing a self-referencing " \
@@ -103,8 +108,13 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
         ],
       }
 
-      expect { Elkrb.layout(graph, algorithm: "layered") }
-        .not_to raise_error
+      result = Elkrb.layout(graph, algorithm: "layered")
+
+      a = result.children.find { |n| n.id == "a" }
+      b = result.children.find { |n| n.id == "b" }
+
+      # Pins S7's interim behaviour; S8 replaces with hyperedge raise.
+      expect(a.y).to be > b.y
     end
 
     it "does not stack-overflow on a cycle CycleBreaker's single-target " \

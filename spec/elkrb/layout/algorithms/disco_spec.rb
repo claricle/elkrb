@@ -234,6 +234,38 @@ RSpec.describe Elkrb::Layout::Algorithms::Disco do
       end
     end
 
+    context "with an edge that references port ids" do
+      it "puts both owning nodes in one component" do
+        # The "with connected graph" case above builds edges from
+        # Port objects assigned straight into sources:/targets: --
+        # since those are :string collections, lutaml-model stringifies
+        # the Port to its #inspect text, not its id, so that test never
+        # actually exercises port-id resolution. This one references
+        # the real port ids NodeIndex resolves.
+        graph = Elkrb::Graph::Graph.from_hash(
+          "id" => "r",
+          "children" => [
+            {
+              "id" => "a", "width" => 30, "height" => 30,
+              "ports" => [{ "id" => "a_out" }]
+            },
+            {
+              "id" => "b", "width" => 30, "height" => 30,
+              "ports" => [{ "id" => "b_in" }]
+            },
+          ],
+          "edges" => [
+            { "id" => "e1", "sources" => ["a_out"], "targets" => ["b_in"] },
+          ],
+        )
+
+        components = algorithm.send(:find_connected_components, graph)
+
+        expect(components.size).to eq(1)
+        expect(components.first[:nodes].map(&:id)).to contain_exactly("a", "b")
+      end
+    end
+
     context "with a two-node cycle" do
       it "does not duplicate the cycle's edges into the component" do
         graph = Elkrb::Graph::Graph.from_hash(
