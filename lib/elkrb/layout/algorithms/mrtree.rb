@@ -46,29 +46,22 @@ module Elkrb
           nodes_with_incoming = Set.new
 
           graph.edges&.each do |edge|
-            next if self_loop_edge?(edge, index)
+            sources = index.endpoint_nodes(edge.sources)
 
+            # Skip a target that resolves to one of the edge's own
+            # sources: real self-loops ("p1" -> "p2" on one node), and
+            # the self-referencing leg of a mixed hyperedge
+            # (a -> [a's port, b]), are not incoming traffic from
+            # elsewhere. The edge's other, genuinely different targets
+            # still count.
             index.endpoint_nodes(edge.targets).each do |target|
+              next if sources.include?(target)
+
               nodes_with_incoming.add(target.id)
             end
           end
 
           graph.children.reject { |node| nodes_with_incoming.include?(node.id) }
-        end
-
-        # Compares resolved OWNERS, not raw ids: two different port ids
-        # on the same node (e.g. "p1" -> "p2") are still a self-loop.
-        # Comparing raw ids here would leave a port-to-port self-loop
-        # looking like real incoming traffic once find_root_nodes above
-        # resolves targets through the index, which can wrongly exclude
-        # a true root from `roots` whenever it also carries such a loop.
-        def self_loop_edge?(edge, index)
-          sources = index.endpoint_nodes(edge.sources)
-          targets = index.endpoint_nodes(edge.targets)
-
-          return false if sources.empty? || targets.empty?
-
-          sources.first == targets.first
         end
 
         def build_tree(root, graph, index)
@@ -100,7 +93,16 @@ module Elkrb
           edges.each do |edge|
             next unless index.endpoint_nodes(edge.sources).include?(node)
 
-            children.concat(index.endpoint_nodes(edge.targets))
+            index.endpoint_nodes(edge.targets).each do |target|
+              # A hyperedge can target one of the source's own ports
+              # alongside a real child (a -> [a's port, b]); resolving
+              # that port back to `node` itself would make the node its
+              # own child. Multiple edges/ports naming the same child
+              # would otherwise duplicate it into two subtree entries.
+              next if target == node || children.include?(target)
+
+              children << target
+            end
           end
 
           children

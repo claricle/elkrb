@@ -317,5 +317,46 @@ RSpec.describe Elkrb::Layout::Algorithms::MRTree do
         expect(b.y).to be > a.y
       end
     end
+
+    context "with a hyperedge mixing a self-referencing target and a " \
+            "real child" do
+      # Codex diff-review finding: comparing only the first resolved
+      # source/target treated this whole edge as a self-loop (since
+      # "ap" resolves to "a", same as the first source), which hid the
+      # real a -> b connection and made b a second root instead of a's
+      # child. Reproduced directly against the pre-fix code.
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "root",
+          layout_options: Elkrb::Graph::LayoutOptions.new(
+            "algorithm" => "mrtree",
+          ),
+        )
+      end
+
+      before do
+        a = Elkrb::Graph::Node.new(
+          id: "a",
+          width: 10,
+          height: 10,
+          ports: [Elkrb::Graph::Port.new(id: "ap")],
+        )
+        b = Elkrb::Graph::Node.new(id: "b", width: 10, height: 10)
+
+        graph.children = [a, b]
+        graph.edges = [
+          Elkrb::Graph::Edge.new(id: "e", sources: ["a"], targets: %w[ap b]),
+        ]
+      end
+
+      it "treats a as the root and b as its only child, not a co-root" do
+        algorithm.layout(graph)
+
+        a = graph.children.find { |n| n.id == "a" }
+        b = graph.children.find { |n| n.id == "b" }
+
+        expect(b.y).to be > a.y
+      end
+    end
   end
 end

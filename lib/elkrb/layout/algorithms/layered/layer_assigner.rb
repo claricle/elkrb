@@ -102,13 +102,21 @@ module Elkrb
           # above resolves targets through the index, and
           # calculate_layer would recurse on the same node forever
           # before it is memoized (SystemStackError).
+          #
+          # Checks EVERY resolved source/target, not just the first pair:
+          # comparing only the first source against the first target
+          # would misclassify a hyperedge whose first target happens to
+          # be the source's own port (e.g. a -> [a's port, b]) as an
+          # entire self-loop, hiding the real a -> b edge from
+          # get_incoming_edges. S8 will reject hyperedges before phase 1
+          # runs; until then this keeps the check correct.
           def self_loop_edge?(edge)
             sources = @index.endpoint_nodes(edge.sources)
             targets = @index.endpoint_nodes(edge.targets)
 
             return false if sources.empty? || targets.empty?
 
-            sources.first == targets.first
+            (sources + targets).uniq.size == 1
           end
         end
       end
