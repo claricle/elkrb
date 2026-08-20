@@ -8,14 +8,15 @@ module Elkrb
   # Command-line interface for elkrb
   #
   # Provides commands for laying out graphs from the command line.
-  # Supports JSON and YAML input/output formats.
+  # Supports JSON and YAML input/output formats, with an ELKT fallback
+  # for files whose extension isn't recognized.
   class Cli < Thor
     def self.exit_on_failure? = true
 
     class_option :verbose, type: :boolean, default: false,
                            desc: "Enable verbose output"
 
-    desc "layout FILE", "Layout a graph from a JSON or YAML file"
+    desc "layout FILE", "Layout a graph from a JSON, YAML, or ELKT file"
     option :algorithm, type: :string, default: "layered",
                        desc: "Layout algorithm to use"
     option :output, type: :string, aliases: "-o",

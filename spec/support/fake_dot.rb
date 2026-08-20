@@ -20,7 +20,7 @@ module FakeDot
 
     File.open(ENV.fetch("FAKE_DOT_LOG"), "a") { |f| f.write("#{ARGV.join("\0")}\n") }
 
-    puts "dot - graphviz version 2.44.1 (20200629.0846)" if ARGV == ["-V"]
+    warn "dot - graphviz version 2.44.1 (20200629.0846)" if ARGV == ["-V"]
 
     ARGV.each_with_index do |arg, i|
       if arg == "-o"
