@@ -1,0 +1,87 @@
+{
+  "id": "root",
+  "children": [
+    {
+      "id": "a",
+      "width": 30,
+      "height": 30,
+      "x": 12,
+      "y": 12
+    },
+    {
+      "id": "b",
+      "width": 30,
+      "height": 30,
+      "x": 62,
+      "y": 12
+    },
+    {
+      "id": "c",
+      "width": 30,
+      "height": 30,
+      "x": 12,
+      "y": 62
+    },
+    {
+      "id": "d",
+      "width": 30,
+      "height": 30,
+      "x": 62,
+      "y": 62
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "sources": [
+        "a"
+      ],
+      "targets": [
+        "b"
+      ],
+      "sections": [
+        {
+          "id": "e1_s0",
+          "startPoint": {
+            "x": 42,
+            "y": 27
+          },
+          "endPoint": {
+            "x": 62,
+            "y": 27
+          },
+          "incomingShape": "a",
+          "outgoingShape": "b"
+        }
+      ]
+    },
+    {
+      "id": "e2",
+      "sources": [
+        "c"
+      ],
+      "targets": [
+        "d"
+      ],
+      "sections": [
+        {
+          "id": "e2_s0",
+          "startPoint": {
+            "x": 42,
+            "y": 77
+          },
+          "endPoint": {
+            "x": 62,
+            "y": 77
+          },
+          "incomingShape": "c",
+          "outgoingShape": "d"
+        }
+      ]
+    }
+  ],
+  "x": 0,
+  "y": 0,
+  "width": 104,
+  "height": 104
+}

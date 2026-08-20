@@ -1,0 +1,55 @@
+{
+  "id": "root",
+  "layoutOptions": {
+    "elk.algorithm": "rectpacking"
+  },
+  "children": [
+    {
+      "id": "a",
+      "width": 40,
+      "height": 20,
+      "x": 15,
+      "y": 15
+    },
+    {
+      "id": "b",
+      "width": 20,
+      "height": 40,
+      "x": 70,
+      "y": 15
+    },
+    {
+      "id": "c",
+      "width": 30,
+      "height": 30,
+      "x": 105,
+      "y": 15
+    },
+    {
+      "id": "d",
+      "width": 25,
+      "height": 25,
+      "x": 150,
+      "y": 15
+    },
+    {
+      "id": "e",
+      "width": 50,
+      "height": 15,
+      "x": 15,
+      "y": 70
+    },
+    {
+      "id": "f",
+      "width": 15,
+      "height": 50,
+      "x": 80,
+      "y": 70
+    }
+  ],
+  "edges": [],
+  "x": 0,
+  "y": 0,
+  "width": 190,
+  "height": 135
+}

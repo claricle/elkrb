@@ -1,0 +1,155 @@
+{
+  "id": "root",
+  "children": [
+    {
+      "id": "a",
+      "width": 30,
+      "height": 30,
+      "x": 12,
+      "y": 17
+    },
+    {
+      "id": "b",
+      "width": 30,
+      "height": 30,
+      "x": 62,
+      "y": 62
+    },
+    {
+      "id": "c",
+      "width": 30,
+      "height": 30,
+      "x": 62,
+      "y": 12
+    },
+    {
+      "id": "d",
+      "width": 30,
+      "height": 30,
+      "x": 112,
+      "y": 17
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "sources": [
+        "a"
+      ],
+      "targets": [
+        "b"
+      ],
+      "sections": [
+        {
+          "id": "e1_s0",
+          "startPoint": {
+            "x": 42,
+            "y": 37
+          },
+          "endPoint": {
+            "x": 62,
+            "y": 77
+          },
+          "bendPoints": [
+            {
+              "x": 52,
+              "y": 37
+            },
+            {
+              "x": 52,
+              "y": 77
+            }
+          ],
+          "incomingShape": "a",
+          "outgoingShape": "b"
+        }
+      ]
+    },
+    {
+      "id": "e2",
+      "sources": [
+        "a"
+      ],
+      "targets": [
+        "c"
+      ],
+      "sections": [
+        {
+          "id": "e2_s0",
+          "startPoint": {
+            "x": 42,
+            "y": 27
+          },
+          "endPoint": {
+            "x": 62,
+            "y": 27
+          },
+          "incomingShape": "a",
+          "outgoingShape": "c"
+        }
+      ]
+    },
+    {
+      "id": "e3",
+      "sources": [
+        "b"
+      ],
+      "targets": [
+        "d"
+      ],
+      "sections": [
+        {
+          "id": "e3_s0",
+          "startPoint": {
+            "x": 92,
+            "y": 77
+          },
+          "endPoint": {
+            "x": 112,
+            "y": 37
+          },
+          "bendPoints": [
+            {
+              "x": 102,
+              "y": 77
+            },
+            {
+              "x": 102,
+              "y": 37
+            }
+          ],
+          "incomingShape": "b",
+          "outgoingShape": "d"
+        }
+      ]
+    },
+    {
+      "id": "e4",
+      "sources": [
+        "c"
+      ],
+      "targets": [
+        "d"
+      ],
+      "sections": [
+        {
+          "id": "e4_s0",
+          "startPoint": {
+            "x": 92,
+            "y": 27
+          },
+          "endPoint": {
+            "x": 112,
+            "y": 27
+          },
+          "incomingShape": "c",
+          "outgoingShape": "d"
+        }
+      ]
+    }
+  ],
+  "x": 0,
+  "y": 0,
+  "width": 154,
+  "height": 104
+}

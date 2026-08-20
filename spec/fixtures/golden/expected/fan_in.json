@@ -1,0 +1,90 @@
+{
+  "id": "root",
+  "children": [
+    {
+      "id": "a",
+      "width": 30,
+      "height": 30,
+      "x": 62,
+      "y": 17
+    },
+    {
+      "id": "b",
+      "width": 30,
+      "height": 30,
+      "x": 12,
+      "y": 62
+    },
+    {
+      "id": "c",
+      "width": 30,
+      "height": 30,
+      "x": 12,
+      "y": 12
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "sources": [
+        "b"
+      ],
+      "targets": [
+        "a"
+      ],
+      "sections": [
+        {
+          "id": "e1_s0",
+          "startPoint": {
+            "x": 42,
+            "y": 77
+          },
+          "endPoint": {
+            "x": 62,
+            "y": 37
+          },
+          "bendPoints": [
+            {
+              "x": 52,
+              "y": 77
+            },
+            {
+              "x": 52,
+              "y": 37
+            }
+          ],
+          "incomingShape": "b",
+          "outgoingShape": "a"
+        }
+      ]
+    },
+    {
+      "id": "e2",
+      "sources": [
+        "c"
+      ],
+      "targets": [
+        "a"
+      ],
+      "sections": [
+        {
+          "id": "e2_s0",
+          "startPoint": {
+            "x": 42,
+            "y": 27
+          },
+          "endPoint": {
+            "x": 62,
+            "y": 27
+          },
+          "incomingShape": "c",
+          "outgoingShape": "a"
+        }
+      ]
+    }
+  ],
+  "x": 0,
+  "y": 0,
+  "width": 104,
+  "height": 104
+}
