@@ -61,6 +61,11 @@ RSpec.describe Elkrb::Options::Registry do
 
     it "returns nil for a bare suffix shared by more than one id, rather than guessing" do
       expect(described_class.canonical("placement")).to be_nil
+      expect(described_class.canonical("strategy")).to be_nil
+    end
+
+    it "resolves a longer suffix that uniquely disambiguates among same-tail strategy ids" do
+      expect(described_class.canonical("nodePlacement.strategy")).to eq("elk.layered.nodePlacement.strategy")
     end
 
     it "resolves aspectRatio to the ELK id even though a private id shares the same bare suffix" do
@@ -114,9 +119,42 @@ RSpec.describe Elkrb::Options::Registry do
       expect(described_class.status("elk.selfLoopOffset")).to eq(:accepted)
     end
 
-    it "reports :accepted for edgeNode/edgeEdge spacing (sirena emits them; not honoured until S25b)" do
+    it "reports :accepted for edgeNode/edgeEdge spacing (sirena emits them; not honoured today)" do
       expect(described_class.status("elk.spacing.edgeNode")).to eq(:accepted)
       expect(described_class.status("elk.spacing.edgeEdge")).to eq(:accepted)
+    end
+
+    it "reports :partial for elk.hierarchyHandling, with a non-empty note" do
+      expect(described_class.status("elk.hierarchyHandling")).to eq(:partial)
+      expect(described_class.note("elk.hierarchyHandling")).not_to be_empty
+    end
+  end
+
+  describe "consumer-contract table rows (remediation plan)" do
+    # Every id the consumer-contract table lists gets its own registry
+    # row with that table's status — S16-S19/S25a flip status/default on
+    # these same rows in place, never add duplicates.
+    it "registers every contract row pre-seeded for a later slice" do
+      accepted_ids = %w[
+        elk.spacing.edgeNode
+        elk.spacing.edgeEdge
+        elk.layered.nodePlacement.strategy
+        elk.layered.considerModelOrder.strategy
+        elk.layered.crossingMinimization.strategy
+        elk.layered.compaction.postCompaction.strategy
+        elk.box.packingMode
+        elk.layered.layering.layerConstraint
+        elk.radial.centerOnRoot
+        elk.disco.componentCompaction.strategy
+      ]
+
+      accepted_ids.each do |id|
+        expect(described_class.status(id)).to eq(:accepted), "#{id} should be :accepted"
+      end
+    end
+
+    it "sorts every row by canonical id" do
+      expect(described_class.all.keys).to eq(described_class.all.keys.sort)
     end
   end
 
