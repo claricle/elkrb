@@ -170,6 +170,7 @@ module Elkrb
               values: entry[:values],
               parser: parsers[entry[:type]],
               status: entry[:status],
+              note: entry[:note],
             }
           end
 

@@ -27,7 +27,7 @@ module Elkrb
         "elk.algorithm" => { type: :string, default: "layered", aliases: %w[algorithm], algorithms: :all, status: :honoured, description: "The layout algorithm to use" },
         "elk.aspectRatio" => { type: :float, default: 1.6, aliases: %w[aspectRatio aspect_ratio], algorithms: %w[box random], status: :honoured, description: "Target width/height ratio (box, random)" },
         "elk.bendPoints" => { type: :kvector_chain, default: nil, aliases: %w[bendPoints], algorithms: :all, status: :honoured, description: "Manual bend points for an edge" },
-        "elk.box.packingMode" => { type: :enum, values: %w[SIMPLE GROUP_DEC GROUP_MIXED GROUP_INC], default: "SIMPLE", algorithms: %w[box], status: :accepted, description: "Box layout packing mode; elkrb implements SIMPLE only, others fall back" },
+        "elk.box.packingMode" => { type: :enum, values: %w[SIMPLE GROUP_DEC GROUP_MIXED GROUP_INC], default: "SIMPLE", algorithms: %w[box], status: :accepted, description: "Box layout packing mode; not honoured today (S16 implements SIMPLE, others fall back to it)" },
         "elk.direction" => { type: :enum, values: %w[UNDEFINED RIGHT LEFT DOWN UP], default: "UNDEFINED", aliases: %w[direction], algorithms: %w[layered mrtree], status: :honoured, description: "Overall direction of layout" },
         "elk.disco.componentCompaction.strategy" => { type: :enum, values: %w[NONE ROW COLUMN GRID], default: "NONE", namespace: :elkrb, algorithms: %w[disco], status: :accepted, description: "elkrb-private: component arrangement strategy; disco.componentArrangement is the id actually read today" },
         "elk.edgeLabels.placement" => { type: :string, default: "CENTER", algorithms: :all, status: :honoured, description: "Edge label placement" },
@@ -37,10 +37,10 @@ module Elkrb
         "elk.force.temperature" => { type: :float, default: 0.001, aliases: %w[temperature], algorithms: %w[force], status: :honoured, description: "Force simulation cooling temperature" },
         "elk.hierarchyHandling" => { type: :enum, values: %w[INHERIT INCLUDE_CHILDREN SEPARATE_CHILDREN], default: "INHERIT", algorithms: :all, status: :partial, note: "cross-level edges are routed; no cross-level layering", description: "Whether a compound node's children are laid out separately or together with it" },
         "elk.layered.compaction.postCompaction.strategy" => { type: :enum, default: "NONE", algorithms: %w[layered], status: :accepted, description: "Post-layout compaction strategy; not honoured today" },
-        "elk.layered.considerModelOrder.strategy" => { type: :enum, default: "NONE", algorithms: %w[layered], status: :accepted, description: "Whether to preserve model node/edge order as a crossing-minimization tie-break; honoured from S25a" },
+        "elk.layered.considerModelOrder.strategy" => { type: :enum, values: %w[NONE NODES_AND_EDGES], default: "NONE", algorithms: %w[layered], status: :accepted, description: "Whether to preserve model node/edge order as a crossing-minimization tie-break; not honoured today" },
         "elk.layered.crossingMinimization.strategy" => { type: :enum, values: %w[LAYER_SWEEP INTERACTIVE NONE], default: "LAYER_SWEEP", algorithms: %w[layered], status: :accepted, description: "Crossing minimization strategy; LAYER_SWEEP honoured from S25a" },
         "elk.layered.layering.layerConstraint" => { type: :enum, values: %w[NONE FIRST FIRST_SEPARATE LAST LAST_SEPARATE], default: "NONE", algorithms: %w[layered], status: :accepted, description: "Forces a node to a specific layer position; honoured from S19" },
-        "elk.layered.nodePlacement.strategy" => { type: :enum, default: "SIMPLE", algorithms: %w[layered], status: :accepted, description: "Node placement strategy; elkrb implements SIMPLE only, others fall back" },
+        "elk.layered.nodePlacement.strategy" => { type: :enum, values: %w[SIMPLE BRANDES_KOEPF NETWORK_SIMPLEX], default: "SIMPLE", algorithms: %w[layered], status: :accepted, description: "Node placement strategy; not honoured today (elkrb implements SIMPLE only, others fall back to it)" },
         "elk.layered.spacing.nodeNodeBetweenLayers" => { type: :float, default: 60.0, aliases: %w[layer_spacing layered.spacing.nodeNodeBetweenLayers], algorithms: %w[layered], status: :honoured, description: "Spacing between layers (ELK's own default is 20.0; elkrb currently defaults to 60.0)" },
         "elk.nodeLabels.placement" => { type: :string, default: "INSIDE CENTER", aliases: %w[node.label.placement label.placement], algorithms: :all, status: :honoured, description: "Node label placement" },
         "elk.padding" => { type: :padding, default: "[top=12,left=12,bottom=12,right=12]", aliases: %w[padding], algorithms: :all, status: :honoured, description: "Padding around the graph" },
@@ -150,10 +150,13 @@ module Elkrb
         # for that.
         #
         # @param name [String] a normalised algorithm name (e.g. "layered")
+        # @param include_all [Boolean] whether to include algorithms: :all
+        #   ids (AlgorithmRegistry passes false for a registration that
+        #   does not inherit BaseAlgorithm, so does not get those for free)
         # @return [Array<String>] canonical ids scoped to that algorithm
-        def for_algorithm(name)
+        def for_algorithm(name, include_all: true)
           OPTIONS.select do |_id, entry|
-            entry[:algorithms] == :all || Array(entry[:algorithms]).include?(name)
+            (include_all && entry[:algorithms] == :all) || Array(entry[:algorithms]).include?(name)
           end.keys
         end
 
@@ -196,6 +199,8 @@ module Elkrb
           if value.is_a?(Numeric)
             return ElkPadding.new(top: value, left: value, bottom: value, right: value)
           end
+
+          raise ArgumentError, "Invalid padding value: #{value.inspect}" unless value.is_a?(Hash)
 
           fallback = ElkPadding.parse(default_string)
           ElkPadding.new(

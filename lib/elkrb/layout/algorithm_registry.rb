@@ -59,9 +59,8 @@ module Elkrb
         # normal load order has already defined BaseAlgorithm anyway.
         def supported_options_for(name_str, algorithm_class)
           base = ::Elkrb::Layout::Algorithms::BaseAlgorithm if defined?(::Elkrb::Layout::Algorithms::BaseAlgorithm)
-          return Options::Registry.for_algorithm(name_str) if base.nil? || algorithm_class <= base
-
-          Options::Registry.all.select { |_id, entry| Array(entry[:algorithms]).include?(name_str) }.keys
+          include_all = base.nil? || algorithm_class <= base
+          Options::Registry.for_algorithm(name_str, include_all: include_all)
         end
 
         # Used by #get and #algorithm_info to find the key actually

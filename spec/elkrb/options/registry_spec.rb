@@ -94,6 +94,11 @@ RSpec.describe Elkrb::Options::Registry do
       expect(padding.to_h).to eq(top: 7.0, left: 7.0, bottom: 7.0, right: 7.0)
     end
 
+    it "raises ArgumentError for a padding value that is none of String/Hash/Numeric/ElkPadding" do
+      expect { described_class.coerce("elk.padding", nil) }.to raise_error(ArgumentError, /Invalid padding value/)
+      expect { described_class.coerce("elk.padding", [1, 2]) }.to raise_error(ArgumentError, /Invalid padding value/)
+    end
+
     it "parses a KVectorChain in ELK's own canonical format" do
       chain = described_class.coerce("elk.bendPoints", "(1,2; 3,4)")
       expect(chain.vectors.size).to eq(2)
@@ -180,6 +185,11 @@ RSpec.describe Elkrb::Options::Registry do
       expect(described_class.for_algorithm("random")).to include("elk.aspectRatio", "elk.randomSeed")
       expect(described_class.for_algorithm("force")).to include("elk.randomSeed")
       expect(described_class.for_algorithm("stress")).not_to include("elk.aspectRatio", "elk.randomSeed")
+    end
+
+    it "excludes algorithms: :all ids when include_all is false" do
+      expect(described_class.for_algorithm("box", include_all: false)).not_to include("elk.padding")
+      expect(described_class.for_algorithm("box", include_all: false)).to include("elk.aspectRatio")
     end
   end
 end
