@@ -32,35 +32,15 @@ module Elkrb
       def load_any_format(file)
         raise ArgumentError, "File not found: #{file}" unless File.exist?(file)
 
-        require_relative "../graph/graph"
-        content = File.read(file)
-        ext = File.extname(file).downcase
-
-        graph = case ext
-                when ".json"
-                  Elkrb::Graph::Graph.from_json(content)
-                when ".yml", ".yaml"
-                  Elkrb::Graph::Graph.from_yaml(content)
-                when ".elkt"
-                  require_relative "../parsers/elkt_parser"
-                  Elkrb::Parsers::ElktParser.parse(content)
-                else
-                  detect_and_parse(content)
-                end
-
-        # Convert to hash for validation
-        if graph.is_a?(Hash)
-          graph
-        else
-          JSON.parse(graph.to_json,
-                     symbolize_names: true)
-        end
-      end
-
-      def detect_and_parse(content)
         require_relative "../format_sniffer"
-        Elkrb::FormatSniffer.parse(content, unparseable_message: "Unable to parse input file")
+        graph = Elkrb::FormatSniffer.read(File.read(file), File.extname(file).downcase,
+                                          unparseable_message: "Unable to parse input file")
+
+        return graph if graph.is_a?(Hash)
+
+        JSON.parse(graph.to_json, symbolize_names: true)
       end
+
 
       def validate_graph(graph)
         errors = []

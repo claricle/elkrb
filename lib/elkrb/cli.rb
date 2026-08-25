@@ -161,35 +161,8 @@ module Elkrb
     private
 
     def read_input_file(file)
-      require_relative "graph/graph"
-      content = File.read(file)
-
-      case File.extname(file).downcase
-      when ".json"
-        require_relative "format_sniffer"
-        Elkrb::FormatSniffer.validate_model!(
-          Elkrb::Graph::Graph.from_json(content),
-          unparseable_message: "Unable to parse input file. Supported formats: JSON, YAML, ELKT"
-        )
-      when ".yml", ".yaml"
-        require_relative "format_sniffer"
-        Elkrb::FormatSniffer.validate_model!(
-          Elkrb::Graph::Graph.from_yaml(content),
-          unparseable_message: "Unable to parse input file. Supported formats: JSON, YAML, ELKT"
-        )
-      when ".elkt"
-        require_relative "format_sniffer"
-        Elkrb::FormatSniffer.parse_elkt(
-          content,
-          unparseable_message: "Unable to parse ELKT input file."
-        )
-      else
-        require_relative "format_sniffer"
-        Elkrb::FormatSniffer.parse(
-          content,
-          unparseable_message: "Unable to parse input file. Supported formats: JSON, YAML, ELKT"
-        )
-      end
+      require_relative "format_sniffer"
+      Elkrb::FormatSniffer.read(File.read(file), File.extname(file).downcase)
     end
 
     def build_layout_options

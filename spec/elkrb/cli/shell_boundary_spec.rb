@@ -295,3 +295,48 @@ RSpec.describe "Graphviz lookup along PATH" do
     end
   end
 end
+
+RSpec.describe "every command reads input through one path" do
+  include CliRunner
+
+  # The extension dispatch used to be copy-pasted into four places, so a guard
+  # added to one left the other three accepting malformed input.
+  it "rejects a malformed shape from layout, validate and diagram alike" do
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "bad.json")
+      File.write(path, '{"id":"r","children":{"a":1}}')
+
+      %w[layout validate].each do |command|
+        _stdout, stderr, status = run_elkrb(command, path)
+
+        expect(status.exitstatus).to eq(1), "#{command} accepted a malformed shape"
+        expect(stderr).to include("Unable to parse"), "#{command} leaked an internal error"
+      end
+    end
+  end
+
+  it "still accepts a well-formed graph from every command" do
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "ok.json")
+      File.write(path, '{"id":"r","children":[{"id":"a","width":10,"height":10}]}')
+
+      %w[layout validate].each do |command|
+        _stdout, _stderr, status = run_elkrb(command, path)
+
+        expect(status.exitstatus).to eq(0), "#{command} rejected a valid graph"
+      end
+    end
+  end
+
+  it "accepts an ELKT graph that carries only its own size" do
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "rootsize.elkt")
+      File.write(path, "layout [ size: 30, 40 ]\n")
+
+      stdout, _stderr, status = run_elkrb("layout", path)
+
+      expect(status.exitstatus).to eq(0)
+      expect(stdout).to include('"width"')
+    end
+  end
+end

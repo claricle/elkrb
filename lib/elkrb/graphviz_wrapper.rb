@@ -71,7 +71,11 @@ module Elkrb
       # An empty PATH component means the working directory, and #split would
       # otherwise turn it into "/dot". The shell would find dot there; we must
       # too, or #available? disagrees with the command that actually runs.
-      ENV.fetch("PATH", "").split(File::PATH_SEPARATOR, -1).flat_map do |dir|
+      # "".split(sep, -1) is [], not [""], so an empty PATH would search
+      # nowhere at all — while the shell still looks in the working directory.
+      raw = ENV.fetch("PATH", "")
+      components = raw.empty? ? [""] : raw.split(File::PATH_SEPARATOR, -1)
+      components.flat_map do |dir|
         base = dir.empty? ? "." : dir
         dot_basenames.map { |name| File.join(base, name) }
       end

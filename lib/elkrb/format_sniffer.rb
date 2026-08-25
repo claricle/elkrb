@@ -37,6 +37,35 @@ module Elkrb
       # @param unparseable_message [String] message for the ArgumentError
       # @return [Hash] the parsed ELKT graph
       # @raise [ArgumentError] when the ELKT parser itself fails
+      DEFAULT_UNPARSEABLE = "Unable to parse input file. Supported formats: JSON, YAML, ELKT"
+
+      # The single entry point every command reads input through. Extension
+      # dispatch plus shape validation lived in four places and drifted apart;
+      # a guard added to one silently left the other three open.
+      #
+      # @param content [String] raw file content
+      # @param extension [String] the file's downcased extension
+      # @return [Elkrb::Graph::Graph, Hash] the parsed graph
+      # @raise [ArgumentError] for unsupported or unparseable input
+      def read(content, extension, unparseable_message: DEFAULT_UNPARSEABLE)
+        require_relative "graph/graph"
+
+        case extension
+        when ".json"
+          validate_model!(Elkrb::Graph::Graph.from_json(content),
+                          unparseable_message: unparseable_message)
+        when ".yml", ".yaml"
+          validate_model!(Elkrb::Graph::Graph.from_yaml(content),
+                          unparseable_message: unparseable_message)
+        when ".elkt"
+          parse_elkt(content, unparseable_message: unparseable_message)
+        when ".dot", ".gv"
+          raise ArgumentError, "DOT format input not yet supported. Use JSON, YAML, or ELKT."
+        else
+          parse(content, unparseable_message: unparseable_message)
+        end
+      end
+
       # A file whose extension names the format skips sniffing, so it also
       # skips the malformed-shape check the sniffer applies. Both paths need
       # it: lutaml coerces a mapping where a sequence belongs into one
@@ -44,7 +73,9 @@ module Elkrb
       #
       # @raise [ArgumentError] when the parsed model is not usable
       def validate_model!(graph, unparseable_message:)
-        raise ArgumentError, unparseable_message if malformed_model?(graph)
+        unless graph.is_a?(Elkrb::Graph::Graph) && !malformed_model?(graph)
+          raise ArgumentError, unparseable_message
+        end
 
         graph
       end
@@ -139,8 +170,12 @@ module Elkrb
             .any? { |line| !line.sub(%r{//.*$}, "").strip.empty? }
       end
 
+      # An ELKT graph is itself a node and may carry only its own position or
+      # size (`layout [ size: 30, 40 ]`). That is meaningful content, so the
+      # root geometry counts alongside children, edges and options.
       def hollow_hash?(graph)
-        blank?(graph[:children]) && blank?(graph[:edges]) && blank?(graph[:layoutOptions])
+        blank?(graph[:children]) && blank?(graph[:edges]) &&
+          blank?(graph[:layoutOptions]) && graph.values_at(:x, :y, :width, :height).all?(&:nil?)
       end
 
       def blank?(collection)
