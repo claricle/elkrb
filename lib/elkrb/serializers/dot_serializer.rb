@@ -107,10 +107,9 @@ module Elkrb
         # Add rankdir from options or graph layout options
         if @options[:rankdir]
           attrs[:rankdir] = @options[:rankdir]
-        elsif graph.layout_options&.direction
-          attrs[:rankdir] = elk_direction_to_rankdir(
-            graph.layout_options.direction,
-          )
+        elsif (direction = graph.layout_options&.[]("elk.direction") ||
+               graph.layout_options&.[]("direction"))
+          attrs[:rankdir] = elk_direction_to_rankdir(direction)
         end
 
         # Add graph size if specified

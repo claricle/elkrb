@@ -291,9 +291,7 @@ RSpec.describe Elkrb::Serializers::DotSerializer do
     context "with layout options" do
       let(:graph) do
         Elkrb::Graph::Graph.new(id: "root").tap do |g|
-          g.layout_options = Elkrb::Graph::LayoutOptions.new(
-            direction: "DOWN",
-          )
+          g.layout_options = { "elk.direction" => "DOWN" }
         end
       end
 
@@ -304,21 +302,21 @@ RSpec.describe Elkrb::Serializers::DotSerializer do
       end
 
       it "handles RIGHT direction" do
-        graph.layout_options.direction = "RIGHT"
+        graph.layout_options["elk.direction"] = "RIGHT"
         result = serializer.serialize(graph)
 
         expect(result).to include("rankdir=LR")
       end
 
       it "handles LEFT direction" do
-        graph.layout_options.direction = "LEFT"
+        graph.layout_options["elk.direction"] = "LEFT"
         result = serializer.serialize(graph)
 
         expect(result).to include("rankdir=RL")
       end
 
       it "handles UP direction" do
-        graph.layout_options.direction = "UP"
+        graph.layout_options["elk.direction"] = "UP"
         result = serializer.serialize(graph)
 
         expect(result).to include("rankdir=BT")
@@ -326,6 +324,15 @@ RSpec.describe Elkrb::Serializers::DotSerializer do
 
       it "allows overriding rankdir via options" do
         result = serializer.serialize(graph, rankdir: "LR")
+
+        expect(result).to include("rankdir=LR")
+      end
+
+      it "falls back to a bare direction key (Gate A finding 4)" do
+        graph.layout_options.delete("elk.direction")
+        graph.layout_options["direction"] = "RIGHT"
+
+        result = serializer.serialize(graph)
 
         expect(result).to include("rankdir=LR")
       end

@@ -348,9 +348,7 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
           id: "g1",
           children: [node1, node2],
           edges: [edge],
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            edge_routing: "SPLINES",
-          ),
+          layout_options: { "elk.edgeRouting" => "SPLINES" },
         )
 
         router.route_edges(graph, nil, "SPLINES")
@@ -412,9 +410,7 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
       it "reads from edgeRouting option" do
         graph = Elkrb::Graph::Graph.new(
           id: "g1",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            edge_routing: "POLYLINE",
-          ),
+          layout_options: { "edgeRouting" => "POLYLINE" },
         )
 
         style = router.send(:get_routing_style, graph)
@@ -427,6 +423,16 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
           layout_options: Elkrb::Graph::LayoutOptions.new,
         )
         graph.layout_options["elk.edgeRouting"] = "splines"
+
+        style = router.send(:get_routing_style, graph)
+        expect(style).to eq("SPLINES")
+      end
+
+      it "reads from the legacy snake_case edge_routing option (Gate A finding 1, Gate B finding 3)" do
+        graph = Elkrb::Graph::Graph.new(
+          id: "g1",
+          layout_options: { "edge_routing" => "SPLINES" },
+        )
 
         style = router.send(:get_routing_style, graph)
         expect(style).to eq("SPLINES")
