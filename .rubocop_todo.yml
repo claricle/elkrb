@@ -23,6 +23,16 @@ AllCops:
     - 'examples/hierarchical_graph.rb'
 
 # Offense count: 1
+# Parked deliberately, not lint debt to burn down in this file. The remote
+# cimas config sets TargetRubyVersion 3.4 while the gemspec declares
+# `>= 3.0.0`, and the gemspec is the wrong side of that mismatch:
+# lib/elkrb/options/k_vector_chain.rb:103 already uses anonymous block
+# forwarding (`def each(&)`), which is Ruby 3.1+. Lowering TargetRubyVersion
+# to 3.0 to match the gemspec makes rubocop report 7 Lint/Syntax failures
+# across lib/ and benchmarks/, and Lint/Syntax has no per-cop Exclude -- the
+# only silencer is an AllCops:Exclude on a real library file. The fix is to
+# raise required_ruby_version, which item 06 does. Re-add this block after any
+# future `rubocop --auto-gen-config` regeneration.
 Gemspec/RequiredRubyVersion:
   Exclude:
     - 'elkrb.gemspec'
