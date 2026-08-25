@@ -15,8 +15,26 @@ module Elkrb
       #   nodes for this level
       # @param routing_style [String] Routing style (ORTHOGONAL, POLYLINE,
       #   SPLINES)
+      # A plain `{id => node}` Hash was the documented node_map before
+      # NodeIndex existed, and both public entry points still take one.
+      # Only #node is ever asked of a node_map, so that is all this wraps.
+      class HashNodeMap
+        def initialize(nodes)
+          @nodes = nodes
+        end
+
+        def node(id)
+          @nodes[id]
+        end
+      end
+      private_constant :HashNodeMap
+
+      def coerce_node_map(node_map)
+        node_map.is_a?(::Hash) ? HashNodeMap.new(node_map) : node_map
+      end
+
       def route_edges(graph, node_map = nil, routing_style = nil)
-        node_map ||= NodeIndex.build(graph)
+        node_map = coerce_node_map(node_map || NodeIndex.build(graph))
         routing_style ||= get_routing_style(graph)
 
         graph.edges&.each do |edge|
@@ -35,6 +53,8 @@ module Elkrb
       # @param graph [Graph::Graph] The containing graph
       def route_edge(edge, node_map, _graph)
         return unless edge.sources&.any? && edge.targets&.any?
+
+        node_map = coerce_node_map(node_map)
 
         # Get source and target nodes
         source_id = edge.sources.first

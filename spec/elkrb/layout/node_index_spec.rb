@@ -283,3 +283,40 @@ RSpec.describe Elkrb::Layout::NodeIndex do
     end
   end
 end
+
+RSpec.describe "EdgeRouter node_map contract" do
+  # A plain {id => node} Hash was the documented node_map before NodeIndex
+  # existed. Both public entry points still have to accept one.
+  let(:router) { Class.new { include Elkrb::Layout::EdgeRouter }.new }
+
+  def fresh
+    a = Elkrb::Graph::Node.new(id: "a", x: 0, y: 0, width: 10, height: 10)
+    b = Elkrb::Graph::Node.new(id: "b", x: 50, y: 50, width: 10, height: 10)
+    edge = Elkrb::Graph::Edge.new(id: "e", sources: ["a"], targets: ["b"])
+    [Elkrb::Graph::Graph.new(id: "r", children: [a, b], edges: [edge]), edge, { "a" => a, "b" => b }]
+  end
+
+  it "routes a single edge given a plain Hash" do
+    graph, edge, hash = fresh
+
+    router.route_edge(edge, hash, graph)
+
+    expect(edge.sections&.size).to eq(1)
+  end
+
+  it "routes a whole graph given a plain Hash" do
+    graph, edge, hash = fresh
+
+    router.route_edges(graph, hash)
+
+    expect(edge.sections&.size).to eq(1)
+  end
+
+  it "still builds its own NodeIndex when no map is given" do
+    graph, edge, = fresh
+
+    router.route_edges(graph)
+
+    expect(edge.sections&.size).to eq(1)
+  end
+end
