@@ -117,20 +117,18 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
       expect(a.y).to be > b.y
     end
 
-    it "does not stack-overflow on a cycle CycleBreaker's single-target " \
-       "detection cannot see" do
-      # Regression guard: a's hyperedge fans out to
-      # three ports; CycleBreaker's first_other_target only follows ONE
-      # of them ("b"), so the real a -> c -> a cycle (via c's edge back
-      # to a's port) is never visited during cycle-breaking and stays
-      # unbroken. calculate_layer then recurses between a and c
-      # forever. Confirmed against the pre-fix code, and confirmed this
+    it "does not stack-overflow on a cycle closing through a hyperedge's " \
+       "later target" do
+      # Regression guard: a's hyperedge fans out to three ports, and
+      # the real a -> c -> a cycle closes through the LAST of them (c's
+      # edge back to a's port). A dfs that stopped at the first
+      # non-self target never visited c during cycle-breaking, left the
+      # cycle unbroken, and calculate_layer then recursed between a and
+      # c forever. Confirmed against that version, and confirmed this
       # exact graph does NOT raise on origin/v2 (port ids are invisible
       # there, so the cycle is invisible too -- a genuine regression
-      # this diff must not ship). A general re-entrancy guard in
-      # calculate_layer (return 0 for a node already being computed,
-      # rather than recursing into it again) closes this without
-      # needing full multi-target cycle detection, which is S8's job.
+      # this diff must not ship). dfs now walks every resolved target,
+      # so CycleBreaker reverses the closing edge itself.
       graph = {
         id: "r",
         children: [
@@ -156,5 +154,65 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
       expect { Elkrb.layout(graph, algorithm: "layered") }
         .not_to raise_error
     end
+
+    it "breaks a cycle that closes through a hyperedge's later target" do
+      # Following only the first non-self target left this cycle for
+      # LayerAssigner's re-entrancy guard to absorb, which warns on
+      # stderr. Walking every target breaks it in phase 1 instead.
+      graph = {
+        id: "r",
+        children: %w[a b c].map { |i| { id: i, width: 10, height: 10 } },
+        edges: [
+          { id: "e1", sources: ["a"], targets: %w[b c] },
+          { id: "e2", sources: ["c"], targets: ["a"] },
+        ],
+      }
+
+      expect { Elkrb.layout(graph, algorithm: "layered") }
+        .not_to output.to_stderr
+    end
+
+    it "leaves a nested edge whose ids alias this level's ports alone" do
+      # "x" and "y" name c's children AND a's and b's ports. Resolving
+      # c's own edge through the parent index aliased it onto a and b,
+      # so walking b -> c reached c with b still on the dfs stack and
+      # reversed an acyclic nested edge into y -> x.
+      graph = cross_level_graph(
+        edges: [{ id: "bc", sources: ["b"], targets: ["c"] }],
+      )
+
+      result = Elkrb.layout(graph, algorithm: "layered")
+      inner = result.children.find { |n| n.id == "c" }.edges.first
+
+      expect(inner.sources).to eq(["x"])
+      expect(inner.targets).to eq(["y"])
+    end
+
+    it "does not layer this level by a nested edge's aliased ids" do
+      # Nothing connects a, b and c at the top level, so all three are
+      # roots. The aliased nested edge made b a layer of its own.
+      result = Elkrb.layout(cross_level_graph, algorithm: "layered")
+
+      expect(result.children.map(&:y).uniq.size).to eq(1)
+    end
+  end
+
+  def cross_level_graph(edges: [])
+    {
+      id: "r",
+      children: [
+        { id: "a", width: 10, height: 10, ports: [{ id: "x" }] },
+        { id: "b", width: 10, height: 10, ports: [{ id: "y" }] },
+        {
+          id: "c", width: 10, height: 10,
+          children: [
+            { id: "x", width: 5, height: 5 },
+            { id: "y", width: 5, height: 5 },
+          ],
+          edges: [{ id: "inner", sources: ["x"], targets: ["y"] }],
+        },
+      ],
+      edges: edges,
+    }
   end
 end

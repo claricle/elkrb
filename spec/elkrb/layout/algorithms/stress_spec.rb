@@ -25,5 +25,39 @@ RSpec.describe Elkrb::Layout::Algorithms::Stress do
       expect(distances[1][0]).to eq(1.0)
       expect(distances[0][2]).to eq(Float::INFINITY)
     end
+
+    it "ignores a nested edge whose ids alias this level's ports" do
+      # "x" and "y" name c's children AND a's and b's ports. Reading
+      # c's own edge through the parent index made a and b look
+      # adjacent.
+      graph = Elkrb::Graph::Graph.from_hash(
+        "id" => "r",
+        "children" => [
+          {
+            "id" => "a", "width" => 10, "height" => 10,
+            "ports" => [{ "id" => "x" }]
+          },
+          {
+            "id" => "b", "width" => 10, "height" => 10,
+            "ports" => [{ "id" => "y" }]
+          },
+          {
+            "id" => "c", "width" => 10, "height" => 10,
+            "children" => [
+              { "id" => "x", "width" => 5, "height" => 5 },
+              { "id" => "y", "width" => 5, "height" => 5 },
+            ],
+            "edges" => [
+              { "id" => "inner", "sources" => ["x"], "targets" => ["y"] },
+            ]
+          },
+        ],
+        "edges" => [],
+      )
+
+      distances = described_class.new.send(:calculate_distances, graph)
+
+      expect(distances[0][1]).to eq(Float::INFINITY)
+    end
   end
 end

@@ -75,8 +75,7 @@ module Elkrb
           index = NodeIndex.build(graph)
           positions = graph.children.each_with_index.to_h { |node, i| [node.id, i] }
 
-          all_edges = collect_all_edges(graph)
-          all_edges.each do |edge|
+          index.edges.each do |edge|
             source_id = edge.sources&.first
             target_id = edge.targets&.first
             next unless source_id && target_id
@@ -166,15 +165,6 @@ module Elkrb
               node.y = sum_y / sum_weight
             end
           end
-        end
-
-        def collect_all_edges(graph)
-          edges = []
-          edges.concat(graph.edges) if graph.edges
-          graph.children&.each do |node|
-            edges.concat(node.edges) if node.edges
-          end
-          edges
         end
       end
     end

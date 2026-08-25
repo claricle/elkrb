@@ -39,43 +39,46 @@ module Elkrb
 
             # Process outgoing edges
             get_outgoing_edges(node).each do |edge|
-              target = first_other_target(edge, node)
-              next unless target
-
-              if @in_stack[target.id]
-                # Found a cycle - mark this edge for reversal. An edge
-                # can appear in get_outgoing_edges via both node.edges
-                # and @graph.edges (or be walked from more than one
-                # in-stack frame for a hyperedge); reversing it twice
-                # would swap it back to its original direction and
-                # leave the cycle unbroken.
-                @edges_to_reverse << edge unless @edges_to_reverse.include?(edge)
-              elsif !@visited[target.id]
-                dfs(target)
+              other_targets(edge, node).each do |target|
+                if @in_stack[target.id]
+                  mark_for_reversal(edge)
+                elsif !@visited[target.id]
+                  dfs(target)
+                end
               end
             end
 
             @in_stack[node.id] = false
           end
 
-          # The first resolved target that is NOT `node` itself. Plain
-          # `edge.targets.first` breaks for a hyperedge whose first
-          # target happens to be one of the source's own ports (e.g.
-          # a -> [a's port, b]): resolving straight to `a` makes dfs
-          # see a's own in-progress frame as a cycle and reverse the
-          # edge, corrupting it before LayerAssigner ever sees it
-          # (confirmed: recurses forever there, SystemStackError). This
-          # keeps the existing "first target" simplification (D8) but
-          # skips a self-reference to find the genuinely different one.
-          def first_other_target(edge, node)
-            @index.endpoint_nodes(edge.targets).find { |target| target != node }
+          # An edge can appear in get_outgoing_edges via both
+          # node.edges and @graph.edges, and a hyperedge can be reached
+          # from more than one in-stack frame or through more than one
+          # of its own targets. Reversing it twice would swap it back
+          # to its original direction and leave the cycle unbroken.
+          def mark_for_reversal(edge)
+            return if @edges_to_reverse.include?(edge)
+
+            @edges_to_reverse << edge
+          end
+
+          # Every resolved target that is NOT `node` itself. A
+          # hyperedge a -> [b, c] has to be walked through both b and
+          # c: stopping at the first one hides a cycle that only c
+          # closes. Dropping `node` matters when a target is one of the
+          # source's own ports (a -> [a's port, b]) -- resolving that
+          # back to `a` makes dfs read a's own in-progress frame as a
+          # cycle and reverse an edge that has none, corrupting it
+          # before LayerAssigner ever sees it (confirmed: recurses
+          # forever there, SystemStackError).
+          def other_targets(edge, node)
+            targets = @index.endpoint_nodes(edge.targets)
+            targets.reject { |target| target == node }
           end
 
           def get_outgoing_edges(node)
             edges = []
-
-            # Get edges from the node itself
-            edges.concat(node.edges) if node.edges
+            edges.concat(@index.edges_on(node))
 
             # Get edges from the graph that have this node as source
             @graph.edges&.each do |edge|

@@ -74,7 +74,7 @@ module Elkrb
           index = NodeIndex.build(graph)
           positions = graph.children.each_with_index.to_h { |n, i| [n.id, i] }
 
-          collect_all_edges(graph).filter_map do |edge|
+          index.edges.filter_map do |edge|
             source_id = edge.sources&.first
             target_id = edge.targets&.first
             next unless source_id && target_id
@@ -164,15 +164,6 @@ module Elkrb
           force1[:y] += (dy / distance) * force
           force2[:x] -= (dx / distance) * force
           force2[:y] -= (dy / distance) * force
-        end
-
-        def collect_all_edges(graph)
-          edges = []
-          edges.concat(graph.edges) if graph.edges
-          graph.children&.each do |node|
-            edges.concat(node.edges) if node.edges
-          end
-          edges
         end
       end
     end

@@ -115,6 +115,20 @@ RSpec.describe Elkrb::Layout::NodeIndex do
         .to raise_error(Elkrb::ValidationError, /node without id/)
     end
 
+    it "raises Elkrb::ValidationError for a port without an id" do
+      graph = Elkrb::Graph::Graph.new(
+        children: [
+          Elkrb::Graph::Node.new(
+            id: "a", width: 10, height: 10,
+            ports: [Elkrb::Graph::Port.new],
+          ),
+        ],
+      )
+
+      expect { described_class.build(graph) }
+        .to raise_error(Elkrb::ValidationError, /port without id/)
+    end
+
     it "allows the same id to repeat at a different level" do
       parent = graph_from(
         "id" => "r",
@@ -149,6 +163,96 @@ RSpec.describe Elkrb::Layout::NodeIndex do
       index = described_class.build(graph)
 
       expect(index.node("a").width).to eq(10)
+    end
+  end
+
+  describe "#edges" do
+    it "takes the graph's own edges and a leaf child's" do
+      graph = graph_from(
+        "id" => "r",
+        "children" => [
+          {
+            "id" => "a", "width" => 10, "height" => 10,
+            "ports" => [{ "id" => "p1" }, { "id" => "p2" }],
+            "edges" => [
+              { "id" => "loop", "sources" => ["p1"], "targets" => ["p2"] },
+            ]
+          },
+          { "id" => "b", "width" => 10, "height" => 10 },
+        ],
+        "edges" => [{ "id" => "ab", "sources" => ["a"], "targets" => ["b"] }],
+      )
+
+      expect(described_class.build(graph).edges.map(&:id)).to eq(%w[ab loop])
+    end
+
+    it "leaves a hierarchical child's edges to that child's own level" do
+      # "x" and "y" name c's children AND a's ports. Ids are unique
+      # only within a level, so reading c's edge here would alias its
+      # endpoints onto "a".
+      graph = graph_from(
+        "id" => "r",
+        "children" => [
+          {
+            "id" => "a", "width" => 10, "height" => 10,
+            "ports" => [{ "id" => "x" }, { "id" => "y" }]
+          },
+          {
+            "id" => "c", "width" => 10, "height" => 10,
+            "children" => [
+              { "id" => "x", "width" => 5, "height" => 5 },
+              { "id" => "y", "width" => 5, "height" => 5 },
+            ],
+            "edges" => [
+              { "id" => "inner", "sources" => ["x"], "targets" => ["y"] },
+            ]
+          },
+        ],
+        "edges" => [],
+      )
+
+      expect(described_class.build(graph).edges).to eq([])
+    end
+  end
+
+  describe "#edges_on" do
+    it "returns a leaf child's own edges" do
+      graph = graph_from(
+        "id" => "r",
+        "children" => [
+          {
+            "id" => "a", "width" => 10, "height" => 10,
+            "ports" => [{ "id" => "p1" }, { "id" => "p2" }],
+            "edges" => [
+              { "id" => "loop", "sources" => ["p1"], "targets" => ["p2"] },
+            ]
+          },
+        ],
+      )
+      index = described_class.build(graph)
+
+      expect(index.edges_on(graph.children.first).map(&:id)).to eq(["loop"])
+    end
+
+    it "returns nothing for a hierarchical child" do
+      graph = graph_from(
+        "id" => "r",
+        "children" => [
+          {
+            "id" => "c", "width" => 10, "height" => 10,
+            "children" => [
+              { "id" => "x", "width" => 5, "height" => 5 },
+              { "id" => "y", "width" => 5, "height" => 5 },
+            ],
+            "edges" => [
+              { "id" => "inner", "sources" => ["x"], "targets" => ["y"] },
+            ]
+          },
+        ],
+      )
+      index = described_class.build(graph)
+
+      expect(index.edges_on(graph.children.first)).to eq([])
     end
   end
 

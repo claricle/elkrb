@@ -56,9 +56,10 @@ module Elkrb
             # does not). A node revisited while still being computed
             # has no further predecessor to contribute, so treat it as
             # one without them rather than recursing forever
-            # (SystemStackError, confirmed for a hyperedge whose
-            # secondary target closes a cycle CycleBreaker's
-            # single-target-per-edge detection cannot see).
+            # (SystemStackError). CycleBreaker walks every target of
+            # every edge, but reversing a hyperedge swaps its whole
+            # source and target lists at once, which can leave a cycle
+            # standing.
             if @in_progress.include?(node.id)
               warn "Layered: cycle through #{node.id} not fully broken " \
                    "(hyperedge); treating as a root for this branch"
@@ -91,23 +92,7 @@ module Elkrb
           end
 
           def get_incoming_edges(node)
-            edges = []
-
-            # Get all edges that target this node
-            @graph.edges&.each do |edge|
-              edges << edge if incoming_to?(edge, node)
-            end
-
-            # Also check edges from other nodes
-            @graph.children&.each do |other_node|
-              next unless other_node.edges
-
-              other_node.edges.each do |edge|
-                edges << edge if incoming_to?(edge, node)
-              end
-            end
-
-            edges
+            @index.edges.select { |edge| incoming_to?(edge, node) }
           end
 
           # True when `node` is a genuine target of `edge`: `node` is

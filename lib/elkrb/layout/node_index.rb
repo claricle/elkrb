@@ -11,6 +11,9 @@ module Elkrb
     #
     # `.build` is the entry point; construct every index through it.
     class NodeIndex
+      # The edges of this level, in graph-then-children order.
+      attr_reader :edges
+
       def self.build(graph)
         new(graph)
       end
@@ -23,20 +26,35 @@ module Elkrb
         (ids || []).filter_map { |id| node(id) }
       end
 
+      # The edges `child` declares that belong to THIS level. A
+      # hierarchical child's `edges` address its own namespace --
+      # `HierarchicalProcessor#create_child_graph` hands them to the
+      # child's level, which is where their ids resolve. Ids are unique
+      # only within a level, so reading them here aliases a nested
+      # endpoint onto an unrelated node or port of this level.
+      def edges_on(child)
+        return [] if child.hierarchical?
+
+        child.edges || []
+      end
+
       private
 
       def initialize(graph)
         @nodes_by_id = {}
-        (graph.children || []).each { |child| index_node(child) }
+        children = graph.children || []
+        children.each { |child| index_node(child) }
+        @edges = ((graph.edges || []) +
+          children.flat_map { |child| edges_on(child) }).freeze
       end
 
       def index_node(node)
-        add(node.id, node)
-        node.ports&.each { |port| add(port.id, node) }
+        add(node.id, node, "node")
+        node.ports&.each { |port| add(port.id, node, "port") }
       end
 
-      def add(id, node)
-        raise Elkrb::ValidationError, "node without id" if id.nil?
+      def add(id, node, kind)
+        raise Elkrb::ValidationError, "#{kind} without id" if id.nil?
 
         if @nodes_by_id.key?(id)
           raise Elkrb::ValidationError, "duplicate id: #{id}"
