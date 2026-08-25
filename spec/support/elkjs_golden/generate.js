@@ -30,9 +30,11 @@ function strip(value) {
   if (typeof value === "number") {
     // A NaN/Infinity from elkjs itself would otherwise pass through
     // unchanged and `JSON.stringify` silently turns it into `null` --
-    // which the Ruby side's `numeric_or_zero` then reads as 0.0, a false
-    // parity match instead of the loud failure a genuinely broken elkjs
-    // value deserves.
+    // which the Ruby side's `numeric_or_zero` then reads as 0.0 on a
+    // width/height, a false parity match instead of the loud failure a
+    // genuinely broken elkjs value deserves. (A null POSITION is caught
+    // on the Ruby side too, by `strict_numeric`; this stops the size
+    // case, and stops both from ever reaching a committed golden.)
     if (!Number.isFinite(value)) {
       throw new Error(`non-finite number in elkjs result: ${value}`);
     }
