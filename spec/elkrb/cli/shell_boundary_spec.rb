@@ -3,6 +3,11 @@
 require "spec_helper"
 require "support/cli_runner"
 require "json"
+require "tmpdir"
+require "fileutils"
+require "elkrb/format_sniffer"
+require "elkrb/graphviz_wrapper"
+require "elkrb/commands/batch_command"
 require "yaml"
 require "tmpdir"
 require "fileutils"
@@ -173,5 +178,60 @@ RSpec.describe "elkrb CLI shell boundary" do
         end
       end
     end
+  end
+end
+
+RSpec.describe "failures that must not look like successes" do
+  let(:input_dir) { Dir.mktmpdir }
+  let(:output_dir) { Dir.mktmpdir }
+
+  before do
+    File.write(File.join(input_dir, "g.json"),
+               '{"id":"r","children":[{"id":"a","width":10,"height":10}]}')
+  end
+
+  after do
+    FileUtils.remove_entry(input_dir)
+    FileUtils.remove_entry(output_dir)
+  end
+
+  context "when Graphviz cannot render" do
+    before do
+      allow_any_instance_of(Elkrb::GraphvizWrapper).to receive(:available?).and_return(false)
+    end
+
+    it "fails the batch instead of counting the file as processed" do
+      command = Elkrb::Commands::BatchCommand.new(input_dir, output_dir: output_dir, format: "svg")
+
+      expect { command.run }.to raise_error(Elkrb::Error, /failed/)
+    end
+
+    it "leaves no DOT text sitting under the requested image filename" do
+      command = Elkrb::Commands::BatchCommand.new(input_dir, output_dir: output_dir, format: "svg")
+
+      begin
+        command.run
+      rescue Elkrb::Error
+        nil
+      end
+
+      expect(Dir.children(output_dir)).to be_empty
+    end
+  end
+end
+
+RSpec.describe "malformed collection shapes" do
+  it "reports a normalized parse error rather than leaking NoMethodError" do
+    expect do
+      Elkrb::FormatSniffer.parse('{"id":"r","children":{"a":1}}', unparseable_message: "not a graph")
+    end.to raise_error(ArgumentError, "not a graph")
+  end
+
+  it "still accepts a properly shaped children list" do
+    graph = Elkrb::FormatSniffer.parse(
+      '{"id":"r","children":[{"id":"a","width":10,"height":10}]}', unparseable_message: "not a graph"
+    )
+
+    expect(graph.children).to be_an(Array)
   end
 end

@@ -59,8 +59,20 @@ module Elkrb
       # calling #id on the Array would blow up.
       def real_graph(result)
         return nil unless result.is_a?(Elkrb::Graph::Graph)
+        return nil if malformed_model?(result)
 
         result unless hollow_model?(result)
+      end
+
+      # Given a mapping where a sequence belongs (`"children": {"a": 1}`),
+      # lutaml-model coerces it into ONE nil-filled model, so `children` comes
+      # back as a single empty Node instead of a list. That is a malformed
+      # document, not a graph: hand it back and every downstream reader breaks
+      # on it. Fall through to the normalized parse error instead.
+      def malformed_model?(graph)
+        [graph.children, graph.edges].any? do |value|
+          !value.nil? && !value.is_a?(::Array)
+        end
       end
 
       # Mirrors the field list in Graph's json and yaml mapping blocks: when

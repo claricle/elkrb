@@ -160,7 +160,9 @@ module Elkrb
           unless graphviz.available?
             warn "⚠ Graphviz not found. Cannot render to #{format}."
             warn "  Install Graphviz or export to DOT format instead."
-            return
+            discard_unrendered(dot_file, output_file)
+            raise Elkrb::GraphvizWrapper::GraphvizNotFoundError,
+                  "Graphviz not found; cannot render #{format}"
           end
 
           graphviz.render(dot_file, output_file, format, engine: "dot", dpi: 96)
@@ -169,7 +171,17 @@ module Elkrb
           File.delete(dot_file) if dot_file != output_file && File.exist?(dot_file)
         rescue Elkrb::GraphvizWrapper::GraphvizNotFoundError => e
           warn "⚠ #{e.message}"
+          discard_unrendered(dot_file, output_file)
+          raise
         end
+      end
+
+      # The DOT text was already written under the requested image filename.
+      # Leaving it there hands the caller a .svg that is not an SVG, so take
+      # it away rather than let a failed render look like a rendered file.
+      def discard_unrendered(dot_file, output_file)
+        File.delete(dot_file) if dot_file != output_file && File.exist?(dot_file)
+        File.delete(output_file) if File.exist?(output_file)
       end
 
       def preview(file)
