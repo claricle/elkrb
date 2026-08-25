@@ -2,10 +2,18 @@
 
 require "bundler/gem_tasks"
 require "rspec/core/rake_task"
+require "rubocop/rake_task"
 
 RSpec::Core::RakeTask.new(:spec)
+RuboCop::RakeTask.new do |task|
+  # A worktree checked out under a parent directory that itself has a
+  # .rubocop.yml (e.g. a git worktree nested under this repo's own clone)
+  # would otherwise inherit that parent's AllCops:Exclude and its own
+  # inherit_from chain. This flag keeps every checkout self-contained.
+  task.options = ["--ignore-parent-exclusion"]
+end
 
-task default: :spec
+task default: %i[spec rubocop]
 
 namespace :benchmark do
   desc "Generate test graphs for benchmarking"
