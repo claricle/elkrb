@@ -20,11 +20,20 @@ RSpec.describe Elkrb do
   end
 
   describe ".known_layout_options" do
-    it "returns option metadata whose algorithm values list is populated" do
+    it "returns option metadata rendered from the registry, keyed by canonical id" do
       result = described_class.known_layout_options
 
-      expect(result["algorithm"][:values]).to include("layered", "force")
-      expect(result["elk.direction"][:values]).to eq(%w[UP DOWN LEFT RIGHT])
+      expect(result["elk.algorithm"][:values]).to include("layered", "force")
+      expect(result["elk.direction"][:values]).to include("RIGHT")
+      expect(result["elk.spacing.nodeNode"][:type]).to eq(:float)
+      expect(result["elk.padding"][:parser]).to eq("Elkrb::Options::ElkPadding")
+      expect(result["elk.hierarchyHandling"][:note]).to eq("cross-level edges are routed; no cross-level layering")
+    end
+
+    it "is the same table LayoutEngine renders, which no longer returns the empty stub" do
+      expect(Elkrb::Layout::LayoutEngine.known_layout_options)
+        .to eq(described_class.known_layout_options)
+      expect(Elkrb::Layout::LayoutEngine.known_layout_options).not_to be_empty
     end
   end
 end
