@@ -31,4 +31,10 @@ jobs:
       # invariant specs) -- they are NOT pending and DO fail on a real
       # regression, which is what makes this job worth running. Re-add
       # spec/cross_validation once S0b merges and it has specs of its own.
+      #
+      # Node-free on purpose, so `rake golden:check` (which regenerates
+      # against a real elkjs) stays local. The half of that guard needing
+      # no Node runs here: spec/support's "the committed golden fixture
+      # set" fails if an input arrives without its expected file, its
+      # MANIFEST.json entry, or its golden_spec example.
       - run: bundle exec rspec spec/elkrb/golden_spec.rb spec/support
