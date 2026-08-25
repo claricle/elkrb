@@ -88,8 +88,12 @@ RSpec.describe GoldenComparator do
   end
 
   it "does not compare port labels when :ports is selected without :labels" do
+    # The port carries x/y because exact tier requires a real position on
+    # both sides for anything below the root; the label's own x is what
+    # this example is about.
     expected = { "id" => "root", "children" => [
-      { "id" => "n1", "ports" => [{ "id" => "p1", "labels" => [{ "id" => "l1", "x" => 0.0 }] }] },
+      { "id" => "n1", "ports" => [{ "id" => "p1", "x" => 0.0, "y" => 0.0,
+                                    "labels" => [{ "id" => "l1", "x" => 0.0 }] }] },
     ] }
     actual = Marshal.load(Marshal.dump(expected))
     actual["children"][0]["ports"][0]["labels"][0]["x"] = 5.0
@@ -363,5 +367,116 @@ RSpec.describe "every committed golden's perturbed copy is caught" do
 
   def numeric_or_zero(hash, key)
     (hash[key] || 0.0).to_f
+  end
+end
+
+RSpec.describe GoldenComparator, "rejecting a corrupted actual result" do
+  # Every example here takes a REAL committed golden, corrupts the copy
+  # standing in for elkrb's output in one specific way, and asserts the
+  # comparator now reports it. Each corruption is one the comparator used
+  # to accept.
+
+  it "rejects a section shape naming a node that is not the edge's endpoint (structural tier)" do
+    # force_tri is a case elkjs leaves with NO incomingShape/outgoingShape,
+    # so there is nothing on the golden side to compare against. The `a ->
+    # b` edge below claims both its ends belong to unrelated node `c` and
+    # routes to c's border, which used to satisfy every structural check.
+    expected = golden_expected("force_tri")
+    corrupted = Marshal.load(Marshal.dump(expected))
+    edge = corrupted["edges"].find { |e| e["sources"] == ["a"] && e["targets"] == ["b"] }
+    c = corrupted["children"].find { |n| n["id"] == "c" }
+    edge["sections"].first["incomingShape"] = "c"
+    edge["sections"].last["outgoingShape"] = "c"
+    edge["sections"].first["startPoint"] = { "x" => c["x"], "y" => c["y"] }
+    edge["sections"].last["endPoint"] = { "x" => c["x"], "y" => c["y"] }
+
+    diffs = described_class.diff_structural(expected, corrupted)
+    expect(diffs.join).to include("is not an endpoint of this edge")
+  end
+
+  it "rejects the same rerouted shape at exact tier" do
+    expected = golden_expected("force_tri")
+    corrupted = Marshal.load(Marshal.dump(expected))
+    edge = corrupted["edges"].find { |e| e["sources"] == ["a"] && e["targets"] == ["b"] }
+    edge["sections"].first["incomingShape"] = "c"
+
+    diffs = described_class.diff_exact(expected, corrupted, %i[nodes sections labels ports graph])
+    expect(diffs.join).to include("is not an endpoint of this edge")
+  end
+
+  it "accepts a section shape that names the edge's own endpoint" do
+    expected = golden_expected("force_tri")
+    annotated = Marshal.load(Marshal.dump(expected))
+    edge = annotated["edges"].find { |e| e["sources"] == ["a"] && e["targets"] == ["b"] }
+    edge["sections"].first["incomingShape"] = "a"
+    edge["sections"].last["outgoingShape"] = "b"
+
+    expect(described_class.diff_exact(expected, annotated, %i[nodes sections labels ports graph])).to be_empty
+  end
+
+  it "rejects a label that lost its coordinates entirely (exact tier)" do
+    # labeled_node's label really does sit at (0,0) in the golden, so
+    # coercing a missing coordinate to 0.0 made deleting it a no-op.
+    expected = golden_expected("labeled_node")
+    corrupted = Marshal.load(Marshal.dump(expected))
+    label = corrupted["children"].find { |n| n["id"] == "a" }["labels"].first
+    label.delete("x")
+    label.delete("y")
+
+    diffs = described_class.diff_exact(expected, corrupted, %i[nodes sections labels ports graph])
+    expect(diffs.join).to include("actual is missing or not numeric")
+  end
+
+  # Synthetic rather than a committed golden: elkjs pads every case, so
+  # no golden node actually sits at x=0 today. A node that DOES belong at
+  # the origin is where the old coercion hid an unplaced node completely,
+  # and a later slice adding an unpadded case would have hit it.
+  it "rejects a node that has no position where the golden puts it at the origin" do
+    expected = { "id" => "root", "children" => [{ "id" => "n1", "x" => 0.0, "y" => 0.0 }] }
+    corrupted = { "id" => "root", "children" => [{ "id" => "n1" }] }
+
+    diffs = described_class.diff_exact(expected, corrupted, %i[nodes])
+    expect(diffs.join).to include("actual is missing or not numeric")
+  end
+
+  it "still treats a missing width as zero, the elkjs quirk the rule exists for" do
+    expected = { "id" => "root", "children" => [{ "id" => "n1", "x" => 0.0, "y" => 0.0, "width" => 0, "height" => 0 }] }
+    actual = { "id" => "root", "children" => [{ "id" => "n1", "x" => 0.0, "y" => 0.0 }] }
+
+    expect(described_class.diff_exact(expected, actual, %i[nodes])).to be_empty
+  end
+end
+
+RSpec.describe "the committed golden fixture set" do
+  # `rake golden:check` catches drift between the inputs and what elkjs
+  # produces for them, but it needs Node and a network install, which
+  # golden.yml deliberately does not have. This is the half of that guard
+  # that needs neither: adding an input without regenerating its expected
+  # file, without updating MANIFEST.json, or without adding a golden_spec
+  # example used to leave the suite green.
+  golden_dir = GoldenHelper::DEFAULT_DIR
+  inputs = Dir[File.join(golden_dir, "inputs", "*.json")].map { |f| File.basename(f, ".json") }.sort
+
+  it "has at least the 30 cases the harness was built for" do
+    expect(inputs.size).to be >= 30
+  end
+
+  it "has an expected file for every input, and no orphan expected file" do
+    expected = Dir[File.join(golden_dir, "expected", "*.json")].map { |f| File.basename(f, ".json") }.sort
+
+    expect(expected).to eq(inputs)
+  end
+
+  it "lists exactly those cases in MANIFEST.json" do
+    manifest = JSON.parse(File.read(File.join(golden_dir, "MANIFEST.json")))
+
+    expect(manifest.fetch("cases").sort).to eq(inputs)
+  end
+
+  it "has a golden_spec.rb example for every case" do
+    source = File.read(File.expand_path("../elkrb/golden_spec.rb", __dir__))
+    covered = source.scan(/match_elkjs_golden\("([^"]+)"/).flatten.sort
+
+    expect(covered).to eq(inputs)
   end
 end

@@ -29,10 +29,15 @@ RSpec::Matchers.define :preserve_ids_and_endpoints do |input_hash|
   # own `children` deserialized to `nil` (e.g. the `no_children_key`
   # corpus shape) — `Node#all_nodes` guards this correctly one level down
   # (`return nodes unless @children`), the bug is specific to `Graph`'s
-  # own implementation. `(actual_owner.children || [])` below is nil-safe
+  # own implementation. The `|| []` on both collections below is nil-safe
   # at every level regardless.
   define_method(:check_level) do |input_level, actual_owner|
-    actual_children_by_id = (actual_owner.children || []).to_h { |n| [n.id, n] }
+    actual_children = actual_owner.children || []
+    actual_edges = actual_owner.edges || []
+    @violations.concat(duplicate_id_violations(actual_children, "node", actual_owner.id))
+    @violations.concat(duplicate_id_violations(actual_edges, "edge", actual_owner.id))
+
+    actual_children_by_id = actual_children.to_h { |n| [n.id, n] }
     (input_level["children"] || []).each do |input_child|
       actual_child = actual_children_by_id[input_child["id"]]
       unless actual_child
@@ -42,7 +47,7 @@ RSpec::Matchers.define :preserve_ids_and_endpoints do |input_hash|
       check_level(input_child, actual_child)
     end
 
-    actual_edges_by_id = (actual_owner.edges || []).to_h { |e| [e.id, e] }
+    actual_edges_by_id = actual_edges.to_h { |e| [e.id, e] }
     (input_level["edges"] || []).each do |input_edge|
       actual_edge = actual_edges_by_id[input_edge["id"]]
       unless actual_edge
@@ -55,6 +60,20 @@ RSpec::Matchers.define :preserve_ids_and_endpoints do |input_hash|
                         "#{input_edge['sources']}->#{input_edge['targets']} to " \
                         "#{actual_edge.sources}->#{actual_edge.targets}"
       end
+    end
+  end
+
+  # `to_h` on an id-keyed collection keeps only the LAST entry for a
+  # repeated id, so a result that duplicated a node or an edge passed as
+  # long as its final copy still matched the input — a graph with two `a`
+  # nodes and two `e1` edges was indistinguishable from a correct one.
+  # Reported before either collection is indexed. The owner's id goes in
+  # the message because ids are unique only within a level
+  # (`NodeIndex.build`'s contract), so "duplicate a" alone would not say
+  # which level it happened at.
+  define_method(:duplicate_id_violations) do |items, kind, owner_id|
+    items.map(&:id).tally.select { |_, count| count > 1 }.map do |id, count|
+      "#{owner_id}: #{count} #{kind}s with id #{id.inspect}"
     end
   end
 end

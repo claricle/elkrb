@@ -63,15 +63,45 @@ module GoldenComparator
           "(NaN/Infinity), cannot compare: #{e.message}"
   end
 
-  # Deep-compares two elkjs-shaped Hashes by id, numeric tolerance 1e-6,
-  # a missing numeric field on either side reads as 0.0 (elkjs writes
-  # width:0, elkrb may omit it). Returns an Array of JSON-pointer-style
-  # diff strings, first 10 kept by the caller.
+  # Deep-compares two elkjs-shaped Hashes by id, numeric tolerance 1e-6.
+  # Returns an Array of JSON-pointer-style diff strings, first 10 kept by
+  # the caller.
+  #
+  # "Missing reads as 0.0" applies to SIZE only. That rule exists for one
+  # real quirk — elkjs writes `width: 0` where elkrb omits the key — and
+  # applying it to a POSITION as well made "never placed" compare equal to
+  # "placed at the origin": deleting the (0,0) from `labeled_node`'s label
+  # left the exact-tier diff empty. Positions go through `strict_numeric`
+  # instead, which demands a finite Numeric on both sides — the same
+  # helper structural tier already uses for the same reason.
+  #
+  # RECT_FIELDS survives for ONE caller: the root graph's own geometry.
+  # elkrb never assigns the root a position (confirmed — a real result's
+  # root carries width/height and no x/y at all), so the root is the one
+  # place a missing position is a convention rather than a bug.
   RECT_FIELDS = %w[x y width height].freeze
-  POINT_FIELDS = %w[x y].freeze
+  POSITION_FIELDS = %w[x y].freeze
+  SIZE_FIELDS = %w[width height].freeze
 
   def numeric_or_zero(hash, key)
     (hash[key] || 0.0).to_f
+  end
+
+  # Exact-tier geometry for anything that is not the root: strict x/y,
+  # lenient width/height.
+  def diff_exact_geometry(expected, actual, path)
+    diff_exact_position(expected, actual, path) +
+      diff_own_numeric(expected, actual, path, SIZE_FIELDS)
+  end
+
+  def diff_exact_position(expected, actual, path)
+    POSITION_FIELDS.flat_map do |key|
+      e, e_error = strict_numeric(expected, key, path, "expected")
+      a, a_error = strict_numeric(actual, key, path, "actual")
+      next [e_error, a_error].compact if e_error || a_error
+
+      (e - a).abs > 1e-6 ? ["#{path}/#{key}: expected #{e}, got #{a}"] : []
+    end
   end
 
   # NaN never equals anything under IEEE 754 comparison — `(NaN - 5).abs >
@@ -181,7 +211,7 @@ module GoldenComparator
 
   def diff_children_tree(expected, actual, fields, path)
     diff_by_id(expected["children"], actual["children"], "#{path}/children") do |e_node, a_node, node_path|
-      diffs = fields.include?(:nodes) ? diff_own_numeric(e_node, a_node, node_path, RECT_FIELDS) : []
+      diffs = fields.include?(:nodes) ? diff_exact_geometry(e_node, a_node, node_path) : []
       diffs.concat(diff_owner_fields(e_node, a_node, fields, node_path))
       diffs.concat(diff_children_tree(e_node, a_node, fields, node_path))
       diffs
@@ -190,7 +220,7 @@ module GoldenComparator
 
   def diff_labels(expected_owner, actual_owner, path)
     diff_by_id(expected_owner["labels"], actual_owner["labels"], "#{path}/labels") do |e, a, label_path|
-      diff_own_numeric(e, a, label_path, RECT_FIELDS)
+      diff_exact_geometry(e, a, label_path)
     end
   end
 
@@ -204,7 +234,7 @@ module GoldenComparator
       diffs = fields.include?(:labels) ? diff_labels(e, a, port_path) : []
       next diffs unless fields.include?(:ports)
 
-      diffs.concat(diff_own_numeric(e, a, port_path, RECT_FIELDS))
+      diffs.concat(diff_exact_geometry(e, a, port_path))
       e_side, a_side = e["side"] || "UNDEFINED", a["side"] || "UNDEFINED"
       diffs << "#{port_path}/side: expected #{e_side}, got #{a_side}" if e_side != a_side
       diffs << "#{port_path}/index: expected #{e['index']}, got #{a['index']}" if e["index"] != a["index"]
@@ -223,6 +253,19 @@ module GoldenComparator
     end
   end
 
+  SHAPE_KEYS = %w[incomingShape outgoingShape].freeze
+
+  # sources+targets as one set, not sources-for-incoming and
+  # targets-for-outgoing: ELK reverses a section's own shapes for cycle
+  # breaking without touching the edge's sources/targets, and side-by-side
+  # matching would read that legitimate output as a rewiring. Every
+  # committed golden that emits a shape names exactly its own
+  # sources[0]/targets[0] (checked across all 30), so the union is the
+  # loosest rule that still rejects an unrelated node.
+  def edge_endpoint_ids(edge)
+    Array(edge["sources"]) + Array(edge["targets"])
+  end
+
   # Which nodes/ports an edge connects -- the coarse sources/targets
   # array, and, where elkjs annotates it, each section's own
   # incomingShape/outgoingShape -- is one structural fact, checked
@@ -230,11 +273,20 @@ module GoldenComparator
   # diverge on it. This used to live only in the structural path
   # (`check_level_sections`): exact tier is supposed to be the STRICTER
   # of the two, so a rewired edge silently passing `diff_exact` while
-  # structural caught it had that backwards. `incomingShape`/
-  # `outgoingShape` are only set by layered and its relatives (confirmed
-  # empirically -- force/stress/random/radial goldens carry neither on
-  # any section), so a section with no EXPECTED value for one is skipped
-  # rather than compared.
+  # structural caught it had that backwards.
+  #
+  # `incomingShape`/`outgoingShape` are only set by layered and its
+  # relatives (confirmed empirically -- force/stress/random/radial
+  # goldens carry neither on any section). A section the golden leaves
+  # unannotated is therefore compared against the edge's own endpoints
+  # rather than skipped, and that is not belt-and-braces:
+  # `check_level_sections` uses the ACTUAL section's own shape as the
+  # rectangle its point must clip to, so an unchecked value is both
+  # accepted AND believed. On a case where elkjs writes no shape at all
+  # (force_tri), an `a -> b` edge could name unrelated node `c` on both
+  # ends, route to c's border, and produce no differences at either tier.
+  # A shape naming something that is not one of this edge's own endpoints
+  # is a bug regardless of what the golden says.
   def diff_edge_endpoints(expected_edge, actual_edge, path)
     diffs = []
     if expected_edge["sources"] != actual_edge["sources"] || expected_edge["targets"] != actual_edge["targets"]
@@ -245,15 +297,20 @@ module GoldenComparator
 
     expected_sections = expected_edge["sections"] || []
     actual_sections = actual_edge["sections"] || []
-    expected_sections.each_with_index do |e_sec, i|
-      a_sec = actual_sections[i]
-      next unless a_sec
+    endpoint_ids = edge_endpoint_ids(actual_edge)
 
-      %w[incomingShape outgoingShape].each do |shape_key|
-        next unless e_sec[shape_key]
-        next if e_sec[shape_key] == a_sec[shape_key]
+    actual_sections.each_with_index do |a_sec, i|
+      e_sec = expected_sections[i]
+      SHAPE_KEYS.each do |shape_key|
+        actual_shape = a_sec[shape_key]
+        expected_shape = e_sec && e_sec[shape_key]
+        sec_path = "#{path}/sections[#{i}]/#{shape_key}"
 
-        diffs << "#{path}/sections[#{i}]/#{shape_key}: expected #{e_sec[shape_key].inspect}, got #{a_sec[shape_key].inspect}"
+        if actual_shape && !endpoint_ids.include?(actual_shape)
+          diffs << "#{sec_path}: #{actual_shape.inspect} is not an endpoint of this edge (#{endpoint_ids.inspect})"
+        elsif expected_shape && expected_shape != actual_shape
+          diffs << "#{sec_path}: expected #{expected_shape.inspect}, got #{actual_shape.inspect}"
+        end
       end
     end
     diffs
@@ -299,7 +356,7 @@ module GoldenComparator
   def diff_point(expected_point, actual_point, path)
     return ["#{path}: missing"] unless expected_point && actual_point
 
-    diff_own_numeric(expected_point, actual_point, path, POINT_FIELDS)
+    diff_exact_position(expected_point, actual_point, path)
   end
 
   # Structural tier: graph size within 1px, every matched node's OWN
@@ -366,11 +423,13 @@ module GoldenComparator
   POSITION_TOLERANCE_FRACTION = 0.15
 
   # Unlike `numeric_or_zero` ("missing reads as 0.0" — real for elkjs's
-  # own width:0 quirk, checked by `diff_own_numeric` on exact-tier
-  # fields), a node missing its OWN position/size entirely here is
-  # exactly the class of bug this check exists to catch: elkrb emitting
-  # no geometry at all. Coercing that to 0.0 would let such a node
-  # compare equal to a golden node that legitimately sits at the origin.
+  # own width:0 quirk, and now confined to size fields), a node missing
+  # its OWN position/size entirely is exactly the class of bug this
+  # check exists to catch: elkrb emitting no geometry at all. Coercing
+  # that to 0.0 would let such a node compare equal to a golden node
+  # that legitimately sits at the origin. Used by both tiers —
+  # structural's dimension/position checks below, and exact tier's
+  # `diff_exact_position`.
   # Returns [value, error] — value is nil whenever error is present, so a
   # caller can short-circuit on the error instead of computing with nil.
   def strict_numeric(hash, key, path, side)
@@ -502,7 +561,12 @@ module GoldenComparator
       # resolve to a real rectangle before applying the geometry check,
       # so a genuinely dangling reference (an id naming no real node/
       # port) is reported on its own rather than silently forgiven by a
-      # valid candidate elsewhere in the list.
+      # valid candidate elsewhere in the list. Taking the ACTUAL section's
+      # own shape as the reference is only safe because
+      # `diff_edge_endpoints` above has already rejected a shape naming
+      # anything other than this edge's own endpoints — otherwise the
+      # point would be measured against whatever rectangle elkrb chose to
+      # name, which is no check at all.
       start_ids = first_section["incomingShape"] ? [first_section["incomingShape"]] : endpoint_candidates(actual_edge)
       end_ids = last_section["outgoingShape"] ? [last_section["outgoingShape"]] : endpoint_candidates(actual_edge)
 
