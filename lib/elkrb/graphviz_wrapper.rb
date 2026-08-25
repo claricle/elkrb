@@ -67,7 +67,12 @@ module Elkrb
     end
 
     def path_dot_candidates
-      ENV.fetch("PATH", "").split(File::PATH_SEPARATOR).map { |dir| File.join(dir, "dot") }
+      # An empty PATH component means the working directory, and #split would
+      # otherwise turn it into "/dot". The shell would find dot there; we must
+      # too, or #available? disagrees with the command that actually runs.
+      ENV.fetch("PATH", "").split(File::PATH_SEPARATOR, -1).map do |dir|
+        File.join(dir.empty? ? "." : dir, "dot")
+      end
     end
 
     def valid_executable?(path)

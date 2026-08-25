@@ -169,6 +169,12 @@ module Elkrb
         Elkrb::Graph::Graph.from_json(content)
       when ".yml", ".yaml"
         Elkrb::Graph::Graph.from_yaml(content)
+      when ".elkt"
+        require_relative "format_sniffer"
+        Elkrb::FormatSniffer.parse_elkt(
+          content,
+          unparseable_message: "Unable to parse ELKT input file."
+        )
       else
         require_relative "format_sniffer"
         Elkrb::FormatSniffer.parse(

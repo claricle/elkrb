@@ -28,6 +28,19 @@ module Elkrb
         sniff(text) || parse_elkt_or_fail(text, unparseable_message)
       end
 
+      # For a file whose extension already names the format there is nothing to
+      # sniff, so the hollow-content guard does not apply: an empty ELKT
+      # document is a valid empty graph, which the parser, layout and the ELKT
+      # serializer all round-trip.
+      #
+      # @param content [String] raw file content
+      # @param unparseable_message [String] message for the ArgumentError
+      # @return [Hash] the parsed ELKT graph
+      # @raise [ArgumentError] when the ELKT parser itself fails
+      def parse_elkt(content, unparseable_message:)
+        parse_elkt!(content.delete_prefix(BYTE_ORDER_MARK), unparseable_message)
+      end
+
       private
 
       # A JSON document can only open with `{` or `[`, so anything else goes

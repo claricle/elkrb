@@ -235,3 +235,39 @@ RSpec.describe "malformed collection shapes" do
     expect(graph.children).to be_an(Array)
   end
 end
+
+RSpec.describe "a file whose extension already names the format" do
+  include CliRunner
+
+  it "accepts an empty ELKT graph, which the parser and serializer both round-trip" do
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "empty.elkt")
+      File.write(path, "")
+
+      stdout, _stderr, status = run_elkrb("layout", path)
+
+      expect(status.exitstatus).to eq(0)
+      expect(stdout).to include('"id"')
+    end
+  end
+end
+
+RSpec.describe "Graphviz lookup along PATH" do
+  it "reads an empty PATH component as the working directory, like the shell does" do
+    Dir.mktmpdir do |dir|
+      dot = File.join(dir, "dot")
+      File.write(dot, "#!/bin/sh\nexit 0\n")
+      File.chmod(0o755, dot)
+
+      Dir.chdir(dir) do
+        # A bare separator: one empty component, meaning "here".
+        allow(ENV).to receive(:fetch).and_call_original
+        allow(ENV).to receive(:fetch).with("PATH", "").and_return(File::PATH_SEPARATOR)
+        allow(ENV).to receive(:[]).and_call_original
+        allow(ENV).to receive(:[]).with("ELKRB_DOT").and_return(nil)
+
+        expect(Elkrb::GraphvizWrapper.new).to be_available
+      end
+    end
+  end
+end
