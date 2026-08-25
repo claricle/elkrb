@@ -33,8 +33,7 @@ module Elkrb
         raise ArgumentError, "File not found: #{file}" unless File.exist?(file)
 
         require_relative "../format_sniffer"
-        graph = Elkrb::FormatSniffer.read(File.read(file), File.extname(file).downcase,
-                                          unparseable_message: "Unable to parse input file")
+        graph = Elkrb::FormatSniffer.read(File.read(file), File.extname(file).downcase)
 
         return graph if graph.is_a?(Hash)
 

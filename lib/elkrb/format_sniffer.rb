@@ -37,7 +37,7 @@ module Elkrb
       # @param unparseable_message [String] message for the ArgumentError
       # @return [Hash] the parsed ELKT graph
       # @raise [ArgumentError] when the ELKT parser itself fails
-      DEFAULT_UNPARSEABLE = "Unable to parse input file. Supported formats: JSON, YAML, ELKT"
+      UNPARSEABLE = "Unable to parse input file. Supported formats: JSON, YAML, ELKT"
 
       # The single entry point every command reads input through. Extension
       # dispatch plus shape validation lived in four places and drifted apart;
@@ -47,24 +47,28 @@ module Elkrb
       # @param extension [String] the file's downcased extension
       # @return [Elkrb::Graph::Graph, Hash] the parsed graph
       # @raise [ArgumentError] for unsupported or unparseable input
-      def read(content, extension, unparseable_message: DEFAULT_UNPARSEABLE)
+      def read(content, extension)
         require_relative "graph/graph"
 
         case extension
         when ".json"
           validate_model!(Elkrb::Graph::Graph.from_json(content),
-                          unparseable_message: unparseable_message)
+                          unparseable_message: UNPARSEABLE)
         when ".yml", ".yaml"
           validate_model!(Elkrb::Graph::Graph.from_yaml(content),
-                          unparseable_message: unparseable_message)
+                          unparseable_message: UNPARSEABLE)
         when ".elkt"
-          parse_elkt(content, unparseable_message: unparseable_message)
+          parse_elkt(content, unparseable_message: UNPARSEABLE)
         when ".dot", ".gv"
           raise ArgumentError, "DOT format input not yet supported. Use JSON, YAML, or ELKT."
         else
-          parse(content, unparseable_message: unparseable_message)
+          parse(content, unparseable_message: UNPARSEABLE)
         end
       end
+
+
+
+      private
 
       # A file whose extension names the format skips sniffing, so it also
       # skips the malformed-shape check the sniffer applies. Both paths need
@@ -87,8 +91,6 @@ module Elkrb
 
         graph
       end
-
-      private
 
       # A JSON document can only open with `{` or `[`, so anything else goes
       # straight to YAML. Flow-style YAML opens with `{` too, though, so a
