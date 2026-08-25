@@ -7,11 +7,11 @@ RSpec.describe Elkrb::Layout::Algorithms::Stress do
     it "resolves port-id edge endpoints to their owning node's row/column" do
       node_a = Elkrb::Graph::Node.new(
         id: "a", width: 10, height: 10,
-        ports: [Elkrb::Graph::Port.new(id: "a_out")],
+        ports: [Elkrb::Graph::Port.new(id: "a_out")]
       )
       node_b = Elkrb::Graph::Node.new(
         id: "b", width: 10, height: 10,
-        ports: [Elkrb::Graph::Port.new(id: "b_in")],
+        ports: [Elkrb::Graph::Port.new(id: "b_in")]
       )
       node_c = Elkrb::Graph::Node.new(id: "c", width: 10, height: 10)
       graph = Elkrb::Graph::Graph.new(children: [node_a, node_b, node_c])

@@ -25,7 +25,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Force do
       )
 
       described_class.new(
-        "iterations" => 1, "repulsion" => 0.0, "temperature" => 1000.0
+        "iterations" => 1, "repulsion" => 0.0, "temperature" => 1000.0,
       ).layout(graph)
 
       a = graph.children.find { |n| n.id == "a" }
@@ -39,11 +39,11 @@ RSpec.describe Elkrb::Layout::Algorithms::Force do
     it "resolves port-id edge endpoints to their owning node's force slot" do
       node_a = Elkrb::Graph::Node.new(
         id: "a", x: 0.0, y: 0.0, width: 10, height: 10,
-        ports: [Elkrb::Graph::Port.new(id: "a_out")],
+        ports: [Elkrb::Graph::Port.new(id: "a_out")]
       )
       node_b = Elkrb::Graph::Node.new(
         id: "b", x: 100.0, y: 0.0, width: 10, height: 10,
-        ports: [Elkrb::Graph::Port.new(id: "b_in")],
+        ports: [Elkrb::Graph::Port.new(id: "b_in")]
       )
       graph = Elkrb::Graph::Graph.new(children: [node_a, node_b])
       graph.edges = [

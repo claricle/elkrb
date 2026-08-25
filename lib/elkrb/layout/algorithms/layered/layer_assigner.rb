@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "set"
-
 module Elkrb
   module Layout
     module Algorithms
@@ -126,7 +124,9 @@ module Elkrb
           # is memoized (SystemStackError, confirmed by direct
           # reproduction).
           def first_other_source(edge, node)
-            @index.endpoint_owners(edge.sources).find { |source| source != node }
+            @index.endpoint_owners(edge.sources).find do |source|
+              source != node
+            end
           end
         end
       end

@@ -42,10 +42,10 @@ module Elkrb
       }.freeze
       private_constant :LEGACY_KWARG_ELK_KEYS
 
-      def initialize(hash = {}, **kw)
+      def initialize(hash = {}, **kwargs)
         super()
-        (hash || {}).each { |k, v| self[k] = v }
-        kw.each { |k, v| assign_kwarg(k, v) }
+        (hash || {}).each { |key, value| self[key] = value }
+        kwargs.each { |key, value| assign_kwarg(key, value) }
       end
 
       def [](key)
@@ -113,7 +113,7 @@ module Elkrb
       # rather than going through #replace, which would take its default from
       # the plain Hash #to_h hands back and drop ours.
       def transform_keys!(*args, &block)
-        return enum_for(:transform_keys!) if args.empty? && block.nil?
+        return enum_for(:transform_keys!, *args) if args.empty? && block.nil?
 
         refill(to_h.transform_keys(*args, &block).to_a)
         self
@@ -163,8 +163,8 @@ module Elkrb
         # ::Hash.[] builds through allocation, not #[]=, so it would seed the
         # map with un-normalized keys. Build the plain Hash its own way, then
         # let #initialize put every pair through #[]=.
-        def [](*args)
-          new(::Hash[*args])
+        def [](*)
+          new(::Hash[*])
         end
 
         def wrap(value)

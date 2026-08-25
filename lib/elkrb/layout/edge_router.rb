@@ -34,9 +34,13 @@ module Elkrb
         private
 
         def owner_of_port(id)
-          @nodes.each_value.find do |node|
-            node.respond_to?(:ports) && node.ports&.any? { |port| port.id == id }
-          end
+          @nodes.each_value.find { |node| owns_port?(node, id) }
+        end
+
+        def owns_port?(node, id)
+          return false unless node.respond_to?(:ports)
+
+          node.ports&.any? { |port| port.id == id } || false
         end
       end
       private_constant :HashNodeMap

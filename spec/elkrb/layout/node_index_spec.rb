@@ -120,7 +120,7 @@ RSpec.describe Elkrb::Layout::NodeIndex do
         children: [
           Elkrb::Graph::Node.new(
             id: "a", width: 10, height: 10,
-            ports: [Elkrb::Graph::Port.new],
+            ports: [Elkrb::Graph::Port.new]
           ),
         ],
       )
@@ -293,7 +293,8 @@ RSpec.describe "EdgeRouter node_map contract" do
     a = Elkrb::Graph::Node.new(id: "a", x: 0, y: 0, width: 10, height: 10)
     b = Elkrb::Graph::Node.new(id: "b", x: 50, y: 50, width: 10, height: 10)
     edge = Elkrb::Graph::Edge.new(id: "e", sources: ["a"], targets: ["b"])
-    [Elkrb::Graph::Graph.new(id: "r", children: [a, b], edges: [edge]), edge, { "a" => a, "b" => b }]
+    [Elkrb::Graph::Graph.new(id: "r", children: [a, b], edges: [edge]), edge,
+     { "a" => a, "b" => b }]
   end
 
   it "routes a single edge given a plain Hash" do
@@ -351,7 +352,9 @@ RSpec.describe "cross-hierarchy edges owned by the graph" do
   end
 
   it "keeps a nested source in the layered topology by projecting it onto its ancestor" do
-    by_id = Elkrb.layout(graph, algorithm: "layered").children.to_h { |node| [node.id, node] }
+    by_id = Elkrb.layout(graph, algorithm: "layered").children.to_h do |node|
+      [node.id, node]
+    end
 
     expect(by_id["p2"].y).to be > by_id["p1"].y
   end

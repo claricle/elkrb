@@ -16,7 +16,8 @@ RSpec.describe Elkrb::Options::Registry do
     it "maps every alias back to the id that declared it" do
       described_class.all.each do |id, entry|
         Array(entry[:aliases]).each do |a|
-          expect(described_class.canonical(a)).to eq(id), "alias #{a} should resolve to #{id}"
+          expect(described_class.canonical(a)).to eq(id),
+                                                  "alias #{a} should resolve to #{id}"
         end
       end
     end
@@ -79,14 +80,16 @@ RSpec.describe Elkrb::Options::Registry do
     end
 
     it "parses an ELK padding string" do
-      padding = described_class.coerce("elk.padding", "[top=1,left=2,bottom=3,right=4]")
+      padding = described_class.coerce("elk.padding",
+                                       "[top=1,left=2,bottom=3,right=4]")
       expect(padding).to be_a(Elkrb::Options::ElkPadding)
       expect(padding.to_h).to eq(top: 1.0, left: 2.0, bottom: 3.0, right: 4.0)
     end
 
     it "fills missing padding hash keys with the registry default (12)" do
       padding = described_class.coerce("elk.padding", { top: 5 })
-      expect(padding.to_h).to eq(top: 5.0, left: 12.0, bottom: 12.0, right: 12.0)
+      expect(padding.to_h).to eq(top: 5.0, left: 12.0, bottom: 12.0,
+                                 right: 12.0)
     end
 
     it "treats a bare Numeric padding value as uniform on all sides" do
@@ -95,8 +98,14 @@ RSpec.describe Elkrb::Options::Registry do
     end
 
     it "raises ArgumentError for a padding value that is none of String/Hash/Numeric/ElkPadding" do
-      expect { described_class.coerce("elk.padding", nil) }.to raise_error(ArgumentError, /Invalid padding value/)
-      expect { described_class.coerce("elk.padding", [1, 2]) }.to raise_error(ArgumentError, /Invalid padding value/)
+      expect do
+        described_class.coerce("elk.padding",
+                               nil)
+      end.to raise_error(ArgumentError, /Invalid padding value/)
+      expect do
+        described_class.coerce("elk.padding",
+                               [1, 2])
+      end.to raise_error(ArgumentError, /Invalid padding value/)
     end
 
     it "parses a KVectorChain in ELK's own canonical format" do
@@ -195,7 +204,8 @@ RSpec.describe Elkrb::Options::Registry do
       ]
 
       accepted_ids.each do |id|
-        expect(described_class.status(id)).to eq(:accepted), "#{id} should be :accepted"
+        expect(described_class.status(id)).to eq(:accepted),
+                                              "#{id} should be :accepted"
       end
     end
 
@@ -213,13 +223,13 @@ RSpec.describe Elkrb::Options::Registry do
 
     it "pins the real ELK enum values for the three layered strategy rows (verified against elkjs's enum construction order)" do
       expect(described_class.all["elk.layered.considerModelOrder.strategy"][:values]).to eq(
-        %w[NONE NODES_AND_EDGES PREFER_EDGES PREFER_NODES]
+        %w[NONE NODES_AND_EDGES PREFER_EDGES PREFER_NODES],
       )
       expect(described_class.all["elk.layered.crossingMinimization.strategy"][:values]).to eq(
-        %w[LAYER_SWEEP MEDIAN_LAYER_SWEEP INTERACTIVE NONE]
+        %w[LAYER_SWEEP MEDIAN_LAYER_SWEEP INTERACTIVE NONE],
       )
       expect(described_class.all["elk.layered.nodePlacement.strategy"][:values]).to eq(
-        %w[SIMPLE INTERACTIVE LINEAR_SEGMENTS BRANDES_KOEPF NETWORK_SIMPLEX]
+        %w[SIMPLE INTERACTIVE LINEAR_SEGMENTS BRANDES_KOEPF NETWORK_SIMPLEX],
       )
     end
   end
@@ -237,26 +247,34 @@ RSpec.describe Elkrb::Options::Registry do
 
     it "excludes layered-only ids for box" do
       expect(described_class.for_algorithm("box")).not_to include(
-        "elk.layered.spacing.nodeNodeBetweenLayers"
+        "elk.layered.spacing.nodeNodeBetweenLayers",
       )
     end
 
     it "scopes aspectRatio to box/random and randomSeed to force/random, excluding stress" do
       expect(described_class.for_algorithm("box")).to include("elk.aspectRatio")
-      expect(described_class.for_algorithm("random")).to include("elk.aspectRatio", "elk.randomSeed")
+      expect(described_class.for_algorithm("random")).to include(
+        "elk.aspectRatio", "elk.randomSeed"
+      )
       expect(described_class.for_algorithm("force")).to include("elk.randomSeed")
-      expect(described_class.for_algorithm("stress")).not_to include("elk.aspectRatio", "elk.randomSeed")
+      expect(described_class.for_algorithm("stress")).not_to include(
+        "elk.aspectRatio", "elk.randomSeed"
+      )
     end
 
     it "excludes algorithms: :all ids when include_all is false" do
-      expect(described_class.for_algorithm("box", include_all: false)).not_to include("elk.padding")
-      expect(described_class.for_algorithm("box", include_all: false)).to include("elk.aspectRatio")
+      expect(described_class.for_algorithm("box",
+                                           include_all: false)).not_to include("elk.padding")
+      expect(described_class.for_algorithm("box",
+                                           include_all: false)).to include("elk.aspectRatio")
     end
   end
 
   describe ".render_known_options" do
     it "renders the documented shape and patches in the given algorithm values" do
-      rendered = described_class.render_known_options(algorithm_values: %w[layered force])
+      rendered = described_class.render_known_options(algorithm_values: %w[
+                                                        layered force
+                                                      ])
 
       expect(rendered["elk.algorithm"][:values]).to eq(%w[layered force])
       expect(rendered["elk.spacing.nodeNode"]).to eq(
@@ -270,5 +288,26 @@ RSpec.describe Elkrb::Options::Registry do
       )
       expect(rendered["elk.padding"][:parser]).to eq("Elkrb::Options::ElkPadding")
     end
+  end
+end
+
+RSpec.describe "boolean coercion keeps the value as the receiver" do
+  # An object that delegates == answers for itself. Comparing the other way
+  # round — `true == value`, which both Array#include? and any?(value) do —
+  # unwraps it and hands back a native boolean instead.
+  it "returns a delegating wrapper unchanged" do
+    require "delegate"
+    wrapped = SimpleDelegator.new(true)
+
+    expect(Elkrb::Options::Registry.coerce("elk.radial.centerOnRoot", wrapped))
+      .to be(wrapped)
+  end
+
+  it "still coerces the ordinary shapes" do
+    coerced = %w[true TRUE false yes].map do |value|
+      Elkrb::Options::Registry.coerce("elk.radial.centerOnRoot", value)
+    end
+
+    expect(coerced).to eq([true, true, false, false])
   end
 end

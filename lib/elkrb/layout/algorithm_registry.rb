@@ -62,9 +62,10 @@ module Elkrb
         # normal load order has already defined BaseAlgorithm anyway.
         def supported_options_for(name_str, algorithm_class)
           base = ::Elkrb::Layout::Algorithms::BaseAlgorithm if defined?(::Elkrb::Layout::Algorithms::BaseAlgorithm)
-          # Class#<= answers nil, not false, for an unrelated class, so the
-          # escape-hatch path would otherwise hand a nil down as a flag.
-          include_all = !base.nil? && algorithm_class <= base ? true : false
+          # #ancestors answers the same question as Class#<= and returns a real
+          # boolean. `<=` answers nil for an unrelated class, which the
+          # escape-hatch path would then hand down as a flag.
+          include_all = !base.nil? && algorithm_class.ancestors.include?(base)
           Options::Registry.for_algorithm(name_str, include_all: include_all)
         end
 
