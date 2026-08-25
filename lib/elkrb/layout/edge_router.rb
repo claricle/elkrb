@@ -3,6 +3,7 @@
 require_relative "../geometry/point"
 require_relative "../geometry/bezier"
 require_relative "../graph/edge"
+require_relative "node_index"
 
 module Elkrb
   module Layout
@@ -10,11 +11,42 @@ module Elkrb
     module EdgeRouter
       # Route edges in a graph using specified routing style
       # @param graph [Graph::Graph] The graph to route edges for
-      # @param node_map [Hash] Map of node IDs to node objects
+      # @param node_map [NodeIndex] Resolves node/port ids to owning
+      #   nodes for this level
       # @param routing_style [String] Routing style (ORTHOGONAL, POLYLINE,
       #   SPLINES)
+      # A plain `{id => node}` Hash was the documented node_map before
+      # NodeIndex existed, and both public entry points still take one.
+      # Only #node is ever asked of a node_map, so that is all this wraps.
+      class HashNodeMap
+        def initialize(nodes)
+          @nodes = nodes
+        end
+
+        # A caller-supplied Hash is keyed by node id, but an edge endpoint may
+        # name a PORT. Fall back to the node owning that port, the way the
+        # pre-NodeIndex router did — otherwise a ported edge silently ends up
+        # with no sections at all.
+        def node(id)
+          @nodes[id] || owner_of_port(id)
+        end
+
+        private
+
+        def owner_of_port(id)
+          @nodes.each_value.find do |node|
+            node.respond_to?(:ports) && node.ports&.any? { |port| port.id == id }
+          end
+        end
+      end
+      private_constant :HashNodeMap
+
+      def coerce_node_map(node_map)
+        node_map.is_a?(::Hash) ? HashNodeMap.new(node_map) : node_map
+      end
+
       def route_edges(graph, node_map = nil, routing_style = nil)
-        node_map ||= build_node_map(graph)
+        node_map = coerce_node_map(node_map || NodeIndex.build(graph))
         routing_style ||= get_routing_style(graph)
 
         graph.edges&.each do |edge|
@@ -28,22 +60,20 @@ module Elkrb
 
       # Route a single edge
       # @param edge [Graph::Edge] The edge to route
-      # @param node_map [Hash] Map of node IDs to node objects
+      # @param node_map [NodeIndex] Resolves node/port ids to owning
+      #   nodes for this level
       # @param graph [Graph::Graph] The containing graph
       def route_edge(edge, node_map, _graph)
         return unless edge.sources&.any? && edge.targets&.any?
+
+        node_map = coerce_node_map(node_map)
 
         # Get source and target nodes
         source_id = edge.sources.first
         target_id = edge.targets.first
 
-        source_node = node_map[source_id]
-        target_node = node_map[target_id]
-
-        # If nodes not found, sources/targets might be port IDs
-        # Try to find nodes that contain these ports
-        source_node ||= find_node_with_port(node_map.values, source_id)
-        target_node ||= find_node_with_port(node_map.values, target_id)
+        source_node = node_map.node(source_id)
+        target_node = node_map.node(target_id)
 
         return unless source_node && target_node
 
@@ -66,22 +96,6 @@ module Elkrb
       end
 
       private
-
-      # Build a map of node IDs to node objects
-      def build_node_map(graph)
-        map = {}
-        graph.children&.each do |node|
-          map[node.id] = node
-        end
-        map
-      end
-
-      # Find node that contains a port with the given ID
-      def find_node_with_port(nodes, port_id)
-        nodes.find do |node|
-          node.ports&.any? { |port| port.id == port_id }
-        end
-      end
 
       # Check if edge should use port-based routing
       def edge_uses_ports?(_edge, source_node, target_node)
@@ -276,11 +290,8 @@ module Elkrb
         source_id = edge.sources.first
         target_id = edge.targets.first
 
-        source_node = node_map[source_id]
-        target_node = node_map[target_id]
-
-        source_node ||= find_node_with_port(node_map.values, source_id)
-        target_node ||= find_node_with_port(node_map.values, target_id)
+        source_node = node_map.node(source_id)
+        target_node = node_map.node(target_id)
 
         return unless source_node && target_node
 
@@ -412,10 +423,7 @@ module Elkrb
       # Route a self-loop edge
       def route_self_loop(edge, node_map, graph, routing_style)
         node_id = edge.sources.first
-        node = node_map[node_id]
-
-        # If not found, might be a port ID
-        node ||= find_node_with_port(node_map.values, node_id)
+        node = node_map.node(node_id)
 
         return unless node
 
