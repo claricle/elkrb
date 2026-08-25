@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "open3"
+require "rbconfig"
 
 module Elkrb
   # Wrapper for optional Graphviz integration
@@ -70,9 +71,17 @@ module Elkrb
       # An empty PATH component means the working directory, and #split would
       # otherwise turn it into "/dot". The shell would find dot there; we must
       # too, or #available? disagrees with the command that actually runs.
-      ENV.fetch("PATH", "").split(File::PATH_SEPARATOR, -1).map do |dir|
-        File.join(dir.empty? ? "." : dir, "dot")
+      ENV.fetch("PATH", "").split(File::PATH_SEPARATOR, -1).flat_map do |dir|
+        base = dir.empty? ? "." : dir
+        dot_basenames.map { |name| File.join(base, name) }
       end
+    end
+
+    # Windows needs the executable suffix; everywhere else the bare name is
+    # what exists. Both are probed so a checkout works either side.
+    def dot_basenames
+      suffix = RbConfig::CONFIG["EXEEXT"].to_s
+      suffix.empty? ? ["dot"] : ["dot#{suffix}", "dot"]
     end
 
     def valid_executable?(path)

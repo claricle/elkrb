@@ -239,6 +239,30 @@ end
 RSpec.describe "a file whose extension already names the format" do
   include CliRunner
 
+  it "rejects a .elkt file whose content is not ELKT at all" do
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "junk.elkt")
+      File.write(path, "this is definitely not ELKT\n")
+
+      _stdout, stderr, status = run_elkrb("layout", path)
+
+      expect(status.exitstatus).to eq(1)
+      expect(stderr).to include("Unable to parse")
+    end
+  end
+
+  it "accepts a comment-only ELKT file as a valid empty graph" do
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "comment.elkt")
+      File.write(path, "// just a comment\n")
+
+      stdout, _stderr, status = run_elkrb("layout", path)
+
+      expect(status.exitstatus).to eq(0)
+      expect(stdout).to include('"id"')
+    end
+  end
+
   it "accepts an empty ELKT graph, which the parser and serializer both round-trip" do
     Dir.mktmpdir do |dir|
       path = File.join(dir, "empty.elkt")

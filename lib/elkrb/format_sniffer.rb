@@ -38,7 +38,11 @@ module Elkrb
       # @return [Hash] the parsed ELKT graph
       # @raise [ArgumentError] when the ELKT parser itself fails
       def parse_elkt(content, unparseable_message:)
-        parse_elkt!(content.delete_prefix(BYTE_ORDER_MARK), unparseable_message)
+        text = content.delete_prefix(BYTE_ORDER_MARK)
+        graph = parse_elkt!(text, unparseable_message)
+        raise ArgumentError, unparseable_message if hollow_hash?(graph) && declarations?(text)
+
+        graph
       end
 
       private
@@ -111,6 +115,16 @@ module Elkrb
         Elkrb::Parsers::ElktParser.parse(content)
       rescue StandardError
         raise ArgumentError, unparseable_message
+      end
+
+      # An empty or comment-only ELKT file is a valid empty graph, so the
+      # hollow guard must not reject it. A file that DOES carry declarations
+      # and still parses to nothing is unrecognized content — the parser skips
+      # lines it does not understand, so without this it exits 0 on junk.
+      def declarations?(text)
+        text.gsub(%r{/\*.*?\*/}m, "")
+            .each_line
+            .any? { |line| !line.sub(%r{//.*$}, "").strip.empty? }
       end
 
       def hollow_hash?(graph)
