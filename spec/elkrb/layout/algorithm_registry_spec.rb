@@ -57,7 +57,8 @@ RSpec.describe Elkrb::Layout::AlgorithmRegistry do
     it "includes supported_options sourced from the options registry" do
       info = described_class.algorithm_info("layered")
 
-      expect(info[:supported_options]).to include("elk.direction", "elk.spacing.nodeNode")
+      expect(info[:supported_options]).to include("elk.direction",
+                                                  "elk.spacing.nodeNode")
       expect(info[:supported_options]).not_to include("elk.force.iterations")
     end
 
@@ -74,7 +75,8 @@ RSpec.describe Elkrb::Layout::AlgorithmRegistry do
 
       info = described_class.algorithm_info("compat_test")
 
-      expect(info[:supported_options]).not_to include("elk.padding", "elk.spacing.nodeNode")
+      expect(info[:supported_options]).not_to include("elk.padding",
+                                                      "elk.spacing.nodeNode")
     end
 
     it "still advertises the selector for a compatible-interface registration, which LayoutEngine honours" do

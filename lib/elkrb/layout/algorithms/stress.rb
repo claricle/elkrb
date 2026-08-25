@@ -73,7 +73,9 @@ module Elkrb
 
           # Set edge distances
           index = NodeIndex.build(graph)
-          positions = graph.children.each_with_index.to_h { |node, i| [node.id, i] }
+          positions = graph.children.each_with_index.to_h do |node, i|
+            [node.id, i]
+          end
 
           index.edges.each do |edge|
             source_id = edge.sources&.first

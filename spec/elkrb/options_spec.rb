@@ -193,12 +193,18 @@ RSpec.describe "Elkrb::Options" do
       end
 
       it "raises ArgumentError naming the input for an odd number of coordinate values" do
-        expect { described_class.parse("(1,2,3)") }.to raise_error(ArgumentError, /\(1,2,3\)/)
+        expect do
+          described_class.parse("(1,2,3)")
+        end.to raise_error(ArgumentError, /\(1,2,3\)/)
       end
 
       it "raises ArgumentError for a non-numeric token rather than coercing it through to_f" do
-        expect { described_class.parse("(1x,2; 3,4)") }.to raise_error(ArgumentError, /1x/)
-        expect { described_class.parse("(1,2; nope,4)") }.to raise_error(ArgumentError, /nope/)
+        expect do
+          described_class.parse("(1x,2; 3,4)")
+        end.to raise_error(ArgumentError, /1x/)
+        expect do
+          described_class.parse("(1,2; nope,4)")
+        end.to raise_error(ArgumentError, /nope/)
       end
 
       it "still accepts signed, decimal and exponent notation" do
@@ -219,7 +225,8 @@ RSpec.describe "Elkrb::Options" do
         # boundaries — so a malformed "3 values in one group" input still
         # yields 3 well-formed vectors rather than raising.
         chain = described_class.parse("({1,2},{3,4,5,6})")
-        expect(chain.to_a.map(&:to_a)).to eq([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+        expect(chain.to_a.map(&:to_a)).to eq([[1.0, 2.0], [3.0, 4.0],
+                                              [5.0, 6.0]])
       end
 
       it "parses chain from array of arrays" do

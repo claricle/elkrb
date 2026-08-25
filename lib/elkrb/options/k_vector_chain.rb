@@ -52,13 +52,20 @@ module Elkrb
       # @return [KVectorChain] Parsed coordinate chain object
       def self.from_string(str)
         tokens = str.split(/[,;()\[\]{}\s]+/).reject(&:empty?)
-        unless tokens.size.even? && tokens.all? { |token| token.match?(NUMERIC_TOKEN) }
+        unless coordinate_pairs?(tokens)
           raise ArgumentError, "Invalid KVectorChain format: #{str}"
         end
 
         vectors = tokens.each_slice(2).map { |x, y| KVector.new(x, y) }
         new(vectors)
       end
+
+      # Every token has to be numeric and they have to pair up. String#to_f
+      # answers 0.0 for junk, so a token is checked before it is converted.
+      def self.coordinate_pairs?(tokens)
+        tokens.size.even? && tokens.all? { |token| token.match?(NUMERIC_TOKEN) }
+      end
+      private_class_method :coordinate_pairs?
 
       # Add a vector to the chain
       #

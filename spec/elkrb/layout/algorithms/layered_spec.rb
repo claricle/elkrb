@@ -40,7 +40,7 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
         children: [
           {
             id: "a", width: 10, height: 10,
-            ports: [{ id: "p1" }, { id: "p2" }],
+            ports: [{ id: "p1" }, { id: "p2" }]
           },
           { id: "b", width: 10, height: 10 },
         ],
@@ -76,7 +76,7 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
         children: [
           {
             id: "a", width: 10, height: 10,
-            ports: [{ id: "ap" }],
+            ports: [{ id: "ap" }]
           },
           { id: "b", width: 10, height: 10 },
         ],
@@ -134,15 +134,15 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
         children: [
           {
             id: "a", width: 10, height: 10,
-            ports: [{ id: "ap" }],
+            ports: [{ id: "ap" }]
           },
           {
             id: "b", width: 10, height: 10,
-            ports: [{ id: "bp" }],
+            ports: [{ id: "bp" }]
           },
           {
             id: "c", width: 10, height: 10,
-            ports: [{ id: "cp" }],
+            ports: [{ id: "cp" }]
           },
         ],
         edges: [
@@ -209,7 +209,7 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
             { id: "x", width: 5, height: 5 },
             { id: "y", width: 5, height: 5 },
           ],
-          edges: [{ id: "inner", sources: ["x"], targets: ["y"] }],
+          edges: [{ id: "inner", sources: ["x"], targets: ["y"] }]
         },
       ],
       edges: edges,

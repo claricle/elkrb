@@ -40,7 +40,7 @@ module Elkrb
           # Run force simulation
           iterations.times do |i|
             apply_forces(graph, resolved_edges, repulsion, temperature, i,
-                        iterations)
+                         iterations)
           end
 
           # Apply padding and set graph dimensions

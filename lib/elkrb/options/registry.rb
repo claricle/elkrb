@@ -13,6 +13,8 @@ module Elkrb
     # all read from OPTIONS through the methods below — nothing else does.
     class Registry
       ELK_PREFIX = "org.eclipse.elk."
+      BOOLEAN_LITERALS = [true, false].freeze
+      private_constant :BOOLEAN_LITERALS
       private_constant :ELK_PREFIX
 
       # The OPTIONS constant name/path is private; .all below returns
@@ -242,7 +244,13 @@ module Elkrb
         # and everything else — including malformed input — coerce to
         # false; no numeric or word aliases for "true" are recognised.
         def coerce_boolean(value)
-          return value if value == true || value == false
+          # `value` stays the receiver so a delegator wrapping a boolean answers
+          # for itself and comes back unwrapped. Both rewrites rubocop offers
+          # here -- Array#include? and any?(value) -- compare the other way
+          # round, and one of them swaps == for ===, so neither is equivalent.
+          # rubocop:disable Performance/RedundantEqualityComparisonBlock
+          return value if BOOLEAN_LITERALS.any? { |literal| value == literal }
+          # rubocop:enable Performance/RedundantEqualityComparisonBlock
 
           value.to_s.strip.casecmp("true").zero?
         end
@@ -252,10 +260,14 @@ module Elkrb
           return ElkPadding.parse(value) if value.is_a?(String)
 
           if value.is_a?(Numeric)
-            return ElkPadding.new(top: value, left: value, bottom: value, right: value)
+            return ElkPadding.new(top: value, left: value, bottom: value,
+                                  right: value)
           end
 
-          raise ArgumentError, "Invalid padding value: #{value.inspect}" unless value.is_a?(Hash)
+          unless value.is_a?(Hash)
+            raise ArgumentError,
+                  "Invalid padding value: #{value.inspect}"
+          end
 
           fallback = ElkPadding.parse(default_string)
           ElkPadding.new(

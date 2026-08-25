@@ -52,7 +52,6 @@ module Elkrb
         @layout_options ||= LayoutOptions.new
       end
 
-
       # Normalizes a Symbol key however the options arrive — a constructor,
       # a plain setter, or lutaml's own deserialization, which routes through
       # here too. This is the single normalization point: a :hash-typed
