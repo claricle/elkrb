@@ -90,6 +90,43 @@ RSpec.describe "elkrb CLI shell boundary" do
       end
     end
 
+    it "keeps the children of a flow-style YAML file" do
+      Dir.mktmpdir do |dir|
+        file = File.join(dir, "flow.noext")
+        # Flow-style YAML opens with "{" like JSON but does not parse as
+        # JSON. Falling straight through to ELKT reads "id: root," and
+        # "children: [" as layout options, so the graph comes back with no
+        # children and no error at all.
+        File.write(file, "{\n  id: root,\n  children: [\n    {id: n1, width: 30, height: 30}\n  ]\n}\n")
+
+        stdout, _stderr, status = run_elkrb("layout", file)
+
+        expect(status.exitstatus).to eq(0)
+        expect(JSON.parse(stdout)["children"].map { |child| child["id"] }).to eq(["n1"])
+      end
+    end
+
+    it "reads every declaration in a BOM-prefixed ELKT file" do
+      bom_file = File.join(CliRunner::ROOT, "spec/fixtures/corpus/bom.elkt")
+
+      stdout, _stderr, status = run_elkrb("layout", bom_file)
+
+      expect(status.exitstatus).to eq(0)
+      expect(JSON.parse(stdout)["children"].map { |child| child["id"] }).to eq(%w[a b])
+    end
+
+    it "accepts a JSON file whose only recognized field is properties" do
+      Dir.mktmpdir do |dir|
+        file = File.join(dir, "props.noext")
+        File.write(file, '{"properties":{"note":"hello"}}')
+
+        stdout, _stderr, status = run_elkrb("layout", file)
+
+        expect(status.exitstatus).to eq(0)
+        expect(JSON.parse(stdout)["properties"]).to eq({ "note" => "hello" })
+      end
+    end
+
     it "exits 1 for a top-level JSON sequence, not a NoMethodError" do
       Dir.mktmpdir do |dir|
         file = File.join(dir, "sequence.noext")

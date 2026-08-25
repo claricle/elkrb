@@ -33,6 +33,10 @@ module Elkrb
       private
 
       def preprocess(input)
+        # A leading BOM stays glued to the first declaration, which then
+        # matches no rule and is dropped without any error.
+        input = input.delete_prefix("\uFEFF")
+
         # Remove block comments
         input = input.gsub(%r{/\*.*?\*/}m, "")
 

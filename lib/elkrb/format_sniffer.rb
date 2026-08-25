@@ -13,6 +13,9 @@ module Elkrb
   # field nil -- silent "success" on garbage is exactly the bug this slice
   # exists to kill).
   module FormatSniffer
+    BYTE_ORDER_MARK = "\uFEFF"
+    private_constant :BYTE_ORDER_MARK
+
     class << self
       # @param content [String] raw file content
       # @param unparseable_message [String] message for the final ArgumentError
@@ -21,35 +24,54 @@ module Elkrb
       def parse(content, unparseable_message:)
         require_relative "graph/graph"
 
-        graph = safely_sniff(content)
-        return graph if graph && !hollow_model?(graph)
-
-        parse_elkt_or_fail(content, unparseable_message)
+        text = content.delete_prefix(BYTE_ORDER_MARK)
+        sniff(text) || parse_elkt_or_fail(text, unparseable_message)
       end
 
       private
 
-      def safely_sniff(content)
-        result = if content.lstrip.start_with?("{", "[")
-                   Elkrb::Graph::Graph.from_json(content)
-                 else
-                   Elkrb::Graph::Graph.from_yaml(content)
-                 end
-        # A top-level JSON/YAML sequence (`[]`, `[{}]`, `- id: g`) parses
-        # without raising but returns an Array, not a Graph -- treat that
-        # the same as a failed parse rather than let hollow_model? call
-        # #id on it.
-        result.is_a?(Elkrb::Graph::Graph) ? result : nil
+      # A JSON document can only open with `{` or `[`, so anything else goes
+      # straight to YAML. Flow-style YAML opens with `{` too, though, so a
+      # failed JSON parse has to fall through to YAML before ELKT gets a
+      # turn -- otherwise a flow-style graph is read as ELKT layout options
+      # and silently loses its children.
+      def sniff(text)
+        return try_json(text) || try_yaml(text) if text.lstrip.start_with?("{", "[")
+
+        try_yaml(text)
+      end
+
+      def try_json(text)
+        real_graph(Elkrb::Graph::Graph.from_json(text))
       rescue Lutaml::Model::InvalidFormatError
         nil
       end
 
-      # graph.layout_options is a typed LayoutOptions model (not a Hash) on
-      # this codebase, so it's checked for nil only -- it doesn't respond to
-      # #empty?, and any recognized layoutOptions substructure at all is
-      # real enough content not to treat as garbage.
+      def try_yaml(text)
+        real_graph(Elkrb::Graph::Graph.from_yaml(text))
+      rescue Lutaml::Model::InvalidFormatError
+        nil
+      end
+
+      # A top-level sequence (`[]`, `[{}]`, `- id: g`) parses without raising
+      # but comes back an Array, and lutaml-model 0.8.19 turns any mapping at
+      # all into a Graph with every field nil. Neither is a real parse, and
+      # calling #id on the Array would blow up.
+      def real_graph(result)
+        return nil unless result.is_a?(Elkrb::Graph::Graph)
+
+        result unless hollow_model?(result)
+      end
+
+      # Mirrors the field list in Graph's json and yaml mapping blocks: when
+      # every recognized field comes back empty, lutaml-model matched nothing.
+      # layout_options is a typed LayoutOptions model rather than a Hash, so
+      # it gets a nil check -- it has no #empty?, and any recognized
+      # layoutOptions substructure at all is real content.
       def hollow_model?(graph)
-        graph.id.nil? && blank?(graph.children) && blank?(graph.edges) && graph.layout_options.nil?
+        graph.id.nil? && graph.x.nil? && graph.y.nil? &&
+          graph.width.nil? && graph.height.nil? && graph.layout_options.nil? &&
+          blank?(graph.children) && blank?(graph.edges) && blank?(graph.properties)
       end
 
       def parse_elkt_or_fail(content, unparseable_message)
