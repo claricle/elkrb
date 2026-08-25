@@ -166,9 +166,17 @@ module Elkrb
 
       case File.extname(file).downcase
       when ".json"
-        Elkrb::Graph::Graph.from_json(content)
+        require_relative "format_sniffer"
+        Elkrb::FormatSniffer.validate_model!(
+          Elkrb::Graph::Graph.from_json(content),
+          unparseable_message: "Unable to parse input file. Supported formats: JSON, YAML, ELKT"
+        )
       when ".yml", ".yaml"
-        Elkrb::Graph::Graph.from_yaml(content)
+        require_relative "format_sniffer"
+        Elkrb::FormatSniffer.validate_model!(
+          Elkrb::Graph::Graph.from_yaml(content),
+          unparseable_message: "Unable to parse input file. Supported formats: JSON, YAML, ELKT"
+        )
       when ".elkt"
         require_relative "format_sniffer"
         Elkrb::FormatSniffer.parse_elkt(

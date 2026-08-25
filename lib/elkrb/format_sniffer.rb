@@ -37,6 +37,18 @@ module Elkrb
       # @param unparseable_message [String] message for the ArgumentError
       # @return [Hash] the parsed ELKT graph
       # @raise [ArgumentError] when the ELKT parser itself fails
+      # A file whose extension names the format skips sniffing, so it also
+      # skips the malformed-shape check the sniffer applies. Both paths need
+      # it: lutaml coerces a mapping where a sequence belongs into one
+      # nil-filled model, and every downstream reader then breaks on it.
+      #
+      # @raise [ArgumentError] when the parsed model is not usable
+      def validate_model!(graph, unparseable_message:)
+        raise ArgumentError, unparseable_message if malformed_model?(graph)
+
+        graph
+      end
+
       def parse_elkt(content, unparseable_message:)
         text = content.delete_prefix(BYTE_ORDER_MARK)
         graph = parse_elkt!(text, unparseable_message)
