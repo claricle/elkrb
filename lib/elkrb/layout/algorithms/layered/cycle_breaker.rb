@@ -72,7 +72,7 @@ module Elkrb
           # before LayerAssigner ever sees it (confirmed: recurses
           # forever there, SystemStackError).
           def other_targets(edge, node)
-            targets = @index.endpoint_nodes(edge.targets)
+            targets = @index.endpoint_owners(edge.targets)
             targets.reject { |target| target == node }
           end
 
@@ -82,7 +82,7 @@ module Elkrb
 
             # Get edges from the graph that have this node as source
             @graph.edges&.each do |edge|
-              edges << edge if @index.endpoint_nodes(edge.sources).include?(node)
+              edges << edge if @index.endpoint_owners(edge.sources).include?(node)
             end
 
             edges

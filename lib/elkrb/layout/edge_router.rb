@@ -23,8 +23,20 @@ module Elkrb
           @nodes = nodes
         end
 
+        # A caller-supplied Hash is keyed by node id, but an edge endpoint may
+        # name a PORT. Fall back to the node owning that port, the way the
+        # pre-NodeIndex router did — otherwise a ported edge silently ends up
+        # with no sections at all.
         def node(id)
-          @nodes[id]
+          @nodes[id] || owner_of_port(id)
+        end
+
+        private
+
+        def owner_of_port(id)
+          @nodes.each_value.find do |node|
+            node.respond_to?(:ports) && node.ports&.any? { |port| port.id == id }
+          end
         end
       end
       private_constant :HashNodeMap

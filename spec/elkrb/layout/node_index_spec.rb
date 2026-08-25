@@ -312,11 +312,47 @@ RSpec.describe "EdgeRouter node_map contract" do
     expect(edge.sections&.size).to eq(1)
   end
 
+  it "resolves a port-id endpoint through a node-keyed Hash" do
+    a = Elkrb::Graph::Node.new(id: "a", x: 0, y: 0, width: 10, height: 10,
+                               ports: [Elkrb::Graph::Port.new(id: "ap", x: 0, y: 0, width: 2, height: 2)])
+    b = Elkrb::Graph::Node.new(id: "b", x: 50, y: 50, width: 10, height: 10,
+                               ports: [Elkrb::Graph::Port.new(id: "bp", x: 0, y: 0, width: 2, height: 2)])
+    edge = Elkrb::Graph::Edge.new(id: "e", sources: ["ap"], targets: ["bp"])
+    graph = Elkrb::Graph::Graph.new(id: "r", children: [a, b], edges: [edge])
+
+    router.route_edges(graph, { "a" => a, "b" => b })
+
+    expect(edge.sections&.size).to eq(1)
+  end
+
   it "still builds its own NodeIndex when no map is given" do
     graph, edge, = fresh
 
     router.route_edges(graph)
 
     expect(edge.sections&.size).to eq(1)
+  end
+end
+
+RSpec.describe "cross-hierarchy edges owned by the graph" do
+  # c1 is nested under p1. The root declares c1 -> p2, which hierarchical
+  # layout explicitly supports. Resolving only this level drops c1, takes the
+  # edge out of the topology, and flattens p1 and p2 into one layer.
+  let(:graph) do
+    {
+      "id" => "root",
+      "children" => [
+        { "id" => "p1", "width" => 40, "height" => 40,
+          "children" => [{ "id" => "c1", "width" => 10, "height" => 10 }] },
+        { "id" => "p2", "width" => 40, "height" => 40 },
+      ],
+      "edges" => [{ "id" => "e1", "sources" => ["c1"], "targets" => ["p2"] }],
+    }
+  end
+
+  it "keeps a nested source in the layered topology by projecting it onto its ancestor" do
+    by_id = Elkrb.layout(graph, algorithm: "layered").children.to_h { |node| [node.id, node] }
+
+    expect(by_id["p2"].y).to be > by_id["p1"].y
   end
 end

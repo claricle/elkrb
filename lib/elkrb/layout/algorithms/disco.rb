@@ -96,6 +96,12 @@ module Elkrb
           # Apply layout algorithm to component
           algorithm = algorithm_class.new
           algorithm.layout(temp_graph)
+
+          # The component was routed in its own coordinate space and is about
+          # to be shifted into place, so those sections are stale the moment
+          # it moves. The outer routing pass is the authoritative one — hand
+          # it a clean slate instead of letting it append to pre-offset bends.
+          component[:edges].each { |edge| edge.sections = nil }
         end
 
         def arrange_components(components, graph, spacing)

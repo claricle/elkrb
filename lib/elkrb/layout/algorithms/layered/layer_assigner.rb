@@ -110,10 +110,10 @@ module Elkrb
           # reject hyperedges before phase 1 runs; until then this
           # keeps the check correct.
           def incoming_to?(edge, node)
-            targets = @index.endpoint_nodes(edge.targets)
+            targets = @index.endpoint_owners(edge.targets)
             return false unless targets.include?(node)
 
-            sources = @index.endpoint_nodes(edge.sources)
+            sources = @index.endpoint_owners(edge.sources)
             sources.any? { |source| source != node }
           end
 
@@ -126,7 +126,7 @@ module Elkrb
           # is memoized (SystemStackError, confirmed by direct
           # reproduction).
           def first_other_source(edge, node)
-            @index.endpoint_nodes(edge.sources).find { |source| source != node }
+            @index.endpoint_owners(edge.sources).find { |source| source != node }
           end
         end
       end

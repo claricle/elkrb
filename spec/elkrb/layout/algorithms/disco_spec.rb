@@ -313,3 +313,39 @@ RSpec.describe Elkrb::Layout::Algorithms::Disco do
     end
   end
 end
+
+RSpec.describe "Disco routing after components are repositioned" do
+  # A port-connected component laid out after an isolated one is routed twice:
+  # once inside its own coordinate space, then again once it has been shifted
+  # into place. The first set is stale and must not survive into the result.
+  let(:graph) do
+    {
+      "id" => "root",
+      "children" => [
+        { "id" => "iso", "width" => 10, "height" => 10 },
+        { "id" => "a", "width" => 10, "height" => 10,
+          "ports" => [{ "id" => "ap", "width" => 2, "height" => 2 }] },
+        { "id" => "b", "width" => 10, "height" => 10,
+          "ports" => [{ "id" => "bp", "width" => 2, "height" => 2 }] },
+      ],
+      "edges" => [{ "id" => "e1", "sources" => ["ap"], "targets" => ["bp"] }],
+    }
+  end
+
+  it "keeps only the bends from the final routing pass" do
+    result = Elkrb.layout(graph, algorithm: "disco")
+    section = result.edges.first.sections.first
+
+    expect(section.bend_points.size).to eq(2)
+  end
+
+  it "leaves no bend outside the laid-out graph" do
+    result = Elkrb.layout(graph, algorithm: "disco")
+    section = result.edges.first.sections.first
+
+    section.bend_points.each do |point|
+      expect(point.x).to be_between(0, result.width)
+      expect(point.y).to be_between(0, result.height)
+    end
+  end
+end
