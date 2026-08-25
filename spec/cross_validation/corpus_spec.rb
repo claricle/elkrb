@@ -163,7 +163,112 @@ RSpec.describe "Elkrb layout corpus" do
     true
   end
 
+  describe CorpusRunner, ".source_directory?" do
+    # Case ids are fixture basenames, so a dump into spec/fixtures would
+    # overwrite the tracked inputs with layout output -- and prune would
+    # delete the ones the corpus no longer names. The rule has to
+    # recognise a source directory under any name it can be reached by: an
+    # alias is not a different directory just because it spells
+    # differently.
+    #
+    # Asserted through the predicate rather than through `run`, because a
+    # `run` pointed at spec/fixtures is the exact accident being guarded
+    # against, and a spec that does it for real destroys the fixtures the
+    # moment the guard regresses.
+    def root(*parts)
+      File.join(CorpusRunner::ROOT, *parts)
+    end
+
+    it "is true for each source directory and for paths beneath it" do
+      CorpusRunner::SOURCE_DIRS.each do |dir|
+        expect(CorpusRunner.source_directory?(dir)).to be(true)
+      end
+
+      expect(CorpusRunner.source_directory?(root("spec/fixtures/dump_probe"))).to be(true)
+    end
+
+    it "is true for a symlink that resolves to a source directory" do
+      Dir.mktmpdir do |tmp|
+        link = File.join(tmp, "alias")
+        File.symlink(root("spec/fixtures"), link)
+
+        expect(CorpusRunner.source_directory?(link)).to be(true)
+        expect(CorpusRunner.source_directory?(File.join(link, "dump_probe"))).to be(true)
+      end
+    end
+
+    it "is true for a name that differs only by case on a case-insensitive filesystem" do
+      aliased = root("spec/Fixtures")
+      unless File.identical?(aliased, root("spec/fixtures"))
+        skip "filesystem is case-sensitive, so spec/Fixtures is a different directory"
+      end
+
+      expect(CorpusRunner.source_directory?(aliased)).to be(true)
+    end
+
+    it "is false for a sibling that merely shares a source directory's prefix" do
+      expect(CorpusRunner.source_directory?(root("spec/fixtures_elsewhere"))).to be(false)
+      expect(CorpusRunner.source_directory?(root("tmp/corpus"))).to be(false)
+    end
+  end
+
   describe CorpusRunner, ".run" do
+    it "refuses the destination before creating it when the guard says so" do
+      allow(CorpusRunner).to receive(:source_directory?).and_return(true)
+
+      Dir.mktmpdir do |tmp|
+        outdir = File.join(tmp, "dump")
+
+        expect { CorpusRunner.run(outdir) }
+          .to raise_error(ArgumentError, /refusing to dump into a corpus source directory/)
+        expect(Dir.exist?(outdir)).to be(false)
+      end
+    end
+
+    # A dump is compared with `diff -r`, and validate:run reuses tmp/corpus
+    # every time, so a case that was renamed or dropped must not leave its
+    # old file behind to be reported as a difference forever.
+    def one_case_corpus
+      kase = CorpusRunner::Case.new(
+        id: "kept", algorithm: "layered",
+        graph: { "id" => "root", "children" => [], "edges" => [] }
+      )
+      allow(CorpusRunner).to receive(:cases).and_return([kase])
+    end
+
+    it "deletes a stale case file from a reused dump directory" do
+      one_case_corpus
+
+      Dir.mktmpdir do |dir|
+        # summary.json is what marks this directory as a previous dump.
+        File.write(File.join(dir, "summary.json"), "{}")
+        File.write(File.join(dir, "renamed_away.json"), "{}")
+        File.write(File.join(dir, "notes.txt"), "mine")
+
+        CorpusRunner.run(dir)
+
+        expect(File.exist?(File.join(dir, "renamed_away.json"))).to be(false)
+        expect(File.exist?(File.join(dir, "kept.json"))).to be(true)
+        expect(File.exist?(File.join(dir, "summary.json"))).to be(true)
+        expect(File.exist?(File.join(dir, "notes.txt"))).to be(true)
+      end
+    end
+
+    it "deletes nothing from a directory that is not a previous dump" do
+      one_case_corpus
+
+      Dir.mktmpdir do |dir|
+        # Pruning is aimed at a path the caller typed, so a directory this
+        # runner has never written to keeps everything it already holds.
+        File.write(File.join(dir, "someones.json"), "{}")
+
+        CorpusRunner.run(dir)
+
+        expect(File.exist?(File.join(dir, "someones.json"))).to be(true)
+        expect(File.exist?(File.join(dir, "kept.json"))).to be(true)
+      end
+    end
+
     it "has no unexpected failures over the real corpus" do
       Dir.mktmpdir do |dir|
         summary = CorpusRunner.run(dir)

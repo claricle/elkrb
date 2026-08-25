@@ -11,8 +11,9 @@ require_relative "../../lib/elkrb"
 # The corpus is every spec/fixtures/*.json (bare graph, default algorithm
 # "layered"), every spec/fixtures/corpus/*.json (wrapper {"algorithm":,
 # "graph":}; the non-JSON fixtures in that directory, bom.elkt and
-# garbage.txt, are deliberately excluded here -- they exist for the CLI's
-# extension-sniffing specs, not for layout), and every entry of each
+# garbage.txt, are deliberately excluded here -- they belong to
+# spec/elkrb/cli_spec.rb's "input format detection" examples, which read
+# them through the CLI, not through layout), and every entry of each
 # spec/cross_validation/fixtures/*/imported_tests.json file. This is the
 # single enumeration every later slice's execution-diff gate diffs
 # against, so `.cases` is the one place that logic lives.
@@ -66,10 +67,12 @@ class CorpusRunner
     def run(outdir, timeout: TIMEOUT_SECONDS)
       refuse_source_directory!(outdir)
       FileUtils.mkdir_p(outdir)
+      corpus = cases
+      prune_stale_dumps(outdir, corpus)
       summary = { "total" => 0, "ok" => 0, "error" => 0, "timeout" => 0, "cases" => [] }
       unexpected_failures = false
 
-      cases.each do |kase|
+      corpus.each do |kase|
         status, payload = run_case(kase, timeout)
         summary["total"] += 1
         summary[status] += 1
@@ -94,13 +97,63 @@ class CorpusRunner
       summary["unexpected_failures"] ? 1 : 0
     end
 
+    # True when `outdir` is, or sits under, one of SOURCE_DIRS.
+    #
+    # Comparing path strings is not enough. On a case-insensitive
+    # filesystem spec/Fixtures IS spec/fixtures, and a symlink aliases
+    # either one under any name at all; both slip past a lexical prefix
+    # check and would let a dump overwrite the tracked inputs. Compare by
+    # device+inode instead, which is what "the same directory" actually
+    # means, and walk the destination's ancestors, because an outdir that
+    # does not exist yet still sits under an existing -- possibly aliased
+    # -- parent.
+    #
+    # Public so its own specs can assert the rule without calling `run`.
+    # Pointing `run` at spec/fixtures is exactly the accident this guard
+    # exists to stop, and a test that does it for real deletes the
+    # fixtures the moment the guard regresses.
+    def source_directory?(outdir)
+      ancestor_paths(File.expand_path(outdir))
+        .any? { |dir| SOURCE_DIRS.any? { |src| File.identical?(dir, src) } }
+    end
+
     private
 
     def refuse_source_directory!(outdir)
-      expanded = File.expand_path(outdir)
-      return unless SOURCE_DIRS.any? { |dir| expanded == dir || expanded.start_with?("#{dir}/") }
+      return unless source_directory?(outdir)
 
       raise ArgumentError, "refusing to dump into a corpus source directory: #{outdir}"
+    end
+
+    def ancestor_paths(path)
+      paths = []
+      loop do
+        paths << path
+        parent = File.dirname(path)
+        break if parent == path
+
+        path = parent
+      end
+      paths
+    end
+
+    # A dump directory is a canonical snapshot that XD compares with
+    # `diff -r`, and validate:run always reuses tmp/corpus. Left alone, a
+    # case that was renamed or dropped keeps its old file there and every
+    # later comparison reports a difference that no longer exists.
+    #
+    # Deleting is aimed at whatever path a caller passed on the command
+    # line, so it is kept to what this runner itself would have written:
+    # only a directory that already holds a summary.json is treated as a
+    # previous dump, and within it only a *.json whose basename is neither
+    # a current case nor the summary is removed.
+    def prune_stale_dumps(outdir, corpus)
+      return unless File.file?(File.join(outdir, "summary.json"))
+
+      keep = corpus.map { |kase| "#{kase.id}.json" } + ["summary.json"]
+      Dir[File.join(outdir, "*.json")].each do |path|
+        File.delete(path) if File.file?(path) && !keep.include?(File.basename(path))
+      end
     end
 
     def run_case(kase, timeout)

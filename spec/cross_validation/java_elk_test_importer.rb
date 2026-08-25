@@ -10,6 +10,18 @@ class JavaElkTestImporter
   TEST_MODELS_PATH = "#{ELK_PATH}/../elk-models".freeze
   OUTPUT_PATH = "spec/cross_validation/fixtures/java_elk"
 
+  # AlgorithmRegistry.normalize_name only strips a dotted prefix and
+  # downcases, so ELK's own camelCase spore ids never resolve and these two
+  # cases raise "Unknown layout algorithm". The marker has to be generated
+  # here, not just hand-added to the committed fixture, because
+  # save_test_cases overwrites that file wholesale -- otherwise the next
+  # regeneration reclassifies a tracked bug (RC14) as a fresh regression and
+  # the corpus dump starts exiting non-zero for it. Drop this when RC14 lands.
+  EXPECTED_ERROR_ALGORITHMS = %w[sporeOverlap sporeCompaction].freeze
+
+  SAMPLE_ALGORITHMS = %w[layered force stress box random fixed mrtree radial
+                         rectpacking disco sporeOverlap sporeCompaction].freeze
+
   def initialize
     @test_cases = []
   end
@@ -23,12 +35,22 @@ class JavaElkTestImporter
     else
       puts "elk-models repository not found at #{TEST_MODELS_PATH}"
       puts "Creating sample test cases based on Java ELK patterns"
-      create_sample_tests
+      @test_cases.concat(sample_test_cases)
     end
 
     save_test_cases
 
     puts "Imported #{@test_cases.length} test cases from Java ELK"
+  end
+
+  # The fallback corpus used when the elk-models checkout is missing, which
+  # is also exactly what is committed under fixtures/java_elk. Pure and
+  # filesystem-free so a spec can hold the committed file to it without
+  # letting a test run write into spec/.
+  def sample_test_cases
+    SAMPLE_ALGORITHMS.map { |algorithm| create_algorithm_test(algorithm) } +
+      [create_hierarchical_test, create_port_test, create_label_test,
+       create_self_loop_test, create_compound_test]
   end
 
   private
@@ -69,23 +91,6 @@ class JavaElkTestImporter
     }
   end
 
-  def create_sample_tests
-    # Create sample test cases based on common Java ELK patterns
-
-    # Algorithm tests
-    %w[layered force stress box random fixed mrtree radial rectpacking
-       disco sporeOverlap sporeCompaction].each do |algo|
-      @test_cases << create_algorithm_test(algo)
-    end
-
-    # Feature tests
-    @test_cases << create_hierarchical_test
-    @test_cases << create_port_test
-    @test_cases << create_label_test
-    @test_cases << create_self_loop_test
-    @test_cases << create_compound_test
-  end
-
   def create_algorithm_test(algorithm)
     # Generate valid edges (no self-loops, no duplicates)
     edges = []
@@ -109,6 +114,7 @@ class JavaElkTestImporter
       source: "java_elk",
       category: "algorithm",
       algorithm: algorithm,
+      **expectation_for(algorithm),
       graph: {
         id: "root",
         layoutOptions: { "elk.algorithm" => algorithm },
@@ -118,6 +124,12 @@ class JavaElkTestImporter
         edges: edges,
       },
     }
+  end
+
+  def expectation_for(algorithm)
+    return {} unless EXPECTED_ERROR_ALGORITHMS.include?(algorithm)
+
+    { expect: "error" }
   end
 
   def create_hierarchical_test

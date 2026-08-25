@@ -97,4 +97,40 @@ RSpec.describe "elkrb CLI" do
       end
     end
   end
+
+  # bom.elkt and garbage.txt sit in spec/fixtures/corpus/ but are excluded
+  # from the layout corpus by its JSON-only glob. The CLI's format
+  # detection is the only thing that reads them, so this is where they earn
+  # their place.
+  describe "input format detection" do
+    def corpus_fixture(name)
+      File.join(CliRunner::ROOT, "spec/fixtures/corpus", name)
+    end
+
+    it "exits 1 when no format can parse the file" do
+      _stdout, _stderr, status = run_elkrb("layout", corpus_fixture("garbage.txt"))
+
+      expect(status.exitstatus).to eq(1)
+    end
+
+    # A UTF-8 BOM makes the ELKT parser drop the file's first declaration,
+    # so `node a` disappears and edge e0 is left pointing at a node that is
+    # no longer in the graph. Tracked as gap1-10; the ELKT parser rewrite
+    # owns the fix and un-pends this.
+    it "keeps every declaration of a BOM-prefixed ELKT file" do
+      pending("gap1-10")
+
+      Dir.mktmpdir do |dir|
+        output = File.join(dir, "bom.json")
+
+        _stdout, _stderr, status = run_elkrb(
+          "convert", corpus_fixture("bom.elkt"), "-o", output
+        )
+
+        expect(status.exitstatus).to eq(0)
+        graph = JSON.parse(File.read(output))
+        expect(graph["children"].map { |child| child["id"] }).to contain_exactly("a", "b")
+      end
+    end
+  end
 end
