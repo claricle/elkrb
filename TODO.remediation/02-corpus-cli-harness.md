@@ -203,14 +203,19 @@ Done. What was verified:
   the refusal message (rake aborts when the importer refuses) and leaves
   `spec/cross_validation/fixtures/elkjs/imported_tests.json` byte-identical.
 
-**Everything in this section — above and below this line — was recorded
-at `22231fd`.** The branch has since moved to `37bb0ce` ("preserve import
-expectations and harden dump guard").
+**Nothing in this section describes the current tip.** It was written
+while the branch was at `22231fd`; it is now at `37bb0ce` ("preserve
+import expectations and harden dump guard"), which changed
+`corpus_runner.rb`, `corpus_spec.rb` and `cli_spec.rb`.
 
-- The suite count and the importer verification **above** are from the
-  older SHA and have not been re-measured. Re-run them before the gate.
-- The gate output **below** is history: those runs happened, at that SHA,
-  and no longer name the tip.
+- **Re-run all four checks above**, not just the suite count. `37bb0ce`
+  touched the files behind every one of them, so the `corpus:dump` run
+  and the focused RSpec run are as stale as the other two.
+- **The gate record below is history, and not all of it ran at one
+  SHA.** Gate A came before the fixes committed at `aaf4efb`; Gate B
+  round 1 came before the fixes at `22231fd`; only Gate B round 2 ran on
+  `22231fd` itself. None of them names the current tip, so none of them
+  is a live approval.
 
 Gates that were mandatory and what they found:
 

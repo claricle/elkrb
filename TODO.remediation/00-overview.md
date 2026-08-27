@@ -213,10 +213,10 @@ unless it says close.
 | # | Item | Slice | Size | Can start | Blocks | Status |
 |---|---|---|---|---|---|---|
 | 01 | Crash guards on ordinary ELK input | S1 | medium | closed | is the `v2` base of everything; 02, 03 | **merged** @ `a008889`; PR #2 still open, 2 Highs |
-| 02 | Corpus and CLI harness | S0b | medium | now | 05; close of 03, and of every **remaining** XD-gated item from 05 on — 06, 08 and 11 already gated against the driver materialised uncommitted and merged ahead of it | built @ `37bb0ce`, **1 open Blocker** |
-| 03 | elkjs golden harness | S0a | large | now; closes after 02 | close of 24; start of 12, 13, 14, 16–23, 31 | built @ `e8c7e69`, not gated |
+| 02 | Corpus and CLI harness | S0b | medium | now | 05; close of 03, and of every **remaining** XD-gated item from 05 on — 06, 08 and 11 already gated against the driver materialised uncommitted and merged ahead of it | built, not merged, **1 open Blocker** |
+| 03 | elkjs golden harness | S0a | large | now; closes after 02 | close of 24; start of 12, 13, 14, 16–23, 31 | built, not merged |
 | 04 | Lint and CI hygiene | S28 | small | closed | nothing; moves the bar to `rake` | **merged** @ `56900d3`, PR #6 |
-| 05 | CLI and shell boundary | S2 | medium | after 02 | 09, 26, 36 | built @ `249a4d8`, not gated — **critical path** |
+| 05 | CLI and shell boundary | S2 | medium | after 02 | 09, 26, 36 | built, not merged — **critical path** |
 | 06 | LayoutOptions open map | S3 | medium | closed | 07, 09, 27, 29, 34 | **merged** @ `36e0eb1`, PR #4 |
 | 07 | Drop the LayoutOptions shim | S3b | medium | **now** | must merge before 14, 16, 17, 19, 23, 24, 28, 30 start | ready — 06 and 11 are merged |
 | 08 | Options registry | S4 | medium | closed | 09, 36 | **merged** @ `1c0abca`, PR #7 |
@@ -405,11 +405,18 @@ merged in.
 
 Four slice PRs (#4-#7), the 01 seed, and #8's lint ratchet.
 
-**The Items table above is the one place a MERGE is recorded.** Never
-restate a merged SHA here, or the two copies drift — which is how this
-section came to be wrong once already. The table below carries only what
-that table cannot: branch names, their current heads, and how far ahead
-of `v2` they sit. Those are not merge records.
+Two tables, one fact each, and neither repeats the other:
+
+- **The Items table above records MERGES.** A merged SHA appears there
+  and nowhere else.
+- **The table below records unmerged BRANCHES** — name, current head,
+  how far ahead of `v2`, and what state it is in. An unmerged head
+  appears there and nowhere else.
+
+That is why the Items table's Status column says only "built, not
+merged" for 02, 03 and 05. It used to carry their heads too, and two
+copies of a moving SHA is exactly how this section came to be wrong
+once already.
 
 One thing that table cannot say: **PR #2 is still an open draft against
 `main` and carries 2 open High findings**, even though its code is the `v2`
