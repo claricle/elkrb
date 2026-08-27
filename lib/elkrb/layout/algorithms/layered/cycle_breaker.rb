@@ -56,8 +56,13 @@ module Elkrb
           # from more than one in-stack frame or through more than one
           # of its own targets. Reversing it twice would swap it back
           # to its original direction and leave the cycle unbroken.
+          #
+          # Identity, not value. lutaml-model gives Edge value equality,
+          # so two distinct edges with the same id, sources and targets
+          # compare equal -- `include?` collapsed them into one and the
+          # second cycle stayed live.
           def mark_for_reversal(edge)
-            return if @edges_to_reverse.include?(edge)
+            return if @edges_to_reverse.any? { |marked| marked.equal?(edge) }
 
             @edges_to_reverse << edge
           end
