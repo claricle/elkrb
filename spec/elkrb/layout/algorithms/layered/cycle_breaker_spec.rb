@@ -41,6 +41,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::CycleBreaker do
 
         expect(back_edges.size).to eq(2)
         expect(back_edges.map(&:sources)).to all(eq(["a"]))
+        expect(back_edges.map(&:targets)).to all(eq(["b"]))
       end
     end
 
