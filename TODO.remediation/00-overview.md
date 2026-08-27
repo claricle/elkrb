@@ -203,7 +203,7 @@ unless it says close.
 | # | Item | Slice | Size | Can start | Blocks | Status |
 |---|---|---|---|---|---|---|
 | 01 | Crash guards on ordinary ELK input | S1 | medium | closed | is the `v2` base of everything; 02, 03 | **merged** @ `a008889`; PR #2 still open, 2 Highs |
-| 02 | Corpus and CLI harness | S0b | medium | now | 05; close of 03, 04, and of every XD-gated item from 05 on | built @ `37bb0ce`, **1 Blocker open**, not gated |
+| 02 | Corpus and CLI harness | S0b | medium | now | 05; close of 03, 04, and of every XD-gated item from 05 on | built @ `37bb0ce`, not gated |
 | 03 | elkjs golden harness | S0a | large | now; closes after 02 | close of 04 and of 24; start of 12, 13, 14, 16–23, 31 | built @ `e8c7e69`, not gated |
 | 04 | Lint and CI hygiene | S28 | small | closed | nothing; moves the bar to `rake` | **merged** @ `11140a6`, PR #6 |
 | 05 | CLI and shell boundary | S2 | medium | after 02 | 09, 26, 36 | built @ `249a4d8`, not gated — **critical path** |
@@ -360,24 +360,25 @@ branch that exists on origin — merge `origin/v2` in instead.
 
 `v2` is on origin at `75bdb13`. Five slice PRs are merged into it. The
 suite there is **763 examples, 0 failures**, and RuboCop reports **0
-offences across 120 files** — measured 2026-08-27 in a clean worktree.
+offences across 120 files** — measured 2026-08-27 in the clean worktree
+`~/.claude/pipeline/worktrees/elkrb/todo-remediation`, with `origin/v2`
+merged in.
 
 ### Merged into `v2`
 
-| Item | PR | Merged at | Notes |
-|---|---|---|---|
-| 01 | — | `a008889` | the `v2` seed. PR #2 is still an open draft against `main`, the one slice PR not targeting `v2`, and it carries **2 open High findings** |
-| 04 | #6 | `11140a6` | rubocop wired into the default rake task |
-| 06 | #4 | `36e0eb1` | Gate B approved after 7 rounds |
-| 08 | #7 | `1c0abca` | Gate B approved after 6 rounds |
-| 11 | #5 | `4364739` | Gate A and Gate B both approved |
-| — | #8 | `daff5a5` | lint ratchet restored on `v2` |
+Five slice PRs, plus #8's lint ratchet. **The Items table above is the one
+place merge status is recorded** — do not restate a SHA here, or the two
+copies drift, which is how this section came to be wrong once already.
+
+One thing that table cannot say: **PR #2 is still an open draft against
+`main` and carries 2 open High findings**, even though its code is the `v2`
+seed.
 
 ### Built, not gated, not merged
 
 | Item | Branch | Head | Ahead of `v2` | State |
 |---|---|---|---|---|
-| 02 | `fix/s0b-corpus-cli-harness` | `37bb0ce` | 5 | **one open Blocker** — dump pruning expands shell metacharacters in a caller-supplied destination and can delete tracked fixtures |
+| 02 | `fix/s0b-corpus-cli-harness` | `37bb0ce` | 5 | the `corpus:dump` pruning Blocker was fixed here and re-measured; nothing outstanding on the code |
 | 03 | `fix/s0a-golden-harness` | `e8c7e69` | 11 | step 7's `corpus_spec` reconciliation happens at merge — the file it edits arrives with 02 |
 | 05 | `fix/s2-cli-shell` | `249a4d8` | 20 | **the critical path.** Base is a local integration ref = `origin/v2` + 02 |
 
@@ -389,8 +390,17 @@ than no number.
 
 - **5 merged**, 3 built but ungated, **29 unstarted**.
 - Ready today from `origin/v2`: **07, 12, 27, 29, 34**.
-- **05 gates 09; 09 gates 10; 10 releases about twenty cards.** That
-  chain is single-file and cannot be parallelised.
+- The chain **05 → 09 → 10** is single-file and cannot be parallelised.
+  Counted from the Items table's own dependency columns, transitively:
+
+  | until this lands | cards still blocked |
+  |---|---|
+  | 05 | **24** |
+  | 09 | 22 |
+  | 10 | 19 |
+
+  So 05 is not one card among three. It is the gate on two thirds of
+  everything left.
 
 Nothing is pushed and no PR is open except #2, because the plan itself
 goes up as a PR and gets approved there before implementation officially

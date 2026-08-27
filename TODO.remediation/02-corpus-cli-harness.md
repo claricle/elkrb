@@ -2,9 +2,20 @@
 Slice S0b · branch `fix/s0b-corpus-cli-harness`
 
 Status: built, **not gated, not merged**. Branch `fix/s0b-corpus-cli-harness`
-@ 37bb0ce, 5 commits ahead of `origin/v2`. One **Blocker** is open: dump
-pruning expands shell metacharacters in a caller-supplied destination and can
-delete tracked fixtures. Fix that before the gates run.
+@ 37bb0ce, 5 commits ahead of `origin/v2`.
+
+The Blocker raised against `corpus:dump` — that pruning could delete tracked
+fixtures in a caller-supplied destination — was **fixed at 37bb0ce**
+("harden dump guard"). Re-measured 2026-08-27 by running the guard directly:
+
+- a directory with no `summary.json` is left untouched, so a tracked fixture
+  directory cannot be pruned at all
+- a real dump directory loses only `*.json` that is neither a current case
+  nor the summary
+- a glob metacharacter in the destination fails the literal `File.file?`
+  check and returns early, deleting nothing
+
+Nothing is outstanding on the code. It needs the gate run.
 
 Can start: now — this item depends on nothing and is the first thing that
 lands after 01 (S1). It was branched from `main` before `v2` existed, then
