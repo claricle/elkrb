@@ -1,9 +1,8 @@
 # 11 — NodeIndex: endpoint resolution, duplicate ids, disco
 Slice S7 · branch `fix/s7-node-index`
 
-Status: done, branch `fix/s7-node-index` @ 3d91c5e, awaiting PR. Gate A and
-Gate B both approved that SHA; the branch is not pushed yet because the plan
-PR is still unapproved. The rest of this file is the record of what was built
+Status: **merged into `v2`** via PR #5, final tip 4364739. Closed. Gate A and
+Gate B both approved. The rest of this file is the record of what was built
 and how it was verified.
 
 Can start: closed. It needed 01 (S1, in `v2` — S1 added the mrtree visited set

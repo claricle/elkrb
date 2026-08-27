@@ -1,10 +1,13 @@
 # 05 — CLI and shell boundary
 Slice S2 · branch `fix/s2-cli-shell`
 
-Status: done, branch `fix/s2-cli-shell` @ b9c6730, awaiting PR. Base is the
-local integration ref d8275ce = `origin/v2` + 02's harness merged in, because
-this item un-pends 02's `cli_spec` examples and cannot build without its
-`cli_runner` and `fake_dot`.
+Status: built, **not gated, not merged**. Branch `fix/s2-cli-shell` @
+249a4d8, 20 commits ahead of `origin/v2`. Base is a local integration ref =
+`origin/v2` + 02's harness merged in, because this item un-pends 02's
+`cli_spec` examples and cannot build without its `cli_runner` and `fake_dot`.
+
+**This is the critical path.** Nothing else unblocks 09, and 09 is what
+unblocks 10, and 10 is what unblocks roughly twenty of the remaining cards.
 
 Can start: after 02 (S0b) — specifically its `spec/support/cli_runner.rb`,
 `spec/support/fake_dot.rb` and the four `pending "RC10"` examples in

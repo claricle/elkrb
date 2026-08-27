@@ -1,8 +1,10 @@
 # 02 — Corpus and CLI harness
 Slice S0b · branch `fix/s0b-corpus-cli-harness`
 
-Status: done, branch `fix/s0b-corpus-cli-harness` @ 22231fd, awaiting PR.
-`origin` carries dcec6d0; two local fix-round commits sit on top of it.
+Status: built, **not gated, not merged**. Branch `fix/s0b-corpus-cli-harness`
+@ 37bb0ce, 5 commits ahead of `origin/v2`. One **Blocker** is open: dump
+pruning expands shell metacharacters in a caller-supplied destination and can
+delete tracked fixtures. Fix that before the gates run.
 
 Can start: now — this item depends on nothing and is the first thing that
 lands after 01 (S1). It was branched from `main` before `v2` existed, then

@@ -1,11 +1,9 @@
 # 08 — Options registry
 Slice S4 · branch `fix/s4-options-registry`
 
-Status: built, not gated through. Branch `fix/s4-options-registry` @ `6b9f180`
-(13 commits on `v2` = a008889). Suite 679 examples / 0 failures. Implementer
-Codex APPROVE (plan round 2). Gate A (multi-agent) ran and its findings are
-fixed — commit `f5a2af3` "gate a fixes: dedupe render, entry_for, pin edge
-cases". **Gate B (Codex `ultra`) has not run.** Nothing is pushed.
+Status: **merged into `v2`** via PR #7, at 1c0abca. Closed. Gate B (Codex
+`ultra`) approved that SHA after six rounds; the approval artifact is
+`.claude/codex-approvals/s4-options-registry@1c0abca.txt`.
 
 Can start: now — 01 (S1) is the `v2` seed and this item edits `lib/elkrb.rb`
 next to slice 1's change to the same file. The XD gate needs 02 (S0b's
@@ -239,8 +237,10 @@ The report carries: the full id list with its defaults; the alias table; and
 any literal default found inconsistent between two call sites — recorded, not
 fixed.
 
-Still outstanding: **Gate B** (Codex `ultra` on `6b9f180`). Then the
-orchestrator pushes and opens a draft PR against `v2`.
+Gate B (Codex `ultra`) ran after this record was written and took six rounds,
+approving the branch at `1c0abca`. That is the SHA merged into `v2` by PR #7.
+The approval artifact is
+`.claude/codex-approvals/s4-options-registry@1c0abca.txt`.
 
 ## Files
 

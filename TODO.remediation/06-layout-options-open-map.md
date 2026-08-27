@@ -1,11 +1,9 @@
 # 06 — LayoutOptions open map
 Slice S3 · branch `fix/s3-open-options-map`
 
-Status: built, not gated through. Branch `fix/s3-open-options-map` @ `3089e99`
-(one commit on `v2` = a008889). Suite 642 examples / 0 failures. Implementer
-Codex APPROVE; Gate A (multi-agent) raised 8 findings (2 High) — all fixed;
-Gate B round 1 (Codex ultra) REQUEST_CHANGES with 3 Medium — all fixed. **Gate
-B round 2 has not run.** Nothing is pushed.
+Status: **merged into `v2`** via PR #4, at 36e0eb1. Closed. Gate B (Codex
+`ultra`) approved that SHA after seven rounds; the approval artifact is
+`.claude/codex-approvals/s3-open-options-map@36e0eb1.txt`.
 
 Can start: now — 01 (S1 crash guards) is already the `v2` seed, and this item
 replaces the nil-`@properties` typed class that slice 1 guarded. The XD gate
@@ -240,8 +238,10 @@ behaviour on paths no committed fixture exercises (no fixture carries
 snake_case `edge_routing`, none constructs `layout_options` with Symbol keys
 directly).
 
-Still outstanding: **Gate B round 2** (Codex `ultra` on `3089e99`). Then the
-orchestrator pushes and opens a draft PR against `v2`.
+Gate B (Codex `ultra`) went a further five rounds after this record was
+written, and approved the branch at `36e0eb1`. That is the SHA merged into
+`v2` by PR #4. The approval artifact is
+`.claude/codex-approvals/s3-open-options-map@36e0eb1.txt`.
 
 The report carries a `## Breaking` section (no `CHANGELOG.md` edit):
 `layoutOptions` is echoed flat; the `layoutOptions.properties` nesting is no

@@ -1,9 +1,9 @@
 # 01 — Crash guards on ordinary ELK input
 Slice S1 · branch `fix/crash-on-elk-input`
 
-Status: done, branch `fix/crash-on-elk-input` @ a008889, merged as the `v2`
-seed and awaiting PR review. PR #2 is a draft against `main` — the one slice
-PR that does not target `v2`.
+Status: merged into `v2` as the seed commit a008889. PR #2 is still an open
+draft against `main` — the one slice PR that does not target `v2` — and it
+carries two open High findings. The code is in `v2`; the PR is not closed.
 
 Can start: closed. This slice is frozen and is not re-planned. Blocks: it is
 the base of everything — `v2` IS this commit, so every other item branches

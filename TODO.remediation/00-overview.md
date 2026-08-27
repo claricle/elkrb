@@ -202,17 +202,17 @@ unless it says close.
 
 | # | Item | Slice | Size | Can start | Blocks | Status |
 |---|---|---|---|---|---|---|
-| 01 | Crash guards on ordinary ELK input | S1 | medium | closed | is the `v2` base of everything; 02, 03 | done @ `a008889` |
-| 02 | Corpus and CLI harness | S0b | medium | now | 05; close of 03, 04, and of every XD-gated item from 05 on | done @ `22231fd` |
-| 03 | elkjs golden harness | S0a | large | now; closes after 02 | close of 04 and of 24; start of 12, 13, 14, 16–23, 31 | done @ `09a5186` |
-| 04 | Lint and CI hygiene | S28 | small | now; closes after 02, 03 | nothing; moves the bar to `rake` | done @ `11140a6` |
-| 05 | CLI and shell boundary | S2 | medium | after 02 | 09, 26, 36 | done @ `b9c6730` |
-| 06 | LayoutOptions open map | S3 | medium | now | 07, 09, 27, 29, 34 | built @ `3089e99`, Gate B round 2 outstanding |
-| 07 | Drop the LayoutOptions shim | S3b | medium | after 06, 11 | must merge before 14, 16, 17, 19, 23, 24, 28, 30 start | blocked by 06 |
-| 08 | Options registry | S4 | medium | now | 09, 36 | built @ `6b9f180`, Gate B outstanding |
-| 09 | Resolver, wiring, precedence, CLI flags | S5 | large | after 05, 06, 08 | 10, 13, 14, 25, 28, 35, 36 | blocked by 06, 08 |
+| 01 | Crash guards on ordinary ELK input | S1 | medium | closed | is the `v2` base of everything; 02, 03 | **merged** @ `a008889`; PR #2 still open, 2 Highs |
+| 02 | Corpus and CLI harness | S0b | medium | now | 05; close of 03, 04, and of every XD-gated item from 05 on | built @ `37bb0ce`, **1 Blocker open**, not gated |
+| 03 | elkjs golden harness | S0a | large | now; closes after 02 | close of 04 and of 24; start of 12, 13, 14, 16–23, 31 | built @ `e8c7e69`, not gated |
+| 04 | Lint and CI hygiene | S28 | small | closed | nothing; moves the bar to `rake` | **merged** @ `11140a6`, PR #6 |
+| 05 | CLI and shell boundary | S2 | medium | after 02 | 09, 26, 36 | built @ `249a4d8`, not gated — **critical path** |
+| 06 | LayoutOptions open map | S3 | medium | closed | 07, 09, 27, 29, 34 | **merged** @ `36e0eb1`, PR #4 |
+| 07 | Drop the LayoutOptions shim | S3b | medium | **now** | must merge before 14, 16, 17, 19, 23, 24, 28, 30 start | ready — 06 and 11 are merged |
+| 08 | Options registry | S4 | medium | closed | 09, 36 | **merged** @ `1c0abca`, PR #7 |
+| 09 | Resolver, wiring, precedence, CLI flags | S5 | large | after 05 | 10, 13, 14, 25, 28, 35, 36 | blocked by 05 only |
 | 10 | Every remaining option read onto the resolver | S6 | large | after 09, 11 | 13, 14, 16, 17, 18, 20, 22, 23, 24, 35 | blocked by 09 |
-| 11 | NodeIndex: endpoints, duplicate ids, disco | S7 | medium | closed | 07, 10, 12, 14, 16, 20, 23, 24 | done @ `3d91c5e` |
+| 11 | NodeIndex: endpoints, duplicate ids, disco | S7 | medium | closed | 07, 10, 12, 14, 16, 20, 23, 24 | **merged** @ `4364739`, PR #5 |
 | 12 | Layered: internal cycle breaking, hyperedges raise | S8 | medium | after 11 | 13, 25; close of 33 | ready |
 | 13 | Layered: direction, ELK spacing, centring | S9 | small | after 09, 10, 12 | 14, 16, 31; merges before 36 touches `cli_spec` | blocked by 10, 12 |
 | 14 | Hierarchy: bottom-up sizing, per-level routing | S10 | large | after 07, 09, 10, 11, 13 | 15, 16, 17, 21, 25 | blocked by 13, 07 |
@@ -227,23 +227,29 @@ unless it says close.
 | 23 | mrtree and radial | S17 | medium | after 07, 10, 11 | 30, 35 | blocked by 07, 10 |
 | 24 | Truthfulness: disco, libavoid, vertiflex, spore, topdown | S18 | medium–large | after 07, 10, 11; closes after 03 | 33 | blocked by 07, 10 |
 | 25 | Constraints | S19 | medium | after 09, 12, 14 | 37 | blocked by 14 |
-| 26 | `validate` correctness | S20 | medium | after 05 | 36 | ready |
-| 27 | ELKT parser rewrite | S21 | large | after 06 | 28 | blocked by 06 |
+| 26 | `validate` correctness | S20 | medium | after 05 | 36 | blocked by 05 |
+| 27 | ELKT parser rewrite | S21 | large | **now** | 28 | ready — 06 is merged |
 | 28 | ELKT and DOT serializers | S22 | large | after 07, 09, 27 | 37 | blocked by 27, 09, 07 |
-| 29 | Data-model completeness | S23 | medium | after 06 | 37 | blocked by 06 |
+| 29 | Data-model completeness | S23 | medium | **now** | 37 | ready — 06 is merged |
 | 30 | README and examples | S24 | medium | after 06–23 merged | 37 | blocked by 15, 17, 19, 21, 22, 23 |
 | 31 | Layered: barycenter crossing minimisation | S25a | medium | after 13, 16 | 32, 35 | blocked by 16 |
 | 32 | Layered: long-edge dummies | S25b | medium | after 31 | 35, 37 | blocked by 31 |
 | 33 | Performance leftovers | S26 | small | after 24; closes after 12, 20, 21 | 35, 37 | blocked by 24 |
-| 34 | Consumer fixtures: capture | S27a | small | after 06 | 35, which reads its fixtures | blocked by 06 |
+| 34 | Consumer fixtures: capture | S27a | small | **now** | 35, which reads its fixtures | ready — 06 is merged |
 | 35 | Consumer contract: acceptance | S27b | small | after 09, 10, 13, 14, 15, 16, 22, 23, 31, 32, 33, 34, 36 merged; reads 34's fixtures | 37 | blocked by 15, 22, 23, 32, 33, 34, 36 |
 | 36 | CLI UX and option introspection | S29 | medium | after 05, 08, 09, 26 | 35, 37 | blocked by 09, 26 |
 | 37 | CHANGELOG, generated docs, packaging | S30 | medium | after 25, 28, 29, 30, 32, 33, 35, 36 | nothing; the `v2 → main` PR follows | blocked by 25, 28, 29, 30, 35 |
 
-Ready to pick up today: **12** and **26**. Every blocker of theirs is
-done. Neither parent is merged yet, so both branch from a local
-`int/<slice>` ref — see "How work is delivered". **06** and **08** are
-built and only need their outstanding gate round.
+Ready to pick up today, branching straight from `origin/v2`:
+**07**, **12**, **27**, **29** and **34**. Every blocker of theirs is
+merged.
+
+**26 is no longer ready** — it needs 05, and 05 is built but not merged.
+
+Three built branches are still ungated and unmerged: **02** (one open
+Blocker), **03**, and **05**. Clearing 05 is the highest-value move on
+the board: it is the only thing standing between us and 09, and 09 → 10
+is what releases roughly twenty of the remaining cards.
 
 ## Rulings
 
@@ -352,21 +358,39 @@ branch that exists on origin — merge `origin/v2` in instead.
 
 ## Current state
 
-`v2` is on origin at `a008889`. Nothing else is pushed.
+`v2` is on origin at `75bdb13`. Five slice PRs are merged into it. The
+suite there is **763 examples, 0 failures**, and RuboCop reports **0
+offences across 120 files** — measured 2026-08-27 in a clean worktree.
 
-| Item | Branch | Head | State |
+### Merged into `v2`
+
+| Item | PR | Merged at | Notes |
 |---|---|---|---|
-| 01 | `fix/crash-on-elk-input` | `a008889` | merged as the `v2` seed; PR #2 is a draft against `main`, the one slice PR not targeting `v2` |
-| 02 | `fix/s0b-corpus-cli-harness` | `22231fd` | gated, awaiting PR. `origin` carries `dcec6d0`; two local fix commits sit on top. 729 examples, 0 failures, 16 pending |
-| 03 | `fix/s0a-golden-harness` | `09a5186` | gated, awaiting PR. 751 examples, 0 failures, 30 pending. Step 7's `corpus_spec` reconciliation happens at merge — the file it edits arrives with 02 |
-| 04 | `fix/s28-lint-ci` | `11140a6` | gated, awaiting PR. `bundle exec rake` green, 625 examples, 0 offences |
-| 05 | `fix/s2-cli-shell` | `b9c6730` | gated, awaiting PR. Base is the local integration ref `d8275ce` = `origin/v2` + 02. 749 examples, 0 failures, 12 pending |
-| 11 | `fix/s7-node-index` | `3d91c5e` | gated, awaiting PR. 653 examples, 0 failures |
-| 06 | `fix/s3-open-options-map` | `3089e99` | built. 642 examples, 0 failures. Gate A fixed, Gate B round 1 fixed, **round 2 not run** |
-| 08 | `fix/s4-options-registry` | `6b9f180` | built. 679 examples, 0 failures. Gate A fixed at `f5a2af3`, **Gate B not run** |
+| 01 | — | `a008889` | the `v2` seed. PR #2 is still an open draft against `main`, the one slice PR not targeting `v2`, and it carries **2 open High findings** |
+| 04 | #6 | `11140a6` | rubocop wired into the default rake task |
+| 06 | #4 | `36e0eb1` | Gate B approved after 7 rounds |
+| 08 | #7 | `1c0abca` | Gate B approved after 6 rounds |
+| 11 | #5 | `4364739` | Gate A and Gate B both approved |
+| — | #8 | `daff5a5` | lint ratchet restored on `v2` |
 
-Six items are gated and waiting on the maintainer. Two need one more gate
-round. The remaining 29 are unstarted; 12 and 26 can start today.
+### Built, not gated, not merged
+
+| Item | Branch | Head | Ahead of `v2` | State |
+|---|---|---|---|---|
+| 02 | `fix/s0b-corpus-cli-harness` | `37bb0ce` | 5 | **one open Blocker** — dump pruning expands shell metacharacters in a caller-supplied destination and can delete tracked fixtures |
+| 03 | `fix/s0a-golden-harness` | `e8c7e69` | 11 | step 7's `corpus_spec` reconciliation happens at merge — the file it edits arrives with 02 |
+| 05 | `fix/s2-cli-shell` | `249a4d8` | 20 | **the critical path.** Base is a local integration ref = `origin/v2` + 02 |
+
+Suite counts on those three branches are not carried here. Each tip has
+moved since it was last measured, and a number nobody re-ran is worse
+than no number.
+
+### What that leaves
+
+- **5 merged**, 3 built but ungated, **29 unstarted**.
+- Ready today from `origin/v2`: **07, 12, 27, 29, 34**.
+- **05 gates 09; 09 gates 10; 10 releases about twenty cards.** That
+  chain is single-file and cannot be parallelised.
 
 Nothing is pushed and no PR is open except #2, because the plan itself
 goes up as a PR and gets approved there before implementation officially

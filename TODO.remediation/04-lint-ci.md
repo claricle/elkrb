@@ -1,7 +1,7 @@
 # 04 — Lint and CI hygiene
 Slice S28 · branch `fix/s28-lint-ci`
 
-Status: done, branch `fix/s28-lint-ci` @ 11140a6, awaiting PR.
+Status: **merged into `v2`** via PR #6, at 11140a6. Closed.
 
 Can start: now — this branch is one commit on `v2` and needs nothing from the
 other two. It cannot CLOSE until 02 (S0b) and 03 (S0a) land: 02 appends to

@@ -1,10 +1,11 @@
 # 03 — elkjs golden harness
 Slice S0a · branch `fix/s0a-golden-harness`
 
-Status: done, branch `fix/s0a-golden-harness` @ 09a5186, awaiting PR — with
-one step deliberately outstanding: the `corpus_spec` reconciliation in step 7
-below could not be written on this branch, because the branch starts from
-`origin/v2` and the file it edits arrives with 02. It happens at merge.
+Status: built, **not gated, not merged**. Branch `fix/s0a-golden-harness` @
+e8c7e69, 11 commits ahead of `origin/v2`. One step is deliberately
+outstanding: the `corpus_spec` reconciliation in step 7 below cannot be
+written on this branch, because the file it edits arrives with 02. It happens
+at merge.
 
 Can start: now — the build ran in parallel with 02 (S0b), off `v2`. It cannot
 CLOSE until 02 lands: step 7 rewrites `spec/cross_validation/corpus_spec.rb`,
