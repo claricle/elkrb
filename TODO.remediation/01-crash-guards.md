@@ -6,7 +6,7 @@ draft against `main` — the one slice PR that does not target `v2` — and it
 carries two open High findings. The code is in `v2`; the PR is not closed.
 
 Can start: closed. This slice is frozen and is not re-planned. Blocks: it is
-the base of everything — `v2` IS this commit, so every other item branches
+the base of everything — `v2` was seeded at this commit, so every other item branches
 from it and re-locates its `6ac367c` line numbers against it. Blocks the START
 of 02 (S0b) and 03 (S0a) only in the sense that both author their ledgers
 against `v2`. Medium (19 files, +605/-107). Not BREAKING: only crashes and

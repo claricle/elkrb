@@ -1,7 +1,10 @@
 # 04 — Lint and CI hygiene
 Slice S28 · branch `fix/s28-lint-ci`
 
-Status: **merged into `v2`** via PR #6, at 11140a6. Closed.
+Status: **merged into `v2`** via PR #6. The merged source tip is `56900d3`
+("Tighten lint pins and document parked version mismatch"), merged by
+`fa3e7f8`. `11140a6` is only its parent and does not carry the final
+`Gemfile` and `.rubocop_todo.yml` changes. Closed.
 
 Can start: now — this branch is one commit on `v2` and needs nothing from the
 other two. It cannot CLOSE until 02 (S0b) and 03 (S0a) land: 02 appends to

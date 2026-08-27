@@ -4,18 +4,43 @@ Slice S0b · branch `fix/s0b-corpus-cli-harness`
 Status: built, **not gated, not merged**. Branch `fix/s0b-corpus-cli-harness`
 @ 37bb0ce, 5 commits ahead of `origin/v2`.
 
-The Blocker raised against `corpus:dump` — that pruning could delete tracked
-fixtures in a caller-supplied destination — was **fixed at 37bb0ce**
-("harden dump guard"). Re-measured 2026-08-27 by running the guard directly:
+**One Blocker is open.** `prune_stale_dumps` in
+`spec/cross_validation/corpus_runner.rb` can delete JSON out of directories
+the caller never named.
 
-- a directory with no `summary.json` is left untouched, so a tracked fixture
-  directory cannot be pruned at all
-- a real dump directory loses only `*.json` that is neither a current case
-  nor the summary
-- a glob metacharacter in the destination fails the literal `File.file?`
-  check and returns early, deleting nothing
+The guard added at 37bb0ce ("harden dump guard") narrows it but does not
+close it:
 
-Nothing is outstanding on the code. It needs the gate run.
+```ruby
+return unless File.file?(File.join(outdir, "summary.json"))
+Dir[File.join(outdir, "*.json")].each { |p| File.delete(p) unless keep.include?(...) }
+```
+
+`File.file?` treats the path literally. `Dir[]` does not. So a destination
+that is a real directory whose *name contains* `*` passes the guard on the
+second run, and the `Dir[]` then expands across its siblings.
+
+Measured 2026-08-27:
+
+```
+  dump*/      summary.json + live_case.json     (a real directory)
+  dumpster/   precious_fixture.json
+  dumpyard/   also_precious.json
+
+  prune_stale_dumps("dump*", ["live_case"])
+
+  dump*/      survived
+  dumpster/   EMPTY   <- deleted
+  dumpyard/   EMPTY   <- deleted
+```
+
+An earlier retraction of this Blocker was wrong. It rested on a probe that
+used a metacharacter in a path with no matching literal directory, so the
+guard returned early and nothing was deleted. One input shape, generalised.
+
+The fix has to compare against a resolved real path, or escape the
+destination before it reaches `Dir[]` — `File.file?` and `Dir[]` must not
+disagree about what `outdir` means.
 
 Can start: now — this item depends on nothing and is the first thing that
 lands after 01 (S1). It was branched from `main` before `v2` existed, then
@@ -155,6 +180,11 @@ Done. What was verified:
 - `bundle exec rake validate:import_elkjs` with no `ELKJS_DIR` exits 1 with
   the refusal message (rake aborts when the importer refuses) and leaves
   `spec/cross_validation/fixtures/elkjs/imported_tests.json` byte-identical.
+
+**Everything below this line was recorded at `22231fd`.** The branch has
+since moved to `37bb0ce` ("preserve import expectations and harden dump
+guard"), so the counts and the importer behaviour described above are from
+the older SHA and have not been re-measured. Re-run them before the gate.
 
 Gates that were mandatory and what they found:
 

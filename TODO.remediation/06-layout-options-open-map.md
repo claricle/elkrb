@@ -238,7 +238,7 @@ behaviour on paths no committed fixture exercises (no fixture carries
 snake_case `edge_routing`, none constructs `layout_options` with Symbol keys
 directly).
 
-Gate B (Codex `ultra`) went a further five rounds after this record was
+Gate B (Codex `ultra`) went a further six rounds after this record was
 written, and approved the branch at `36e0eb1`. That is the SHA merged into
 `v2` by PR #4. The approval artifact is
 `.claude/codex-approvals/s3-open-options-map@36e0eb1.txt`.

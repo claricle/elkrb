@@ -195,7 +195,10 @@ Gates that were mandatory and what they found:
 - **Gate B** round 1 found 1 Medium — an Array leaking out of the sniff.
   Fixed. Round 2: APPROVE.
 
-Recorded for later items, not fixed here:
+Recorded for later items, not fixed here — **except the first, which was
+subsequently fixed on this branch at `d4cba2e` ("propagate render failures
+and reject malformed shapes"). The paragraph below describes the state
+before that commit.**
 
 - **`batch` still reports success when Graphviz rendering itself fails.**
   `diagram_command.rb#render_to_image` rescues

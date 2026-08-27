@@ -121,8 +121,9 @@ because 30-odd arrows into one node hide the shape:
   `fix/s0b-corpus-cli-harness` uncommitted; the gate cannot.
 - **03 gates every item that un-pends a golden** — 12, 13, 14, 16, 17,
   18, 19, 20, 21, 22, 23, 31. Item 03's own header calls this a start
-  block; those items phrase it as "the golden assertions need 03". Both
-  are moot now: 03 is done.
+  block; those items phrase it as "the golden assertions need 03". **03
+  is built but not merged**, so this block is live: none of those twelve
+  items can start until it lands.
 
 Item 04 blocks nothing structurally. It moves the bar instead: from 04
 on, "green" means `bundle exec rake` (spec **and** rubocop), not
@@ -145,16 +146,16 @@ gantt
     dateFormat  YYYY-MM-DD
     axisFormat  %m-%d
     title Waves — ordering, not a schedule
-    section Wave 0 landed
+    section Wave 0
     01 crash guards (v2 seed)   :done, w0a, 2026-08-19, 1d
-    02 corpus + CLI harness     :done, w0b, 2026-08-19, 2d
-    03 elkjs goldens            :done, w0c, after w0b, 1d
+    02 corpus + CLI harness     :active, w0b, 2026-08-19, 2d
+    03 elkjs goldens            :active, w0c, after w0b, 1d
     04 lint + CI                :done, w0d, after w0c, 1d
-    05 CLI shell boundary       :done, w0e, after w0b, 1d
+    05 CLI shell boundary       :active, w0e, after w0b, 1d
     11 NodeIndex                :done, w0f, 2026-08-20, 1d
-    section Wave 0 built, gate outstanding
-    06 options open map         :active, w0g, 2026-08-20, 2d
-    08 options registry         :active, w0h, 2026-08-20, 2d
+    section Wave 0 merged
+    06 options open map         :done, w0g, 2026-08-20, 2d
+    08 options registry         :done, w0h, 2026-08-20, 2d
     section Wave 1 options core
     07 drop shim                :w1a, after w0g, 2d
     09 resolver + wiring        :w1b, after w0h, 3d
@@ -203,9 +204,9 @@ unless it says close.
 | # | Item | Slice | Size | Can start | Blocks | Status |
 |---|---|---|---|---|---|---|
 | 01 | Crash guards on ordinary ELK input | S1 | medium | closed | is the `v2` base of everything; 02, 03 | **merged** @ `a008889`; PR #2 still open, 2 Highs |
-| 02 | Corpus and CLI harness | S0b | medium | now | 05; close of 03, 04, and of every XD-gated item from 05 on | built @ `37bb0ce`, not gated |
+| 02 | Corpus and CLI harness | S0b | medium | now | 05; close of 03, and of every XD-gated item from 05 on | built @ `37bb0ce`, **1 open Blocker** |
 | 03 | elkjs golden harness | S0a | large | now; closes after 02 | close of 04 and of 24; start of 12, 13, 14, 16–23, 31 | built @ `e8c7e69`, not gated |
-| 04 | Lint and CI hygiene | S28 | small | closed | nothing; moves the bar to `rake` | **merged** @ `11140a6`, PR #6 |
+| 04 | Lint and CI hygiene | S28 | small | closed | nothing; moves the bar to `rake` | **merged** @ `56900d3`, PR #6 |
 | 05 | CLI and shell boundary | S2 | medium | after 02 | 09, 26, 36 | built @ `249a4d8`, not gated — **critical path** |
 | 06 | LayoutOptions open map | S3 | medium | closed | 07, 09, 27, 29, 34 | **merged** @ `36e0eb1`, PR #4 |
 | 07 | Drop the LayoutOptions shim | S3b | medium | **now** | must merge before 14, 16, 17, 19, 23, 24, 28, 30 start | ready — 06 and 11 are merged |
@@ -241,14 +242,19 @@ unless it says close.
 | 37 | CHANGELOG, generated docs, packaging | S30 | medium | after 25, 28, 29, 30, 32, 33, 35, 36 | nothing; the `v2 → main` PR follows | blocked by 25, 28, 29, 30, 35 |
 
 Ready to pick up today, branching straight from `origin/v2`:
-**07**, **12**, **27**, **29** and **34**. Every blocker of theirs is
-merged.
+**07**, **27**, **29** and **34**. Every blocker of theirs is merged.
 
-**26 is no longer ready** — it needs 05, and 05 is built but not merged.
+Two that look ready and are not:
 
-Three built branches are still ungated and unmerged: **02**, **03** and
-**05**. None of them has an open finding — they have never been through
-the gates.
+- **12** needs 03, which is built but not merged. 03 gates the start of
+  12, 13, 14, 16, 17, 18, 19, 20, 21, 22, 23 and 31.
+- **26** needs 05, which is built but not merged.
+
+Three built branches are still unmerged: **02**, **03** and **05**. Gate
+A and Gate B both ran on each of them at an earlier SHA. Every one has
+since moved, so **no current tip carries a valid approval** — an approval
+names a SHA, and a new commit invalidates it. 02 also has an open
+Blocker (see its card).
 
 Clearing **05** is the highest-value move on the board. Counted from the
 dependency columns above, **24 of the 29 unstarted cards are blocked
@@ -347,7 +353,13 @@ stack named in the body.
 3. **Orchestrator gates** on the exact head SHA: Gate A
    (`multi-agent-review`), then Gate B (Codex at `ultra`, with the
    verbatim verify-before-critique instruction). Three rounds each, then
-   park. A Codex run that errored, was killed, or printed no `VERDICT` is
+   park.
+
+   **This rule was exceeded and not waived.** Item 06 took seven Gate B
+   rounds and item 08 took six, and both were merged. Neither recorded an
+   exception at the time. Recorded here rather than quietly dropped: either
+   raise the limit to what the work actually needs, or park at three and
+   mean it. It cannot stay at three while merges run past it. A Codex run that errored, was killed, or printed no `VERDICT` is
    not a review — re-run it.
 4. **Publish** only when both gates approve that SHA: push, then
    `gh pr create --draft` against `v2`. The body carries `## Summary`
@@ -362,7 +374,10 @@ branch that exists on origin — merge `origin/v2` in instead.
 
 ## Current state
 
-`v2` is on origin at `75bdb13`. Five slice PRs are merged into it. The
+`v2` is on origin at `75bdb13`. **Four slice PRs are merged into it**
+— #4, #5, #6 and #7. Item 01 was seeded directly rather than merged, and
+its PR #2 is still open. PR #8 is not a slice; it restored the lint
+ratchet. The
 suite there is **763 examples, 0 failures**, and RuboCop reports **0
 offences across 120 files** — measured 2026-08-27 in the clean worktree
 `~/.claude/pipeline/worktrees/elkrb/todo-remediation`, with `origin/v2`
@@ -370,7 +385,7 @@ merged in.
 
 ### Merged into `v2`
 
-Five slice PRs, plus #8's lint ratchet. **The Items table above is the one
+Four slice PRs (#4-#7), the 01 seed, and #8's lint ratchet. **The Items table above is the one
 place merge status is recorded** — do not restate a SHA here, or the two
 copies drift, which is how this section came to be wrong once already.
 
@@ -382,7 +397,7 @@ seed.
 
 | Item | Branch | Head | Ahead of `v2` | State |
 |---|---|---|---|---|
-| 02 | `fix/s0b-corpus-cli-harness` | `37bb0ce` | 5 | the `corpus:dump` pruning Blocker was fixed here and re-measured; nothing outstanding on the code |
+| 02 | `fix/s0b-corpus-cli-harness` | `37bb0ce` | 5 | **one open Blocker** — `prune_stale_dumps` still deletes across sibling directories when the destination is a real directory whose name contains `*`. `File.file?` reads the path literally, `Dir[]` globs it. See the card |
 | 03 | `fix/s0a-golden-harness` | `e8c7e69` | 11 | step 7's `corpus_spec` reconciliation happens at merge — the file it edits arrives with 02 |
 | 05 | `fix/s2-cli-shell` | `249a4d8` | 20 | **the critical path.** Base is a local integration ref = `origin/v2` + 02 |
 
@@ -406,6 +421,7 @@ than no number.
   So 05 is not one card among three. It is the gate on two thirds of
   everything left.
 
-Nothing is pushed and no PR is open except #2, because the plan itself
-goes up as a PR and gets approved there before implementation officially
-resumes.
+That paragraph used to say nothing was pushed and no PR existed except
+#2. Both are now false: `v2` is on origin at `75bdb13`, PRs #4-#8 are
+merged, and PR #3 carries this plan. What still holds is the rule — a
+branch is not pushed until it has a Codex approval naming its exact tip.
