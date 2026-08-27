@@ -50,6 +50,21 @@ RSpec.describe "elkrb CLI shell boundary" do
       expect(stderr).not_to eq("")
     end
 
+    # Cli#error_output writes with $stderr.puts rather than Kernel#warn
+    # because warn is a no-op once warnings are off, which would delete
+    # every CLI error message for anyone running under -W0.
+    it "still reports the error on stderr under RUBYOPT=-W0" do
+      garbage_file = File.join(CliRunner::ROOT,
+                               "spec/fixtures/corpus/garbage.txt")
+
+      stdout, stderr, status = run_elkrb("layout", garbage_file,
+                                         env: { "RUBYOPT" => "-W0" })
+
+      expect(status.exitstatus).to eq(1)
+      expect(stdout).to eq("")
+      expect(stderr).to start_with("Error: ")
+    end
+
     it "exits 0 for an ELKT file the sniff-then-parse fallback can read" do
       Dir.mktmpdir do |dir|
         file = File.join(dir, "graph.elkt")
