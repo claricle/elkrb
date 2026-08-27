@@ -407,11 +407,14 @@ Four slice PRs (#4-#7), the 01 seed, and #8's lint ratchet.
 
 Two tables, one fact each, and neither repeats the other:
 
-- **The Items table above records MERGES.** A merged SHA appears there
-  and nowhere else.
-- **The table below records unmerged BRANCHES** — name, current head,
-  how far ahead of `v2`, and what state it is in. An unmerged head
-  appears there and nowhere else.
+- **The Items table above is the authoritative merge record.** When a
+  merged SHA is quoted elsewhere — the seed `a008889` shows up in
+  several places as history and as a base — that table is what the
+  quote must agree with. It is the copy to correct first.
+- **The table below is the authoritative branch record** — name,
+  current head, how far ahead of `v2`, and what state it is in. An
+  unmerged head appears there and nowhere else, so a moving SHA has
+  exactly one home.
 
 That is why the Items table's Status column says only "built, not
 merged" for 02, 03 and 05. It used to carry their heads too, and two
