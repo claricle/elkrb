@@ -246,10 +246,14 @@ merged.
 
 **26 is no longer ready** — it needs 05, and 05 is built but not merged.
 
-Three built branches are still ungated and unmerged: **02** (one open
-Blocker), **03**, and **05**. Clearing 05 is the highest-value move on
-the board: it is the only thing standing between us and 09, and 09 → 10
-is what releases roughly twenty of the remaining cards.
+Three built branches are still ungated and unmerged: **02**, **03** and
+**05**. None of them has an open finding — they have never been through
+the gates.
+
+Clearing **05** is the highest-value move on the board. Counted from the
+dependency columns above, **24 of the 29 unstarted cards are blocked
+behind it**, through 09 and then 10. Nothing else on the list moves that
+many.
 
 ## Rulings
 
