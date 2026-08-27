@@ -31,26 +31,28 @@ module FakeDot
     end
   RUBY
 
+  OVERRIDDEN_ENV = %w[PATH FAKE_DOT_LOG ELKRB_DOT].freeze
+
   def with_fake_dot
-    original_path = ENV["PATH"]
-    original_log = ENV["FAKE_DOT_LOG"]
-    original_elkrb_dot = ENV["ELKRB_DOT"]
+    saved = OVERRIDDEN_ENV.to_h { |key| [key, ENV.fetch(key, nil)] }
 
     Dir.mktmpdir("fake_dot") do |dir|
-      log_path = File.join(dir, "dot.log")
-      script_path = File.join(dir, "dot")
-      File.write(script_path, FAKE_DOT_SCRIPT)
-      FileUtils.chmod(0o755, script_path)
-
-      ENV["PATH"] = [dir, original_path].compact.join(File::PATH_SEPARATOR)
-      ENV["FAKE_DOT_LOG"] = log_path
-      ENV.delete("ELKRB_DOT")
-
-      yield log_path
+      yield install_fake_dot(dir, saved["PATH"])
     ensure
-      ENV["PATH"] = original_path
-      ENV["FAKE_DOT_LOG"] = original_log
-      ENV["ELKRB_DOT"] = original_elkrb_dot
+      saved.each { |key, value| ENV[key] = value }
     end
+  end
+
+  # @return [String] the log path the caller reads argv back from
+  def install_fake_dot(dir, original_path)
+    log_path = File.join(dir, "dot.log")
+    script_path = File.join(dir, "dot")
+    File.write(script_path, FAKE_DOT_SCRIPT)
+    FileUtils.chmod(0o755, script_path)
+
+    ENV["PATH"] = [dir, original_path].compact.join(File::PATH_SEPARATOR)
+    ENV["FAKE_DOT_LOG"] = log_path
+    ENV.delete("ELKRB_DOT")
+    log_path
   end
 end

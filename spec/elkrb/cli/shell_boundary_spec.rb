@@ -9,8 +9,6 @@ require "elkrb/format_sniffer"
 require "elkrb/graphviz_wrapper"
 require "elkrb/commands/batch_command"
 require "yaml"
-require "tmpdir"
-require "fileutils"
 
 RSpec.describe "elkrb CLI shell boundary" do
   include CliRunner
@@ -42,7 +40,8 @@ RSpec.describe "elkrb CLI shell boundary" do
     end
 
     it "exits 1 with a stderr message for unparsable input" do
-      garbage_file = File.join(CliRunner::ROOT, "spec/fixtures/corpus/garbage.txt")
+      garbage_file = File.join(CliRunner::ROOT,
+                               "spec/fixtures/corpus/garbage.txt")
 
       stdout, stderr, status = run_elkrb("layout", garbage_file)
 
@@ -102,12 +101,15 @@ RSpec.describe "elkrb CLI shell boundary" do
         # JSON. Falling straight through to ELKT reads "id: root," and
         # "children: [" as layout options, so the graph comes back with no
         # children and no error at all.
-        File.write(file, "{\n  id: root,\n  children: [\n    {id: n1, width: 30, height: 30}\n  ]\n}\n")
+        File.write(file,
+                   "{\n  id: root,\n  children: [\n    " \
+                   "{id: n1, width: 30, height: 30}\n  ]\n}\n")
 
         stdout, _stderr, status = run_elkrb("layout", file)
 
         expect(status.exitstatus).to eq(0)
-        expect(JSON.parse(stdout)["children"].map { |child| child["id"] }).to eq(["n1"])
+        ids = JSON.parse(stdout)["children"].map { |child| child["id"] }
+        expect(ids).to eq(["n1"])
       end
     end
 
@@ -117,7 +119,8 @@ RSpec.describe "elkrb CLI shell boundary" do
       stdout, _stderr, status = run_elkrb("layout", bom_file)
 
       expect(status.exitstatus).to eq(0)
-      expect(JSON.parse(stdout)["children"].map { |child| child["id"] }).to eq(%w[a b])
+      ids = JSON.parse(stdout)["children"].map { |child| child["id"] }
+      expect(ids).to eq(%w[a b])
     end
 
     it "accepts a JSON file whose only recognized field is properties" do
@@ -145,7 +148,8 @@ RSpec.describe "elkrb CLI shell boundary" do
 
         expect(status.exitstatus).to eq(1)
         expect(stdout).to eq("")
-        expect(stderr).to eq("Error: Unable to parse input file. Supported formats: JSON, YAML, ELKT\n")
+        expect(stderr).to eq("Error: Unable to parse input file. " \
+                             "Supported formats: JSON, YAML, ELKT\n")
       end
     end
 
@@ -158,7 +162,8 @@ RSpec.describe "elkrb CLI shell boundary" do
 
         expect(status.exitstatus).to eq(1)
         expect(stdout).to eq("")
-        expect(stderr).to eq("Error: Unable to parse input file. Supported formats: JSON, YAML, ELKT\n")
+        expect(stderr).to eq("Error: Unable to parse input file. " \
+                             "Supported formats: JSON, YAML, ELKT\n")
       end
     end
   end
@@ -197,17 +202,22 @@ RSpec.describe "failures that must not look like successes" do
 
   context "when Graphviz cannot render" do
     before do
-      allow_any_instance_of(Elkrb::GraphvizWrapper).to receive(:available?).and_return(false)
+      allow_any_instance_of(Elkrb::GraphvizWrapper)
+        .to receive(:available?).and_return(false)
     end
 
     it "fails the batch instead of counting the file as processed" do
-      command = Elkrb::Commands::BatchCommand.new(input_dir, output_dir: output_dir, format: "svg")
+      command = Elkrb::Commands::BatchCommand.new(input_dir,
+                                                  output_dir: output_dir,
+                                                  format: "svg")
 
       expect { command.run }.to raise_error(Elkrb::Error, /failed/)
     end
 
     it "leaves no DOT text sitting under the requested image filename" do
-      command = Elkrb::Commands::BatchCommand.new(input_dir, output_dir: output_dir, format: "svg")
+      command = Elkrb::Commands::BatchCommand.new(input_dir,
+                                                  output_dir: output_dir,
+                                                  format: "svg")
 
       begin
         command.run
@@ -223,13 +233,15 @@ end
 RSpec.describe "malformed collection shapes" do
   it "reports a normalized parse error rather than leaking NoMethodError" do
     expect do
-      Elkrb::FormatSniffer.parse('{"id":"r","children":{"a":1}}', unparseable_message: "not a graph")
+      Elkrb::FormatSniffer.parse('{"id":"r","children":{"a":1}}',
+                                 unparseable_message: "not a graph")
     end.to raise_error(ArgumentError, "not a graph")
   end
 
   it "still accepts a properly shaped children list" do
     graph = Elkrb::FormatSniffer.parse(
-      '{"id":"r","children":[{"id":"a","width":10,"height":10}]}', unparseable_message: "not a graph"
+      '{"id":"r","children":[{"id":"a","width":10,"height":10}]}',
+      unparseable_message: "not a graph",
     )
 
     expect(graph.children).to be_an(Array)
@@ -263,7 +275,8 @@ RSpec.describe "a file whose extension already names the format" do
     end
   end
 
-  it "accepts an empty ELKT graph, which the parser and serializer both round-trip" do
+  it "accepts an empty ELKT graph, which the parser and serializer " \
+     "both round-trip" do
     Dir.mktmpdir do |dir|
       path = File.join(dir, "empty.elkt")
       File.write(path, "")
@@ -277,7 +290,8 @@ RSpec.describe "a file whose extension already names the format" do
 end
 
 RSpec.describe "Graphviz lookup along PATH" do
-  it "reads an empty PATH component as the working directory, like the shell does" do
+  it "reads an empty PATH component as the working directory, " \
+     "like the shell does" do
     Dir.mktmpdir do |dir|
       dot = File.join(dir, "dot")
       File.write(dot, "#!/bin/sh\nexit 0\n")
@@ -309,8 +323,10 @@ RSpec.describe "every command reads input through one path" do
       %w[layout validate].each do |command|
         _stdout, stderr, status = run_elkrb(command, path)
 
-        expect(status.exitstatus).to eq(1), "#{command} accepted a malformed shape"
-        expect(stderr).to include("Unable to parse"), "#{command} leaked an internal error"
+        expect(status.exitstatus).to eq(1),
+                                     "#{command} accepted a malformed shape"
+        expect(stderr).to include("Unable to parse"),
+                          "#{command} leaked an internal error"
       end
     end
   end
@@ -318,7 +334,8 @@ RSpec.describe "every command reads input through one path" do
   it "still accepts a well-formed graph from every command" do
     Dir.mktmpdir do |dir|
       path = File.join(dir, "ok.json")
-      File.write(path, '{"id":"r","children":[{"id":"a","width":10,"height":10}]}')
+      File.write(path,
+                 '{"id":"r","children":[{"id":"a","width":10,"height":10}]}')
 
       %w[layout validate].each do |command|
         _stdout, _stderr, status = run_elkrb(command, path)

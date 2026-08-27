@@ -22,8 +22,8 @@ RSpec.describe Elkrb::GraphvizWrapper do
     ENV["ELKRB_DOT"] = original_elkrb_dot
   end
 
-  def with_empty_path
-    Dir.mktmpdir("empty_path") { |dir| with_path_only(dir) { yield } }
+  def with_empty_path(&)
+    Dir.mktmpdir("empty_path") { |dir| with_path_only(dir, &) }
   end
 
   def fake_dot_executable(log_path)
@@ -115,7 +115,7 @@ RSpec.describe Elkrb::GraphvizWrapper do
           wrapper.render(input, output, :png)
 
           expect(logged_argv(log_path)).to eq(
-            ["-Kdot", "-Tpng", "-Gdpi=96", "-o", output, input]
+            ["-Kdot", "-Tpng", "-Gdpi=96", "-o", output, input],
           )
         end
       end
@@ -172,7 +172,7 @@ RSpec.describe Elkrb::GraphvizWrapper do
         expect do
           described_class.new.render("input.dot", "output.png", :png)
         end.to raise_error(Elkrb::GraphvizWrapper::GraphvizNotFoundError,
-                            /Graphviz is required/)
+                           /Graphviz is required/)
       end
     end
 

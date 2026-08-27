@@ -248,7 +248,8 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
 
       command = described_class.new(input_file, { output: output_file })
 
-      expect { command.run }.to raise_error(ArgumentError, /Unable to parse input file/)
+      expect { command.run }.to raise_error(ArgumentError,
+                                            /Unable to parse input file/)
     end
   end
 end

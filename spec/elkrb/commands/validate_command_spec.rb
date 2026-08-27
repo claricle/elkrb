@@ -161,7 +161,8 @@ RSpec.describe Elkrb::Commands::ValidateCommand do
 
       command = described_class.new(input_file, {})
 
-      expect { command.run }.to raise_error(ArgumentError, /Unable to parse input file/)
+      expect { command.run }.to raise_error(ArgumentError,
+                                            /Unable to parse input file/)
     end
   end
 end

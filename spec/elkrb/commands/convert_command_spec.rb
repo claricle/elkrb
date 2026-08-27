@@ -172,10 +172,12 @@ RSpec.describe Elkrb::Commands::ConvertCommand do
 
       command = described_class.new(input_file, { output: output_file })
 
-      expect { command.run }.to raise_error(ArgumentError, /Unable to parse input file/)
+      expect { command.run }.to raise_error(ArgumentError,
+                                            /Unable to parse input file/)
     end
 
-    it "preserves options-only ELKT content that also parses as valid (hollow) YAML" do
+    it "preserves options-only ELKT content that also parses as valid " \
+       "(hollow) YAML" do
       input_file = File.join(temp_dir, "options_only.noext")
       output_file = File.join(temp_dir, "output.json")
       # Valid YAML on its own (succeeds silently with an empty/hollow
