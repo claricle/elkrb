@@ -17,7 +17,8 @@ class ElkjsTestImporter
   def import_all
     unless Dir.exist?(ELKJS_PATH)
       warn "elkjs checkout not found at #{ELKJS_PATH} (set ELKJS_DIR to " \
-           "override) - refusing to overwrite #{OUTPUT_PATH}/imported_tests.json"
+           "override) - refusing to overwrite " \
+           "#{OUTPUT_PATH}/imported_tests.json"
       exit 1
     end
 

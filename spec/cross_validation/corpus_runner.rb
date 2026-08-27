@@ -42,9 +42,14 @@ class CorpusRunner
 
   class << self
     def cases
-      all_cases = top_level_fixture_cases + corpus_fixture_cases + imported_cases
-      duplicates = all_cases.map(&:id).tally.select { |_, count| count > 1 }.keys
-      raise ArgumentError, "duplicate corpus case ids: #{duplicates.join(', ')}" unless duplicates.empty?
+      all_cases =
+        top_level_fixture_cases + corpus_fixture_cases + imported_cases
+      id_counts = all_cases.map(&:id).tally
+      duplicates = id_counts.select { |_, count| count > 1 }.keys
+      unless duplicates.empty?
+        raise ArgumentError,
+              "duplicate corpus case ids: #{duplicates.join(', ')}"
+      end
 
       all_cases
     end
@@ -52,32 +57,46 @@ class CorpusRunner
     def run(outdir, timeout: TIMEOUT_SECONDS)
       refuse_source_directory!(outdir)
       FileUtils.mkdir_p(outdir)
-      summary = { "total" => 0, "ok" => 0, "error" => 0, "timeout" => 0, "cases" => [] }
+      summary = { "total" => 0, "ok" => 0, "error" => 0, "timeout" => 0,
+                  "cases" => [] }
 
       cases.each do |kase|
         status, payload = run_case(kase, timeout)
-        summary["total"] += 1
-        summary[status] += 1
-        summary["cases"] << { "id" => kase.id, "algorithm" => kase.algorithm, "status" => status }
-        File.write(File.join(outdir, "#{kase.id}.json"), JSON.pretty_generate(payload))
+        tally(summary, kase, status)
+        File.write(File.join(outdir, "#{kase.id}.json"),
+                   JSON.pretty_generate(payload))
       end
 
-      File.write(File.join(outdir, "summary.json"), JSON.pretty_generate(summary))
+      File.write(File.join(outdir, "summary.json"),
+                 JSON.pretty_generate(summary))
       summary
     end
 
     private
 
+    def tally(summary, kase, status)
+      summary["total"] += 1
+      summary[status] += 1
+      summary["cases"] << { "id" => kase.id, "algorithm" => kase.algorithm,
+                            "status" => status }
+    end
+
     def refuse_source_directory!(outdir)
       expanded = File.expand_path(outdir)
-      return unless SOURCE_DIRS.any? { |dir| expanded == dir || expanded.start_with?("#{dir}/") }
+      inside = SOURCE_DIRS.any? do |dir|
+        expanded == dir || expanded.start_with?("#{dir}/")
+      end
+      return unless inside
 
-      raise ArgumentError, "refusing to dump into a corpus source directory: #{outdir}"
+      raise ArgumentError,
+            "refusing to dump into a corpus source directory: #{outdir}"
     end
 
     def run_case(kase, timeout)
       Kernel.srand(DETERMINISTIC_SEED)
-      result = Timeout.timeout(timeout) { Elkrb.layout(kase.graph, algorithm: kase.algorithm) }
+      result = Timeout.timeout(timeout) do
+        Elkrb.layout(kase.graph, algorithm: kase.algorithm)
+      end
       ["ok", canonicalize(JSON.parse(result.to_json))]
     rescue Timeout::Error
       ["timeout", { "error" => "Timeout" }]
@@ -99,29 +118,31 @@ class CorpusRunner
     end
 
     def top_level_fixture_cases
-      Dir[File.join(ROOT, "spec/fixtures/*.json")].sort.map do |path|
-        Case.new(id: File.basename(path, ".json"), algorithm: "layered", graph: JSON.parse(File.read(path)))
+      Dir[File.join(ROOT, "spec/fixtures/*.json")].map do |path|
+        Case.new(id: File.basename(path, ".json"), algorithm: "layered",
+                 graph: JSON.parse(File.read(path)))
       end
     end
 
     def corpus_fixture_cases
-      Dir[File.join(ROOT, "spec/fixtures/corpus/*.json")].sort.map do |path|
+      Dir[File.join(ROOT, "spec/fixtures/corpus/*.json")].map do |path|
         wrapper = JSON.parse(File.read(path))
         Case.new(
           id: File.basename(path, ".json"),
           algorithm: wrapper.fetch("algorithm", "layered"),
-          graph: wrapper.fetch("graph")
+          graph: wrapper.fetch("graph"),
         )
       end
     end
 
     def imported_cases
-      Dir[File.join(ROOT, "spec/cross_validation/fixtures/*/imported_tests.json")].sort.flat_map do |path|
+      glob = "spec/cross_validation/fixtures/*/imported_tests.json"
+      Dir[File.join(ROOT, glob)].flat_map do |path|
         JSON.parse(File.read(path)).map do |entry|
           Case.new(
             id: entry.fetch("id"),
             algorithm: entry.fetch("algorithm", "layered"),
-            graph: entry.fetch("graph")
+            graph: entry.fetch("graph"),
           )
         end
       end

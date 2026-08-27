@@ -61,7 +61,9 @@ RSpec.describe "elkrb CLI" do
   end
 
   describe "render" do
-    windows_skip_reason = "fake_dot.rb's script needs a POSIX shell; not portable to Windows" if Gem.win_platform?
+    posix_only = "fake_dot.rb's script needs a POSIX shell; " \
+                 "not portable to Windows"
+    windows_skip_reason = posix_only if Gem.win_platform?
 
     it "never shells out to a string built from the output path",
        skip: windows_skip_reason do
