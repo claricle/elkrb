@@ -209,7 +209,14 @@ module Elkrb
     end
 
     def error_output(message)
+      # Kernel#warn is silent when warnings are off. Measured on ruby 3.4.8:
+      # `ruby -W0 -e 'warn "MSG"'` prints nothing, `ruby -W0 -e '$stderr.puts
+      # "MSG"'` prints MSG. The CLI must report errors on stderr whatever the
+      # warning level, so taking the cop's suggestion would delete every error
+      # message for anyone running under -W0.
+      # rubocop:disable Style/StderrPuts
       $stderr.puts message
+      # rubocop:enable Style/StderrPuts
     end
   end
 end

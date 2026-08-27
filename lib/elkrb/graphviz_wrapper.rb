@@ -62,8 +62,12 @@ module Elkrb
     # empty ELKRB_DOT is treated as no override: every `dot` on PATH is
     # tried in order.
     def find_graphviz
-      override = ENV["ELKRB_DOT"]
-      candidates = override.nil? || override.empty? ? path_dot_candidates : [override]
+      override = ENV.fetch("ELKRB_DOT", nil)
+      candidates = if override.nil? || override.empty?
+                     path_dot_candidates
+                   else
+                     [override]
+                   end
       candidates.find { |candidate| valid_executable?(candidate) }
     end
 
@@ -93,7 +97,8 @@ module Elkrb
     end
 
     def build_command(engine, format, input_file, output_file, dpi)
-      [@dot_path, "-K#{engine}", "-T#{format}", "-Gdpi=#{dpi}", "-o", output_file, input_file]
+      [@dot_path, "-K#{engine}", "-T#{format}", "-Gdpi=#{dpi}",
+       "-o", output_file, input_file]
     end
 
     def execute_command(argv)

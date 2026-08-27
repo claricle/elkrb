@@ -39,7 +39,6 @@ module Elkrb
         Elkrb::FormatSniffer.read(File.read(file), File.extname(file).downcase)
       end
 
-
       def detect_format(filename)
         ext = File.extname(filename).downcase
 

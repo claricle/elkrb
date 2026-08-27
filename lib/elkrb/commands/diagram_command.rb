@@ -51,7 +51,6 @@ module Elkrb
         Elkrb::FormatSniffer.read(File.read(file), File.extname(file).downcase)
       end
 
-
       def build_layout_options
         opts = {}
 
@@ -160,7 +159,7 @@ module Elkrb
       # it away rather than let a failed render look like a rendered file.
       def discard_unrendered(dot_file, output_file)
         File.delete(dot_file) if dot_file != output_file && File.exist?(dot_file)
-        File.delete(output_file) if File.exist?(output_file)
+        FileUtils.rm_f(output_file)
       end
 
       def preview(file)

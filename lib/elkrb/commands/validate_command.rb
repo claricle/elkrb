@@ -40,7 +40,6 @@ module Elkrb
         JSON.parse(graph.to_json, symbolize_names: true)
       end
 
-
       def validate_graph(graph)
         errors = []
 

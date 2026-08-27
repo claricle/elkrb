@@ -47,13 +47,19 @@ module Elkrb
         puts "✓ Processed #{success_count} file(s) → #{@options[:output_dir]}"
         puts "⚠ #{error_count} error(s)" if error_count.positive?
 
-        return unless error_count.positive?
-
-        require_relative "../errors"
-        raise Elkrb::Error, "#{error_count} of #{files.size} file(s) failed"
+        fail_on_errors(error_count, files.size)
       end
 
       private
+
+      # The summary alone would let a batch that failed on every file still
+      # exit 0, so a non-empty error count has to reach the caller.
+      def fail_on_errors(error_count, total)
+        return unless error_count.positive?
+
+        require_relative "../errors"
+        raise Elkrb::Error, "#{error_count} of #{total} file(s) failed"
+      end
 
       def process_file(file)
         basename = File.basename(file, File.extname(file))
