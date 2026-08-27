@@ -305,8 +305,16 @@ RSpec.describe "a file whose extension already names the format" do
 end
 
 RSpec.describe "Graphviz lookup along PATH" do
+  # Sets the real environment instead of stubbing ENV, the way
+  # graphviz_wrapper_spec's with_path_only does. A stub named after one
+  # reader (ENV#[]) stops intercepting the moment the code switches to
+  # another (ENV#fetch), and the example then silently reads whatever the
+  # developer's own environment happens to hold.
   it "reads an empty PATH component as the working directory, " \
      "like the shell does" do
+    original_path = ENV.fetch("PATH", nil)
+    original_elkrb_dot = ENV.fetch("ELKRB_DOT", nil)
+
     Dir.mktmpdir do |dir|
       dot = File.join(dir, "dot")
       File.write(dot, "#!/bin/sh\nexit 0\n")
@@ -314,14 +322,15 @@ RSpec.describe "Graphviz lookup along PATH" do
 
       Dir.chdir(dir) do
         # A bare separator: one empty component, meaning "here".
-        allow(ENV).to receive(:fetch).and_call_original
-        allow(ENV).to receive(:fetch).with("PATH", "").and_return(File::PATH_SEPARATOR)
-        allow(ENV).to receive(:[]).and_call_original
-        allow(ENV).to receive(:[]).with("ELKRB_DOT").and_return(nil)
+        ENV["PATH"] = File::PATH_SEPARATOR
+        ENV.delete("ELKRB_DOT")
 
         expect(Elkrb::GraphvizWrapper.new).to be_available
       end
     end
+  ensure
+    ENV["PATH"] = original_path
+    ENV["ELKRB_DOT"] = original_elkrb_dot
   end
 end
 
