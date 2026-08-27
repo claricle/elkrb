@@ -48,10 +48,18 @@ module Elkrb
       # dispatch plus shape validation lived in four places and drifted apart;
       # a guard added to one silently left the other three open.
       #
+      # The two paths raise differently, by design. A named JSON/YAML
+      # extension hands lutaml-model the content directly, so a document it
+      # cannot tokenize surfaces lutaml's own parse error, which names the
+      # offending token. Only the sniffed path normalizes to UNPARSEABLE.
+      #
       # @param content [String] raw file content
       # @param extension [String] the file's downcased extension
       # @return [Elkrb::Graph::Graph, Hash] the parsed graph
-      # @raise [ArgumentError] for unsupported or unparseable input
+      # @raise [Lutaml::Model::InvalidFormatError] when .json/.yml/.yaml
+      #   content will not parse as that format
+      # @raise [ArgumentError] for .dot/.gv, for a parsed-but-unusable
+      #   JSON/YAML model, and for ELKT or sniffed content that yields nothing
       def read(content, extension)
         require_relative "graph/graph"
 
@@ -152,9 +160,10 @@ module Elkrb
 
       # Mirrors the field list in Graph's json and yaml mapping blocks: when
       # every recognized field comes back empty, lutaml-model matched nothing.
-      # layout_options is a typed LayoutOptions model rather than a Hash, so
-      # it gets a nil check -- it has no #empty?, and any recognized
-      # layoutOptions substructure at all is real content.
+      # layout_options is nil-checked rather than blank-checked because any
+      # recognized layoutOptions substructure at all is real content -- an
+      # explicit `"layoutOptions": {}` means the document WAS understood, so
+      # a present-but-empty LayoutOptions must not read as hollow.
       def hollow_model?(graph)
         NIL_WHEN_HOLLOW.all? { |field| graph.public_send(field).nil? } &&
           BLANK_WHEN_HOLLOW.all? { |field| blank?(graph.public_send(field)) }
