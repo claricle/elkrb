@@ -48,8 +48,7 @@ rebased onto `v2` and force-pushed; that predates the no-rebase rule and is
 grandfathered, recorded here, and is the one exception. Blocks the START of 05
 (S2, which un-pends this item's `cli_spec` examples and uses its
 `cli_runner`/`fake_dot`). Blocks the CLOSE of 03 (S0a, which merges after this
-item and rewrites its `corpus_spec` invariant set) and of 04 (S28, whose
-`.gitignore` edit collides with this item's append) — both branches are rooted
+item and rewrites its `corpus_spec` invariant set) — that branch is rooted
 on `v2` and built in parallel; only their merges are ordered (`git merge-base
 v2 fix/s0a-golden-harness` is a008889). Blocks the CLOSE of every
 execution-diff-gated item from 05 onward: `rake corpus:dump` is the sole XD

@@ -6,10 +6,14 @@ Status: **merged into `v2`** via PR #6. The merged source tip is `56900d3`
 `fa3e7f8`. `11140a6` is only its parent and does not carry the final
 `Gemfile` and `.rubocop_todo.yml` changes. Closed.
 
-Can start: now — this branch is one commit on `v2` and needs nothing from the
-other two. It cannot CLOSE until 02 (S0b) and 03 (S0a) land: 02 appends to
-`.gitignore` at EOF while this item inserts `.claude/` mid-file, so landing
-second avoids a conflict, and 03 owns `golden.yml`, which must not be
+Can start: closed. This branch was two commits on the `v2` seed — `11140a6`
+then `56900d3` — and needed nothing from the other two.
+
+**The close-order rule below was not followed, and it is now historical.**
+04 merged first, ahead of 02 and 03. The conflicts it was written to avoid
+have to be resolved on 02's and 03's branches instead, when they land: 02
+appends to `.gitignore` at EOF while this item inserted `.claude/` mid-file,
+and 03 owns `golden.yml`, which must not be
 duplicated here. Blocks nothing structurally, but it moves the bar: from this
 item on, "green" means `bundle exec rake` (spec **and** rubocop), not `bundle
 exec rspec`. Every item from 05 (S2) onward reports against that bar, which is

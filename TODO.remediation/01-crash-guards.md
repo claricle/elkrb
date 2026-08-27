@@ -14,11 +14,14 @@ wrong output change.
 
 ## Facts
 
-`v2` and `fix/crash-on-elk-input` are the same commit, one ahead of `main`:
+`v2` was seeded from `fix/crash-on-elk-input` at `a008889`, one ahead of
+`main`. **Both have since moved** — `origin/v2` is at `75bdb13` after four
+slice merges, and the local fix branch carries later review commits. The
+command below reproduces the original seeding, not today's state:
 
 ```sh
-git rev-parse --short v2 fix/crash-on-elk-input   # a008889 a008889
-git log --oneline 6ac367c..v2                     # a008889 Fix crashes on ordinary ELK input
+git rev-parse --short a008889   # the v2 seed
+git log --oneline 6ac367c..a008889   # a008889 Fix crashes on ordinary ELK input
 ```
 
 The suite on that commit is green: `bundle exec rspec` → **625 examples, 0

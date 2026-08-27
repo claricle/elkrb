@@ -205,7 +205,7 @@ unless it says close.
 |---|---|---|---|---|---|---|
 | 01 | Crash guards on ordinary ELK input | S1 | medium | closed | is the `v2` base of everything; 02, 03 | **merged** @ `a008889`; PR #2 still open, 2 Highs |
 | 02 | Corpus and CLI harness | S0b | medium | now | 05; close of 03, and of every XD-gated item from 05 on | built @ `37bb0ce`, **1 open Blocker** |
-| 03 | elkjs golden harness | S0a | large | now; closes after 02 | close of 04 and of 24; start of 12, 13, 14, 16–23, 31 | built @ `e8c7e69`, not gated |
+| 03 | elkjs golden harness | S0a | large | now; closes after 02 | close of 24; start of 12, 13, 14, 16–23, 31 | built @ `e8c7e69`, not gated |
 | 04 | Lint and CI hygiene | S28 | small | closed | nothing; moves the bar to `rake` | **merged** @ `56900d3`, PR #6 |
 | 05 | CLI and shell boundary | S2 | medium | after 02 | 09, 26, 36 | built @ `249a4d8`, not gated — **critical path** |
 | 06 | LayoutOptions open map | S3 | medium | closed | 07, 09, 27, 29, 34 | **merged** @ `36e0eb1`, PR #4 |
@@ -214,7 +214,7 @@ unless it says close.
 | 09 | Resolver, wiring, precedence, CLI flags | S5 | large | after 05 | 10, 13, 14, 25, 28, 35, 36 | blocked by 05 only |
 | 10 | Every remaining option read onto the resolver | S6 | large | after 09, 11 | 13, 14, 16, 17, 18, 20, 22, 23, 24, 35 | blocked by 09 |
 | 11 | NodeIndex: endpoints, duplicate ids, disco | S7 | medium | closed | 07, 10, 12, 14, 16, 20, 23, 24 | **merged** @ `4364739`, PR #5 |
-| 12 | Layered: internal cycle breaking, hyperedges raise | S8 | medium | after 11 | 13, 25; close of 33 | ready |
+| 12 | Layered: internal cycle breaking, hyperedges raise | S8 | medium | after 11, 03 | 13, 25; close of 33 | blocked by 03 |
 | 13 | Layered: direction, ELK spacing, centring | S9 | small | after 09, 10, 12 | 14, 16, 31; merges before 36 touches `cli_spec` | blocked by 10, 12 |
 | 14 | Hierarchy: bottom-up sizing, per-level routing | S10 | large | after 07, 09, 10, 11, 13 | 15, 16, 17, 21, 25 | blocked by 13, 07 |
 | 15 | Cross-level edge routing | S10b | small | after 14, 16 | 30, 35 | blocked by 16 |
@@ -408,7 +408,8 @@ than no number.
 ### What that leaves
 
 - **5 merged**, 3 built but ungated, **29 unstarted**.
-- Ready today from `origin/v2`: **07, 12, 27, 29, 34**.
+- Ready today from `origin/v2`: **07, 27, 29, 34**. Not 12 — 03 gates
+  its start and 03 is unmerged.
 - The chain **05 → 09 → 10** is single-file and cannot be parallelised.
   Counted from the Items table's own dependency columns, transitively:
 
