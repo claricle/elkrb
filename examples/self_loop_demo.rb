@@ -146,7 +146,7 @@ graph4 = Elkrb::Graph::Graph.new(
   ],
   layout_options: Elkrb::Graph::LayoutOptions.new(
     algorithm: "layered",
-    edge_routing: "SPLINES",
+    "elk.edgeRouting" => "SPLINES",
   ),
 )
 
@@ -375,7 +375,7 @@ puts "=" * 70
     ],
     layout_options: Elkrb::Graph::LayoutOptions.new(
       algorithm: "layered",
-      edge_routing: style,
+      "elk.edgeRouting" => style,
     ),
   )
 

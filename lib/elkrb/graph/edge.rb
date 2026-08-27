@@ -14,7 +14,7 @@ module Elkrb
       attribute :incoming_shape, :string
       attribute :outgoing_shape, :string
 
-      json do
+      key_value do
         map "id", to: :id
         map "startPoint", to: :start_point
         map "endPoint", to: :end_point
@@ -68,10 +68,10 @@ module Elkrb
       attribute :targets, :string, collection: true
       attribute :labels, Label, collection: true
       attribute :sections, EdgeSection, collection: true
-      attribute :layout_options, LayoutOptions
+      attribute :layout_options, :hash
       attribute :properties, :hash
 
-      json do
+      key_value do
         map "id", to: :id
         map "sources", to: :sources
         map "targets", to: :targets
@@ -89,6 +89,17 @@ module Elkrb
         map "sections", to: :sections
         map "layout_options", to: :layout_options
         map "properties", to: :properties
+      end
+
+      # Normalizes a Symbol key however the options arrive — a constructor,
+      # a plain setter, or lutaml's own deserialization, which routes through
+      # here too. This is the single normalization point: a :hash-typed
+      # attribute otherwise stores a raw, unnormalized Hash.
+      def layout_options=(value)
+        value_set_for(:layout_options)
+        attr = self.class.attributes(lutaml_register)[:layout_options]
+        cast = attr.cast_value(DeepStringifyKeys.call(value), lutaml_register)
+        instance_variable_set(:@layout_options, LayoutOptions.wrap(cast))
       end
     end
   end

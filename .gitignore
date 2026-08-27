@@ -58,6 +58,7 @@ Gemfile.lock
 .DS_Store
 .vscode/
 .idea/
+.claude/
 *.swp
 *.tmp
 *.log

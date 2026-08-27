@@ -326,22 +326,22 @@ module Elkrb
       def label_placement_option(element, option_key)
         return nil unless element.layout_options
 
-        element.layout_options.properties&.[](option_key) ||
-          element.layout_options.properties&.[]("label.placement")
+        element.layout_options[option_key] ||
+          element.layout_options["label.placement"]
       end
 
       # Get label padding option.
       def label_padding_option(element)
         return 5.0 unless element.layout_options
 
-        element.layout_options.properties&.[]("label.padding") || 5.0
+        element.layout_options["label.padding"] || 5.0
       end
 
       # Get label margin option.
       def label_margin_option(element)
         return 5.0 unless element.layout_options
 
-        element.layout_options.properties&.[]("label.margin") || 5.0
+        element.layout_options["label.margin"] || 5.0
       end
     end
   end
