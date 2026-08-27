@@ -352,14 +352,24 @@ stack named in the body.
    difference is a bug.
 3. **Orchestrator gates** on the exact head SHA: Gate A
    (`multi-agent-review`), then Gate B (Codex at `ultra`, with the
-   verbatim verify-before-critique instruction). Three rounds each, then
-   park.
+   verbatim verify-before-critique instruction). **Gate B runs until it
+   returns APPROVE. There is no round cap.**
 
-   **This rule was exceeded and not waived.** Item 06 took seven Gate B
-   rounds and item 08 took six, and both were merged. Neither recorded an
-   exception at the time. Recorded here rather than quietly dropped: either
-   raise the limit to what the work actually needs, or park at three and
-   mean it. It cannot stay at three while merges run past it. A Codex run that errored, was killed, or printed no `VERDICT` is
+   That is a maintainer ruling, 2026-08-27, and it replaces the old
+   "three rounds each, then park". The old cap never held: item 06 took
+   seven rounds, item 08 took six, and both merged anyway — so the rule
+   was being broken rather than followed, which is worse than not having
+   it.
+
+   The evidence behind the ruling: rounds four and five have been
+   finding defects that would have failed when someone ran the plan, not
+   cosmetics — a criterion nothing could satisfy, a rename listed at two
+   places when it touches ten, a code block using a variable it never
+   assigned. Findings were still getting more serious, not less, at the
+   point the old cap would have parked the work.
+
+   What has not changed: a round that errored, was killed, or printed no
+   verdict is not a round. Re-run it. A Codex run that errored, was killed, or printed no `VERDICT` is
    not a review — re-run it.
 4. **Publish** only when both gates approve that SHA: push, then
    `gh pr create --draft` against `v2`. The body carries `## Summary`
