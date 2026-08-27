@@ -208,13 +208,14 @@ while the branch was at `22231fd`; it is now at `37bb0ce` ("preserve
 import expectations and harden dump guard"), which changed
 `corpus_runner.rb`, `corpus_spec.rb` and `cli_spec.rb`.
 
-- **Re-run all four checks above**, not just the suite count. Two are
+- **Re-run all four checks above**, not just the suite count. Three are
   directly invalidated: `37bb0ce` changed `corpus_runner.rb`,
-  `corpus_spec.rb` and `cli_spec.rb`, which the `corpus:dump` run and
-  the focused RSpec run both exercise. The other two are re-run because
-  evidence should name one SHA, not because that commit touched them —
-  it left the `Rakefile` and the elkjs importer alone and changed the
-  Java importer instead.
+  `corpus_spec.rb` and `cli_spec.rb` and added
+  `java_elk_test_importer_spec.rb`, which between them cover the
+  `corpus:dump` run, the focused RSpec run and the full suite. Only the
+  elkjs-import check is re-run purely so the evidence names one SHA —
+  that commit left the `Rakefile` and the elkjs importer alone and
+  changed the Java importer instead.
 - **The gate record below is history, and not all of it ran at one
   SHA.** Gate A came before the fixes committed at `aaf4efb`; Gate B
   round 1 came before the fixes at `22231fd`; only Gate B round 2 ran on
