@@ -46,7 +46,7 @@ The items table below is the authoritative "can start" list.
 flowchart TD
     I01[01 crash guards] --> I02[02 corpus + CLI harness]
     I02 -.merge order.-> I03[03 elkjs goldens]
-    I04[04 lint + CI]
+    I01 --> I04[04 lint + CI]
     I02 --> I05[05 CLI shell boundary]
     I01 --> I11[11 NodeIndex]
     I06[06 options open map] --> I07[07 drop shim]
@@ -120,9 +120,9 @@ because 30-odd arrows into one node hide the shape:
   may start earlier by materialising the driver from
   `fix/s0b-corpus-cli-harness` uncommitted.
 
-  The gate was supposed not to. In practice 06, 08 and 11 all gated
-  against the materialised driver and merged ahead of 02, so this is a
-  convention that has already been bent three times rather than a
+  The gate was supposed not to have that licence. In practice 06, 08
+  and 11 all gated against the materialised driver and merged ahead of
+  02, so this is a convention already bent three times rather than a
   constraint the repo enforces. Treat it as the target state, and note
   that three merged items were gated without 02 in their base.
 - **03 gates every item that un-pends a golden** — 12, 13, 14, 16, 17,
@@ -165,7 +165,7 @@ gantt
     section Wave 1 options core
     07 drop shim                :w1a, after w0g, 2d
     09 resolver + wiring        :w1b, after w0h, 3d
-    12 layered cycles           :w1c, after w0c, 2d
+    12 layered cycles           :w1c, after w0c w0f, 2d
     26 validate                 :w1d, after w0e, 2d
     27 ELKT parser              :w1e, after w0g, 3d
     29 data model               :w1f, after w0g, 2d
@@ -221,17 +221,17 @@ unless it says close.
 | 10 | Every remaining option read onto the resolver | S6 | large | after 09, 11 | 13, 14, 16, 17, 18, 20, 22, 23, 24, 35 | blocked by 09 |
 | 11 | NodeIndex: endpoints, duplicate ids, disco | S7 | medium | closed | 07, 10, 12, 14, 16, 20, 23, 24 | **merged** @ `4364739`, PR #5 |
 | 12 | Layered: internal cycle breaking, hyperedges raise | S8 | medium | after 11, 03 | 13, 25; close of 33 | blocked by 03 |
-| 13 | Layered: direction, ELK spacing, centring | S9 | small | after 09, 10, 12 | 14, 16, 31; merges before 36 touches `cli_spec` | blocked by 10, 12 |
-| 14 | Hierarchy: bottom-up sizing, per-level routing | S10 | large | after 07, 09, 10, 11, 13 | 15, 16, 17, 21, 25 | blocked by 13, 07 |
+| 13 | Layered: direction, ELK spacing, centring | S9 | small | after 09, 10, 12, 03 | 14, 16, 31; merges before 36 touches `cli_spec` | blocked by 10, 12 |
+| 14 | Hierarchy: bottom-up sizing, per-level routing | S10 | large | after 07, 09, 10, 11, 13, 03 | 15, 16, 17, 21, 25 | blocked by 13, 07 |
 | 15 | Cross-level edge routing | S10b | small | after 14, 16 | 30, 35 | blocked by 16 |
-| 16 | Edge sections: borders, ids, shapes, ORTHOGONAL | S11 | medium | after 07, 10, 11, 13, 14 | 15, 18, 19, 31 | blocked by 14 |
-| 17 | Labels owner-relative | S12 | medium | after 07, 10, 14 | 30 | blocked by 14 |
-| 18 | Ports | S13 | medium | after 10, 16 | 19 | blocked by 16 |
-| 19 | Self-loops | S13b | small | after 07, 16, 18 | 30 | blocked by 18 |
-| 20 | Seeded RNG, stress edge length, random | S14 | medium | after 10, 11 | 21; close of 33 | blocked by 10 |
-| 21 | Force rewrite (Fruchterman–Reingold) | S15 | medium–large | after 14, 20 | 30; close of 33 | blocked by 14, 20 |
-| 22 | Box, rectpacking, fixed | S16 | medium–large | after 10 | 30, 35 | blocked by 10 |
-| 23 | mrtree and radial | S17 | medium | after 07, 10, 11 | 30, 35 | blocked by 07, 10 |
+| 16 | Edge sections: borders, ids, shapes, ORTHOGONAL | S11 | medium | after 07, 10, 11, 13, 14, 03 | 15, 18, 19, 31 | blocked by 14 |
+| 17 | Labels owner-relative | S12 | medium | after 07, 10, 14, 03 | 30 | blocked by 14 |
+| 18 | Ports | S13 | medium | after 10, 16, 03 | 19 | blocked by 16 |
+| 19 | Self-loops | S13b | small | after 07, 16, 18, 03 | 30 | blocked by 18 |
+| 20 | Seeded RNG, stress edge length, random | S14 | medium | after 10, 11, 03 | 21; close of 33 | blocked by 10 |
+| 21 | Force rewrite (Fruchterman–Reingold) | S15 | medium–large | after 14, 20, 03 | 30; close of 33 | blocked by 14, 20 |
+| 22 | Box, rectpacking, fixed | S16 | medium–large | after 10, 03 | 30, 35 | blocked by 10 |
+| 23 | mrtree and radial | S17 | medium | after 07, 10, 11, 03 | 30, 35 | blocked by 07, 10 |
 | 24 | Truthfulness: disco, libavoid, vertiflex, spore, topdown | S18 | medium–large | after 07, 10, 11; closes after 03 | 33 | blocked by 07, 10 |
 | 25 | Constraints | S19 | medium | after 09, 12, 14 | 37 | blocked by 14 |
 | 26 | `validate` correctness | S20 | medium | after 05 | 36 | blocked by 05 |
@@ -239,7 +239,7 @@ unless it says close.
 | 28 | ELKT and DOT serializers | S22 | large | after 07, 09, 27 | 37 | blocked by 27, 09, 07 |
 | 29 | Data-model completeness | S23 | medium | **now** | 37 | ready — 06 is merged |
 | 30 | README and examples | S24 | medium | after 06–23 merged | 37 | blocked by 15, 17, 19, 21, 22, 23 |
-| 31 | Layered: barycenter crossing minimisation | S25a | medium | after 13, 16 | 32, 35 | blocked by 16 |
+| 31 | Layered: barycenter crossing minimisation | S25a | medium | after 13, 16, 03 | 32, 35 | blocked by 16 |
 | 32 | Layered: long-edge dummies | S25b | medium | after 31 | 35, 37 | blocked by 31 |
 | 33 | Performance leftovers | S26 | small | after 24; closes after 12, 20, 21 | 35, 37 | blocked by 24 |
 | 34 | Consumer fixtures: capture | S27a | small | **now** | 35, which reads its fixtures | ready — 06 is merged |
@@ -374,9 +374,8 @@ stack named in the body.
    assigned. Findings were still getting more serious, not less, at the
    point the old cap would have parked the work.
 
-   What has not changed: a round that errored, was killed, or printed no
-   verdict is not a round. Re-run it. A Codex run that errored, was killed, or printed no `VERDICT` is
-   not a review — re-run it.
+   What has not changed: a Codex run that errored, was killed, or
+   printed no `VERDICT` is not a round. Re-run it.
 4. **Publish** only when both gates approve that SHA: push, then
    `gh pr create --draft` against `v2`. The body carries `## Summary`
    bullets, the item's `## Breaking` section, and the intended
@@ -409,7 +408,7 @@ One thing that table cannot say: **PR #2 is still an open draft against
 `main` and carries 2 open High findings**, even though its code is the `v2`
 seed.
 
-### Built, not gated, not merged
+### Built and gated once, since moved, not merged
 
 | Item | Branch | Head | Ahead of `v2` | State |
 |---|---|---|---|---|
@@ -439,7 +438,8 @@ than no number.
   unstarted cards** — 83% of what has not been touched, or 75% of the
   32 that are not yet merged.
 
-That paragraph used to say nothing was pushed and no PR existed except
-#2. Both are now false: `v2` is on origin at `75bdb13`, PRs #4-#8 are
-merged, and PR #3 carries this plan. What still holds is the rule — a
+This section used to close by saying nothing was pushed and no PR
+existed except #2. Both are now false: `v2` is on origin at `75bdb13`, PRs #4-#8 are
+merged (#4-#7 are the slices, #8 the lint ratchet), and PR #3 carries
+this plan. What still holds is the rule — a
 branch is not pushed until it has a Codex approval naming its exact tip.

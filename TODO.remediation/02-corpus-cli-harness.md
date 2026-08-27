@@ -13,8 +13,15 @@ close it:
 
 ```ruby
 return unless File.file?(File.join(outdir, "summary.json"))
-Dir[File.join(outdir, "*.json")].each { |p| File.delete(p) unless keep.include?(...) }
+
+keep = corpus.map { |kase| "#{kase.id}.json" } + ["summary.json"]
+Dir[File.join(outdir, "*.json")].each do |path|
+  File.delete(path) if File.file?(path) && !keep.include?(File.basename(path))
+end
 ```
+
+`summary.json` is in `keep`, which is why it survives in the transcript
+below while the sibling directories do not.
 
 `File.file?` treats the path literally. `Dir[]` does not. So a destination
 that is a real directory whose *name contains* `*` passes the guard on the
@@ -45,7 +52,11 @@ disagree about what `outdir` means.
 Can start: now — this item depends on nothing. It was **planned** as the
 first thing to land after 01 (S1); that is no longer what happened. 04, 06,
 08 and 11 all merged first while this branch sat ungated, so it now lands
-into a `v2` that has moved well past the seed. It was branched from `main` before `v2` existed, then
+into a `v2` that has moved well past the seed. Three of those four — 06, 08
+and 11 — are the ones that gated against this branch's driver uncommitted;
+04 needed no execution-diff gate at all.
+
+It was branched from `main` before `v2` existed, then
 rebased onto `v2` and force-pushed; that predates the no-rebase rule and is
 grandfathered, recorded here, and is the one exception. Blocks the START of 05
 (S2, which un-pends this item's `cli_spec` examples and uses its
@@ -193,7 +204,7 @@ Done. What was verified:
 
 **Everything below this line was recorded at `22231fd`.** The branch has
 since moved to `37bb0ce` ("preserve import expectations and harden dump
-guard"), so the counts and the importer behaviour described above are from
+guard"), so the counts and the importer behaviour recorded below are from
 the older SHA and have not been re-measured. Re-run them before the gate.
 
 Gates that were mandatory and what they found:
