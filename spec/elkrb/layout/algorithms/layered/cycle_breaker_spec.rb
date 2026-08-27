@@ -32,7 +32,15 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::CycleBreaker do
       end
 
       it "leaves no cycle for the layer assigner to recurse on" do
-        expect { Elkrb.layout(graph, algorithm: "layered") }.not_to raise_error
+        laid_out = Elkrb.layout(graph, algorithm: "layered")
+
+        # `not_to raise_error` alone passes with the bug restored -- the
+        # unbroken cycle warns rather than raising. Assert the orientation
+        # too, so a half-broken cycle cannot pass this example.
+        back_edges = laid_out.edges.select { |edge| edge.id == "back" }
+
+        expect(back_edges.size).to eq(2)
+        expect(back_edges.map(&:sources)).to all(eq(["a"]))
       end
     end
 
