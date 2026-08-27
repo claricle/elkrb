@@ -16,7 +16,8 @@ and cannot build without its `cli_runner` and `fake_dot`. Before it gates:
 1. 02 lands first.
 2. Merge current `origin/v2` into this branch — that brings 04's rake task.
 3. Run the full `bundle exec rake`, spec **and** rubocop, and clear it.
-4. Then gate, against the tip that produced.
+4. Gate the exact branch tip that step 3 passed on — not an earlier SHA,
+   and not one with commits added after. The approval names that tip.
 
 **This is the critical path.** Nothing else unblocks 09, and 09 is what
 unblocks 10, and 10 is what unblocks roughly twenty of the remaining cards.

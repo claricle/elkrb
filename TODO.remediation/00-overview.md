@@ -210,7 +210,7 @@ unless it says close.
 | # | Item | Slice | Size | Can start | Blocks | Status |
 |---|---|---|---|---|---|---|
 | 01 | Crash guards on ordinary ELK input | S1 | medium | closed | is the `v2` base of everything; 02, 03 | **merged** @ `a008889`; PR #2 still open, 2 Highs |
-| 02 | Corpus and CLI harness | S0b | medium | now | 05; close of 03, and of every XD-gated item from 05 on | built @ `37bb0ce`, **1 open Blocker** |
+| 02 | Corpus and CLI harness | S0b | medium | now | 05; close of 03, and of every **remaining** XD-gated item from 05 on — 06, 08 and 11 already gated against the driver materialised uncommitted and merged ahead of it | built @ `37bb0ce`, **1 open Blocker** |
 | 03 | elkjs golden harness | S0a | large | now; closes after 02 | close of 24; start of 12, 13, 14, 16–23, 31 | built @ `e8c7e69`, not gated |
 | 04 | Lint and CI hygiene | S28 | small | closed | nothing; moves the bar to `rake` | **merged** @ `56900d3`, PR #6 |
 | 05 | CLI and shell boundary | S2 | medium | after 02 | 09, 26, 36 | built @ `249a4d8`, not gated — **critical path** |
