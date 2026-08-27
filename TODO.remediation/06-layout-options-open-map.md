@@ -5,7 +5,8 @@ Status: **merged into `v2`** via PR #4, at 36e0eb1. Closed. Gate B (Codex
 `ultra`) approved that SHA after seven rounds; the approval artifact is
 `.claude/codex-approvals/s3-open-options-map@36e0eb1.txt`.
 
-Can start: now — 01 (S1 crash guards) is already the `v2` seed, and this item
+Can start: closed. When it was open: 01 (S1 crash guards) was already the
+`v2` seed, and this item
 replaces the nil-`@properties` typed class that slice 1 guarded. The XD gate
 needs 02 (S0b's `corpus:dump` driver); the build may start before that by
 materialising the driver from `fix/s0b-corpus-cli-harness` uncommitted. Blocks

@@ -20,7 +20,8 @@ and cannot build without its `cli_runner` and `fake_dot`. Before it gates:
    and not one with commits added after. The approval names that tip.
 
 **This is the critical path.** Nothing else unblocks 09, and 09 is what
-unblocks 10, and 10 is what unblocks roughly twenty of the remaining cards.
+unblocks 10, and 10 is what unblocks 19 of the remaining cards. 24 sit
+behind 05 itself — see the closure table in `00-overview.md`.
 
 Can start: after 02 (S0b) — specifically its `spec/support/cli_runner.rb`,
 `spec/support/fake_dot.rb` and the four `pending "RC10"` examples in

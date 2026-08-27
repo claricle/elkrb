@@ -5,7 +5,8 @@ Status: **merged into `v2`** via PR #7, at 1c0abca. Closed. Gate B (Codex
 `ultra`) approved that SHA after six rounds; the approval artifact is
 `.claude/codex-approvals/s4-options-registry@1c0abca.txt`.
 
-Can start: now — 01 (S1) is the `v2` seed and this item edits `lib/elkrb.rb`
+Can start: closed. When it was open: 01 (S1) was the `v2` seed and this item
+edits `lib/elkrb.rb`
 next to slice 1's change to the same file. The XD gate needs 02 (S0b's
 `corpus:dump` driver); the build may start before that by materialising the
 driver from `fix/s0b-corpus-cli-harness` uncommitted. Blocks the start of 09
