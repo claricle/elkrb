@@ -16,28 +16,33 @@ module Elkrb
     BYTE_ORDER_MARK = "\uFEFF"
     private_constant :BYTE_ORDER_MARK
 
+    UNPARSEABLE =
+      "Unable to parse input file. Supported formats: JSON, YAML, ELKT"
+    private_constant :UNPARSEABLE
+
+    DOT_UNSUPPORTED =
+      "DOT format input not yet supported. Use JSON, YAML, or ELKT."
+    private_constant :DOT_UNSUPPORTED
+
+    NIL_WHEN_HOLLOW = %i[id x y width height layout_options].freeze
+    private_constant :NIL_WHEN_HOLLOW
+
+    BLANK_WHEN_HOLLOW = %i[children edges properties].freeze
+    private_constant :BLANK_WHEN_HOLLOW
+
     class << self
       # @param content [String] raw file content
       # @param unparseable_message [String] message for the final ArgumentError
-      # @return [Elkrb::Graph::Graph, Hash] a parsed graph model, or an ELKT hash
-      # @raise [ArgumentError] when neither JSON/YAML nor ELKT yields real content
+      # @return [Elkrb::Graph::Graph, Hash] a parsed graph model, or an ELKT
+      #   hash
+      # @raise [ArgumentError] when neither JSON/YAML nor ELKT yields real
+      #   content
       def parse(content, unparseable_message:)
         require_relative "graph/graph"
 
         text = content.delete_prefix(BYTE_ORDER_MARK)
         sniff(text) || parse_elkt_or_fail(text, unparseable_message)
       end
-
-      # For a file whose extension already names the format there is nothing to
-      # sniff, so the hollow-content guard does not apply: an empty ELKT
-      # document is a valid empty graph, which the parser, layout and the ELKT
-      # serializer all round-trip.
-      #
-      # @param content [String] raw file content
-      # @param unparseable_message [String] message for the ArgumentError
-      # @return [Hash] the parsed ELKT graph
-      # @raise [ArgumentError] when the ELKT parser itself fails
-      UNPARSEABLE = "Unable to parse input file. Supported formats: JSON, YAML, ELKT"
 
       # The single entry point every command reads input through. Extension
       # dispatch plus shape validation lived in four places and drifted apart;
@@ -51,24 +56,28 @@ module Elkrb
         require_relative "graph/graph"
 
         case extension
-        when ".json"
-          validate_model!(Elkrb::Graph::Graph.from_json(content),
-                          unparseable_message: UNPARSEABLE)
-        when ".yml", ".yaml"
-          validate_model!(Elkrb::Graph::Graph.from_yaml(content),
-                          unparseable_message: UNPARSEABLE)
-        when ".elkt"
-          parse_elkt(content, unparseable_message: UNPARSEABLE)
-        when ".dot", ".gv"
-          raise ArgumentError, "DOT format input not yet supported. Use JSON, YAML, or ELKT."
-        else
-          parse(content, unparseable_message: UNPARSEABLE)
+        when ".json", ".yml", ".yaml" then read_model(content, extension)
+        when ".elkt" then parse_elkt(content, unparseable_message: UNPARSEABLE)
+        when ".dot", ".gv" then raise ArgumentError, DOT_UNSUPPORTED
+        else parse(content, unparseable_message: UNPARSEABLE)
         end
       end
 
-
-
       private
+
+      # JSON and YAML differ only in the deserializer; both then need the same
+      # shape check.
+      #
+      # @raise [ArgumentError] when the document parses to an unusable model
+      def read_model(content, extension)
+        model = if extension == ".json"
+                  Elkrb::Graph::Graph.from_json(content)
+                else
+                  Elkrb::Graph::Graph.from_yaml(content)
+                end
+
+        validate_model!(model, unparseable_message: UNPARSEABLE)
+      end
 
       # A file whose extension names the format skips sniffing, so it also
       # skips the malformed-shape check the sniffer applies. Both paths need
@@ -87,7 +96,9 @@ module Elkrb
       def parse_elkt(content, unparseable_message:)
         text = content.delete_prefix(BYTE_ORDER_MARK)
         graph = parse_elkt!(text, unparseable_message)
-        raise ArgumentError, unparseable_message if hollow_hash?(graph) && declarations?(text)
+        if hollow_hash?(graph) && declarations?(text)
+          raise ArgumentError, unparseable_message
+        end
 
         graph
       end
@@ -98,7 +109,9 @@ module Elkrb
       # turn -- otherwise a flow-style graph is read as ELKT layout options
       # and silently loses its children.
       def sniff(text)
-        return try_json(text) || try_yaml(text) if text.lstrip.start_with?("{", "[")
+        if text.lstrip.start_with?("{", "[")
+          return try_json(text) || try_yaml(text)
+        end
 
         try_yaml(text)
       end
@@ -143,9 +156,8 @@ module Elkrb
       # it gets a nil check -- it has no #empty?, and any recognized
       # layoutOptions substructure at all is real content.
       def hollow_model?(graph)
-        graph.id.nil? && graph.x.nil? && graph.y.nil? &&
-          graph.width.nil? && graph.height.nil? && graph.layout_options.nil? &&
-          blank?(graph.children) && blank?(graph.edges) && blank?(graph.properties)
+        NIL_WHEN_HOLLOW.all? { |field| graph.public_send(field).nil? } &&
+          BLANK_WHEN_HOLLOW.all? { |field| blank?(graph.public_send(field)) }
       end
 
       def parse_elkt_or_fail(content, unparseable_message)
@@ -168,8 +180,8 @@ module Elkrb
       # lines it does not understand, so without this it exits 0 on junk.
       def declarations?(text)
         text.gsub(%r{/\*.*?\*/}m, "")
-            .each_line
-            .any? { |line| !line.sub(%r{//.*$}, "").strip.empty? }
+          .each_line
+          .any? { |line| !line.sub(%r{//.*$}, "").strip.empty? }
       end
 
       # An ELKT graph is itself a node and may carry only its own position or
@@ -177,7 +189,8 @@ module Elkrb
       # root geometry counts alongside children, edges and options.
       def hollow_hash?(graph)
         blank?(graph[:children]) && blank?(graph[:edges]) &&
-          blank?(graph[:layoutOptions]) && graph.values_at(:x, :y, :width, :height).all?(&:nil?)
+          blank?(graph[:layoutOptions]) &&
+          graph.values_at(:x, :y, :width, :height).all?(&:nil?)
       end
 
       def blank?(collection)
