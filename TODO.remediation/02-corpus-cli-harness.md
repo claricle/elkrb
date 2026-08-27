@@ -21,7 +21,8 @@ end
 ```
 
 `summary.json` is in `keep`, which is why it survives in the transcript
-below while the sibling directories do not.
+below while the siblings' JSON does not. The sibling **directories**
+survive — it is their `*.json` contents that are deleted.
 
 `File.file?` treats the path literally. `Dir[]` does not. So a destination
 that is a real directory whose *name contains* `*` passes the guard on the
@@ -37,8 +38,8 @@ Measured 2026-08-27:
   prune_stale_dumps("dump*", ["live_case"])
 
   dump*/      survived
-  dumpster/   EMPTY   <- deleted
-  dumpyard/   EMPTY   <- deleted
+  dumpster/   its precious_fixture.json was DELETED
+  dumpyard/   its also_precious.json was DELETED
 ```
 
 An earlier retraction of this Blocker was wrong. It rested on a probe that
@@ -202,10 +203,14 @@ Done. What was verified:
   the refusal message (rake aborts when the importer refuses) and leaves
   `spec/cross_validation/fixtures/elkjs/imported_tests.json` byte-identical.
 
-**Everything below this line was recorded at `22231fd`.** The branch has
-since moved to `37bb0ce` ("preserve import expectations and harden dump
-guard"), so the counts and the importer behaviour recorded below are from
-the older SHA and have not been re-measured. Re-run them before the gate.
+**Everything in this section — above and below this line — was recorded
+at `22231fd`.** The branch has since moved to `37bb0ce` ("preserve import
+expectations and harden dump guard").
+
+- The suite count and the importer verification **above** are from the
+  older SHA and have not been re-measured. Re-run them before the gate.
+- The gate output **below** is history: those runs happened, at that SHA,
+  and no longer name the tip.
 
 Gates that were mandatory and what they found:
 

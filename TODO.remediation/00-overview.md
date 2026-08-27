@@ -44,9 +44,12 @@ The items table below is the authoritative "can start" list.
 
 ```mermaid
 flowchart TD
+%% 04 stands alone on purpose: nothing blocks its start and it blocks
+%% nothing structurally. Its old merge-order edge from 03 is spent —
+%% 04 merged first. A solid edge here would assert a block that is not real.
     I01[01 crash guards] --> I02[02 corpus + CLI harness]
     I02 -.merge order.-> I03[03 elkjs goldens]
-    I01 --> I04[04 lint + CI]
+    I04[04 lint + CI]
     I02 --> I05[05 CLI shell boundary]
     I01 --> I11[11 NodeIndex]
     I06[06 options open map] --> I07[07 drop shim]
@@ -400,9 +403,13 @@ merged in.
 
 ### Merged into `v2`
 
-Four slice PRs (#4-#7), the 01 seed, and #8's lint ratchet. **The Items table above is the one
-place merge status is recorded** — do not restate a SHA here, or the two
-copies drift, which is how this section came to be wrong once already.
+Four slice PRs (#4-#7), the 01 seed, and #8's lint ratchet.
+
+**The Items table above is the one place a MERGE is recorded.** Never
+restate a merged SHA here, or the two copies drift — which is how this
+section came to be wrong once already. The table below carries only what
+that table cannot: branch names, their current heads, and how far ahead
+of `v2` they sit. Those are not merge records.
 
 One thing that table cannot say: **PR #2 is still an open draft against
 `main` and carries 2 open High findings**, even though its code is the `v2`
