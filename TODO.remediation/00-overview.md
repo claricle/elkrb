@@ -405,11 +405,11 @@ merged in.
 
 Four slice PRs (#4-#7), the 01 seed, and #8's lint ratchet.
 
-Two tables, one fact each, and neither repeats the other:
-
-Neither says "and nowhere else" — SHAs are quoted all over these cards
-as history, as bases, as evidence, and that is fine. What matters is
-which copy is right when two disagree:
+**Two tables, one authority each.** They do overlap — both mention 02's
+open Blocker and 05's critical-path status, and SHAs are quoted all
+over these cards as history, as bases, as evidence. That is fine and
+not worth stamping out. What the rule settles is which copy is right
+when two disagree:
 
 - **The Items table above is the authoritative MERGE record.** The seed
   `a008889` appears in several places as history and as a base; that
