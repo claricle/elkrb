@@ -9,8 +9,8 @@ at merge.
 
 Can start: now — the build ran in parallel with 02 (S0b), off `v2`. It cannot
 CLOSE until 02 lands: step 7 rewrites `spec/cross_validation/corpus_spec.rb`,
-which 02 creates, and flips its `D5` ledger rows. Blocks the CLOSE of 04 (S28,
-which lands right after 02 and 03 so every later item sees one green bar).
+which 02 creates, and flips its `D5` ledger rows. It no longer blocks 04 —
+04 merged ahead of both harness items (PR #6), so that close order is spent.
 Blocks the START of every item that claims elkjs parity by un-pending a
 golden: 12 (S8), 13 (S9), 14 (S10), 16 (S11), 17 (S12), 18 (S13), 19 (S13b),
 20 (S14), 21 (S15), 22 (S16), 23 (S17), 31 (S25a). Also blocks the CLOSE of 24

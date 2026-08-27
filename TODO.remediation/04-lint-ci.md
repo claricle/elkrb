@@ -9,16 +9,19 @@ Status: **merged into `v2`** via PR #6. The merged source tip is `56900d3`
 Can start: closed. This branch was two commits on the `v2` seed — `11140a6`
 then `56900d3` — and needed nothing from the other two.
 
-**The close-order rule below was not followed, and it is now historical.**
-04 merged first, ahead of 02 and 03. The conflicts it was written to avoid
-have to be resolved on 02's and 03's branches instead, when they land: 02
-appends to `.gitignore` at EOF while this item inserted `.claude/` mid-file,
-and 03 owns `golden.yml`, which must not be
-duplicated here. Blocks nothing structurally, but it moves the bar: from this
-item on, "green" means `bundle exec rake` (spec **and** rubocop), not `bundle
-exec rspec`. Every item from 05 (S2) onward reports against that bar, which is
-why this lands right after the two harness items. Small (4 files, ~350 lines,
-337 of them generated). Not BREAKING: no `lib/` change.
+**The close-order rule this item was written around is spent.** 04 merged
+first, ahead of 02 and 03, and the conflicts it existed to avoid did not
+materialise. Measured 2026-08-27 with `git merge-tree --write-tree` against
+`origin/v2`: both `fix/s0b-corpus-cli-harness` and `fix/s0a-golden-harness`
+merge **clean**. The `.gitignore` edits auto-combine, and `golden.yml` exists
+only on 03, so nothing is duplicated.
+
+What does still land on 02 and 03 is the bar, not a conflict: from this item
+on, "green" means `bundle exec rake` (spec **and** rubocop), not `bundle exec
+rspec`. Both harness branches were built before that changed, so each must be
+re-measured against `rake` — and cleared of any new offences — before its
+gate run. Small (4 files, ~350 lines, 337 of them generated). Not BREAKING:
+no `lib/` change.
 
 ## Facts
 

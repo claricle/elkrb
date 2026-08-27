@@ -46,7 +46,7 @@ The items table below is the authoritative "can start" list.
 flowchart TD
     I01[01 crash guards] --> I02[02 corpus + CLI harness]
     I02 -.merge order.-> I03[03 elkjs goldens]
-    I03 -.merge order.-> I04[04 lint + CI]
+    I04[04 lint + CI]
     I02 --> I05[05 CLI shell boundary]
     I01 --> I11[11 NodeIndex]
     I06[06 options open map] --> I07[07 drop shim]
@@ -150,7 +150,7 @@ gantt
     01 crash guards (v2 seed)   :done, w0a, 2026-08-19, 1d
     02 corpus + CLI harness     :active, w0b, 2026-08-19, 2d
     03 elkjs goldens            :active, w0c, after w0b, 1d
-    04 lint + CI                :done, w0d, after w0c, 1d
+    04 lint + CI                :done, w0d, 2026-08-20, 1d
     05 CLI shell boundary       :active, w0e, after w0b, 1d
     11 NodeIndex                :done, w0f, 2026-08-20, 1d
     section Wave 0 merged
@@ -159,7 +159,7 @@ gantt
     section Wave 1 options core
     07 drop shim                :w1a, after w0g, 2d
     09 resolver + wiring        :w1b, after w0h, 3d
-    12 layered cycles           :w1c, after w0f, 2d
+    12 layered cycles           :w1c, after w0c, 2d
     26 validate                 :w1d, after w0e, 2d
     27 ELKT parser              :w1e, after w0g, 3d
     29 data model               :w1f, after w0g, 2d
@@ -419,8 +419,9 @@ than no number.
   | 09 | 22 |
   | 10 | 19 |
 
-  So 05 is not one card among three. It is the gate on two thirds of
-  everything left.
+  So 05 is not one card among three. It gates **24 of the 29
+  unstarted cards** — 83% of what has not been touched, or 75% of the
+  32 that are not yet merged.
 
 That paragraph used to say nothing was pushed and no PR existed except
 #2. Both are now false: `v2` is on origin at `75bdb13`, PRs #4-#8 are
