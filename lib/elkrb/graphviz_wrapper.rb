@@ -57,7 +57,7 @@ module Elkrb
     #
     # @return [String, nil] the path to `dot`, or nil if not found
     #
-    # ENV["ELKRB_DOT"], if set to a non-empty value, is the sole candidate —
+    # ELKRB_DOT, if set to a non-empty value, is the sole candidate —
     # no PATH fallback if it doesn't point at a real executable. An unset or
     # empty ELKRB_DOT is treated as no override: every `dot` on PATH is
     # tried in order.
