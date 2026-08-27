@@ -2,6 +2,7 @@
 
 require "set"
 require_relative "base_algorithm"
+require_relative "../node_index"
 
 module Elkrb
   module Layout
@@ -13,14 +14,16 @@ module Elkrb
         def layout_flat(graph, _options = {})
           return graph if graph.children.empty?
 
+          index = NodeIndex.build(graph)
+
           # Identify root nodes (nodes with no incoming edges)
-          roots = find_root_nodes(graph)
+          roots = find_root_nodes(graph, index)
 
           # If no roots found, treat all nodes as roots
           roots = graph.children if roots.empty?
 
           # Build tree structure from roots
-          trees = roots.map { |root| build_tree(root, graph) }
+          trees = roots.map { |root| build_tree(root, graph, index) }
 
           # Calculate positions for each tree
           spacing_val = node_spacing
@@ -39,35 +42,35 @@ module Elkrb
 
         private
 
-        def find_root_nodes(graph)
+        def find_root_nodes(graph, index)
           nodes_with_incoming = Set.new
 
           graph.edges&.each do |edge|
-            next if self_loop_edge?(edge)
+            sources = index.endpoint_nodes(edge.sources)
 
-            targets = edge.targets || []
-            targets.each do |target_id|
-              nodes_with_incoming.add(target_id)
+            # Count a target as having incoming traffic only when at
+            # least one resolved source is a DIFFERENT node: a real
+            # self-loop ("p1" -> "p2" on one node) and the
+            # self-referencing leg of a mixed hyperedge
+            # (a -> [a's port, b]) are not incoming traffic from
+            # elsewhere, but a target that ALSO appears among the
+            # sources (e.g. [a, b] -> b) still has genuine incoming
+            # traffic from the other source.
+            index.endpoint_nodes(edge.targets).each do |target|
+              next unless sources.any? { |source| source != target }
+
+              nodes_with_incoming.add(target.id)
             end
           end
 
           graph.children.reject { |node| nodes_with_incoming.include?(node.id) }
         end
 
-        def self_loop_edge?(edge)
-          sources = edge.sources || []
-          targets = edge.targets || []
-
-          return false if sources.empty? || targets.empty?
-
-          sources.first == targets.first
+        def build_tree(root, graph, index)
+          build_subtree(root, graph, index, 0, Set.new)
         end
 
-        def build_tree(root, graph)
-          build_subtree(root, graph, 0, Set.new)
-        end
-
-        def build_subtree(node, graph, level, visited)
+        def build_subtree(node, graph, index, level, visited)
           visited = visited | [node.id]
 
           tree = {
@@ -76,28 +79,31 @@ module Elkrb
             level: level,
           }
 
-          children = find_children(node, graph)
+          children = find_children(node, graph, index)
                      .reject { |child| visited.include?(child.id) }
           tree[:children] = children.map do |child|
-            build_subtree(child, graph, level + 1, visited)
+            build_subtree(child, graph, index, level + 1, visited)
           end
 
           tree
         end
 
-        def find_children(node, graph)
+        def find_children(node, graph, index)
           children = []
           edges = graph.edges || []
 
           edges.each do |edge|
-            sources = edge.sources || []
-            targets = edge.targets || []
+            next unless index.endpoint_nodes(edge.sources).include?(node)
 
-            next unless sources.include?(node.id)
+            index.endpoint_nodes(edge.targets).each do |target|
+              # A hyperedge can target one of the source's own ports
+              # alongside a real child (a -> [a's port, b]); resolving
+              # that port back to `node` itself would make the node its
+              # own child. Multiple edges/ports naming the same child
+              # would otherwise duplicate it into two subtree entries.
+              next if target == node || children.include?(target)
 
-            targets.each do |target_id|
-              child = graph.children.find { |n| n.id == target_id }
-              children << child if child
+              children << target
             end
           end
 

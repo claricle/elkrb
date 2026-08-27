@@ -104,6 +104,7 @@ module Elkrb
         #   - :description (String) - Brief description
         #   - :category (String, nil) - Algorithm category (e.g., "hierarchical", "force")
         #   - :supports_hierarchy (Boolean, nil) - Whether it supports hierarchical graphs
+        #   - :supported_options (Array<String>) - Canonical option ids scoped to this algorithm
         #
         # @example List all algorithms
         #   algorithms = Elkrb::Layout::LayoutEngine.known_layout_algorithms
@@ -152,11 +153,10 @@ module Elkrb
 
         # Returns metadata for all supported layout options.
         #
-        # @return [Array<Hash>] Array of option metadata
-        # @note Currently returns an empty array. Full implementation planned.
+        # @return [Hash{String => Hash}] Same shape and content as
+        #   Elkrb.known_layout_options, keyed by canonical id.
         def known_layout_options
-          # TODO: Build from all algorithms' supported options
-          []
+          Options::Registry.render_known_options(algorithm_values: AlgorithmRegistry.available_algorithms)
         end
 
         private

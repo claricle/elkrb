@@ -159,9 +159,9 @@ graph4.layout_options["elk.portSideAssignment"] = "AUTOMATIC"
 graph4.layout_options["elk.portOrdering"] = "INDEX"
 
 puts "\nLayout Options:"
-puts "  Port Constraints: #{graph4.layout_options.port_constraints}"
-puts "  Port Side Assignment: #{graph4.layout_options.port_side_assignment}"
-puts "  Port Ordering: #{graph4.layout_options.port_ordering}"
+puts "  Port Constraints: #{graph4.layout_options['elk.portConstraints']}"
+puts "  Port Side Assignment: #{graph4.layout_options['elk.portSideAssignment']}"
+puts "  Port Ordering: #{graph4.layout_options['elk.portOrdering']}"
 
 # Create node with ports
 node5 = Elkrb::Graph::Node.new(
