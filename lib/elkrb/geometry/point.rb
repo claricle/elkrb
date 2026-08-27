@@ -8,7 +8,7 @@ module Elkrb
       attribute :x, :float, default: -> { 0.0 }
       attribute :y, :float, default: -> { 0.0 }
 
-      json do
+      key_value do
         map "x", to: :x
         map "y", to: :y
       end

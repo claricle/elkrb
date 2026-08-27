@@ -2,6 +2,24 @@
 
 module Elkrb
   module Options
+    class Registry
+      def self.canonical: (String | Symbol key) -> String?
+
+      def self.coerce: (String | Symbol id, untyped value) -> untyped
+
+      def self.default: (String | Symbol id) -> untyped
+
+      def self.status: (String | Symbol id) -> Symbol?
+
+      def self.note: (String | Symbol id) -> String?
+
+      def self.for_algorithm: (String name, ?include_all: bool) -> Array[String]
+
+      def self.all: () -> Hash[String, Hash[Symbol, untyped]]
+
+      def self.render_known_options: (algorithm_values: Array[String]) -> Hash[String, Hash[Symbol, untyped]]
+    end
+
     class ElkPadding
       attr_reader left: Float
       attr_reader top: Float
