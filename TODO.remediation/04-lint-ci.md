@@ -18,9 +18,12 @@ only on 03, so nothing is duplicated.
 
 What does still land on 02 and 03 is the bar, not a conflict: from this item
 on, "green" means `bundle exec rake` (spec **and** rubocop), not `bundle exec
-rspec`. Both harness branches were built before that changed, so each must be
-re-measured against `rake` — and cleared of any new offences — before its
-gate run. Small (4 files, ~350 lines, 337 of them generated). Not BREAKING:
+rspec`. Both harness branches were built before that changed, and **their own
+tips still define `rake` as spec-only** — running `bundle exec rake` there
+measures nothing new. So the order on each is: merge current `origin/v2` in
+first, which brings this item's rake task with it, *then* run
+`bundle exec rake` and clear any offences it surfaces. Do it before the gate
+run, not after. Small (4 files, ~350 lines, 337 of them generated). Not BREAKING:
 no `lib/` change.
 
 ## Facts

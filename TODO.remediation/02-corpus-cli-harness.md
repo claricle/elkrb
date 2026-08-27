@@ -42,8 +42,10 @@ The fix has to compare against a resolved real path, or escape the
 destination before it reaches `Dir[]` — `File.file?` and `Dir[]` must not
 disagree about what `outdir` means.
 
-Can start: now — this item depends on nothing and is the first thing that
-lands after 01 (S1). It was branched from `main` before `v2` existed, then
+Can start: now — this item depends on nothing. It was **planned** as the
+first thing to land after 01 (S1); that is no longer what happened. 04, 06,
+08 and 11 all merged first while this branch sat ungated, so it now lands
+into a `v2` that has moved well past the seed. It was branched from `main` before `v2` existed, then
 rebased onto `v2` and force-pushed; that predates the no-rebase rule and is
 grandfathered, recorded here, and is the one exception. Blocks the START of 05
 (S2, which un-pends this item's `cli_spec` examples and uses its
