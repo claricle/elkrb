@@ -29,7 +29,8 @@ RSpec.describe "elkrb CLI" do
 
   describe "layout" do
     it "exits 0 and prints JSON to stdout" do
-      stdout, _stderr, status = run_elkrb("layout", "spec/fixtures/simple_graph.json")
+      stdout, _stderr, status = run_elkrb("layout",
+                                          "spec/fixtures/simple_graph.json")
 
       expect(status.exitstatus).to eq(0)
       expect { JSON.parse(stdout) }.not_to raise_error
@@ -62,7 +63,8 @@ RSpec.describe "elkrb CLI" do
   describe "render" do
     windows_skip_reason = "fake_dot.rb's script needs a POSIX shell; not portable to Windows" if Gem.win_platform?
 
-    it "never shells out to a string built from the output path", skip: windows_skip_reason do
+    it "never shells out to a string built from the output path",
+       skip: windows_skip_reason do
       malicious_dot_file = File.join(CliRunner::ROOT, "spec/fixtures/x.dot")
 
       with_fake_dot do |log_path|
