@@ -52,9 +52,18 @@ grandfathered, recorded here, and is the one exception. Blocks the START of 05
 `cli_runner`/`fake_dot`). Blocks the CLOSE of 03 (S0a, which merges after this
 item and rewrites its `corpus_spec` invariant set) — that branch is rooted
 on `v2` and built in parallel; only their merges are ordered (`git merge-base
-v2 fix/s0a-golden-harness` is a008889). Blocks the CLOSE of every
+v2 fix/s0a-golden-harness` is a008889). Gates the CLOSE of every
 execution-diff-gated item from 05 onward: `rake corpus:dump` is the sole XD
-driver and no XD gate runs before this item is in the base. Medium (~860
+driver.
+
+**That claim used to say no XD gate runs before this item is in the base.
+That is not what happened.** 06, 08 and 11 all ran their execution-diff gates
+with the driver materialised uncommitted from this branch, and all three
+merged first. So the rule as practised is weaker: a gate may run against a
+materialised driver, and what 02 actually gates is the point at which that
+stops being a manual step. Items from 05 on should not repeat the
+workaround — but three already did, and pretending otherwise would make the
+next person distrust the rest of this file. Medium (~860
 lines, spec-only). Not BREAKING: no `lib/` change, one guard in a spec-side
 importer.
 

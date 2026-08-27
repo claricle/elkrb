@@ -118,7 +118,13 @@ because 30-odd arrows into one node hide the shape:
 - **02 gates the CLOSE of every execution-diff-gated item from 05 on.**
   `bundle exec rake "corpus:dump[<dir>]"` is the sole XD driver. A build
   may start earlier by materialising the driver from
-  `fix/s0b-corpus-cli-harness` uncommitted; the gate cannot.
+  `fix/s0b-corpus-cli-harness` uncommitted.
+
+  The gate was supposed not to. In practice 06, 08 and 11 all gated
+  against the materialised driver and merged ahead of 02, so this is a
+  convention that has already been bent three times rather than a
+  constraint the repo enforces. Treat it as the target state, and note
+  that three merged items were gated without 02 in their base.
 - **03 gates every item that un-pends a golden** — 12, 13, 14, 16, 17,
   18, 19, 20, 21, 22, 23, 31. Item 03's own header calls this a start
   block; those items phrase it as "the golden assertions need 03". **03
@@ -409,7 +415,7 @@ seed.
 |---|---|---|---|---|
 | 02 | `fix/s0b-corpus-cli-harness` | `37bb0ce` | 5 | **one open Blocker** — `prune_stale_dumps` still deletes across sibling directories when the destination is a real directory whose name contains `*`. `File.file?` reads the path literally, `Dir[]` globs it. See the card |
 | 03 | `fix/s0a-golden-harness` | `e8c7e69` | 11 | step 7's `corpus_spec` reconciliation happens at merge — the file it edits arrives with 02 |
-| 05 | `fix/s2-cli-shell` | `249a4d8` | 20 | **the critical path.** Base is a local integration ref = `origin/v2` + 02 |
+| 05 | `fix/s2-cli-shell` | `249a4d8` | 20 | **the critical path.** Base is a frozen integration ref: the `v2` seed `a008889` plus 02's **old** tip `dcec6d0`. It contains neither current `origin/v2` nor current 02, and its Rakefile is still spec-only |
 
 Suite counts on those three branches are not carried here. Each tip has
 moved since it was last measured, and a number nobody re-ran is worse

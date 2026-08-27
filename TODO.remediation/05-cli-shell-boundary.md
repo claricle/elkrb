@@ -2,9 +2,21 @@
 Slice S2 · branch `fix/s2-cli-shell`
 
 Status: built, **not gated, not merged**. Branch `fix/s2-cli-shell` @
-249a4d8, 20 commits ahead of `origin/v2`. Base is a local integration ref =
-`origin/v2` + 02's harness merged in, because this item un-pends 02's
-`cli_spec` examples and cannot build without its `cli_runner` and `fake_dot`.
+249a4d8, 20 commits ahead of `origin/v2`.
+
+**Its base is frozen and both halves have moved on.** Measured 2026-08-27:
+the branch forks from the `v2` seed `a008889` and carries 02's **old** tip
+`dcec6d0`. It contains neither current `origin/v2` (`75bdb13`) nor current 02
+(`37bb0ce`), and its own Rakefile still runs `task default: :spec`, so
+`bundle exec rake` there does not measure RuboCop at all.
+
+The base is what it is because this item un-pends 02's `cli_spec` examples
+and cannot build without its `cli_runner` and `fake_dot`. Before it gates:
+
+1. 02 lands first.
+2. Merge current `origin/v2` into this branch — that brings 04's rake task.
+3. Run the full `bundle exec rake`, spec **and** rubocop, and clear it.
+4. Then gate, against the tip that produced.
 
 **This is the critical path.** Nothing else unblocks 09, and 09 is what
 unblocks 10, and 10 is what unblocks roughly twenty of the remaining cards.
