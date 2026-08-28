@@ -128,13 +128,15 @@ module Elkrb
             relax_levels([seed], graph, adjacent, levels)
           end
 
+          # `placed` doubles as the walk's visited set, so a later tree cannot
+          # reach back into a node an earlier tree already owns — placing a
+          # node twice lets the second placement win and drags it above its own
+          # parent. Nothing reads `placed` mid-walk except the walk itself.
           placed = Set.new
           seeds.filter_map do |seed|
             next if placed.include?(seed.id)
 
-            tree = build_tree(seed, adjacent, placed, levels)
-            mark_placed(tree, placed)
-            tree
+            build_subtree(seed, adjacent, placed, levels, 0)
           end
         end
 
@@ -174,29 +176,23 @@ module Elkrb
           changed
         end
 
-        def mark_placed(tree, placed)
-          placed << tree[:node].id
-          tree[:children].each { |child| mark_placed(child, placed) }
-        end
-
-        # `already_placed` seeds the visited set so a later tree cannot reach
-        # back into a node an earlier tree already owns — placing a node twice
-        # lets the second placement win and drags it above its own parent.
-        def build_tree(root, adjacent, already_placed, levels)
-          build_subtree(root, adjacent, already_placed.dup, levels)
-        end
-
         # `visited` is one mutable set for the whole walk, not a per-path copy.
         # Copying it per path means a node reachable by many routes is expanded
         # once per route, which is factorial on a dense graph — and it would
         # place that node more than once anyway.
-        def build_subtree(node, adjacent, visited, levels)
+        #
+        # `floor` is the level this node may not sit above: one below its parent
+        # in the tree being built. A cyclic component gets bounded fallback
+        # levels rather than path depths, so a back edge can hand a node a level
+        # deeper than its own child's and draw the parent underneath it. Taking
+        # the floor forces every edge the forest actually picked to point down.
+        def build_subtree(node, adjacent, visited, levels, floor)
           visited << node.id
 
           tree = {
             node: node,
             children: [],
-            level: levels.fetch(node.id),
+            level: [levels.fetch(node.id), floor].max,
           }
 
           children = adjacent[node.id]
@@ -207,7 +203,7 @@ module Elkrb
           children.each { |child| visited << child.id }
 
           tree[:children] = children.map do |child|
-            build_subtree(child, adjacent, visited, levels)
+            build_subtree(child, adjacent, visited, levels, tree[:level] + 1)
           end
 
           tree
