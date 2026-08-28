@@ -138,9 +138,10 @@ RSpec.describe "elkrb CLI shell boundary" do
       expect(ids).to eq(%w[a b])
     end
 
-    # JSON is the tool's primary format and was the only one the mark broke:
-    # lutaml passes the leading U+FEFF to the JSON parser, which rejects the
-    # document. The sniffed and ELKT paths stripped it, .json did not.
+    # Neither named branch stripped the mark. This is the loud half: lutaml
+    # passes the leading U+FEFF to the JSON parser, which rejects the
+    # document. The .yaml example below covers the quiet half, where the
+    # document loaded and lost its children without any error at all.
     it "reads a BOM-prefixed .json file" do
       Dir.mktmpdir do |dir|
         file = File.join(dir, "bom.json")

@@ -44,10 +44,13 @@ module Elkrb
       # Psych's own refusal. Only the sniffed path normalizes to UNPARSEABLE.
       #
       # The byte order mark comes off here rather than per branch, because
-      # every branch needs it gone and `.json` was the one that forgot:
-      # lutaml hands the leading U+FEFF straight to the JSON parser, which
-      # rejects the document. String#strip does NOT remove a BOM, so it is
-      # no substitute.
+      # every branch needs it gone and neither named branch stripped it.
+      # `.json` was the loud half: lutaml hands the leading U+FEFF straight
+      # to the JSON parser, which rejects the document. `.yml`/`.yaml` was
+      # the quiet and more dangerous one -- Psych loads a marked document
+      # and silently drops every key after the first, so a marked graph laid
+      # out as an empty graph and the CLI exited 0. String#strip does NOT
+      # remove a BOM, so it is no substitute.
       #
       # @param content [String] raw file content
       # @param extension [String] the file's downcased extension
