@@ -6,6 +6,7 @@ require "json"
 require "tmpdir"
 require "fileutils"
 require "elkrb/format_sniffer"
+require "elkrb/parsers/elkt_parser"
 require "elkrb/graphviz_wrapper"
 require "elkrb/commands/batch_command"
 require "yaml"
@@ -625,5 +626,42 @@ RSpec.describe "byte order mark removal across input encodings" do
     content = accented_json.force_encoding(Encoding::BINARY)
 
     expect(child_ids(content, ".json")).to eq(["a"])
+  end
+
+  # ElktParser.parse is public API and is called directly, so it strips the
+  # mark itself rather than relying on FormatSniffer having done it first.
+  let(:elkt) { "node a\nnode b\nedge a -> b\n" }
+
+  # A real Latin-1 graph: the accent sits in a label, which is where the
+  # parser's own rules accept one. The node ids stay ASCII because a
+  # high-byte id matches no rule on any branch, then or now.
+  let(:accented_elkt) do
+    %(node a {\n  label "caf\xE9"\n}\nnode b\nedge a -> b\n)
+  end
+
+  def elkt_node_ids(graph)
+    graph[:children].map { |node| node[:id] }
+  end
+
+  def latin1(text)
+    text.dup.force_encoding(Encoding::ISO_8859_1)
+  end
+
+  it "strips the mark when ElktParser.parse is called directly" do
+    graph = Elkrb::Parsers::ElktParser.parse("\uFEFF#{elkt}")
+
+    expect(elkt_node_ids(graph)).to eq(%w[a b])
+  end
+
+  it "parses unmarked ISO-8859-1 ELKT holding a non-ASCII byte" do
+    graph = Elkrb::Parsers::ElktParser.parse(latin1(accented_elkt))
+
+    expect(elkt_node_ids(graph)).to eq(%w[a b])
+  end
+
+  it "reads a .elkt file in ISO-8859-1 holding a non-ASCII byte" do
+    graph = Elkrb::FormatSniffer.read(latin1(accented_elkt), ".elkt")
+
+    expect(elkt_node_ids(graph)).to eq(%w[a b])
   end
 end
