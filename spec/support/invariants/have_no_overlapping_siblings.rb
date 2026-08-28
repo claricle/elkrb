@@ -30,8 +30,14 @@ RSpec::Matchers.define :have_no_overlapping_siblings do
   # alongside this matcher in the same spec — this one stays robust rather
   # than raising on it.
   define_method(:strictly_overlap?) do |a, b|
-    ax, ay, aw, ah = a.x || 0.0, a.y || 0.0, a.width || 0.0, a.height || 0.0
-    bx, by, bw, bh = b.x || 0.0, b.y || 0.0, b.width || 0.0, b.height || 0.0
+    ax = a.x || 0.0
+    ay = a.y || 0.0
+    aw = a.width || 0.0
+    ah = a.height || 0.0
+    bx = b.x || 0.0
+    by = b.y || 0.0
+    bw = b.width || 0.0
+    bh = b.height || 0.0
     ax < bx + bw && bx < ax + aw && ay < by + bh && by < ay + ah
   end
 end

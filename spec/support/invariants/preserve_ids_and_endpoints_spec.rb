@@ -24,7 +24,8 @@ RSpec.describe "preserve_ids_and_endpoints" do
   it "fails when an edge's endpoints changed" do
     graph = Elkrb::Graph::Graph.from_hash(input_hash)
     result = Elkrb.layout(graph, {})
-    result.edges.first.sources, result.edges.first.targets = result.edges.first.targets, result.edges.first.sources
+    result.edges.first.sources, result.edges.first.targets =
+      result.edges.first.targets, result.edges.first.sources
 
     expect(result).not_to preserve_ids_and_endpoints(input_hash)
   end
@@ -63,7 +64,8 @@ RSpec.describe "preserve_ids_and_endpoints duplicate detection" do
     nested_input = {
       "id" => "root",
       "children" => [
-        { "id" => "p", "children" => [{ "id" => "c1", "width" => 30, "height" => 30 }] },
+        { "id" => "p",
+          "children" => [{ "id" => "c1", "width" => 30, "height" => 30 }] },
       ],
     }
     nested = Elkrb.layout(Elkrb::Graph::Graph.from_hash(nested_input), {})

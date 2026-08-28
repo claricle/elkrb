@@ -130,7 +130,9 @@ module GoldenComparator
   # only ever matches the LAST id-less item pair-for-pair (a known,
   # narrower limitation than duplicate-id detection, out of scope here).
   def duplicate_id_diffs(items, label)
-    items.filter_map { |item| item["id"] }.tally.select { |_, count| count > 1 }.map do |id, count|
+    items.filter_map do |item|
+      item["id"]
+    end.tally.select { |_, count| count > 1 }.map do |id, count|
       "#{label} has #{count} items with id #{id.inspect}"
     end
   end
@@ -146,7 +148,9 @@ module GoldenComparator
   def diff_by_id(expected_items, actual_items, path)
     expected_items ||= []
     actual_items ||= []
-    expected_named, expected_unnamed = expected_items.partition { |item| item["id"] }
+    expected_named, expected_unnamed = expected_items.partition do |item|
+      item["id"]
+    end
     actual_named, actual_unnamed = actual_items.partition { |item| item["id"] }
 
     diffs = duplicate_id_diffs(expected_named, "#{path}: expected")
@@ -155,19 +159,23 @@ module GoldenComparator
     expected_by_id = expected_named.to_h { |item| [item["id"], item] }
     actual_by_id = actual_named.to_h { |item| [item["id"], item] }
 
-    diffs.concat((expected_by_id.keys - actual_by_id.keys).map { |id| "#{path}/#{id}: missing from actual" })
-    diffs.concat((actual_by_id.keys - expected_by_id.keys).map { |id| "#{path}/#{id}: unexpected in actual" })
+    diffs.concat((expected_by_id.keys - actual_by_id.keys).map do |id|
+      "#{path}/#{id}: missing from actual"
+    end)
+    diffs.concat((actual_by_id.keys - expected_by_id.keys).map do |id|
+      "#{path}/#{id}: unexpected in actual"
+    end)
 
     (expected_by_id.keys & actual_by_id.keys).each do |id|
       diffs.concat(yield(expected_by_id[id], actual_by_id[id], "#{path}/#{id}"))
     end
 
-    if expected_unnamed.size != actual_unnamed.size
-      diffs << "#{path}: expected #{expected_unnamed.size} id-less item(s), got #{actual_unnamed.size}"
-    else
+    if expected_unnamed.size == actual_unnamed.size
       expected_unnamed.each_with_index do |item, i|
         diffs.concat(yield(item, actual_unnamed[i], "#{path}[#{i}]"))
       end
+    else
+      diffs << "#{path}: expected #{expected_unnamed.size} id-less item(s), got #{actual_unnamed.size}"
     end
     diffs
   end
@@ -184,7 +192,10 @@ module GoldenComparator
   # sections-only promotion of the same case both depend on this.
   def diff_exact(expected, actual, fields, path = "")
     diffs = []
-    diffs.concat(diff_own_numeric(expected, actual, path, RECT_FIELDS)) if fields.include?(:graph)
+    if fields.include?(:graph)
+      diffs.concat(diff_own_numeric(expected, actual, path,
+                                    RECT_FIELDS))
+    end
     diffs.concat(diff_owner_fields(expected, actual, fields, path))
     diffs.concat(diff_children_tree(expected, actual, fields, path))
     diffs
@@ -202,7 +213,10 @@ module GoldenComparator
     if fields.include?(:sections) || fields.include?(:labels)
       diffs.concat(diff_edges(expected_owner, actual_owner, fields, path))
     end
-    diffs.concat(diff_labels(expected_owner, actual_owner, path)) if fields.include?(:labels)
+    if fields.include?(:labels)
+      diffs.concat(diff_labels(expected_owner, actual_owner,
+                               path))
+    end
     if fields.include?(:ports) || fields.include?(:labels)
       diffs.concat(diff_ports(expected_owner, actual_owner, path, fields))
     end
@@ -210,8 +224,14 @@ module GoldenComparator
   end
 
   def diff_children_tree(expected, actual, fields, path)
-    diff_by_id(expected["children"], actual["children"], "#{path}/children") do |e_node, a_node, node_path|
-      diffs = fields.include?(:nodes) ? diff_exact_geometry(e_node, a_node, node_path) : []
+    diff_by_id(expected["children"], actual["children"],
+               "#{path}/children") do |e_node, a_node, node_path|
+      diffs = if fields.include?(:nodes)
+                diff_exact_geometry(e_node, a_node,
+                                    node_path)
+              else
+                []
+              end
       diffs.concat(diff_owner_fields(e_node, a_node, fields, node_path))
       diffs.concat(diff_children_tree(e_node, a_node, fields, node_path))
       diffs
@@ -219,7 +239,8 @@ module GoldenComparator
   end
 
   def diff_labels(expected_owner, actual_owner, path)
-    diff_by_id(expected_owner["labels"], actual_owner["labels"], "#{path}/labels") do |e, a, label_path|
+    diff_by_id(expected_owner["labels"], actual_owner["labels"],
+               "#{path}/labels") do |e, a, label_path|
       diff_exact_geometry(e, a, label_path)
     end
   end
@@ -230,25 +251,35 @@ module GoldenComparator
   # (to get at port-owned labels) doesn't also pull in port position deltas
   # it never asked for.
   def diff_ports(expected_owner, actual_owner, path, fields)
-    diff_by_id(expected_owner["ports"], actual_owner["ports"], "#{path}/ports") do |e, a, port_path|
+    diff_by_id(expected_owner["ports"], actual_owner["ports"],
+               "#{path}/ports") do |e, a, port_path|
       diffs = fields.include?(:labels) ? diff_labels(e, a, port_path) : []
       next diffs unless fields.include?(:ports)
 
       diffs.concat(diff_exact_geometry(e, a, port_path))
-      e_side, a_side = e["side"] || "UNDEFINED", a["side"] || "UNDEFINED"
+      e_side = e["side"] || "UNDEFINED"
+      a_side = a["side"] || "UNDEFINED"
       diffs << "#{port_path}/side: expected #{e_side}, got #{a_side}" if e_side != a_side
       diffs << "#{port_path}/index: expected #{e['index']}, got #{a['index']}" if e["index"] != a["index"]
-      e_offset, a_offset = (e["offset"] || 0.0).to_f, (a["offset"] || 0.0).to_f
+      e_offset = (e["offset"] || 0.0).to_f
+      a_offset = (a["offset"] || 0.0).to_f
       diffs << "#{port_path}/offset: expected #{e_offset}, got #{a_offset}" unless (e_offset - a_offset).abs <= 1e-6
       diffs
     end
   end
 
   def diff_edges(expected_owner, actual_owner, fields, path)
-    diff_by_id(expected_owner["edges"], actual_owner["edges"], "#{path}/edges") do |e_edge, a_edge, edge_path|
+    diff_by_id(expected_owner["edges"], actual_owner["edges"],
+               "#{path}/edges") do |e_edge, a_edge, edge_path|
       diffs = diff_edge_endpoints(e_edge, a_edge, edge_path)
-      diffs.concat(diff_sections(e_edge, a_edge, edge_path)) if fields.include?(:sections)
-      diffs.concat(diff_labels(e_edge, a_edge, edge_path)) if fields.include?(:labels)
+      if fields.include?(:sections)
+        diffs.concat(diff_sections(e_edge, a_edge,
+                                   edge_path))
+      end
+      if fields.include?(:labels)
+        diffs.concat(diff_labels(e_edge, a_edge,
+                                 edge_path))
+      end
       diffs
     end
   end
@@ -336,9 +367,12 @@ module GoldenComparator
     expected_sections.each_with_index.flat_map do |e_sec, i|
       a_sec = actual_sections[i]
       sec_path = "#{path}/sections[#{i}]"
-      diffs = diff_point(e_sec["startPoint"], a_sec["startPoint"], "#{sec_path}/startPoint")
-      diffs.concat(diff_point(e_sec["endPoint"], a_sec["endPoint"], "#{sec_path}/endPoint"))
-      diffs.concat(diff_bend_points(e_sec["bendPoints"], a_sec["bendPoints"], "#{sec_path}/bendPoints"))
+      diffs = diff_point(e_sec["startPoint"], a_sec["startPoint"],
+                         "#{sec_path}/startPoint")
+      diffs.concat(diff_point(e_sec["endPoint"], a_sec["endPoint"],
+                              "#{sec_path}/endPoint"))
+      diffs.concat(diff_bend_points(e_sec["bendPoints"], a_sec["bendPoints"],
+                                    "#{sec_path}/bendPoints"))
       diffs
     end
   end
@@ -350,7 +384,9 @@ module GoldenComparator
       return ["#{path}: expected #{expected_points.size} bend points, got #{actual_points.size}"]
     end
 
-    expected_points.each_with_index.flat_map { |point, i| diff_point(point, actual_points[i], "#{path}[#{i}]") }
+    expected_points.each_with_index.flat_map do |point, i|
+      diff_point(point, actual_points[i], "#{path}[#{i}]")
+    end
   end
 
   def diff_point(expected_point, actual_point, path)
@@ -434,10 +470,16 @@ module GoldenComparator
   # caller can short-circuit on the error instead of computing with nil.
   def strict_numeric(hash, key, path, side)
     value = hash[key]
-    return [nil, "#{path}/#{key}: #{side} is missing or not numeric (#{value.inspect})"] unless value.is_a?(Numeric)
+    unless value.is_a?(Numeric)
+      return [nil,
+              "#{path}/#{key}: #{side} is missing or not numeric (#{value.inspect})"]
+    end
 
     value = value.to_f
-    return [nil, "#{path}/#{key}: #{side} is non-finite (#{value})"] unless value.finite?
+    unless value.finite?
+      return [nil,
+              "#{path}/#{key}: #{side} is non-finite (#{value})"]
+    end
 
     [value, nil]
   end
@@ -448,10 +490,13 @@ module GoldenComparator
     actual_box_width = numeric_or_zero(actual_level, "width")
     actual_box_height = numeric_or_zero(actual_level, "height")
 
-    diff_by_id(expected_level["children"], actual_level["children"], path) do |e_node, a_node, node_path|
-      diffs = %w[width height].flat_map { |key| diff_strict_dimension(e_node, a_node, node_path, key) }
+    diff_by_id(expected_level["children"], actual_level["children"],
+               path) do |e_node, a_node, node_path|
+      diffs = %w[width height].flat_map do |key|
+        diff_strict_dimension(e_node, a_node, node_path, key)
+      end
       diffs.concat(diff_normalised_position(e_node, expected_box_width, expected_box_height,
-                                             a_node, actual_box_width, actual_box_height, node_path))
+                                            a_node, actual_box_width, actual_box_height, node_path))
       diffs.concat(diff_node_geometry(e_node, a_node, node_path))
       diffs
     end
@@ -465,9 +510,12 @@ module GoldenComparator
     (e - a).abs > 1 ? ["#{path}/#{key}: expected #{e}, got #{a} (>1px)"] : []
   end
 
-  def diff_normalised_position(e_node, e_box_width, e_box_height, a_node, a_box_width, a_box_height, path)
-    diff_strict_axis_position(e_node, e_box_width, a_node, a_box_width, path, "x", "width") +
-      diff_strict_axis_position(e_node, e_box_height, a_node, a_box_height, path, "y", "height")
+  def diff_normalised_position(e_node, e_box_width, e_box_height, a_node,
+a_box_width, a_box_height, path)
+    diff_strict_axis_position(e_node, e_box_width, a_node, a_box_width, path,
+                              "x", "width") +
+      diff_strict_axis_position(e_node, e_box_height, a_node, a_box_height,
+                                path, "y", "height")
   end
 
   # The box-dimension guard lives HERE, per axis, after `strict_numeric` --
@@ -475,7 +523,8 @@ module GoldenComparator
   # degenerate box on one axis (e.g. a zero-height container) is a reason
   # to skip THAT axis's fraction, not a reason to also skip strict
   # validation of the OTHER axis's x/y, or to skip validating x/y at all.
-  def diff_strict_axis_position(e_node, e_box, a_node, a_box, path, key, box_label)
+  def diff_strict_axis_position(e_node, e_box, a_node, a_box, path, key,
+box_label)
     e, e_error = strict_numeric(e_node, key, path, "expected")
     a, a_error = strict_numeric(a_node, key, path, "actual")
     return [e_error, a_error].compact if e_error || a_error
@@ -511,7 +560,8 @@ module GoldenComparator
     # namespace (two ports sharing an id, or a port id colliding with a
     # node id) would otherwise silently collapse the same way a
     # duplicate node/edge id would.
-    diffs.concat(duplicate_id_diffs(reference_ids(actual_level), "#{path}/(nodes+ports): actual"))
+    diffs.concat(duplicate_id_diffs(reference_ids(actual_level),
+                                    "#{path}/(nodes+ports): actual"))
     rects = rect_index(actual_level)
     expected_edges = expected_level["edges"] || []
     actual_edges_list = actual_level["edges"] || []
@@ -522,8 +572,12 @@ module GoldenComparator
     actual_edges = actual_edges_list.to_h { |e| [e["id"], e] }
     actual_edge_ids = actual_edges.keys
 
-    (expected_edge_ids - actual_edge_ids).each { |id| diffs << "#{path}/edges/#{id}: missing from actual" }
-    (actual_edge_ids - expected_edge_ids).each { |id| diffs << "#{path}/edges/#{id}: unexpected in actual" }
+    (expected_edge_ids - actual_edge_ids).each do |id|
+      diffs << "#{path}/edges/#{id}: missing from actual"
+    end
+    (actual_edge_ids - expected_edge_ids).each do |id|
+      diffs << "#{path}/edges/#{id}: unexpected in actual"
+    end
 
     (expected_level["edges"] || []).each do |edge|
       actual_edge = actual_edges[edge["id"]]
@@ -537,12 +591,14 @@ module GoldenComparator
       # true, since that endpoint IS what routed it. `diff_edge_endpoints`
       # is the same helper exact tier's `diff_edges` calls, so the two
       # tiers can't diverge on what counts as a rewired edge.
-      diffs.concat(diff_edge_endpoints(edge, actual_edge, "#{path}/edges/#{edge['id']}"))
+      diffs.concat(diff_edge_endpoints(edge, actual_edge,
+                                       "#{path}/edges/#{edge['id']}"))
 
       sections = actual_edge["sections"] || []
       next diffs << "#{path}/edges/#{edge['id']}: no sections in actual" if sections.empty?
 
-      first_section, last_section = sections.first, sections.last
+      first_section = sections.first
+      last_section = sections.last
       # `incomingShape`/`outgoingShape` are set by layered and its
       # relatives but not by force/stress/random/radial (confirmed
       # empirically across the committed goldens) — without one, which
@@ -570,24 +626,35 @@ module GoldenComparator
       start_ids = first_section["incomingShape"] ? [first_section["incomingShape"]] : endpoint_candidates(actual_edge)
       end_ids = last_section["outgoingShape"] ? [last_section["outgoingShape"]] : endpoint_candidates(actual_edge)
 
-      diffs.concat(point_near_any_reference(first_section["startPoint"], rects, start_ids, "#{path}/edges/#{edge['id']}/start"))
-      diffs.concat(point_near_any_reference(last_section["endPoint"], rects, end_ids, "#{path}/edges/#{edge['id']}/end"))
+      diffs.concat(point_near_any_reference(first_section["startPoint"], rects,
+                                            start_ids, "#{path}/edges/#{edge['id']}/start"))
+      diffs.concat(point_near_any_reference(last_section["endPoint"], rects,
+                                            end_ids, "#{path}/edges/#{edge['id']}/end"))
     end
 
     expected_children_list = expected_level["children"] || []
     actual_children_list = actual_level["children"] || []
-    diffs.concat(duplicate_id_diffs(expected_children_list, "#{path}/children: expected"))
-    diffs.concat(duplicate_id_diffs(actual_children_list, "#{path}/children: actual"))
+    diffs.concat(duplicate_id_diffs(expected_children_list,
+                                    "#{path}/children: expected"))
+    diffs.concat(duplicate_id_diffs(actual_children_list,
+                                    "#{path}/children: actual"))
 
     expected_children = expected_children_list.to_h { |c| [c["id"], c] }
     actual_children = actual_children_list.to_h { |c| [c["id"], c] }
 
-    (expected_children.keys - actual_children.keys).each { |id| diffs << "#{path}/children/#{id}: missing from actual" }
-    (actual_children.keys - expected_children.keys).each { |id| diffs << "#{path}/children/#{id}: unexpected in actual" }
+    (expected_children.keys - actual_children.keys).each do |id|
+      diffs << "#{path}/children/#{id}: missing from actual"
+    end
+    (actual_children.keys - expected_children.keys).each do |id|
+      diffs << "#{path}/children/#{id}: unexpected in actual"
+    end
 
     expected_children.each do |id, child|
       match = actual_children[id]
-      check_level_sections(child, match, "#{path}/children/#{id}", diffs) if match
+      if match
+        check_level_sections(child, match, "#{path}/children/#{id}",
+                             diffs)
+      end
     end
   end
 
@@ -610,7 +677,9 @@ module GoldenComparator
   # before `rect_index` silently collapses it.
   def reference_ids(level)
     (level["children"] || []).flat_map do |node|
-      [{ "id" => node["id"] }] + (node["ports"] || []).map { |port| { "id" => port["id"] } }
+      [{ "id" => node["id"] }] + (node["ports"] || []).map do |port|
+        { "id" => port["id"] }
+      end
     end
   end
 
@@ -633,7 +702,7 @@ module GoldenComparator
   def numeric_rect(hash)
     {
       x: numeric_or_zero(hash, "x"), y: numeric_or_zero(hash, "y"),
-      width: numeric_or_zero(hash, "width"), height: numeric_or_zero(hash, "height"),
+      width: numeric_or_zero(hash, "width"), height: numeric_or_zero(hash, "height")
     }
   end
 
@@ -665,11 +734,14 @@ module GoldenComparator
   def point_on_border(point, rect, path)
     return ["#{path}: point missing x/y"] unless point && point["x"].is_a?(Numeric) && point["y"].is_a?(Numeric)
 
-    px, py = point["x"].to_f, point["y"].to_f
+    px = point["x"].to_f
+    py = point["y"].to_f
     return ["#{path}: (#{px},#{py}) is non-finite"] unless px.finite? && py.finite?
 
-    left, right = rect[:x], rect[:x] + rect[:width]
-    top, bottom = rect[:y], rect[:y] + rect[:height]
+    left = rect[:x]
+    right = rect[:x] + rect[:width]
+    top = rect[:y]
+    bottom = rect[:y] + rect[:height]
 
     on_vertical_edge = (px - left).abs <= 1 || (px - right).abs <= 1
     on_horizontal_edge = (py - top).abs <= 1 || (py - bottom).abs <= 1
@@ -700,7 +772,9 @@ module GoldenComparator
     # (algorithm_registry.rb): a fully-qualified id like
     # "org.eclipse.elk.layered" resolves to "layered", not to a literal
     # mismatch against the bare form.
-    algorithm = expected.dig("layoutOptions", "elk.algorithm")&.then { |a| a.to_s.split(".").last.downcase }
+    algorithm = expected.dig("layoutOptions", "elk.algorithm")&.then do |a|
+      a.to_s.split(".").last.downcase
+    end
     diffs =
       if algorithm && algorithm != "layered"
         []
@@ -709,8 +783,10 @@ module GoldenComparator
         axis = %w[UP DOWN].include?(direction) ? :y : :x
         cross_axis = axis == :y ? :x : :y
 
-        expected_layers = group_by_layer(expected["children"] || [], axis, cross_axis)
-        actual_layers = group_by_layer(actual["children"] || [], axis, cross_axis)
+        expected_layers = group_by_layer(expected["children"] || [], axis,
+                                         cross_axis)
+        actual_layers = group_by_layer(actual["children"] || [], axis,
+                                       cross_axis)
 
         if expected_layers == actual_layers
           []
@@ -723,7 +799,10 @@ module GoldenComparator
     actual_children = (actual["children"] || []).to_h { |c| [c["id"], c] }
     expected_children.each do |id, child|
       match = actual_children[id]
-      diffs.concat(diff_layer_membership(child, match, "#{path}/children/#{id}")) if match
+      if match
+        diffs.concat(diff_layer_membership(child, match,
+                                           "#{path}/children/#{id}"))
+      end
     end
     diffs
   end
@@ -741,7 +820,11 @@ module GoldenComparator
       .group_by { |n| numeric_or_zero(n, axis.to_s).round }
       .sort.to_h
       .values
-      .map { |group| group.sort_by { |n| [numeric_or_zero(n, cross_axis.to_s), n["id"]] }.map { |n| n["id"] } }
+      .map do |group|
+      group.sort_by do |n|
+        [numeric_or_zero(n, cross_axis.to_s), n["id"]]
+      end.map { |n| n["id"] }
+    end
   end
 
   # smoke tier: same node ids present (order-independent), every node's
@@ -780,7 +863,8 @@ module GoldenComparator
   end
 end
 
-RSpec::Matchers.define :match_elkjs_golden do |name, tier:, fields: %i[nodes sections labels ports graph], dir: GoldenHelper::DEFAULT_DIR|
+RSpec::Matchers.define :match_elkjs_golden do |name, tier:, fields: %i[nodes
+                                                                       sections labels ports graph], dir: GoldenHelper::DEFAULT_DIR|
   match do |actual|
     expected = golden_expected(name, dir: dir)
     comparable_actual = GoldenComparator.error_hash?(actual) ? actual : GoldenComparator.to_comparable(actual)
@@ -790,9 +874,12 @@ RSpec::Matchers.define :match_elkjs_golden do |name, tier:, fields: %i[nodes sec
         error_diffs(expected, comparable_actual)
       else
         case tier
-        when :exact then GoldenComparator.diff_exact(expected, comparable_actual, fields)
-        when :structural then GoldenComparator.diff_structural(expected, comparable_actual)
-        when :smoke then GoldenComparator.diff_smoke(expected, comparable_actual)
+        when :exact then GoldenComparator.diff_exact(expected,
+                                                     comparable_actual, fields)
+        when :structural then GoldenComparator.diff_structural(expected,
+                                                               comparable_actual)
+        when :smoke then GoldenComparator.diff_smoke(expected,
+                                                     comparable_actual)
         else raise ArgumentError, "unknown tier: #{tier.inspect}"
         end
       end
@@ -807,7 +894,8 @@ RSpec::Matchers.define :match_elkjs_golden do |name, tier:, fields: %i[nodes sec
     if expected_error && actual_error
       expected_message = GoldenComparator.error_message(expected)
       actual_message = GoldenComparator.error_message(actual)
-      return [] if GoldenComparator.same_error_condition?(expected_message, actual_message)
+      return [] if GoldenComparator.same_error_condition?(expected_message,
+                                                          actual_message)
 
       return ["expected an error naming the same condition as #{expected_message.inspect}, got #{actual_message.inspect}"]
     end
@@ -820,7 +908,8 @@ RSpec::Matchers.define :match_elkjs_golden do |name, tier:, fields: %i[nodes sec
   end
 
   failure_message do |_actual|
-    "#{name} (tier: #{tier}) — first #{[@diffs.size, 10].min} of #{@diffs.size} differences:\n" +
+    "#{name} (tier: #{tier}) — first #{[@diffs.size,
+                                        10].min} of #{@diffs.size} differences:\n" +
       @diffs.first(10).join("\n")
   end
 end

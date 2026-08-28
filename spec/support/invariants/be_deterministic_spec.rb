@@ -5,12 +5,16 @@ require_relative "be_deterministic"
 RSpec.describe "be_deterministic" do
   let(:input_hash) do
     { "id" => "root", "children" => [{ "id" => "a", "width" => 30, "height" => 30 },
-                                      { "id" => "b", "width" => 30, "height" => 30 }],
+                                     { "id" => "b", "width" => 30,
+                                       "height" => 30 }],
       "edges" => [{ "id" => "e1", "sources" => ["a"], "targets" => ["b"] }] }
   end
 
   it "passes when two layout runs of the same input agree" do
-    expect { Elkrb.layout(Elkrb::Graph::Graph.from_hash(input_hash), {}) }.to be_deterministic
+    expect do
+      Elkrb.layout(Elkrb::Graph::Graph.from_hash(input_hash),
+                   {})
+    end.to be_deterministic
   end
 
   it "fails when the block returns a different result each call" do

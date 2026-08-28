@@ -114,7 +114,8 @@ namespace :golden do
 
     FileUtils.rm_rf("#{GOLDEN_DIR}/expected")
     FileUtils.cp_r(tmp, "#{GOLDEN_DIR}/expected")
-    FileUtils.mv("#{GOLDEN_DIR}/expected/MANIFEST.json", "#{GOLDEN_DIR}/MANIFEST.json")
+    FileUtils.mv("#{GOLDEN_DIR}/expected/MANIFEST.json",
+                 "#{GOLDEN_DIR}/MANIFEST.json")
     FileUtils.remove_entry(tmp)
     puts "Golden expected files regenerated in #{GOLDEN_DIR}/expected"
   end
@@ -135,7 +136,9 @@ namespace :golden do
     committed_manifest = JSON.parse(File.read("#{GOLDEN_DIR}/MANIFEST.json"))
     # "generated" is a timestamp and "node" is machine-specific — only the
     # pinned elkjs version and the case list are required to match.
-    drifted_keys = %w[elkjs cases].select { |key| fresh_manifest[key] != committed_manifest[key] }
+    drifted_keys = %w[elkjs cases].select do |key|
+      fresh_manifest[key] != committed_manifest[key]
+    end
     abort "MANIFEST.json drift in #{drifted_keys.join(', ')} (generated tree left at #{tmp})" unless drifted_keys.empty?
 
     # spec/fixtures/golden/expected already holds only case files (no
@@ -145,7 +148,8 @@ namespace :golden do
     # intact for inspection on failure, matching what the abort message
     # below claims — a real BSD/GNU `diff` flag, confirmed working on
     # both during planning.
-    ok = system("diff", "-r", "-x", "MANIFEST.json", "#{GOLDEN_DIR}/expected", tmp)
+    ok = system("diff", "-r", "-x", "MANIFEST.json", "#{GOLDEN_DIR}/expected",
+                tmp)
     if ok
       FileUtils.remove_entry(tmp)
     elsif ok.nil?
