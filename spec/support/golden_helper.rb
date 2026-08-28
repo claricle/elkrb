@@ -21,11 +21,13 @@ RSpec.configure { |c| c.include GoldenHelper }
 module GoldenComparator
   module_function
 
-  # Both construction sites for an error hash in this diff (golden_spec.rb's
-  # rescue clauses) use a String "error" key -- `JSON.parse` (how
-  # `golden_expected` reads the other side) never produces Symbol keys
-  # either, since nothing here passes `symbolize_names: true`. One
-  # convention, not defended against a Symbol-keyed hash nothing produces.
+  # Both construction sites for an error hash in this diff -- the rescue
+  # clause in golden_spec.rb's `hyperedge` example, and
+  # elkjs_golden/generate.js:101 writing `{ error: ... }` into the golden
+  # file -- use a String "error" key. `JSON.parse` (how `golden_expected`
+  # reads the other side) never produces Symbol keys either, since nothing
+  # here passes `symbolize_names: true`. One convention, not defended
+  # against a Symbol-keyed hash nothing produces.
   def error_hash?(value)
     value.is_a?(Hash) && value.key?("error")
   end
@@ -481,43 +483,18 @@ module GoldenComparator
     end
   end
 
-  # Every OTHER structural check (id sets, section borders, layer
-  # membership) can pass while every node is stacked on the origin,
-  # permuted with its siblings, or a compound is sized nothing like its
-  # declared size — none of them look at a node's OWN width/height/
-  # position against the golden's. This is the check that does:
-  #
-  # - width/height within 1px, UNCONDITIONALLY (not gated by algorithm or
-  #   direction) — a compound's declared size is not "loose", it is the
-  #   one thing structural tier exists to prove for hierarchy (RC5).
-  # - position, compared as a FRACTION of the containing level's own
-  #   bounding box (each side normalised against ITS OWN width/height),
-  #   not raw coordinates — different algorithms use different absolute
-  #   coordinate conventions even for a correct layout (RIGHT vs DOWN,
-  #   padding choices), so raw-coordinate comparison would be stricter
-  #   than structural tier is meant to be. POSITION_TOLERANCE_FRACTION
-  #   (0.15 — a node more than 15% of the graph's own span away from
-  #   where it belongs) is coarse on purpose: it must not demand
-  #   byte-identical placement, only catch a node stacked at the origin,
-  #   swapped with a sibling, or otherwise clearly out of place. Being a
-  #   DEADBAND rather than an absolute distance, it has known blind spots:
-  #   a uniform small translation of every node (confirmed on `rect6`,
-  #   +20px slips through, +30px is caught) or a swap between two
-  #   siblings that already sat within 15% of each other both read as "no
-  #   diff". Both are inherent to comparing normalised fractions rather
-  #   than raw coordinates, and acceptable here (exact tier is where
-  #   byte-identical placement is enforced) — but this is NOT a general
-  #   "layout is right" proof, and a later slice tightening this
-  #   tolerance should know that going in.
-  #
-  # Matched by `diff_by_id`, the same canonical by-id pairing every other
-  # owner-child comparison in this file uses — which also means a node
-  # present on only one side is reported here (structural tier had no
-  # other check that would catch a node vanishing or appearing outright).
-  # Recurses into every matched child, treating that child as the new
-  # bounding box for ITS OWN children — the same per-level frame
-  # `check_level_sections` and `rect_index` already use elsewhere in this
-  # file.
+  # 0.15 — a node more than 15% of the graph's own span away from where
+  # it belongs. Coarse on purpose: it must not demand byte-identical
+  # placement, only catch a node stacked at the origin, swapped with a
+  # sibling, or otherwise clearly out of place. Being a DEADBAND rather
+  # than an absolute distance, it has known blind spots: a uniform small
+  # translation of every node (confirmed on `rect6`, +20px slips through,
+  # +30px is caught) or a swap between two siblings that already sat
+  # within 15% of each other both read as "no diff". Both are inherent to
+  # comparing normalised fractions rather than raw coordinates, and
+  # acceptable here (exact tier is where byte-identical placement is
+  # enforced) — but this is NOT a general "layout is right" proof, and a
+  # later slice tightening this tolerance should know that going in.
   POSITION_TOLERANCE_FRACTION = 0.15
 
   # Unlike `numeric_or_zero` ("missing reads as 0.0" — real for elkjs's
@@ -547,23 +524,48 @@ module GoldenComparator
     [value, nil]
   end
 
+  # Every OTHER structural check (id sets, section borders, layer
+  # membership) can pass while every node is stacked on the origin,
+  # permuted with its siblings, or a compound is sized nothing like its
+  # declared size — none of them look at a node's OWN width/height/
+  # position against the golden's. This is the check that does:
+  #
+  # - width/height within 1px, UNCONDITIONALLY (not gated by algorithm or
+  #   direction) — a compound's declared size is not "loose", it is the
+  #   one thing structural tier exists to prove for hierarchy (RC5).
+  # - position, compared as a FRACTION of the containing level's own
+  #   bounding box (each side normalised against ITS OWN width/height),
+  #   not raw coordinates — different algorithms use different absolute
+  #   coordinate conventions even for a correct layout (RIGHT vs DOWN,
+  #   padding choices), so raw-coordinate comparison would be stricter
+  #   than structural tier is meant to be. The tolerance on that
+  #   fraction is POSITION_TOLERANCE_FRACTION above.
+  #
+  # Matched by `diff_by_id`, the same canonical by-id pairing every other
+  # owner-child comparison in this file uses — which also means a node
+  # present on only one side is reported here (structural tier had no
+  # other check that would catch a node vanishing or appearing outright).
+  # Recurses into every matched child, treating that child as the new
+  # bounding box for ITS OWN children — the same per-level frame
+  # `check_level_sections` and `rect_index` already use elsewhere in this
+  # file.
   def diff_node_geometry(expected_level, actual_level, path)
-    expected_box = box_of(expected_level)
-    actual_box = box_of(actual_level)
+    expected_size = size_of(expected_level)
+    actual_size = size_of(actual_level)
 
     diff_by_id(expected_level["children"], actual_level["children"],
                path) do |e_node, a_node, node_path|
       diffs = SIZE_FIELDS.flat_map do |key|
         diff_strict_dimension(e_node, a_node, node_path, key)
       end
-      diffs.concat(diff_normalised_position(expected_box.merge(node: e_node),
-                                            actual_box.merge(node: a_node),
+      diffs.concat(diff_normalised_position(expected_size.merge(node: e_node),
+                                            actual_size.merge(node: a_node),
                                             node_path))
       diffs.concat(diff_node_geometry(e_node, a_node, node_path))
     end
   end
 
-  def box_of(level)
+  def size_of(level)
     { width: numeric_or_zero(level, "width"),
       height: numeric_or_zero(level, "height") }
   end
@@ -691,19 +693,24 @@ module GoldenComparator
     sections = actual_edge["sections"] || []
     return diffs << "#{edge_path}: no sections in actual" if sections.empty?
 
-    diffs.concat(check_section_border(sections.first,
-                                      %w[startPoint incomingShape],
-                                      actual_edge, rects, "#{edge_path}/start"))
-    diffs.concat(check_section_border(sections.last,
-                                      %w[endPoint outgoingShape],
-                                      actual_edge, rects, "#{edge_path}/end"))
+    first_section = sections.first
+    last_section = sections.last
+    diffs.concat(check_section_border(
+                   actual_edge, rects, "#{edge_path}/start",
+                   point: first_section["startPoint"],
+                   shape: first_section["incomingShape"]
+                 ))
+    diffs.concat(check_section_border(
+                   actual_edge, rects, "#{edge_path}/end",
+                   point: last_section["endPoint"],
+                   shape: last_section["outgoingShape"]
+                 ))
   end
 
-  # `incomingShape`/`outgoingShape` are set by layered and its
-  # relatives but not by force/stress/random/radial (confirmed
-  # empirically across the committed goldens) — without one, which
-  # node the point SHOULD clip to isn't just unlabelled, it isn't
-  # even reliably source-then-target: `random3`'s committed golden
+  # Where `incomingShape`/`outgoingShape` are populated is stated once,
+  # above `diff_edge_endpoints`. Without one, which node the point
+  # SHOULD clip to isn't just unlabelled, it isn't even reliably
+  # source-then-target: `random3`'s committed golden
   # anchors both this edge's start AND end on its SOURCE node's
   # border, never the target's (verified by running
   # `diff_structural(expected, expected)` against the real golden).
@@ -723,11 +730,9 @@ module GoldenComparator
   # anything other than this edge's own endpoints — otherwise the
   # point would be measured against whatever rectangle elkrb chose to
   # name, which is no check at all.
-  def check_section_border(section, keys, actual_edge, rects, point_path)
-    point_key, shape_key = keys
-    shape_id = section[shape_key]
-    ids = shape_id ? [shape_id] : endpoint_candidates(actual_edge)
-    point_near_any_reference(section[point_key], rects, ids, point_path)
+  def check_section_border(actual_edge, rects, point_path, point:, shape:)
+    ids = shape ? [shape] : endpoint_candidates(actual_edge)
+    point_near_any_reference(point, rects, ids, point_path)
   end
 
   def check_level_children(expected_level, actual_level, path)
