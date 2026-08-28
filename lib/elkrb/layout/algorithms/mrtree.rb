@@ -11,6 +11,12 @@ module Elkrb
       #
       # Arranges nodes in a tree structure that can handle multiple root nodes.
       class MRTree < BaseAlgorithm
+        # Both readers of the adjacency map ask for every child of the
+        # graph, sinks included, so a missing key has to answer something
+        # enumerable rather than raise or grow the map.
+        NO_CHILDREN = [].freeze
+        private_constant :NO_CHILDREN
+
         def layout_flat(graph, _options = {})
           return graph if graph.children.empty?
 
@@ -22,8 +28,7 @@ module Elkrb
           # If no roots found, treat all nodes as roots
           roots = graph.children if roots.empty?
 
-          # Build tree structure from roots
-          trees = roots.map { |root| build_tree(root, graph, index) }
+          trees = build_forest(roots, graph, adjacency(graph, index))
 
           # Calculate positions for each tree
           spacing_val = node_spacing
@@ -66,48 +71,146 @@ module Elkrb
           graph.children.reject { |node| nodes_with_incoming.include?(node.id) }
         end
 
-        def build_tree(root, graph, index)
-          build_subtree(root, graph, index, 0, Set.new)
+        # Child nodes per source id, resolved once for the whole graph.
+        # Rebuilding this per node would rescan every edge inside the
+        # relaxation loop.
+        #
+        # Reads `graph.edges`, matching #find_root_nodes, NOT `index.edges`.
+        # The index folds in the edges declared on childless top-level nodes,
+        # so it is a strict superset: reading it here while root finding reads
+        # the narrower set would let a node whose only incoming edge sits on a
+        # sibling leaf be a root AND somebody's child at the same time.
+        #
+        # Ids identify nodes here where #find_root_nodes compares objects. The
+        # two agree: NodeIndex keeps ids unique within a level and answers the
+        # same object for the same id.
+        def adjacency(graph, index)
+          map = {}
+
+          (graph.edges || []).each do |edge|
+            targets = index.endpoint_nodes(edge.targets)
+
+            index.endpoint_nodes(edge.sources).each do |source|
+              # A hyperedge can target one of its source's own ports
+              # alongside a real child (a -> [a's port, b]). Resolving that
+              # port back to the source would make the node its own child,
+              # and stepping down it would let the node keep deepening its
+              # own level until it hit the relaxation bound.
+              children = targets.reject { |target| target.id == source.id }
+              (map[source.id] ||= []).concat(children)
+            end
+          end
+
+          map.each_value { |children| children.uniq!(&:id) }
+          map.default = NO_CHILDREN
+          map
         end
 
-        def build_subtree(node, graph, index, level, visited)
-          visited = visited | [node.id]
+        # Every child has to end up in some tree. A component that is wholly
+        # cyclic (a -> b -> a) contains no root, so it is never reached from
+        # the graph's roots and its nodes keep nil coordinates until padding
+        # trips over them. Whenever a pass leaves nodes unplaced, seed one of
+        # them as a fallback root and keep going.
+        def build_forest(roots, graph, adjacent)
+          # A node reachable by two paths belongs at the DEEPER one, or it
+          # ends up above its own parent. Levels are settled for the whole
+          # graph before any tree is built, so placement order stops mattering.
+          levels = {}
+          seeds = roots.dup
+          relax_levels(seeds, graph, adjacent, levels)
+
+          loop do
+            remaining = graph.children.reject { |node| levels.key?(node.id) }
+            break if remaining.empty?
+
+            seed = remaining.first
+            seeds << seed
+            relax_levels([seed], graph, adjacent, levels)
+          end
+
+          placed = Set.new
+          seeds.filter_map do |seed|
+            next if placed.include?(seed.id)
+
+            tree = build_tree(seed, adjacent, placed, levels)
+            mark_placed(tree, placed)
+            tree
+          end
+        end
+
+        # Deepest path wins. Walking every simple path to find it is factorial
+        # — a complete 8-node cycle took 2.5s and each extra node multiplied
+        # that by roughly ten. Relax instead: a longest path visits each node
+        # at most once, so `limit` passes settle every level the graph can
+        # produce, and a cycle cannot raise one past that bound.
+        def relax_levels(seeds, graph, adjacent, levels)
+          seeds.each { |seed| levels[seed.id] ||= 0 }
+          limit = graph.children.size
+
+          limit.times do
+            break unless relax_pass(graph, adjacent, levels, limit)
+          end
+
+          levels
+        end
+
+        # One relaxation sweep. Answers whether any level moved.
+        def relax_pass(graph, adjacent, levels, limit)
+          changed = false
+
+          graph.children.each do |node|
+            depth = levels[node.id]
+            next if depth.nil?
+
+            adjacent[node.id].each do |child|
+              candidate = depth + 1
+              next if candidate > limit || candidate <= (levels[child.id] || -1)
+
+              levels[child.id] = candidate
+              changed = true
+            end
+          end
+
+          changed
+        end
+
+        def mark_placed(tree, placed)
+          placed << tree[:node].id
+          tree[:children].each { |child| mark_placed(child, placed) }
+        end
+
+        # `already_placed` seeds the visited set so a later tree cannot reach
+        # back into a node an earlier tree already owns — placing a node twice
+        # lets the second placement win and drags it above its own parent.
+        def build_tree(root, adjacent, already_placed, levels)
+          build_subtree(root, adjacent, already_placed.dup, levels)
+        end
+
+        # `visited` is one mutable set for the whole walk, not a per-path copy.
+        # Copying it per path means a node reachable by many routes is expanded
+        # once per route, which is factorial on a dense graph — and it would
+        # place that node more than once anyway.
+        def build_subtree(node, adjacent, visited, levels)
+          visited << node.id
 
           tree = {
             node: node,
             children: [],
-            level: level,
+            level: levels.fetch(node.id),
           }
 
-          children = find_children(node, graph, index)
+          children = adjacent[node.id]
                      .reject { |child| visited.include?(child.id) }
+          # The whole child list is settled before any of it is recursed into,
+          # so each sibling is claimed now — otherwise the first sibling's
+          # subtree can reach a later one and place it a second time.
+          children.each { |child| visited << child.id }
+
           tree[:children] = children.map do |child|
-            build_subtree(child, graph, index, level + 1, visited)
+            build_subtree(child, adjacent, visited, levels)
           end
 
           tree
-        end
-
-        def find_children(node, graph, index)
-          children = []
-          edges = graph.edges || []
-
-          edges.each do |edge|
-            next unless index.endpoint_nodes(edge.sources).include?(node)
-
-            index.endpoint_nodes(edge.targets).each do |target|
-              # A hyperedge can target one of the source's own ports
-              # alongside a real child (a -> [a's port, b]); resolving
-              # that port back to `node` itself would make the node its
-              # own child. Multiple edges/ports naming the same child
-              # would otherwise duplicate it into two subtree entries.
-              next if target == node || children.include?(target)
-
-              children << target
-            end
-          end
-
-          children
         end
 
         def layout_tree(tree, x_offset, y_offset)
@@ -119,7 +222,7 @@ module Elkrb
             # Leaf node
             node.x = x_offset
             node.y = y_offset + (tree[:level] * level_height)
-            return node.width + spacing_val
+            return (node.width || 0.0) + spacing_val
           end
 
           # Layout children first
@@ -133,16 +236,18 @@ module Elkrb
           first_child = tree[:children].first[:node]
           last_child = tree[:children].last[:node]
 
-          center_x = (first_child.x + last_child.x + last_child.width) / 2.0
-          node.x = center_x - (node.width / 2.0)
+          last_child_width = last_child.width || 0.0
+
+          center_x = (first_child.x + last_child.x + last_child_width) / 2.0
+          node.x = center_x - ((node.width || 0.0) / 2.0)
           node.y = y_offset + (tree[:level] * level_height)
 
           # Return total width
-          last_child.x + last_child.width - x_offset + spacing_val
+          last_child.x + last_child_width - x_offset + spacing_val
         end
 
         def calculate_tree_width(tree)
-          return tree[:node].width if tree[:children].empty?
+          return tree[:node].width || 0.0 if tree[:children].empty?
 
           tree[:children].sum { |child| calculate_tree_width(child) }
         end
