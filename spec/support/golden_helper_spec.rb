@@ -12,7 +12,7 @@ RSpec.describe "match_elkjs_golden" do
       FileUtils.mkdir_p(File.join(dir, "expected"))
       File.write(
         File.join(dir, "expected", "synthetic.json"),
-        JSON.generate({ "id" => "root",
+        JSON.generate({ "id" => "root", "width" => 100.0, "height" => 100.0,
                         "children" => [{ "id" => "n1", "x" => 10.0,
                                          "y" => 0.0, "width" => 10.0,
                                          "height" => 10.0 }] }),
@@ -21,8 +21,15 @@ RSpec.describe "match_elkjs_golden" do
     end
   end
 
+  # Both roots carry the SAME 100x100 size on purpose. Structural tier
+  # normalises a node's position against its container's own span and
+  # skips the check entirely when that span is zero, so a sizeless root
+  # would make the structural example below green without the tolerance
+  # code ever running. At 100px the 0.5px delta is 0.005 of the span,
+  # comfortably inside POSITION_TOLERANCE_FRACTION, so the example still
+  # passes -- now for the reason it names.
   let(:actual) do
-    { "id" => "root",
+    { "id" => "root", "width" => 100.0, "height" => 100.0,
       "children" => [{ "id" => "n1", "x" => 10.5, "y" => 0.0, "width" => 10.0,
                        "height" => 10.0 }] }
   end
