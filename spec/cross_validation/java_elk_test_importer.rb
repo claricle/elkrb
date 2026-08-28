@@ -10,13 +10,14 @@ class JavaElkTestImporter
   TEST_MODELS_PATH = "#{ELK_PATH}/../elk-models".freeze
   OUTPUT_PATH = "spec/cross_validation/fixtures/java_elk"
 
-  # AlgorithmRegistry.normalize_name only strips a dotted prefix and
-  # downcases, so ELK's own camelCase spore ids never resolve and these two
-  # cases raise "Unknown layout algorithm". The marker has to be generated
-  # here, not just hand-added to the committed fixture, because
-  # save_test_cases overwrites that file wholesale -- otherwise the next
-  # regeneration reclassifies a tracked bug (RC14) as a fresh regression and
-  # the corpus dump starts exiting non-zero for it. Drop this when RC14 lands.
+  # Both SPOrE algorithms resolve fine -- AlgorithmRegistry.normalize_name
+  # folds camelCase, so "sporeOverlap" reaches SporeOverlap -- and then
+  # crash inside the algorithm itself on nil arithmetic. The marker has to
+  # be generated here, not just hand-added to the committed fixture,
+  # because save_test_cases overwrites that file wholesale: otherwise the
+  # next regeneration reclassifies a tracked bug as a fresh regression and
+  # the corpus dump starts exiting non-zero for it. It comes out when the
+  # two algorithms stop crashing, not when the registry changes.
   EXPECTED_ERROR_ALGORITHMS = %w[sporeOverlap sporeCompaction].freeze
 
   SAMPLE_ALGORITHMS = %w[layered force stress box random fixed mrtree radial
@@ -38,6 +39,12 @@ class JavaElkTestImporter
       @test_cases.concat(sample_test_cases)
     end
 
+    if @test_cases.empty?
+      warn "Java ELK import found 0 test cases - refusing to overwrite " \
+           "#{OUTPUT_PATH}/imported_tests.json"
+      exit 1
+    end
+
     save_test_cases
 
     puts "Imported #{@test_cases.length} test cases from Java ELK"
@@ -55,9 +62,13 @@ class JavaElkTestImporter
 
   private
 
+  # `base:` scopes the glob to TEST_MODELS_PATH, which is taken literally.
+  # Joining it into the pattern let a glob metacharacter in the checkout
+  # path be interpreted rather than matched, so a sibling checkout's models
+  # were imported into the committed fixture.
   def import_from_models_repo
-    # Import .elkt files from elk-models repository
-    elkt_files = Dir.glob("#{TEST_MODELS_PATH}/**/*.elkt")
+    names = Dir.glob("**/*.elkt", base: TEST_MODELS_PATH)
+    elkt_files = names.map { |name| File.join(TEST_MODELS_PATH, name) }
 
     elkt_files.each do |file|
       parse_elkt_file(file)

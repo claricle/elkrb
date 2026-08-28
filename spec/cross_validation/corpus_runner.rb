@@ -55,7 +55,8 @@ class CorpusRunner
   # `expect` is nil for every ordinary case; a corpus wrapper (or an
   # imported_tests.json entry) may set "expect": "error" to mark a
   # deliberate, permanent crasher (duplicate_ids: RC4/S7; the two SPOrE
-  # cases: RC14 registry normalisation) so a healthy dump's exit status
+  # cases, which resolve to their algorithms and then crash on nil
+  # arithmetic inside them) so a healthy dump's exit status
   # reflects unexpected regressions, not known, already-tracked bugs.
   Case = Struct.new(:id, :algorithm, :graph, :expect, keyword_init: true)
 
