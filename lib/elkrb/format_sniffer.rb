@@ -108,8 +108,6 @@ module Elkrb
       # here instead, so the caller sees the same message as any other
       # unreadable input.
       def parse(content)
-        require_relative "graph/graph"
-
         sniff(content) || parse_elkt_or_fail(content)
       rescue Psych::Exception
         raise ArgumentError, UNPARSEABLE
