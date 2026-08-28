@@ -638,6 +638,12 @@ RSpec.describe Elkrb::Layout::Algorithms::MRTree do
         algorithm.layout(graph)
 
         expect(graph.children.map(&:width)).to all(be_nil)
+        # Nil widths alone are also what a layout that did nothing at all
+        # would leave behind. The missing width has to be READ as zero:
+        # the chain stacks into one zero-wide column at the left padding.
+        expect(graph.children.map(&:x)).to all(eq(12.0))
+        expect(graph.children.map(&:y)).to eq([12.0, 92.0, 172.0])
+        expect(graph.width).to eq(24.0)
       end
     end
   end
@@ -858,5 +864,267 @@ RSpec.describe "MRTree on a cycle hanging off a real root" do
     %w[r0 a b c].each_cons(2) do |parent, child|
       expect(by_id[child].y).to be > by_id[parent].y
     end
+  end
+end
+
+RSpec.describe "MRTree relaxing a shared node listed above its own parents" do
+  # a -> b, a -> c and b -> c, with the children listed bottom-up. One
+  # sweep over that order reaches c through the short a -> c hop and stops:
+  # nothing has told it about the longer a -> b -> c route yet, so c lands
+  # level with b, its own parent. Only a second sweep pushes it below.
+  #
+  # Listed top-down the same graph converges in a single sweep and cannot
+  # tell a one-shot relaxation from a repeated one.
+  let(:graph) do
+    {
+      "id" => "root",
+      "children" => %w[c b a].map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => [
+        { "id" => "e1", "sources" => ["a"], "targets" => ["b"] },
+        { "id" => "e2", "sources" => ["a"], "targets" => ["c"] },
+        { "id" => "e3", "sources" => ["b"], "targets" => ["c"] },
+      ],
+    }
+  end
+
+  it "keeps sweeping until the deeper route reaches c" do
+    by_id = Elkrb.layout(graph, algorithm: "mrtree")
+      .children.to_h { |node| [node.id, node] }
+
+    expect(by_id["c"].y).to be > by_id["b"].y
+    expect(by_id["b"].y).to be > by_id["a"].y
+  end
+end
+
+RSpec.describe "MRTree with more than one rootless component" do
+  # z is the graph's only root. a <-> b and c <-> d are two disjoint cyclic
+  # components, neither reachable from z and neither holding a root of its
+  # own. Seeding just one fallback root leaves the other component unlevelled
+  # and unplaced, and padding then trips over its nil coordinates.
+  let(:graph) do
+    {
+      "id" => "root",
+      "children" => %w[z a b c d].map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => [
+        { "id" => "e1", "sources" => ["a"], "targets" => ["b"] },
+        { "id" => "e2", "sources" => ["b"], "targets" => ["a"] },
+        { "id" => "e3", "sources" => ["c"], "targets" => ["d"] },
+        { "id" => "e4", "sources" => ["d"], "targets" => ["c"] },
+      ],
+    }
+  end
+
+  it "seeds a fallback root for every rootless component, not just one" do
+    result = Elkrb.layout(graph, algorithm: "mrtree")
+    by_id = result.children.to_h { |node| [node.id, node] }
+
+    expect(result.children.map(&:y)).to all(be_a(Float))
+    # z, a <-> b and c <-> d are three separate trees, so three columns.
+    expect(result.children.map(&:x).uniq.size).to eq(3)
+    expect(by_id["b"].y).to be > by_id["a"].y
+    expect(by_id["d"].y).to be > by_id["c"].y
+  end
+end
+
+RSpec.describe "MRTree with a multi-source edge led by its own target" do
+  # b heads its own source list, with the genuinely different source a
+  # second, and b is listed before a as a child. Reading only sources.first
+  # calls this a self-loop, so nothing marks b as having incoming traffic
+  # and b starts a tree of its own at its own x offset.
+  #
+  # The existing %w[a b] fixture cannot catch that: its first source already
+  # differs from the target, so the two readings agree there.
+  let(:graph) do
+    {
+      "id" => "root",
+      "children" => %w[b a].map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => [
+        { "id" => "e", "sources" => %w[b a], "targets" => ["b"] },
+      ],
+    }
+  end
+
+  it "keeps b under a instead of starting a tree of its own" do
+    by_id = Elkrb.layout(graph, algorithm: "mrtree")
+      .children.to_h { |node| [node.id, node] }
+
+    expect(by_id["b"].x).to eq(by_id["a"].x)
+    expect(by_id["b"].y).to be > by_id["a"].y
+  end
+end
+
+RSpec.describe "MRTree on a graph with no root anywhere" do
+  # A bare 2-cycle: every node has incoming traffic, so root finding comes
+  # back empty and every child has to be treated as a root. n1's tree then
+  # claims n0, and the n0 seed behind it has to be skipped -- handing it a
+  # tree of its own would place n0 twice, in a second column.
+  let(:graph) do
+    {
+      "id" => "root",
+      "children" => %w[n1 n0].map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => [
+        { "id" => "e1", "sources" => ["n0"], "targets" => ["n1"] },
+        { "id" => "e2", "sources" => ["n1"], "targets" => ["n0"] },
+      ],
+    }
+  end
+
+  it "places both nodes in one column, each exactly once" do
+    result = Elkrb.layout(graph, algorithm: "mrtree")
+    by_id = result.children.to_h { |node| [node.id, node] }
+
+    expect(result.children.map(&:y)).to all(be_a(Float))
+    expect(by_id["n0"].x).to eq(by_id["n1"].x)
+    expect(by_id["n0"].y).to be > by_id["n1"].y
+  end
+end
+
+RSpec.describe "MRTree with an edge declared on a childless sibling" do
+  # n owns the edge x -> y, so the node index folds it in and index.edges
+  # sees it while graph.edges does not. Root finding reads the narrower
+  # graph.edges, which makes y a root. Building the adjacency map from the
+  # wider set would make y x's child at the same time -- a root that is also
+  # somebody's child gets placed twice, once per view.
+  let(:graph) do
+    {
+      "id" => "root",
+      "children" => [
+        { "id" => "x", "width" => 10, "height" => 10 },
+        { "id" => "y", "width" => 10, "height" => 10 },
+        { "id" => "n", "width" => 10, "height" => 10,
+          "edges" => [
+            { "id" => "own", "sources" => ["x"], "targets" => ["y"] },
+          ] },
+      ],
+    }
+  end
+
+  it "keeps the child list and the root list reading the same edges" do
+    result = Elkrb.layout(graph, algorithm: "mrtree")
+    by_id = result.children.to_h { |node| [node.id, node] }
+
+    # y is a root by graph.edges, so it stays one: its own column, its own
+    # top row, not tucked under x.
+    expect(by_id["y"].y).to eq(by_id["x"].y)
+    expect(by_id["y"].x).not_to eq(by_id["x"].x)
+    expect(result.children.map(&:x).uniq.size).to eq(3)
+  end
+end
+
+RSpec.describe "MRTree on a hash that declares no edges at all" do
+  # Graph.from_hash bypasses Graph#initialize, so it leaves `edges` nil
+  # rather than filling in the empty default -- and that is the constructor
+  # LayoutEngine uses for Hash input. Reaching for `edges.each` here blows
+  # up on the real entry point while every Graph.new fixture stays green.
+  let(:graph) do
+    {
+      "id" => "root",
+      "children" => %w[a b].map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+    }
+  end
+
+  it "lays the children out as roots instead of tripping over nil edges" do
+    expect { Elkrb.layout(graph, algorithm: "mrtree") }.not_to raise_error
+
+    result = Elkrb.layout(graph, algorithm: "mrtree")
+    expect(result.children.map(&:x)).to all(be_a(Float))
+    expect(result.children.map(&:y)).to all(be_a(Float))
+    # No edges means no parents: two roots, side by side on one row.
+    expect(result.children.map(&:y).uniq.size).to eq(1)
+    expect(result.children.map(&:x).uniq.size).to eq(2)
+  end
+end
+
+RSpec.describe "MRTree on many disjoint cyclic components" do
+  # Two isolated roots plus a pile of 2-cycles. Nothing reaches the cycles
+  # from a root, so every one of them costs its own fallback seed and its
+  # own relaxation -- this is the shape that stresses build_forest's loop,
+  # where one dense component with a real root only ever seeds once.
+  #
+  # The bound is deliberately loose. It is here to catch a hang, not to
+  # certify the current cost: levelling this shape is superlinear and that
+  # is known, unfixed, and out of this change's scope.
+  def disjoint_cycles(size)
+    ids = (0...size).map { |i| "n#{i}" }
+    edges = ((size - 2) / 2).times.flat_map do |k|
+      a = ids[2 + (k * 2)]
+      b = ids[3 + (k * 2)]
+      [{ "id" => "f#{k}", "sources" => [a], "targets" => [b] },
+       { "id" => "r#{k}", "sources" => [b], "targets" => [a] }]
+    end
+    {
+      "id" => "r",
+      "children" => ids.map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => edges,
+    }
+  end
+
+  it "places every component without hanging" do
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    result = Elkrb.layout(disjoint_cycles(80), algorithm: "mrtree")
+    elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+
+    expect(elapsed).to be < 5.0
+    # The crash this branch is named for: a component left unseeded keeps
+    # nil coordinates, and apply_padding dies subtracting from them.
+    expect(result.children.map(&:x)).to all(be_a(Float))
+    expect(result.children.map(&:y)).to all(be_a(Float))
+  end
+end
+
+RSpec.describe "MRTree levelling a cycle it cannot find a path through" do
+  # root is the only real root; c1..c5 are wired to each other in every
+  # direction. Relaxation has no longest path to settle on here, so each
+  # sweep keeps offering a deeper candidate and the levels climb until the
+  # bound stops them. Drop that bound and the depth grows with the SQUARE
+  # of the node count instead of with the node count.
+  let(:graph) do
+    ids = %w[c1 c2 c3 c4 c5]
+    edges = [{ "id" => "seed", "sources" => ["root"], "targets" => ["c1"] }]
+    ids.each_with_index do |from, i|
+      ids.each_with_index do |to, j|
+        next if i == j
+
+        edges << { "id" => "e#{i}_#{j}", "sources" => [from],
+                   "targets" => [to] }
+      end
+    end
+    {
+      "id" => "r",
+      "children" => (["root"] + ids).map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => edges,
+    }
+  end
+
+  it "keeps the cycle's depth proportional to the node count" do
+    result = Elkrb.layout(graph, algorithm: "mrtree")
+
+    # Rows are 80 apart. Relaxation cannot push a level past the node
+    # count, and the tree floor can add at most one row per node on top of
+    # that, so twice the node count is the honest ceiling -- six nodes here
+    # occupy seven rows. Unbounded, the same graph spreads over thirty-two.
+    expect(result.height).to be < (2 * result.children.size * 80.0)
+  end
+
+  it "still puts the seed root above every node of the cycle" do
+    by_id = Elkrb.layout(graph, algorithm: "mrtree")
+      .children.to_h { |node| [node.id, node] }
+    root = by_id.delete("root")
+
+    expect(by_id.each_value.map(&:y)).to all(be > root.y)
   end
 end

@@ -202,6 +202,10 @@ module Elkrb
         # the floor forces every edge the forest actually picked to point down.
         # The edge that CLOSES a cycle is not one of those, and still points
         # upward — no tree can honour it, so it stays a violation.
+        #
+        # A floored level can exceed the relaxation bound: r0 -> a -> b -> c
+        # with c -> a closing it puts c at level 6 across four nodes. Cyclic
+        # components therefore come out taller than they need to be.
         def build_subtree(node, adjacent, visited, levels, floor)
           visited << node.id
 
