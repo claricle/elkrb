@@ -2,12 +2,13 @@
 Slice S0b · branch `fix/s0b-corpus-cli-harness`
 
 Status: built, lint-clean, **not gated, not merged**. Branch
-`fix/s0b-corpus-cli-harness` @ `5c05156`, 9 commits ahead of `origin/v2`
+`fix/s0b-corpus-cli-harness` @ `23ed0de`, 11 commits ahead of `origin/v2`
 (`f6ba3e0`). `origin/v2` was merged in at `bc19cb8`, so it is an ancestor of
-the tip. Everything below was measured at `5c05156` unless it says otherwise.
+the tip. Everything below was measured at `23ed0de` unless it says otherwise.
 
-**The Blocker is fixed.** It was fixed at `1716de0`, "Scope dump pruning to
-the directory it was given".
+**The Blocker is fixed, both sides.** The destination side at `1716de0`,
+"Scope dump pruning to the directory it was given"; the source side at
+`23ed0de`, "glob corpus source dirs literally with base".
 
 ## The Blocker, and how it was closed
 
@@ -88,27 +89,29 @@ foreign. What that costs depends on what sits beside it:
 Do not write "any metacharacter empties the corpus", and do not write "`*` or
 `?` raises duplicate ids". Both are single shapes generalised.
 
-## The class is NOT closed. Six sites, one fixed
+## The class is NOT closed. Six sites, four fixed
 
-Six sites in this branch carry the literal-vs-pattern shape. **One is fixed.**
-The plan claimed four; that is wrong at this tip, and the plan contradicts
-itself on it (it also says the three `ROOT` globs were deferred).
+Six sites in this branch carry the literal-vs-pattern shape. **Four are
+fixed.** The plan claimed four and also called the three `ROOT` globs
+deferred, so it contradicted itself. Four are fixed now, and what stayed
+deferred is sites 5 and 6, the two importers.
 
 | # | Site | State |
 |---|---|---|
 | 1 | `corpus_runner.rb` `prune_stale_dumps` | **fixed** at `1716de0` |
-| 2 | `corpus_runner.rb` `top_level_fixture_cases` | open |
-| 3 | `corpus_runner.rb` `corpus_fixture_cases` | open |
-| 4 | `corpus_runner.rb` `imported_cases` | open |
+| 2 | `corpus_runner.rb` `top_level_fixture_cases` | **fixed** at `23ed0de` |
+| 3 | `corpus_runner.rb` `corpus_fixture_cases` | **fixed** at `23ed0de` |
+| 4 | `corpus_runner.rb` `imported_cases` | **fixed** at `23ed0de` |
 | 5 | `elkjs_test_importer.rb:61` | deferred, reason measured |
 | 6 | `java_elk_test_importer.rb:60` | deferred, reason measured |
 
-Sites 2-4 build a pattern from `ROOT`, which is `File.expand_path("../..",
-__dir__)` — the checkout path. They read rather than delete, which is not a
-reason to leave them, because they feed the site that does: `cases` builds
-`run`'s corpus, which builds `prune_stale_dumps`' `keep`.
+Sites 2-4 built their pattern from `ROOT`, which is
+`File.expand_path("../..", __dir__)` — the checkout path. They only read, and
+that was argued as a reason to leave them. It was not one: they feed the site
+that deletes. `cases` builds `run`'s corpus, which builds
+`prune_stale_dumps`' `keep`.
 
-**That chain is live.** Measured at `5c05156` by extracting the tip into
+**That chain was live.** Measured at `5c05156` by extracting the tip into
 `/private/tmp/elk[x]root` with a sibling `/private/tmp/elkxroot` holding one
 `spec/fixtures/foreign_case.json`:
 
@@ -124,8 +127,31 @@ reason to leave them, because they feed the site that does: `cases` builds
   AFTER:  foreign_case.json summary.json
 ```
 
-Every real dump was deleted. The fix at `1716de0` closed the destination side
-of the Blocker. The source side is still open.
+Every real dump was deleted. That is why sites 2-4 were fixed rather than
+carried. `1716de0` closed the destination side of the Blocker; `23ed0de`
+closes the source side, routing all three globs through one private
+`fixture_paths(dir, pattern)` that passes the directory as `base:`.
+
+Enumeration had to come through unchanged, because the case list is the fixed
+list every later slice diffs against. Three measurements say it did:
+
+- `CorpusRunner.cases.map(&:id)` is byte-identical across the fix. 47 ids,
+  and the same SHA-1 (`daf0ea1`) before and after.
+- A `4f7980f` dump and a `23ed0de` dump compared with `diff -r` agree on all
+  48 files.
+- The sort-by-whole-path order in `imported_cases` survives. `fixture_paths`
+  joins the directory back on before that sort, so it still sorts absolute
+  paths. Demonstrated with a temporary real
+  `spec/cross_validation/fixtures/elkjs-2/`: glob returns elkjs, elkjs-2,
+  java_elk under both the old and the new form, and the shipped sort turns
+  both into elkjs-2, elkjs, java_elk.
+
+`spec/cross_validation/corpus_runner_fixture_paths_spec.rb` pins it. 8
+examples, each building its own `Dir.mktmpdir` parent, covering both
+metacharacter families and the `*/imported_tests.json` directory-component
+shape. Mutation-checked: put the old `Dir[File.join(dir, pattern)]` form back
+and 6 of the 8 go red. The two that stay green are the plain-name baselines,
+where the old form behaves identically. Restore it and all 8 pass.
 
 The two importer sites are deferred with the reason recorded in the plan: all
 three external checkouts are absent here, so a fix cannot be
@@ -314,7 +340,7 @@ corrected here — item 03 (S0a) rewrites that ledger wholesale.
 
 ## Done when
 
-Re-measured at `5c05156`. Each command and its exact output:
+Re-measured at `23ed0de`. Each command and its exact output:
 
 1. `bundle exec rake "corpus:dump[/tmp/corpus_base]"` (quote the brackets —
    zsh globs them) →
@@ -335,10 +361,11 @@ Re-measured at `5c05156`. Each command and its exact output:
    entrypoint exits on it.
 
 2. `bundle exec rspec spec/cross_validation spec/elkrb/cli_spec.rb` →
-   **120 examples, 0 failures, 17 pending**.
+   **128 examples, 0 failures, 17 pending**.
 
-3. `bundle exec rspec` → **887 examples, 0 failures, 17 pending**.
-   (`22231fd` was 729/0/16; the base before this branch was 625/0.)
+3. `bundle exec rspec` → **895 examples, 0 failures, 17 pending**.
+   (`5c05156` was 887/0/17; `22231fd` was 729/0/16; the base before this
+   branch was 625/0. `23ed0de` adds the 8 `fixture_paths` examples.)
 
 4. `bundle exec rake validate:import_elkjs` with no `ELKJS_DIR` → exit 1 with
    the refusal message ("elkjs checkout not found at … - refusing to overwrite
@@ -349,22 +376,24 @@ Re-measured at `5c05156`. Each command and its exact output:
            spec/cross_validation/fixtures/elkjs/imported_tests.json
    ```
 
-5. `bundle exec rubocop --ignore-parent-exclusion` → **126 files inspected, no
+5. `bundle exec rubocop --ignore-parent-exclusion` → **127 files inspected, no
    offenses detected**. Cleared in code at `1df5bef` and `5c05156`: no new
    `.rubocop_todo.yml` entries, no `rubocop:disable` comments, no widening of
    `.rubocop.yml`. In this nested worktree `--ignore-parent-exclusion` is
    required, because the worktree sits under a checkout whose `main` lacks
    `.rubocop_todo.yml`.
 
-6. The lint work changed no output. A pristine `1716de0` dump and a `5c05156`
-   dump compared with `diff -r` are byte-identical across all 48 files.
+6. Neither the lint work nor the source-side glob fix changed any output. A
+   pristine `1716de0` dump and a `5c05156` dump compared with `diff -r` are
+   byte-identical across all 48 files, and so are a `4f7980f` dump and a
+   `23ed0de` dump.
 
 ## Gates
 
 **The old gate record is history. None of it is a live approval.** Gate A ran
 before the fixes committed at `aaf4efb`. Gate B round 1 ran before the fixes
 at `22231fd`. Only Gate B round 2 ran on `22231fd` itself. The tip is now
-`5c05156`, four commits past that, so every one of them is invalidated by
+`23ed0de`, six commits past that, so every one of them is invalidated by
 arithmetic.
 
 What they found, for the record:
@@ -406,9 +435,10 @@ What they found, for the record:
   regenerates `fixtures/java_elk/imported_tests.json`. The two rows exist in
   the committed file today. Whoever next regenerates that fixture must re-add
   them or the corpus exit status starts lying.
-- Sites 2-4 above: `ROOT` still reaches a glob pattern unescaped, and the
-  measured consequence is that the corpus goes foreign and every real dump is
-  deleted. The destination side is fixed; the source side is not.
+- Sites 5 and 6 above, the two importers: their checkout path still reaches a
+  glob pattern unescaped. Deferred for the measured reason above — neither
+  external checkout exists here, so a fix cannot be integration-checked
+  against the real corpora.
 - `corpus_spec.rb` files both spore rows under RC14, and `CLAUDE.md` repeats
   the registry-resolution story. The measurement says otherwise. Item 03 (S0a)
   rewrites that ledger.
