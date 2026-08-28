@@ -418,6 +418,7 @@ namespace :golden do
   desc "Diff freshly generated goldens against the committed ones (no writes)"
   task :check do
     require "tmpdir"
+    require "fileutils"
     require "json"
 
     golden_dir = GoldenFixtures::GOLDEN_DIR
