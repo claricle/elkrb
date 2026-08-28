@@ -417,7 +417,9 @@ RSpec.describe "malformed collection shapes" do
       '{"id":"r","children":[{"id":"a","width":10,"height":10}]}', ""
     )
 
-    expect(graph.children).to be_an(Array)
+    # The child itself has to survive: an empty list is an Array too, so
+    # be_an(Array) alone stays green with the node silently dropped.
+    expect(graph.children.map(&:id)).to eq(["a"])
   end
 end
 
