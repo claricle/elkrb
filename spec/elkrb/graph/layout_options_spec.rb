@@ -220,6 +220,29 @@ RSpec.describe "layoutOptions on every model" do
       expect(edge.layout_options["k"]).to eq(1)
     end
 
+    it "stores layoutOptions as a plain ::Hash, not a subclass" do
+      node = Elkrb::Graph::Node.new(id: "n")
+      node.layout_options = { "a" => 1 }
+      json = '{"id":"r","layoutOptions":{"a":1}}'
+
+      expect(Elkrb::Graph::Graph.new(layout_options: { "a" => 1 })
+               .layout_options.class).to eq(Hash)
+      expect(node.layout_options.class).to eq(Hash)
+      expect(Elkrb::Graph::Graph.from_json(json).layout_options.class)
+        .to eq(Hash)
+      expect(Elkrb::Graph::Graph.new(id: "r").layout_options.class)
+        .to eq(Hash)
+    end
+
+    it "stringifies top-level keys when the cast yields a non-Hash" do
+      node = Elkrb::Graph::Node.new(id: "n")
+      node.layout_options = Struct.new(:padding, :direction).new(10, "RIGHT")
+
+      expect(node.layout_options["padding"]).to eq(10)
+      expect(node.layout_options.keys)
+        .to contain_exactly("padding", "direction")
+    end
+
     it "normalizes a Symbol key assigned directly via .new(layout_options:), on every model" do
       graph = Elkrb::Graph::Graph.new(id: "g",
                                       layout_options: { edgeRouting: "SPLINES" })
