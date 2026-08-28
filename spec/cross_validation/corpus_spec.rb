@@ -50,14 +50,44 @@ RSpec.describe "Elkrb layout corpus" do
   # width/height is a finite, non-negative Float. The root graph itself
   # is checked for size only (ELK's root canvas is never positioned).
   # S0a extends this set.
-  def assert_layout_invariants(result)
+  def assert_layout_invariants(result, input)
     assert_finite_size(result, "$")
+    assert_structure_preserved(result, input)
     (result.children || []).each_with_index do |node, i|
       assert_node_invariants(node, "$.children[#{i}]")
     end
     (result.edges || []).each_with_index do |edge, i|
       assert_edge_invariants(edge, "$.edges[#{i}]")
     end
+  end
+
+  # Layout moves elements; it must not add, drop, reorder or rename one.
+  # Coordinates alone cannot see that: an element that is simply gone
+  # takes its coordinates with it, so a regression that loses every edge
+  # keeps every finite-number assertion green. The fixtures added to
+  # exercise edges -- hyperedge, cycle3, self_loop, port_id_edges,
+  # stale_sections -- are the ones this covers.
+  def assert_structure_preserved(result, input)
+    expect(node_ids(result)).to eq(input_node_ids(input))
+    expect(edge_ids(result)).to eq(input_edge_ids(input))
+  end
+
+  def node_ids(element)
+    (element.children || []).flat_map { |c| [c.id, *node_ids(c)] }
+  end
+
+  def edge_ids(element)
+    (element.edges || []).map(&:id) +
+      (element.children || []).flat_map { |c| edge_ids(c) }
+  end
+
+  def input_node_ids(hash)
+    (hash["children"] || []).flat_map { |c| [c["id"], *input_node_ids(c)] }
+  end
+
+  def input_edge_ids(hash)
+    (hash["edges"] || []).map { |e| e["id"] } +
+      (hash["children"] || []).flat_map { |c| input_edge_ids(c) }
   end
 
   def assert_node_invariants(node, label)
@@ -154,7 +184,7 @@ RSpec.describe "Elkrb layout corpus" do
         pending(reason) if reason
 
         result = layout_with_timeout(kase)
-        assert_layout_invariants(result)
+        assert_layout_invariants(result, kase.graph)
       end
     end
   end
@@ -183,7 +213,7 @@ RSpec.describe "Elkrb layout corpus" do
 
   def entry_still_fails?(kase, check)
     result = layout_with_timeout(kase)
-    assert_layout_invariants(result) if check == "invariants"
+    assert_layout_invariants(result, kase.graph) if check == "invariants"
     false
   rescue StandardError, SystemStackError, RSpec::Expectations::ExpectationNotMetError
     true
