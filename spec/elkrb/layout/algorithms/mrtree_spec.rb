@@ -827,3 +827,36 @@ RSpec.describe "MRTree on a densely cyclic graph" do
     expect(by_id.each_value.map(&:y)).to all(be > root.y)
   end
 end
+
+RSpec.describe "MRTree on a cycle hanging off a real root" do
+  # r0 is the only root. a -> b -> c is the rest of the chain and c -> a
+  # closes the cycle, which is what pushes a's own level past b's: the
+  # back edge offers a a deeper candidate, the relaxation bound freezes
+  # it there, and a ends up drawn below the child it owns.
+  let(:graph) do
+    {
+      "id" => "root",
+      "children" => %w[r0 a b c].map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => [
+        { "id" => "e1", "sources" => ["r0"], "targets" => ["a"] },
+        { "id" => "e2", "sources" => ["a"], "targets" => ["b"] },
+        { "id" => "e3", "sources" => ["b"], "targets" => ["c"] },
+        { "id" => "e4", "sources" => ["c"], "targets" => ["a"] },
+      ],
+    }
+  end
+
+  it "keeps every parent strictly above its own child" do
+    by_id = Elkrb.layout(graph, algorithm: "mrtree")
+      .children.to_h { |node| [node.id, node] }
+
+    # r0 -> a -> b -> c is the chain the forest picks. c -> a is the edge
+    # that closes the cycle and stays an unavoidable violation -- no tree
+    # can honour it. Every edge the forest DID pick has to go downward.
+    %w[r0 a b c].each_cons(2) do |parent, child|
+      expect(by_id[child].y).to be > by_id[parent].y
+    end
+  end
+end
