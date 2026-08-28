@@ -550,8 +550,12 @@ RSpec.describe "every command reads input through one path" do
       path = File.join(dir, "bad.json")
       File.write(path, '{"id":"r","children":{"a":1}}')
 
-      %w[layout validate].each do |command|
-        _stdout, stderr, status = run_elkrb(command, path)
+      # diagram is the third reader and needs an output path of its own.
+      readers = { "layout" => [], "validate" => [],
+                  "diagram" => ["-o", File.join(dir, "out.dot")] }
+
+      readers.each do |command, extra|
+        _stdout, stderr, status = run_elkrb(command, path, *extra)
 
         expect(status.exitstatus).to eq(1),
                                      "#{command} accepted a malformed shape"
