@@ -244,6 +244,16 @@ RSpec.describe "Elkrb layout corpus" do
     end
   end
 
+  describe CorpusRunner, ".cases" do
+    it "refuses a case id that would collide with summary.json" do
+      reserved = CorpusRunner::Case.new(id: CorpusRunner::RESERVED_ID)
+      allow(CorpusRunner).to receive(:imported_cases).and_return([reserved])
+
+      expect { CorpusRunner.cases }
+        .to raise_error(ArgumentError, /collides with summary\.json/)
+    end
+  end
+
   describe CorpusRunner, ".run" do
     it "refuses the destination before creating it when the guard says so" do
       allow(CorpusRunner).to receive(:source_directory?).and_return(true)
@@ -261,23 +271,32 @@ RSpec.describe "Elkrb layout corpus" do
     # A dump is compared with `diff -r`, and validate:run reuses tmp/corpus
     # every time, so a case that was renamed or dropped must not leave its
     # old file behind to be reported as a difference forever.
-    def one_case_corpus
-      kase = CorpusRunner::Case.new(
-        id: "kept", algorithm: "layered",
+    #
+    # Only the case list is stubbed. Pruning, the summary and every file
+    # write are the real thing, so these examples still fail if any of them
+    # regresses; the stub only keeps two full 47-case runs out of an
+    # example that does not need them.
+    def trivial_case(id)
+      CorpusRunner::Case.new(
+        id: id, algorithm: "layered",
         graph: { "id" => "root", "children" => [], "edges" => [] }
       )
-      allow(CorpusRunner).to receive(:cases).and_return([kase])
     end
 
-    it "deletes a stale case file from a reused dump directory" do
-      one_case_corpus
+    def corpus_of(*ids)
+      allow(CorpusRunner).to receive(:cases)
+        .and_return(ids.map { |id| trivial_case(id) })
+    end
+
+    it "deletes a case file the corpus no longer names" do
+      corpus_of("kept", "renamed_away")
 
       Dir.mktmpdir do |dir|
-        # summary.json is what marks this directory as a previous dump.
-        File.write(File.join(dir, "summary.json"), "{}")
-        File.write(File.join(dir, "renamed_away.json"), "{}")
-        File.write(File.join(dir, "notes.txt"), "mine")
+        CorpusRunner.run(dir)
+        expect(File.exist?(File.join(dir, "renamed_away.json"))).to be(true)
 
+        corpus_of("kept")
+        File.write(File.join(dir, "notes.txt"), "mine")
         CorpusRunner.run(dir)
 
         expect(File.exist?(File.join(dir, "renamed_away.json"))).to be(false)
@@ -288,7 +307,7 @@ RSpec.describe "Elkrb layout corpus" do
     end
 
     it "deletes nothing from a directory that is not a previous dump" do
-      one_case_corpus
+      corpus_of("kept")
 
       Dir.mktmpdir do |dir|
         # Pruning is aimed at a path the caller typed, so a directory this
@@ -299,6 +318,42 @@ RSpec.describe "Elkrb layout corpus" do
 
         expect(File.exist?(File.join(dir, "someones.json"))).to be(true)
         expect(File.exist?(File.join(dir, "kept.json"))).to be(true)
+      end
+    end
+
+    # One run is not enough to see this. `run` is what writes summary.json,
+    # so a delete set of "every *.json that is not a current case" made the
+    # first run manufacture the second run's licence to sweep the directory:
+    # run 1 left a summary behind, and run 2 read it as proof the whole
+    # directory was ours. The set is the ids the previous summary recorded,
+    # so a file this runner never wrote is never a candidate, however many
+    # times it is pointed at the directory.
+    it "keeps a file it never wrote across two runs of one directory" do
+      corpus_of("kept")
+
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, "someones.json"), "{}")
+        File.write(File.join(dir, "notes.txt"), "mine")
+
+        2.times { CorpusRunner.run(dir) }
+
+        expect(File.exist?(File.join(dir, "someones.json"))).to be(true)
+        expect(File.exist?(File.join(dir, "notes.txt"))).to be(true)
+        expect(File.exist?(File.join(dir, "kept.json"))).to be(true)
+      end
+    end
+
+    # Kernel.srand is process-wide. The suite seeds deliberately, and two
+    # algorithms call bare `rand`, so a reseed left in place would decide
+    # what every later example sees.
+    it "restores the caller's random seed" do
+      corpus_of("kept")
+
+      Dir.mktmpdir do |dir|
+        previous = Kernel.srand(12_345)
+        CorpusRunner.run(dir)
+
+        expect(Kernel.srand(previous)).to eq(12_345)
       end
     end
 

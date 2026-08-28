@@ -30,6 +30,10 @@ class CorpusRunner
   ROOT = File.expand_path("../..", __dir__)
   TIMEOUT_SECONDS = 30
 
+  # The dump's index file is "summary.json", so this is the one case id a
+  # dump directory cannot hold.
+  RESERVED_ID = "summary"
+
   # A fixed seed reseeded before every case. force/random call unseeded
   # Kernel#rand, so without this, two dumps of identical, unchanged code
   # would disagree on those cases, breaking every later slice's
@@ -63,10 +67,17 @@ class CorpusRunner
         *imported_cases,
       ]
       refuse_duplicate_ids!(all_cases)
+      refuse_reserved_id!(all_cases)
       all_cases
     end
 
+    # `outdir` is expanded once, here, so the guard and every write that
+    # follows are talking about the same directory: source_directory?
+    # compares expanded paths, and comparing one path while writing to
+    # another is how a guard ends up passing for a directory nobody wrote
+    # to.
     def run(outdir, timeout: TIMEOUT_SECONDS)
+      outdir = File.expand_path(outdir)
       refuse_source_directory!(outdir)
       FileUtils.mkdir_p(outdir)
       corpus = cases
@@ -137,6 +148,16 @@ class CorpusRunner
             "duplicate corpus case ids: #{duplicates.join(', ')}"
     end
 
+    # Every case is dumped to "#{id}.json", so a case called "summary"
+    # would write the dump's own index and then be overwritten by it.
+    def refuse_reserved_id!(all_cases)
+      return unless all_cases.any? { |kase| kase.id == RESERVED_ID }
+
+      raise ArgumentError,
+            "corpus case id #{RESERVED_ID.inspect} collides with " \
+            "#{RESERVED_ID}.json"
+    end
+
     # Counts the case, records its summary entry, and writes its dump. The
     # dump is written whatever the outcome; see the class comment on why the
     # exit status is informational only.
@@ -185,31 +206,52 @@ class CorpusRunner
     # later comparison reports a difference that no longer exists.
     #
     # Deleting is aimed at whatever path a caller passed on the command
-    # line, so it is kept to what this runner itself would have written:
-    # only a directory that already holds a summary.json is treated as a
-    # previous dump, and within it only a *.json whose basename is neither
-    # a current case nor the summary is removed.
+    # line, so the delete set is the ids the PREVIOUS summary.json recorded
+    # minus the ids this run is about to write. A file this runner never
+    # wrote is then not a candidate at all.
+    #
+    # Choosing the set the other way round -- every *.json that is not a
+    # current case -- made the first run authorise the second. `run` is
+    # what writes summary.json, so pointing it twice at a directory of
+    # someone else's JSON swept it: run 1 left the summary that run 2 read
+    # as proof the directory was ours.
+    #
+    # The loop walks what the directory actually holds, so a recorded id is
+    # only ever resolved against a name in it; nothing outside can be named
+    # by a summary this runner did not write. `base:` scopes the glob to
+    # the directory itself, which is taken literally -- joining the path
+    # into the pattern instead let a metacharacter in a caller-supplied
+    # `outdir` reach a sibling.
     def prune_stale_dumps(outdir, corpus)
-      return unless File.file?(File.join(outdir, "summary.json"))
-
-      keep = corpus.map { |kase| "#{kase.id}.json" } + ["summary.json"]
-      # `base:` scopes the glob to the directory itself. Joining the path into
-      # the pattern instead let a metacharacter in a caller-supplied `outdir`
-      # escape it: `File.file?` reads the path literally while `Dir[]` globs
-      # it, so the two disagreed about which directory was meant. A `*` or `?`
-      # still matched its own directory and quietly added siblings' files; a
-      # `[...]` or `{...}` did not match it at all, so the real directory was
-      # never listed and the delete set became entirely foreign.
+      dropped = recorded_case_ids(outdir) - corpus.map(&:id)
+      stale = dropped.map { |id| "#{id}.json" }
       Dir.glob("*.json", base: outdir).each do |name|
-        next if keep.include?(name)
+        next unless stale.include?(name)
 
         path = File.join(outdir, name)
         File.delete(path) if File.file?(path)
       end
     end
 
+    # The case ids the previous dump recorded, or none when this directory
+    # holds no summary of ours to read them from. A summary that is absent,
+    # unreadable, not JSON, or not the shape `new_summary` writes prunes
+    # nothing: deleting on a guess is the failure this set exists to avoid.
+    def recorded_case_ids(outdir)
+      summary = JSON.parse(File.read(File.join(outdir, "summary.json")))
+      entries = summary.is_a?(Hash) ? summary["cases"] : nil
+      return [] unless entries.is_a?(Array)
+
+      entries.grep(Hash).filter_map { |entry| entry["id"] }
+    rescue SystemCallError, JSON::ParserError
+      []
+    end
+
+    # srand returns the seed it replaces. Kernel's generator is process-wide
+    # and the spec suite seeds it deliberately, so the reseed is undone
+    # rather than left to decide what runs after the corpus.
     def run_case(kase, timeout)
-      Kernel.srand(DETERMINISTIC_SEED)
+      previous_seed = Kernel.srand(DETERMINISTIC_SEED)
       result = Timeout.timeout(timeout) do
         Elkrb.layout(kase.graph, algorithm: kase.algorithm)
       end
@@ -218,6 +260,8 @@ class CorpusRunner
       ["timeout", { "error" => "Timeout" }]
     rescue StandardError, SystemStackError => e
       ["error", { "error" => "#{e.class}: #{e.message}" }]
+    ensure
+      Kernel.srand(previous_seed)
     end
 
     def canonicalize(value)
