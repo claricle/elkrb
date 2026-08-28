@@ -11,7 +11,8 @@ RSpec.describe "elkjs golden parity" do
     matched = matcher.matches?(result)
     message = matcher.failure_message unless matched
 
-    pending "RC7: layered ignores elk.direction and uses a 60px layer gap instead of ELK's RIGHT/20 defaults"
+    pending "RC7: layered ignores elk.direction and uses a 60px layer gap " \
+            "instead of ELK's RIGHT/20 defaults"
     expect(matched).to be(true), message
   end
 
@@ -25,7 +26,8 @@ RSpec.describe "elkjs golden parity" do
     matched = matcher.matches?(result)
     message = matcher.failure_message unless matched
 
-    pending "RC7: layered ignores elk.direction and uses a 60px layer gap instead of ELK's RIGHT/20 defaults"
+    pending "RC7: layered ignores elk.direction and uses a 60px layer gap " \
+            "instead of ELK's RIGHT/20 defaults"
     expect(matched).to be(true), message
   end
 
@@ -39,7 +41,8 @@ RSpec.describe "elkjs golden parity" do
     matched = matcher.matches?(result)
     message = matcher.failure_message unless matched
 
-    pending "RC7: layered has no crossing minimisation or dummy-node routing for branching graphs"
+    pending "RC7: layered has no crossing minimisation or dummy-node routing " \
+            "for branching graphs"
     expect(matched).to be(true), message
   end
 
@@ -53,7 +56,8 @@ RSpec.describe "elkjs golden parity" do
     matched = matcher.matches?(result)
     message = matcher.failure_message unless matched
 
-    pending "RC7: layered has no crossing minimisation or dummy-node routing for branching graphs"
+    pending "RC7: layered has no crossing minimisation or dummy-node routing " \
+            "for branching graphs"
     expect(matched).to be(true), message
   end
 
@@ -67,7 +71,8 @@ RSpec.describe "elkjs golden parity" do
     matched = matcher.matches?(result)
     message = matcher.failure_message unless matched
 
-    pending "RC7: layered has no crossing minimisation or dummy-node routing for branching graphs"
+    pending "RC7: layered has no crossing minimisation or dummy-node routing " \
+            "for branching graphs"
     expect(matched).to be(true), message
   end
 
@@ -81,7 +86,8 @@ RSpec.describe "elkjs golden parity" do
     matched = matcher.matches?(result)
     message = matcher.failure_message unless matched
 
-    pending "RC7: cycle breaker permanently reverses edges and layered lacks crossing minimisation"
+    pending "RC7: cycle breaker permanently reverses edges and layered lacks " \
+            "crossing minimisation"
     expect(matched).to be(true), message
   end
 
@@ -95,7 +101,8 @@ RSpec.describe "elkjs golden parity" do
     matched = matcher.matches?(result)
     message = matcher.failure_message unless matched
 
-    pending "RC7: layered ignores elk.direction and uses a 60px layer gap instead of ELK's RIGHT/20 defaults"
+    pending "RC7: layered ignores elk.direction and uses a 60px layer gap " \
+            "instead of ELK's RIGHT/20 defaults"
     expect(matched).to be(true), message
   end
 
@@ -109,7 +116,8 @@ RSpec.describe "elkjs golden parity" do
     matched = matcher.matches?(result)
     message = matcher.failure_message unless matched
 
-    pending "RC7: layered has no crossing minimisation or dummy-node routing for long edges"
+    pending "RC7: layered has no crossing minimisation or dummy-node routing " \
+            "for long edges"
     expect(matched).to be(true), message
   end
 
@@ -123,7 +131,8 @@ RSpec.describe "elkjs golden parity" do
     matched = matcher.matches?(result)
     message = matcher.failure_message unless matched
 
-    pending "RC7: layered ignores elk.direction and uses a 60px layer gap instead of ELK's RIGHT/20 defaults"
+    pending "RC7: layered ignores elk.direction and uses a 60px layer gap " \
+            "instead of ELK's RIGHT/20 defaults"
     expect(matched).to be(true), message
   end
 
@@ -207,7 +216,8 @@ RSpec.describe "elkjs golden parity" do
     matched = matcher.matches?(result)
     message = matcher.failure_message unless matched
 
-    pending "RC7: elk.spacing.nodeNode and elk.layered.spacing.nodeNodeBetweenLayers are not read"
+    pending "RC7: elk.spacing.nodeNode and " \
+            "elk.layered.spacing.nodeNodeBetweenLayers are not read"
     expect(matched).to be(true), message
   end
 
@@ -221,7 +231,8 @@ RSpec.describe "elkjs golden parity" do
     matched = matcher.matches?(result)
     message = matcher.failure_message unless matched
 
-    pending "RC7: layered ignores elk.direction and uses a 60px layer gap instead of ELK's RIGHT/20 defaults"
+    pending "RC7: layered ignores elk.direction and uses a 60px layer gap " \
+            "instead of ELK's RIGHT/20 defaults"
     expect(matched).to be(true), message
   end
 
@@ -235,7 +246,8 @@ RSpec.describe "elkjs golden parity" do
     matched = matcher.matches?(result)
     message = matcher.failure_message unless matched
 
-    pending "RC7: layered ignores elk.direction and uses a 60px layer gap instead of ELK's RIGHT/20 defaults"
+    pending "RC7: layered ignores elk.direction and uses a 60px layer gap " \
+            "instead of ELK's RIGHT/20 defaults"
     expect(matched).to be(true), message
   end
 
@@ -249,7 +261,8 @@ RSpec.describe "elkjs golden parity" do
     matched = matcher.matches?(result)
     message = matcher.failure_message unless matched
 
-    pending "RC2.2: graph-level elk.algorithm pin is never read, LayoutEngine always defaults to layered"
+    pending "RC2.2: graph-level elk.algorithm pin is never read, " \
+            "LayoutEngine always defaults to layered"
     expect(matched).to be(true), message
   end
 
@@ -263,7 +276,8 @@ RSpec.describe "elkjs golden parity" do
     matched = matcher.matches?(result)
     message = matcher.failure_message unless matched
 
-    pending "RC2.2: graph-level elk.algorithm pin is never read, LayoutEngine always defaults to layered"
+    pending "RC2.2: graph-level elk.algorithm pin is never read, " \
+            "LayoutEngine always defaults to layered"
     expect(matched).to be(true), message
   end
 
@@ -277,7 +291,8 @@ RSpec.describe "elkjs golden parity" do
     matched = matcher.matches?(result)
     message = matcher.failure_message unless matched
 
-    pending "RC2.2: graph-level elk.algorithm pin is never read, LayoutEngine always defaults to layered"
+    pending "RC2.2: graph-level elk.algorithm pin is never read, " \
+            "LayoutEngine always defaults to layered"
     expect(matched).to be(true), message
   end
 
@@ -291,7 +306,8 @@ RSpec.describe "elkjs golden parity" do
     matched = matcher.matches?(result)
     message = matcher.failure_message unless matched
 
-    pending "RC2.2: graph-level elk.algorithm pin is never read, LayoutEngine always defaults to layered"
+    pending "RC2.2: graph-level elk.algorithm pin is never read, " \
+            "LayoutEngine always defaults to layered"
     expect(matched).to be(true), message
   end
 
@@ -305,7 +321,8 @@ RSpec.describe "elkjs golden parity" do
     matched = matcher.matches?(result)
     message = matcher.failure_message unless matched
 
-    pending "RC2.2: graph-level elk.algorithm pin is never read, LayoutEngine always defaults to layered"
+    pending "RC2.2: graph-level elk.algorithm pin is never read, " \
+            "LayoutEngine always defaults to layered"
     expect(matched).to be(true), message
   end
 
@@ -319,7 +336,8 @@ RSpec.describe "elkjs golden parity" do
     matched = matcher.matches?(result)
     message = matcher.failure_message unless matched
 
-    pending "RC2.2: graph-level elk.algorithm pin is never read, LayoutEngine always defaults to layered"
+    pending "RC2.2: graph-level elk.algorithm pin is never read, " \
+            "LayoutEngine always defaults to layered"
     expect(matched).to be(true), message
   end
 
@@ -333,7 +351,8 @@ RSpec.describe "elkjs golden parity" do
     matched = matcher.matches?(result)
     message = matcher.failure_message unless matched
 
-    pending "RC2.2: graph-level elk.algorithm pin is never read, LayoutEngine always defaults to layered"
+    pending "RC2.2: graph-level elk.algorithm pin is never read, " \
+            "LayoutEngine always defaults to layered"
     expect(matched).to be(true), message
   end
 
@@ -347,7 +366,8 @@ RSpec.describe "elkjs golden parity" do
     matched = matcher.matches?(result)
     message = matcher.failure_message unless matched
 
-    pending "RC2.2: graph-level elk.algorithm pin is never read, LayoutEngine always defaults to layered"
+    pending "RC2.2: graph-level elk.algorithm pin is never read, " \
+            "LayoutEngine always defaults to layered"
     expect(matched).to be(true), message
   end
 
@@ -361,7 +381,8 @@ RSpec.describe "elkjs golden parity" do
     matched = matcher.matches?(result)
     message = matcher.failure_message unless matched
 
-    pending "RC2.2: graph-level elk.algorithm pin is never read, LayoutEngine always defaults to layered"
+    pending "RC2.2: graph-level elk.algorithm pin is never read, " \
+            "LayoutEngine always defaults to layered"
     expect(matched).to be(true), message
   end
 
@@ -375,7 +396,8 @@ RSpec.describe "elkjs golden parity" do
     matched = matcher.matches?(result)
     message = matcher.failure_message unless matched
 
-    pending "RC2.2: graph-level elk.algorithm pin is never read, LayoutEngine always defaults to layered"
+    pending "RC2.2: graph-level elk.algorithm pin is never read, " \
+            "LayoutEngine always defaults to layered"
     expect(matched).to be(true), message
   end
 
@@ -389,7 +411,8 @@ RSpec.describe "elkjs golden parity" do
     matched = matcher.matches?(result)
     message = matcher.failure_message unless matched
 
-    pending "RC2.2: graph-level elk.algorithm pin is never read, LayoutEngine always defaults to layered"
+    pending "RC2.2: graph-level elk.algorithm pin is never read, " \
+            "LayoutEngine always defaults to layered"
     expect(matched).to be(true), message
   end
 
@@ -403,7 +426,8 @@ RSpec.describe "elkjs golden parity" do
     matched = matcher.matches?(result)
     message = matcher.failure_message unless matched
 
-    pending "RC2.2: graph-level elk.algorithm pin is never read, LayoutEngine always defaults to layered"
+    pending "RC2.2: graph-level elk.algorithm pin is never read, " \
+            "LayoutEngine always defaults to layered"
     expect(matched).to be(true), message
   end
 
@@ -419,7 +443,8 @@ RSpec.describe "elkjs golden parity" do
     matched = matcher.matches?(result)
     message = matcher.failure_message unless matched
 
-    pending "RC7: layered silently mis-routes hyperedges instead of raising like elkjs"
+    pending "RC7: layered silently mis-routes hyperedges instead of raising " \
+            "like elkjs"
     expect(matched).to be(true), message
   end
 end
