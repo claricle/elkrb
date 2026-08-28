@@ -11,7 +11,11 @@ RSpec.describe Elkrb::GraphvizWrapper do
 
   let(:wrapper) { described_class.new }
 
-  def with_path_only(dir)
+  # The fallback locations are absolute paths on the real machine, so an
+  # example that means "PATH holds only this dir" has to blank them too, or
+  # it turns on whether the developer happens to have Homebrew's Graphviz.
+  def with_path_only(dir, fallbacks: [])
+    stub_const("#{described_class}::FALLBACK_DOT_PATHS", fallbacks)
     original_path = ENV.fetch("PATH", nil)
     original_elkrb_dot = ENV.fetch("ELKRB_DOT", nil)
     ENV["PATH"] = dir
@@ -22,8 +26,17 @@ RSpec.describe Elkrb::GraphvizWrapper do
     ENV["ELKRB_DOT"] = original_elkrb_dot
   end
 
-  def with_empty_path(&)
-    Dir.mktmpdir("empty_path") { |dir| with_path_only(dir, &) }
+  def with_empty_path(fallbacks: [], &)
+    Dir.mktmpdir("empty_path") do |dir|
+      with_path_only(dir, fallbacks: fallbacks, &)
+    end
+  end
+
+  def write_fake_dot(dir, body)
+    path = File.join(dir, "dot")
+    File.write(path, "#!/bin/sh\n#{body}\n")
+    FileUtils.chmod(0o755, path)
+    path
   end
 
   def fake_dot_executable(log_path)
@@ -89,6 +102,27 @@ RSpec.describe Elkrb::GraphvizWrapper do
       with_fake_dot do
         ENV["ELKRB_DOT"] = ""
         expect(described_class.new.available?).to be true
+      end
+    end
+
+    it "finds dot in a fallback location when PATH holds none" do
+      Dir.mktmpdir do |dir|
+        fallback = write_fake_dot(dir, "exit 0")
+
+        with_empty_path(fallbacks: [fallback]) do
+          expect(described_class.new.available?).to be true
+        end
+      end
+    end
+
+    it "prefers a dot on PATH over one in a fallback location" do
+      with_fake_dot do
+        Dir.mktmpdir do |dir|
+          fallback = write_fake_dot(dir, "echo 'dot - graphviz version 9.9.9'")
+          stub_const("#{described_class}::FALLBACK_DOT_PATHS", [fallback])
+
+          expect(described_class.new.version).to eq("2.44.1")
+        end
       end
     end
 

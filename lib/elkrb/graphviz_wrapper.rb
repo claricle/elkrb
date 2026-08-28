@@ -12,6 +12,17 @@ module Elkrb
     SUPPORTED_FORMATS = %i[png svg pdf ps eps].freeze
     SUPPORTED_ENGINES = %w[dot neato fdp sfdp twopi circo].freeze
 
+    # Where the package managers put `dot` when it is not on PATH. macOS
+    # cron and launchd hand a process /usr/bin:/bin, and Homebrew -- the
+    # install route #installation_message recommends -- is on neither.
+    FALLBACK_DOT_PATHS = %w[
+      /usr/bin/dot
+      /usr/local/bin/dot
+      /opt/homebrew/bin/dot
+      /opt/local/bin/dot
+    ].freeze
+    private_constant :FALLBACK_DOT_PATHS
+
     def initialize
       @dot_path = find_graphviz
     end
@@ -58,13 +69,13 @@ module Elkrb
     # @return [String, nil] the path to `dot`, or nil if not found
     #
     # ELKRB_DOT, if set to a non-empty value, is the sole candidate —
-    # no PATH fallback if it doesn't point at a real executable. An unset or
-    # empty ELKRB_DOT is treated as no override: every `dot` on PATH is
-    # tried in order.
+    # neither PATH nor a fallback location is tried if it doesn't point at a
+    # real executable. An unset or empty ELKRB_DOT is treated as no override:
+    # every `dot` on PATH is tried in order, then the fallback locations.
     def find_graphviz
       override = ENV.fetch("ELKRB_DOT", nil)
       candidates = if override.nil? || override.empty?
-                     path_dot_candidates
+                     path_dot_candidates + FALLBACK_DOT_PATHS
                    else
                      [override]
                    end
