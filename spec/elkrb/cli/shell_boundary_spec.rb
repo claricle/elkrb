@@ -367,6 +367,45 @@ RSpec.describe "malformed collection shapes" do
   end
 end
 
+RSpec.describe "an empty but recognized collection is real content" do
+  # A mapped field that came back present-but-empty means lutaml-model
+  # understood the document. Only an all-nil model means it matched nothing,
+  # and an absent field and an explicit `null` are both nil.
+  let(:unparseable) do
+    "Unable to parse input file. Supported formats: JSON, YAML, ELKT"
+  end
+
+  it "accepts a graph whose only content is an empty children list" do
+    graph = Elkrb::FormatSniffer.read('{"children":[]}', "")
+
+    expect(graph.children).to eq([])
+  end
+
+  it "accepts a graph whose only content is an empty edges list" do
+    graph = Elkrb::FormatSniffer.read('{"edges":[]}', "")
+
+    expect(graph.edges).to eq([])
+  end
+
+  it "still rejects an empty mapping" do
+    expect do
+      Elkrb::FormatSniffer.read("{}", "")
+    end.to raise_error(ArgumentError, unparseable)
+  end
+
+  it "still rejects a mapping with no recognized field" do
+    expect do
+      Elkrb::FormatSniffer.read('{"foo":1}', "")
+    end.to raise_error(ArgumentError, unparseable)
+  end
+
+  it "still rejects an explicitly null children value" do
+    expect do
+      Elkrb::FormatSniffer.read('{"children":null}', "")
+    end.to raise_error(ArgumentError, unparseable)
+  end
+end
+
 RSpec.describe "a file whose extension already names the format" do
   include CliRunner
 

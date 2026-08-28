@@ -26,11 +26,10 @@ module Elkrb
       "DOT format input not yet supported. Use JSON, YAML, or ELKT."
     private_constant :DOT_UNSUPPORTED
 
-    NIL_WHEN_HOLLOW = %i[id x y width height layout_options].freeze
+    NIL_WHEN_HOLLOW = %i[
+      id x y width height layout_options children edges properties
+    ].freeze
     private_constant :NIL_WHEN_HOLLOW
-
-    BLANK_WHEN_HOLLOW = %i[children edges properties].freeze
-    private_constant :BLANK_WHEN_HOLLOW
 
     class << self
       # The single entry point every command reads input through. Extension
@@ -199,14 +198,14 @@ module Elkrb
       end
 
       # Mirrors the field list in Graph's json and yaml mapping blocks: when
-      # every recognized field comes back empty, lutaml-model matched nothing.
-      # layout_options is nil-checked rather than blank-checked because any
-      # recognized layoutOptions substructure at all is real content -- an
-      # explicit `"layoutOptions": {}` means the document WAS understood, so
-      # a present-but-empty LayoutOptions must not read as hollow.
+      # every recognized field comes back nil, lutaml-model matched nothing
+      # and the document was never understood. Present-but-empty is the
+      # opposite of that -- `"children": []` and `"layoutOptions": {}` were
+      # both recognized and are real content, so neither may read as hollow.
+      # Deserialization leaves an absent field nil, and an explicit `null`
+      # nil too, so a document carrying only those is still rejected.
       def hollow_model?(graph)
-        NIL_WHEN_HOLLOW.all? { |field| graph.public_send(field).nil? } &&
-          BLANK_WHEN_HOLLOW.all? { |field| blank?(graph.public_send(field)) }
+        NIL_WHEN_HOLLOW.all? { |field| graph.public_send(field).nil? }
       end
 
       def parse_elkt_or_fail(content)
