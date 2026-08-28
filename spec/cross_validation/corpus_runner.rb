@@ -233,8 +233,21 @@ class CorpusRunner
       end
     end
 
+    # `base:` scopes the glob to `dir` itself, which is taken literally. Every
+    # corpus source directory is built from ROOT -- the checkout path, wherever
+    # the repo happens to sit -- so joining it into the pattern instead let a
+    # glob metacharacter in it be interpreted rather than matched: the glob and
+    # the later `File.read` disagreed about which directory was meant. A `*` or
+    # `?` still matched its own directory and quietly added a sibling's files;
+    # a `[...]`, `{...}` or unclosed `[` did not match it, so the listing was
+    # entirely foreign or empty. This list is what `run` prunes against, so a
+    # mislisting here becomes a delete in `prune_stale_dumps`.
+    def fixture_paths(dir, pattern)
+      Dir.glob(pattern, base: dir).map { |name| File.join(dir, name) }
+    end
+
     def top_level_fixture_cases
-      Dir[File.join(ROOT, "spec/fixtures/*.json")].map do |path|
+      fixture_paths(File.join(ROOT, "spec/fixtures"), "*.json").map do |path|
         Case.new(
           id: File.basename(path, ".json"),
           algorithm: "layered",
@@ -244,7 +257,8 @@ class CorpusRunner
     end
 
     def corpus_fixture_cases
-      Dir[File.join(ROOT, "spec/fixtures/corpus/*.json")].map do |path|
+      dir = File.join(ROOT, "spec/fixtures/corpus")
+      fixture_paths(dir, "*.json").map do |path|
         wrapper = JSON.parse(File.read(path))
         Case.new(
           id: File.basename(path, ".json"),
@@ -259,13 +273,10 @@ class CorpusRunner
     # for that shape glob's own order is component-wise, so the two disagree:
     # given elkjs/, elkjs-2/ and java_elk/, glob returns elkjs before elkjs-2
     # while sort returns the reverse. The case list is the fixed enumeration
-    # every later slice diffs against, so it is ordered explicitly. The glob
-    # goes into a local first because the redundant-sort cop reads the chain,
-    # not the shape of the pattern.
+    # every later slice diffs against, so it is ordered explicitly.
     def imported_cases
-      paths = Dir[File.join(ROOT, "spec/cross_validation/fixtures",
-                            "*/imported_tests.json")]
-      paths.sort.flat_map do |path|
+      dir = File.join(ROOT, "spec/cross_validation/fixtures")
+      fixture_paths(dir, "*/imported_tests.json").sort.flat_map do |path|
         JSON.parse(File.read(path)).map do |entry|
           Case.new(
             id: entry.fetch("id"),
