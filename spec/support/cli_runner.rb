@@ -13,8 +13,8 @@ module CliRunner
   LIB = File.join(ROOT, "lib")
   EXE = File.join(ROOT, "exe/elkrb")
 
-  def run_elkrb(*args, stdin: nil, env: {})
+  def run_elkrb(*, stdin: nil, env: {})
     capture_opts = stdin.nil? ? {} : { stdin_data: stdin }
-    Open3.capture3(env, RbConfig.ruby, "-I#{LIB}", EXE, *args, **capture_opts)
+    Open3.capture3(env, RbConfig.ruby, "-I#{LIB}", EXE, *, **capture_opts)
   end
 end

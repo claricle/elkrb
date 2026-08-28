@@ -28,22 +28,29 @@ module FakeDot
   RUBY
 
   def with_fake_dot
-    original_path = ENV["PATH"]
-    original_log = ENV["FAKE_DOT_LOG"]
+    original_path = ENV.fetch("PATH", nil)
+    original_log = ENV.fetch("FAKE_DOT_LOG", nil)
 
     Dir.mktmpdir("fake_dot") do |dir|
-      log_path = File.join(dir, "dot.log")
-      script_path = File.join(dir, "dot")
-      File.write(script_path, FAKE_DOT_SCRIPT)
-      FileUtils.chmod(0o755, script_path)
-
-      ENV["PATH"] = [dir, original_path].compact.join(File::PATH_SEPARATOR)
-      ENV["FAKE_DOT_LOG"] = log_path
-
-      yield log_path
+      yield install_fake_dot(dir)
     ensure
       ENV["PATH"] = original_path
       ENV["FAKE_DOT_LOG"] = original_log
     end
+  end
+
+  # Writes the script into `dir`, puts `dir` first on PATH, and returns the
+  # log path the caller reads argv from. PATH is still the original here --
+  # with_fake_dot only restores it after the block.
+  def install_fake_dot(dir)
+    script_path = File.join(dir, "dot")
+    File.write(script_path, FAKE_DOT_SCRIPT)
+    FileUtils.chmod(0o755, script_path)
+
+    log_path = File.join(dir, "dot.log")
+    search_path = [dir, ENV.fetch("PATH", nil)].compact
+    ENV["PATH"] = search_path.join(File::PATH_SEPARATOR)
+    ENV["FAKE_DOT_LOG"] = log_path
+    log_path
   end
 end

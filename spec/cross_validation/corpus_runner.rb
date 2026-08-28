@@ -57,10 +57,12 @@ class CorpusRunner
 
   class << self
     def cases
-      all_cases = top_level_fixture_cases + corpus_fixture_cases + imported_cases
-      duplicates = all_cases.map(&:id).tally.select { |_, count| count > 1 }.keys
-      raise ArgumentError, "duplicate corpus case ids: #{duplicates.join(', ')}" unless duplicates.empty?
-
+      all_cases = [
+        *top_level_fixture_cases,
+        *corpus_fixture_cases,
+        *imported_cases,
+      ]
+      refuse_duplicate_ids!(all_cases)
       all_cases
     end
 
@@ -69,23 +71,12 @@ class CorpusRunner
       FileUtils.mkdir_p(outdir)
       corpus = cases
       prune_stale_dumps(outdir, corpus)
-      summary = { "total" => 0, "ok" => 0, "error" => 0, "timeout" => 0, "cases" => [] }
-      unexpected_failures = false
 
-      corpus.each do |kase|
-        status, payload = run_case(kase, timeout)
-        summary["total"] += 1
-        summary[status] += 1
-        expected = status != "ok" && kase.expect == status
-        unexpected_failures ||= status != "ok" && !expected
-        case_entry = { "id" => kase.id, "algorithm" => kase.algorithm, "status" => status }
-        case_entry["expected"] = true if expected
-        summary["cases"] << case_entry
-        File.write(File.join(outdir, "#{kase.id}.json"), JSON.pretty_generate(payload))
-      end
+      summary = new_summary
+      corpus.each { |kase| dump_case(kase, summary, outdir, timeout) }
 
-      summary["unexpected_failures"] = unexpected_failures
-      File.write(File.join(outdir, "summary.json"), JSON.pretty_generate(summary))
+      summary["unexpected_failures"] = unexpected_failure?(summary)
+      write_json(File.join(outdir, "summary.json"), summary)
       summary
     end
 
@@ -122,7 +113,58 @@ class CorpusRunner
     def refuse_source_directory!(outdir)
       return unless source_directory?(outdir)
 
-      raise ArgumentError, "refusing to dump into a corpus source directory: #{outdir}"
+      raise ArgumentError,
+            "refusing to dump into a corpus source directory: #{outdir}"
+    end
+
+    def new_summary
+      { "total" => 0, "ok" => 0, "error" => 0, "timeout" => 0, "cases" => [] }
+    end
+
+    # A failure whose wrapper did not declare it. Derived from the recorded
+    # entries so summary.json and the exit code cannot disagree.
+    def unexpected_failure?(summary)
+      summary["cases"].any? do |entry|
+        entry["status"] != "ok" && !entry["expected"]
+      end
+    end
+
+    def refuse_duplicate_ids!(all_cases)
+      duplicates = all_cases.map(&:id).tally.select { |_, n| n > 1 }.keys
+      return if duplicates.empty?
+
+      raise ArgumentError,
+            "duplicate corpus case ids: #{duplicates.join(', ')}"
+    end
+
+    # Counts the case, records its summary entry, and writes its dump. The
+    # dump is written whatever the outcome; see the class comment on why the
+    # exit status is informational only.
+    def dump_case(kase, summary, outdir, timeout)
+      status, payload = run_case(kase, timeout)
+      summary["total"] += 1
+      summary[status] += 1
+      summary["cases"] << case_entry(kase, status)
+      write_json(File.join(outdir, "#{kase.id}.json"), payload)
+    end
+
+    # "expected" is recorded only for a failure the wrapper declared, so a
+    # reader of summary.json can tell a tracked bug from a fresh regression
+    # without consulting the corpus.
+    def case_entry(kase, status)
+      entry = {
+        "id" => kase.id,
+        "algorithm" => kase.algorithm,
+        "status" => status,
+      }
+      entry["expected"] = true if status != "ok" && kase.expect == status
+      entry
+    end
+
+    # Both dump sites go through here: a case file and summary.json have to
+    # agree on the canonical format, which is what every later slice diffs.
+    def write_json(path, value)
+      File.write(path, JSON.pretty_generate(value))
     end
 
     def ancestor_paths(path)
@@ -168,7 +210,9 @@ class CorpusRunner
 
     def run_case(kase, timeout)
       Kernel.srand(DETERMINISTIC_SEED)
-      result = Timeout.timeout(timeout) { Elkrb.layout(kase.graph, algorithm: kase.algorithm) }
+      result = Timeout.timeout(timeout) do
+        Elkrb.layout(kase.graph, algorithm: kase.algorithm)
+      end
       ["ok", canonicalize(JSON.parse(result.to_json))]
     rescue Timeout::Error
       ["timeout", { "error" => "Timeout" }]
@@ -190,31 +234,44 @@ class CorpusRunner
     end
 
     def top_level_fixture_cases
-      Dir[File.join(ROOT, "spec/fixtures/*.json")].sort.map do |path|
-        Case.new(id: File.basename(path, ".json"), algorithm: "layered", graph: JSON.parse(File.read(path)))
+      Dir[File.join(ROOT, "spec/fixtures/*.json")].map do |path|
+        Case.new(
+          id: File.basename(path, ".json"),
+          algorithm: "layered",
+          graph: JSON.parse(File.read(path)),
+        )
       end
     end
 
     def corpus_fixture_cases
-      Dir[File.join(ROOT, "spec/fixtures/corpus/*.json")].sort.map do |path|
+      Dir[File.join(ROOT, "spec/fixtures/corpus/*.json")].map do |path|
         wrapper = JSON.parse(File.read(path))
         Case.new(
           id: File.basename(path, ".json"),
           algorithm: wrapper.fetch("algorithm", "layered"),
           graph: wrapper.fetch("graph"),
-          expect: wrapper["expect"]
+          expect: wrapper["expect"],
         )
       end
     end
 
+    # Sorted by whole path. The wildcard here is a directory component, and
+    # for that shape glob's own order is component-wise, so the two disagree:
+    # given elkjs/, elkjs-2/ and java_elk/, glob returns elkjs before elkjs-2
+    # while sort returns the reverse. The case list is the fixed enumeration
+    # every later slice diffs against, so it is ordered explicitly. The glob
+    # goes into a local first because the redundant-sort cop reads the chain,
+    # not the shape of the pattern.
     def imported_cases
-      Dir[File.join(ROOT, "spec/cross_validation/fixtures/*/imported_tests.json")].sort.flat_map do |path|
+      paths = Dir[File.join(ROOT, "spec/cross_validation/fixtures",
+                            "*/imported_tests.json")]
+      paths.sort.flat_map do |path|
         JSON.parse(File.read(path)).map do |entry|
           Case.new(
             id: entry.fetch("id"),
             algorithm: entry.fetch("algorithm", "layered"),
             graph: entry.fetch("graph"),
-            expect: entry["expect"]
+            expect: entry["expect"],
           )
         end
       end

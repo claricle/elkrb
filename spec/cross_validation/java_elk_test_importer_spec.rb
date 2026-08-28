@@ -6,7 +6,8 @@ require_relative "java_elk_test_importer"
 
 RSpec.describe JavaElkTestImporter do
   def committed_fixture
-    File.read(File.expand_path("fixtures/java_elk/imported_tests.json", __dir__))
+    path = File.expand_path("fixtures/java_elk/imported_tests.json", __dir__)
+    File.read(path)
   end
 
   # save_test_cases rewrites imported_tests.json wholesale, so anything
@@ -25,7 +26,8 @@ RSpec.describe JavaElkTestImporter do
   end
 
   it "marks the algorithms the registry cannot resolve as expected errors" do
-    by_id = described_class.new.sample_test_cases.to_h { |kase| [kase[:id], kase] }
+    cases = described_class.new.sample_test_cases
+    by_id = cases.to_h { |kase| [kase[:id], kase] }
 
     expect(by_id["java_elk_sporeOverlap"][:expect]).to eq("error")
     expect(by_id["java_elk_sporeCompaction"][:expect]).to eq("error")

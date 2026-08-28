@@ -29,7 +29,9 @@ RSpec.describe "elkrb CLI" do
 
   describe "layout" do
     it "exits 0 and prints JSON to stdout" do
-      stdout, _stderr, status = run_elkrb("layout", "spec/fixtures/simple_graph.json")
+      stdout, _stderr, status = run_elkrb(
+        "layout", "spec/fixtures/simple_graph.json"
+      )
 
       expect(status.exitstatus).to eq(0)
       expect { JSON.parse(stdout) }.not_to raise_error
@@ -66,9 +68,13 @@ RSpec.describe "elkrb CLI" do
   end
 
   describe "render" do
-    windows_skip_reason = "fake_dot.rb's script needs a POSIX shell; not portable to Windows" if Gem.win_platform?
+    if Gem.win_platform?
+      windows_skip_reason = "fake_dot.rb's script needs a POSIX shell; " \
+                            "not portable to Windows"
+    end
 
-    it "never shells out to a string built from the output path", skip: windows_skip_reason do
+    it "never shells out to a string built from the output path",
+       skip: windows_skip_reason do
       malicious_dot_file = File.join(CliRunner::ROOT, "spec/fixtures/x.dot")
 
       with_fake_dot do |log_path|
@@ -91,7 +97,9 @@ RSpec.describe "elkrb CLI" do
           # via system(*argv) instead of a shell string. Either way the
           # malicious path must survive as one argv element, not get
           # split by a shell.
-          expect(log_entries).to include(malicious_output).or include("-o#{malicious_output}")
+          expect(log_entries)
+            .to include(malicious_output)
+            .or include("-o#{malicious_output}")
           expect(File.exist?(File.join(dir, "PWNED"))).to be(false)
         end
       end
@@ -108,7 +116,9 @@ RSpec.describe "elkrb CLI" do
     end
 
     it "exits 1 when no format can parse the file" do
-      _stdout, _stderr, status = run_elkrb("layout", corpus_fixture("garbage.txt"))
+      _stdout, _stderr, status = run_elkrb(
+        "layout", corpus_fixture("garbage.txt")
+      )
 
       expect(status.exitstatus).to eq(1)
     end
@@ -129,7 +139,8 @@ RSpec.describe "elkrb CLI" do
 
         expect(status.exitstatus).to eq(0)
         graph = JSON.parse(File.read(output))
-        expect(graph["children"].map { |child| child["id"] }).to contain_exactly("a", "b")
+        ids = graph["children"].map { |child| child["id"] }
+        expect(ids).to contain_exactly("a", "b")
       end
     end
   end
