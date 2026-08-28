@@ -2,9 +2,16 @@
 
 require "elkrb"
 
+# Not redundant, despite the cop: measured on ruby 3.4.8, `Dir[]` walks a
+# directory's contents before a sibling file of the same name, so the raw
+# order here puts every `support/invariants/*.rb` ahead of
+# `support/invariants.rb`. Sorting makes the require order deterministic
+# and identical on every machine rather than filesystem-dependent.
+# rubocop:disable Lint/RedundantDirGlobSort
 Dir[File.join(__dir__, "support/**/*.rb")].sort.reject do |f|
   f.end_with?("_spec.rb")
 end.each { |f| require f }
+# rubocop:enable Lint/RedundantDirGlobSort
 
 RSpec.configure do |config|
   config.expect_with :rspec do |expectations|
