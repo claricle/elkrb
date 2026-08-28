@@ -555,9 +555,14 @@ RSpec.describe Elkrb::Layout::Algorithms::MRTree do
 
     context "with two edges onto two ports of the same child" do
       # "bp1" and "bp2" are different ids that resolve to the same node, so
-      # de-duplicating the raw ids would leave b in the child list twice.
-      # A duplicate does not move a node, it adds a column, so the width is
-      # what shows it.
+      # de-duplicating the raw ids instead of the resolved nodes leaves b in
+      # a's child list twice.
+      #
+      # z is what makes that visible. With only a and b, the duplicate moves
+      # a and b together and apply_padding's bounding box takes the shift
+      # straight back out -- the result is byte-identical either way. z is a
+      # second tree, and a second tree starts at the width of the first one,
+      # so it moves as soon as a's tree claims a column it should not have.
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
@@ -579,7 +584,9 @@ RSpec.describe Elkrb::Layout::Algorithms::MRTree do
           ],
         )
 
-        graph.children = [b, a]
+        z = Elkrb::Graph::Node.new(id: "z", width: 10, height: 10)
+
+        graph.children = [b, a, z]
         graph.edges = [
           Elkrb::Graph::Edge.new(id: "e1", sources: ["a"], targets: ["bp1"]),
           Elkrb::Graph::Edge.new(id: "e2", sources: ["a"], targets: ["bp2"]),
@@ -589,9 +596,14 @@ RSpec.describe Elkrb::Layout::Algorithms::MRTree do
       it "gives a one child, not the same node twice" do
         algorithm.layout(graph)
 
-        # One 10-wide column between 12.0 of padding on each side. A second
-        # copy of b would add a column and widen this.
-        expect(graph.width).to eq(34.0)
+        z = graph.children.find { |n| n.id == "z" }
+
+        # a's tree is one 10-wide column, so z lands 30.0 past it: the
+        # column plus 20.0 of node spacing, inside 12.0 of padding. A
+        # duplicated b gives a's tree a second column and drops z to 22.0
+        # with the graph 44.0 wide.
+        expect(z.x).to eq(42.0)
+        expect(graph.width).to eq(64.0)
       end
     end
 
