@@ -14,7 +14,8 @@ RSpec.describe "preserve_ids_and_endpoints" do
     }
   end
 
-  it "passes when every node and edge survives layout with unchanged endpoints" do
+  it "passes when every node and edge survives layout with unchanged " \
+     "endpoints" do
     graph = Elkrb::Graph::Graph.from_hash(input_hash)
     result = Elkrb.layout(graph, {})
 
