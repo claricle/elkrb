@@ -103,11 +103,12 @@ RSpec::Matchers.define :omit_size_for_unsized_input do |input_hash|
   define_method(:check_labels) do |input_labels, actual_labels, owner_id|
     input_named, input_unnamed = (input_labels || []).partition { |l| l["id"] }
     actual_named, actual_unnamed = (actual_labels || []).partition(&:id)
-    check_named_labels(input_named, index_by_id(actual_named), owner_id)
+    check_named_labels(input_named, actual_named, owner_id)
     check_unnamed_labels(input_unnamed, actual_unnamed, owner_id)
   end
 
-  define_method(:check_named_labels) do |input_named, actual_by_id, owner_id|
+  define_method(:check_named_labels) do |input_named, actual_named, owner_id|
+    actual_by_id = index_by_id(actual_named)
     input_named.each do |input_label|
       path = "#{owner_id}/labels/#{input_label['id']}"
       actual_label = actual_by_id[input_label["id"]]
