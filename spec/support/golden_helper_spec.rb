@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "tmpdir"
+require_relative "golden_cases"
 require_relative "golden_helper"
 
 RSpec.describe "match_elkjs_golden" do
@@ -371,31 +372,16 @@ RSpec.describe GoldenComparator do
 end
 
 RSpec.describe "every committed golden self-matches at its assigned tier" do
-  # Kept in sync with golden_spec.rb's own per-case tier (`hyperedge` is
-  # the sole error-case golden, excluded here — its "match" is a
-  # different code path in the matcher, exercised in golden_spec.rb
-  # directly). A golden that fails this only means the COMPARATOR
-  # disagrees with reality, not that elkrb is wrong about anything — this
-  # caught a real bug once already (structural tier's port-anchor check
-  # rejected `ports_simple`'s own real elkjs data before that check was
-  # fixed to use the port's border instead of its centre).
-  tier_by_case = {
-    "chain2" => :exact, "chain3" => :exact, "fan_out" => :structural,
-    "fan_in" => :structural, "diamond" => :structural, "cycle3" => :structural,
-    "self_loop" => :structural, "long_edge" => :structural,
-    "ports_simple" => :structural, "labeled_node" => :exact,
-    "labeled_node_placement" => :exact, "compound_chain" => :exact,
-    "compound_nested" => :structural, "direction_down" => :exact,
-    "spacing_override" => :exact, "sizeless" => :exact,
-    "two_components" => :structural, "box3" => :exact, "box_mixed" => :exact,
-    "box_aspect" => :exact, "fixed2" => :exact, "mrtree3" => :exact,
-    "mrtree7" => :structural, "radial_star5" => :structural,
-    "rect6" => :structural, "force_tri" => :structural,
-    "stress_path4" => :structural, "random3" => :structural,
-    "spore_overlap4" => :structural
-  }.freeze
-
-  tier_by_case.each do |name, tier|
+  # Driven by the same shared table golden_spec.rb generates its examples
+  # from, so a case can never have an example there and no self-match here
+  # (`hyperedge` is the sole error-case golden and is excluded from that
+  # table — its "match" is a different code path in the matcher, exercised
+  # in golden_spec.rb directly). A golden that fails this only means the
+  # COMPARATOR disagrees with reality, not that elkrb is wrong about
+  # anything — this caught a real bug once already (structural tier's
+  # port-anchor check rejected `ports_simple`'s own real elkjs data before
+  # that check was fixed to use the port's border instead of its centre).
+  GoldenCases::TIER_BY_CASE.each do |name, tier|
     it "#{name} (#{tier})" do
       expected = golden_expected(name)
       diffs =
@@ -422,25 +408,8 @@ RSpec.describe "every committed golden's perturbed copy is caught" do
   # the symmetric "missing from actual" check), otherwise a node shifted
   # past `POSITION_TOLERANCE_FRACTION` of the graph's own size (exercises
   # `diff_node_geometry` on an edge-less case like `rect6`/
-  # `spore_overlap4`). Local variable, not a constant, so it can't collide
-  # with the same-named table in the previous `RSpec.describe` block.
-  tier_by_case = {
-    "chain2" => :exact, "chain3" => :exact, "fan_out" => :structural,
-    "fan_in" => :structural, "diamond" => :structural, "cycle3" => :structural,
-    "self_loop" => :structural, "long_edge" => :structural,
-    "ports_simple" => :structural, "labeled_node" => :exact,
-    "labeled_node_placement" => :exact, "compound_chain" => :exact,
-    "compound_nested" => :structural, "direction_down" => :exact,
-    "spacing_override" => :exact, "sizeless" => :exact,
-    "two_components" => :structural, "box3" => :exact, "box_mixed" => :exact,
-    "box_aspect" => :exact, "fixed2" => :exact, "mrtree3" => :exact,
-    "mrtree7" => :structural, "radial_star5" => :structural,
-    "rect6" => :structural, "force_tri" => :structural,
-    "stress_path4" => :structural, "random3" => :structural,
-    "spore_overlap4" => :structural
-  }.freeze
-
-  tier_by_case.each do |name, tier|
+  # `spore_overlap4`).
+  GoldenCases::TIER_BY_CASE.each do |name, tier|
     it "#{name} (#{tier})" do
       expected = golden_expected(name)
       mutated = Marshal.load(Marshal.dump(expected))
@@ -598,9 +567,8 @@ RSpec.describe "the committed golden fixture set" do
   end
 
   it "has a golden_spec.rb example for every case" do
-    source = File.read(File.expand_path("../elkrb/golden_spec.rb", __dir__))
-    covered = source.scan(/match_elkjs_golden\("([^"]+)"/).flatten.sort
-
-    expect(covered).to eq(inputs)
+    # golden_spec.rb generates one example per name in this table, so
+    # asserting the table covers the inputs asserts the examples do.
+    expect(GoldenCases::ALL_NAMES.sort).to eq(inputs)
   end
 end
