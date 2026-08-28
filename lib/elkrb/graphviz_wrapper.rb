@@ -4,8 +4,13 @@ require "open3"
 require "rbconfig"
 
 module Elkrb
-  # Wrapper for optional Graphviz integration
-  # Provides graceful degradation when Graphviz is not installed
+  # Wrapper for optional Graphviz integration.
+  #
+  # A missing Graphviz is a hard failure, not a degraded render. #available?
+  # lets a caller ask first; #render raises GraphvizNotFoundError carrying
+  # the install instructions, and the diagram command re-raises it after
+  # deleting the half-written file rather than leaving DOT text sitting
+  # under a .svg name.
   class GraphvizWrapper
     class GraphvizNotFoundError < StandardError; end
 
@@ -73,19 +78,30 @@ module Elkrb
     # real executable. An unset or empty ELKRB_DOT is treated as no override:
     # every `dot` on PATH is tried in order, then the fallback locations.
     #
-    # The override is anchored to the working directory because a bare name
-    # like "dot" resolves two different ways: File.file? reads it against the
-    # working directory, while the OS resolves an argv[0] carrying no
-    # separator through PATH. Unanchored, this method validated one binary
-    # and #render ran another.
+    # An override naming NO directory is anchored to the working directory,
+    # because a bare name like "dot" resolves two different ways: File.file?
+    # reads it against the working directory, while the OS resolves an
+    # argv[0] carrying no separator through PATH. Unanchored, this method
+    # validated one binary and #render ran another. An override that already
+    # names a directory has no such split -- File.file? and the kernel both
+    # resolve it against the working directory -- so it is left exactly as
+    # given. Rewriting it would be worse than useless: the anchor cannot
+    # consult the filesystem, so on a path crossing a symlinked directory
+    # into a "..", it names a different file than the OS reaches.
     def find_graphviz
       override = ENV.fetch("ELKRB_DOT", nil)
       candidates = if override.nil? || override.empty?
                      path_dot_candidates + FALLBACK_DOT_PATHS
                    else
-                     [File.absolute_path(override)]
+                     [anchor_bare_name(override)]
                    end
       candidates.find { |candidate| valid_executable?(candidate) }
+    end
+
+    # File.basename strips a directory on either separator, so a path that
+    # already carries one comes back different from itself.
+    def anchor_bare_name(path)
+      File.basename(path) == path ? File.join(Dir.pwd, path) : path
     end
 
     def path_dot_candidates
@@ -113,16 +129,33 @@ module Elkrb
       File.file?(path) && File.executable?(path)
     end
 
-    # Both file paths are anchored so neither can begin with a dash. dot
-    # takes the input as a bare positional, so a file literally named "-V"
-    # was parsed as the version flag: dot printed its banner, exited 0 and
-    # wrote nothing, and the wrapper reported a successful render. The
-    # output path is anchored for the same reason, one step milder -- dot
-    # rejects "-o -V" with "Missing argument for -o flag" rather than
-    # writing the file the caller asked for.
+    # dot takes the input as a bare positional and reads the token after -o
+    # as the output name, so on either side a path that begins with a dash
+    # is taken for an option instead. A file named "-V" made dot print its
+    # banner, exit 0 and write nothing, and the wrapper called that a
+    # successful render. The output side fails the same way for any name
+    # whose leading dash spells a real flag: measured against graphviz
+    # 15.1.1, "-o -x.png" and "-o -v.png" exit 0, write nothing and print
+    # nothing, because -x and -v are the reduce and verbose flags. Other
+    # names there are merely loud ("Missing argument for -o flag").
+    #
+    # This closes only the dash-named half of report-success-on-no-output;
+    # the input side also has to reject a directory, which
+    # #validate_file_exists! does.
     def build_command(engine, format, input_file, output_file, dpi)
       [@dot_path, "-K#{engine}", "-T#{format}", "-Gdpi=#{dpi}",
-       "-o", File.absolute_path(output_file), File.absolute_path(input_file)]
+       "-o", option_safe_path(output_file), option_safe_path(input_file)]
+    end
+
+    # Anchors ONLY a name dot would read as an option, and with File.join,
+    # which is purely lexical and leaves any ".." in place for the OS to
+    # resolve. File.absolute_path collapses ".." itself, without consulting
+    # the filesystem, so across a symlinked directory it names a different
+    # file than the OS reaches -- and macOS ships /tmp and /var as symlinks,
+    # so that needs no hand-made link to hit. Every other path is passed
+    # through byte-identical.
+    def option_safe_path(path)
+      path.start_with?("-") ? File.join(Dir.pwd, path) : path
     end
 
     def execute_command(argv)
@@ -147,8 +180,11 @@ module Elkrb
                            "Supported engines: #{SUPPORTED_ENGINES.join(', ')}"
     end
 
+    # Only a readable regular file will do. File.exist? is also true of a
+    # directory, and dot handed one exits 0 having written nothing, so the
+    # caller printed a render that never happened.
     def validate_file_exists!(file)
-      return if File.exist?(file)
+      return if File.file?(file) && File.readable?(file)
 
       raise ArgumentError, "Input file not found: #{file}"
     end

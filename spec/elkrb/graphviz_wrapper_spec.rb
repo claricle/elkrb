@@ -53,6 +53,18 @@ RSpec.describe Elkrb::GraphvizWrapper do
     input
   end
 
+  # Builds `dir/work/link -> ../real`, and returns `dir/work`. From there
+  # the OS reads "link/../x" as `dir/x`, because it follows the link before
+  # it applies the "..". A lexical collapse names `dir/work/x` instead, so
+  # the two disagree about which file is meant.
+  # @return [String] the working directory the caller must chdir into
+  def with_updir_symlink(dir)
+    work = File.join(dir, "work")
+    FileUtils.mkdir_p([work, File.join(dir, "real")])
+    File.symlink("../real", File.join(work, "link"))
+    work
+  end
+
   describe "#available?" do
     it "returns true when dot is on PATH" do
       with_fake_dot do
@@ -116,6 +128,23 @@ RSpec.describe Elkrb::GraphvizWrapper do
 
           Dir.chdir(dir) do
             ENV["ELKRB_DOT"] = "dot"
+            wrapper = described_class.new
+
+            expect(wrapper.available?).to be true
+            expect(wrapper.version).to eq("9.9.9")
+          end
+        end
+      end
+    end
+
+    it "runs the ELKRB_DOT the OS reaches when the override crosses a symlink" do
+      with_fake_dot do
+        Dir.mktmpdir("symlinked_dot") do |dir|
+          write_fake_dot(dir, "echo 'dot - graphviz version 9.9.9'")
+          work = with_updir_symlink(dir)
+
+          Dir.chdir(work) do
+            ENV["ELKRB_DOT"] = File.join("link", "..", "dot")
             wrapper = described_class.new
 
             expect(wrapper.available?).to be true
@@ -250,7 +279,47 @@ RSpec.describe Elkrb::GraphvizWrapper do
 
           argv = logged_argv(log_path)
           expect(argv[argv.index("-o") + 1]).not_to start_with("-")
+          # The line above is what discriminates. This one only shows the
+          # anchored name is still writable: the fake dot touches whatever
+          # follows -o unconditionally, where real graphviz given "-o
+          # -Tsvg.png" writes nothing at all -- it either rejects the
+          # missing argument or swallows the name as another flag.
           expect(File.exist?(dash_output)).to be true
+        end
+      end
+    end
+
+    it "hands dot the input path the OS reaches across a symlink" do
+      with_fake_dot do |log_path|
+        Dir.mktmpdir do |dir|
+          work = with_updir_symlink(dir)
+          target = File.join(dir, "graph.dot")
+          File.write(target, "digraph{a->b}")
+          File.write(File.join(work, "graph.dot"), "digraph{decoy}")
+
+          Dir.chdir(work) do
+            wrapper.render(File.join("link", "..", "graph.dot"),
+                           "output.png", :png)
+
+            expect(File.identical?(logged_argv(log_path).last, target))
+              .to be true
+          end
+        end
+      end
+    end
+
+    it "hands dot the output path the OS reaches across a symlink" do
+      with_fake_dot do
+        Dir.mktmpdir do |dir|
+          work = with_updir_symlink(dir)
+          input = write_fake_input(work)
+
+          Dir.chdir(work) do
+            wrapper.render(input, File.join("link", "..", "out.png"), :png)
+          end
+
+          expect(File.exist?(File.join(dir, "out.png"))).to be true
+          expect(File.exist?(File.join(work, "out.png"))).to be false
         end
       end
     end
@@ -289,6 +358,22 @@ RSpec.describe Elkrb::GraphvizWrapper do
         expect do
           wrapper.render("missing.dot", "output.png", :png)
         end.to raise_error(ArgumentError, /Input file not found/)
+      end
+    end
+
+    it "rejects a directory as input instead of reporting a render" do
+      with_fake_dot do
+        Dir.mktmpdir do |dir|
+          # File.exist? is true for a directory, and real graphviz handed
+          # one exits 0 having written nothing -- so the CLI printed
+          # "Rendered" and left no output file behind.
+          input_dir = File.join(dir, "adir")
+          FileUtils.mkdir_p(input_dir)
+
+          expect do
+            wrapper.render(input_dir, File.join(dir, "out.png"), :png)
+          end.to raise_error(ArgumentError, /Input file not found/)
+        end
       end
     end
 
