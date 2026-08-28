@@ -1,0 +1,155 @@
+{
+  "id": "flowchart",
+  "children": [
+    {
+      "id": "Start",
+      "width": 65.0,
+      "height": 34.0,
+      "labels": [
+        {
+          "text": "Start",
+          "width": 35.0,
+          "height": 14.0
+        }
+      ],
+      "metadata": {
+        "shape": "stadium",
+        "classes": null
+      }
+    },
+    {
+      "id": "Process",
+      "width": 114.0,
+      "height": 34.0,
+      "labels": [
+        {
+          "text": "Process Data",
+          "width": 84.0,
+          "height": 14.0
+        }
+      ],
+      "metadata": {
+        "shape": "rect",
+        "classes": null
+      }
+    },
+    {
+      "id": "Decision",
+      "width": 82.0,
+      "height": 54.0,
+      "labels": [
+        {
+          "text": "Valid?",
+          "width": 42.0,
+          "height": 14.0
+        }
+      ],
+      "metadata": {
+        "shape": "rhombus",
+        "classes": null
+      }
+    },
+    {
+      "id": "Success",
+      "width": 79.0,
+      "height": 34.0,
+      "labels": [
+        {
+          "text": "Success",
+          "width": 49.0,
+          "height": 14.0
+        }
+      ],
+      "metadata": {
+        "shape": "rect",
+        "classes": null
+      }
+    },
+    {
+      "id": "Failure",
+      "width": 128.0,
+      "height": 34.0,
+      "labels": [
+        {
+          "text": "Report Failure",
+          "width": 98.0,
+          "height": 14.0
+        }
+      ],
+      "metadata": {
+        "shape": "rect",
+        "classes": null
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "Start_to_Process",
+      "sources": [
+        "Start"
+      ],
+      "targets": [
+        "Process"
+      ],
+      "labels": [],
+      "metadata": {
+        "arrow_type": "arrow"
+      }
+    },
+    {
+      "id": "Process_to_Decision",
+      "sources": [
+        "Process"
+      ],
+      "targets": [
+        "Decision"
+      ],
+      "labels": [],
+      "metadata": {
+        "arrow_type": "arrow"
+      }
+    },
+    {
+      "id": "Decision_to_Success",
+      "sources": [
+        "Decision"
+      ],
+      "targets": [
+        "Success"
+      ],
+      "labels": [
+        {
+          "text": "|Yes|",
+          "width": 35.0,
+          "height": 14.0
+        }
+      ],
+      "metadata": {
+        "arrow_type": "arrow"
+      }
+    },
+    {
+      "id": "Decision_to_Failure",
+      "sources": [
+        "Decision"
+      ],
+      "targets": [
+        "Failure"
+      ],
+      "labels": [
+        {
+          "text": "|No|",
+          "width": 28.0,
+          "height": 14.0
+        }
+      ],
+      "metadata": {
+        "arrow_type": "arrow"
+      }
+    }
+  ],
+  "layoutOptions": {
+    "algorithm": "sporeOverlap",
+    "elk.direction": "DOWN"
+  }
+}
