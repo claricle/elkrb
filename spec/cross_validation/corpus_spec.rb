@@ -6,7 +6,10 @@ require "timeout"
 require "tmpdir"
 require_relative "corpus_runner"
 
-RSpec.describe "Elkrb layout corpus" do
+# Held in a module because a constant assigned inside a `describe` block
+# lands on Object regardless. Naming the namespace makes that explicit and
+# keeps both constants greppable.
+module CorpusCatalogue
   CASES = CorpusRunner.cases.freeze
 
   # [case id, check] => RC id. A listed check is `pending`; the guard
@@ -40,7 +43,9 @@ RSpec.describe "Elkrb layout corpus" do
     ["elkjs_bug7_complex", "invariants"] => "RC8",
     ["java_elk_ports", "invariants"] => "RC4",
   }.freeze
+end
 
+RSpec.describe "Elkrb layout corpus" do
   # Every node/label/port/section coordinate is a finite Float and every
   # width/height is a finite, non-negative Float. The root graph itself
   # is checked for size only (ELK's root canvas is never positioned).
@@ -59,12 +64,7 @@ RSpec.describe "Elkrb layout corpus" do
     assert_finite_point(node, label)
     assert_finite_size(node, label)
     assert_labels(node.labels, label)
-    (node.ports || []).each_with_index do |p, i|
-      port_label = "#{label}.ports[#{i}]"
-      assert_finite_point(p, port_label)
-      assert_finite_size(p, port_label)
-      assert_labels(p.labels, port_label)
-    end
+    assert_ports(node.ports, label)
     (node.children || []).each_with_index do |c, i|
       assert_node_invariants(c, "#{label}.children[#{i}]")
     end
@@ -73,17 +73,31 @@ RSpec.describe "Elkrb layout corpus" do
     end
   end
 
+  def assert_ports(ports, owner_label)
+    (ports || []).each_with_index do |port, i|
+      label = "#{owner_label}.ports[#{i}]"
+      assert_finite_point(port, label)
+      assert_finite_size(port, label)
+      assert_labels(port.labels, label)
+    end
+  end
+
   def assert_edge_invariants(edge, label)
     assert_labels(edge.labels, label)
     (edge.sections || []).each_with_index do |section, i|
-      section_label = "#{label}.sections[#{i}]"
-      expect(section.start_point).not_to be_nil, "#{section_label}.start is nil"
-      expect(section.end_point).not_to be_nil, "#{section_label}.end is nil"
-      assert_finite_point(section.start_point, "#{section_label}.start")
-      assert_finite_point(section.end_point, "#{section_label}.end")
-      (section.bend_points || []).each_with_index do |bp, j|
-        assert_finite_point(bp, "#{section_label}.bend[#{j}]")
-      end
+      assert_section_invariants(section, "#{label}.sections[#{i}]")
+    end
+  end
+
+  def assert_section_invariants(section, label)
+    start_point = section.start_point
+    end_point = section.end_point
+    expect(start_point).not_to be_nil, "#{label}.start is nil"
+    expect(end_point).not_to be_nil, "#{label}.end is nil"
+    assert_finite_point(start_point, "#{label}.start")
+    assert_finite_point(end_point, "#{label}.end")
+    (section.bend_points || []).each_with_index do |bp, j|
+      assert_finite_point(bp, "#{label}.bend[#{j}]")
     end
   end
 
@@ -95,23 +109,27 @@ RSpec.describe "Elkrb layout corpus" do
   end
 
   def assert_finite_point(point, label)
-    expect(point.x).to be_a(Float), "#{label}.x is #{point.x.inspect}, not a Float"
-    expect(point.x).to be_finite, "#{label}.x=#{point.x} is not finite"
-    expect(point.y).to be_a(Float), "#{label}.y is #{point.y.inspect}, not a Float"
-    expect(point.y).to be_finite, "#{label}.y=#{point.y} is not finite"
+    assert_finite_number(point.x, "#{label}.x")
+    assert_finite_number(point.y, "#{label}.y")
   end
 
   def assert_finite_size(element, label)
-    expect(element.width).to be_a(Float), "#{label}.width is #{element.width.inspect}, not a Float"
-    expect(element.width).to be_finite, "#{label}.width=#{element.width} is not finite"
-    expect(element.width).to be >= 0, "#{label}.width=#{element.width} is negative"
-    expect(element.height).to be_a(Float), "#{label}.height is #{element.height.inspect}, not a Float"
-    expect(element.height).to be_finite, "#{label}.height=#{element.height} is not finite"
-    expect(element.height).to be >= 0, "#{label}.height=#{element.height} is negative"
+    assert_non_negative(element.width, "#{label}.width")
+    assert_non_negative(element.height, "#{label}.height")
+  end
+
+  def assert_finite_number(value, label)
+    expect(value).to be_a(Float), "#{label} is #{value.inspect}, not a Float"
+    expect(value).to be_finite, "#{label}=#{value} is not finite"
+  end
+
+  def assert_non_negative(value, label)
+    assert_finite_number(value, label)
+    expect(value).to be >= 0, "#{label}=#{value} is negative"
   end
 
   def known_failure_reason(id, check)
-    KNOWN_FAILURES[[id, check]]
+    CorpusCatalogue::KNOWN_FAILURES[[id, check]]
   end
 
   # Corpus fixtures can regress into a hang, not just a crash; without
@@ -121,7 +139,7 @@ RSpec.describe "Elkrb layout corpus" do
     Timeout.timeout(30) { Elkrb.layout(kase.graph, algorithm: kase.algorithm) }
   end
 
-  CASES.each do |kase|
+  CorpusCatalogue::CASES.each do |kase|
     describe kase.id do
       it "does not raise" do
         reason = known_failure_reason(kase.id, "no_crash")
@@ -131,7 +149,8 @@ RSpec.describe "Elkrb layout corpus" do
       end
 
       it "keeps layout invariants" do
-        reason = known_failure_reason(kase.id, "invariants") || known_failure_reason(kase.id, "no_crash")
+        reason = known_failure_reason(kase.id, "invariants") ||
+          known_failure_reason(kase.id, "no_crash")
         pending(reason) if reason
 
         result = layout_with_timeout(kase)
@@ -141,18 +160,25 @@ RSpec.describe "Elkrb layout corpus" do
   end
 
   it "keeps the KNOWN_FAILURES ledger honest" do
-    cases_by_id = CASES.to_h { |kase| [kase.id, kase] }
+    ledger = CorpusCatalogue::KNOWN_FAILURES
+    cases_by_id = CorpusCatalogue::CASES.to_h { |kase| [kase.id, kase] }
 
-    stale_ids = KNOWN_FAILURES.keys.map(&:first).uniq - cases_by_id.keys
-    expect(stale_ids).to be_empty,
-      "KNOWN_FAILURES references case ids that no longer exist in the corpus: #{stale_ids.inspect}"
+    stale_ids = ledger.keys.map(&:first).uniq - cases_by_id.keys
+    expect(stale_ids).to(
+      be_empty,
+      "KNOWN_FAILURES references case ids that no longer exist in the " \
+      "corpus: #{stale_ids.inspect}",
+    )
 
-    now_passing = KNOWN_FAILURES.keys.reject do |id, check|
+    now_passing = ledger.keys.reject do |id, check|
       entry_still_fails?(cases_by_id.fetch(id), check)
     end
 
-    expect(now_passing).to be_empty,
-      "KNOWN_FAILURES entries now pass and must be removed from the ledger: #{now_passing.inspect}"
+    expect(now_passing).to(
+      be_empty,
+      "KNOWN_FAILURES entries now pass and must be removed from the " \
+      "ledger: #{now_passing.inspect}",
+    )
   end
 
   def entry_still_fails?(kase, check)
@@ -184,7 +210,8 @@ RSpec.describe "Elkrb layout corpus" do
         expect(CorpusRunner.source_directory?(dir)).to be(true)
       end
 
-      expect(CorpusRunner.source_directory?(root("spec/fixtures/dump_probe"))).to be(true)
+      probe = root("spec/fixtures/dump_probe")
+      expect(CorpusRunner.source_directory?(probe)).to be(true)
     end
 
     it "is true for a symlink that resolves to a source directory" do
@@ -193,21 +220,26 @@ RSpec.describe "Elkrb layout corpus" do
         File.symlink(root("spec/fixtures"), link)
 
         expect(CorpusRunner.source_directory?(link)).to be(true)
-        expect(CorpusRunner.source_directory?(File.join(link, "dump_probe"))).to be(true)
+        under_link = File.join(link, "dump_probe")
+        expect(CorpusRunner.source_directory?(under_link)).to be(true)
       end
     end
 
-    it "is true for a name that differs only by case on a case-insensitive filesystem" do
+    it "is true for a name that differs only by case on a " \
+       "case-insensitive filesystem" do
       aliased = root("spec/Fixtures")
       unless File.identical?(aliased, root("spec/fixtures"))
-        skip "filesystem is case-sensitive, so spec/Fixtures is a different directory"
+        skip "filesystem is case-sensitive, so spec/Fixtures is a " \
+             "different directory"
       end
 
       expect(CorpusRunner.source_directory?(aliased)).to be(true)
     end
 
-    it "is false for a sibling that merely shares a source directory's prefix" do
-      expect(CorpusRunner.source_directory?(root("spec/fixtures_elsewhere"))).to be(false)
+    it "is false for a sibling that merely shares a source " \
+       "directory's prefix" do
+      sibling = root("spec/fixtures_elsewhere")
+      expect(CorpusRunner.source_directory?(sibling)).to be(false)
       expect(CorpusRunner.source_directory?(root("tmp/corpus"))).to be(false)
     end
   end
@@ -220,7 +252,8 @@ RSpec.describe "Elkrb layout corpus" do
         outdir = File.join(tmp, "dump")
 
         expect { CorpusRunner.run(outdir) }
-          .to raise_error(ArgumentError, /refusing to dump into a corpus source directory/)
+          .to raise_error(ArgumentError,
+                          /refusing to dump into a corpus source directory/)
         expect(Dir.exist?(outdir)).to be(false)
       end
     end
@@ -276,7 +309,8 @@ RSpec.describe "Elkrb layout corpus" do
       end
     end
 
-    it "writes a canonical file per case, records errors and timeouts, and totals a summary" do
+    it "writes a canonical file per case, records errors and timeouts, " \
+       "and totals a summary" do
       # width/height 10/3 forces layered's own arithmetic (centring,
       # padding) to produce a Float with far more than 6 decimal digits
       # before canonicalize rounds it -- a 1.0/1.0 node never exercises
@@ -291,9 +325,13 @@ RSpec.describe "Elkrb layout corpus" do
             { "id" => "b", "width" => 10.0 / 3, "height" => 10.0 / 3 },
           ],
           "edges" => [{ "id" => "e1", "sources" => ["a"], "targets" => ["b"] }],
-        }
+        },
       )
-      error_case = CorpusRunner::Case.new(id: "boom", algorithm: "layered", graph: nil)
+      error_case = CorpusRunner::Case.new(
+        id: "boom",
+        algorithm: "layered",
+        graph: nil,
+      )
 
       # force calls Kernel#rand; only a case that actually consumes
       # randomness can prove the per-case srand reseed makes two runs
@@ -310,7 +348,7 @@ RSpec.describe "Elkrb layout corpus" do
             { "id" => "b", "width" => 10.0, "height" => 10.0 },
           ],
           "edges" => [{ "id" => "e1", "sources" => ["a"], "targets" => ["b"] }],
-        }
+        },
       )
 
       slow_algorithm = Class.new(Elkrb::Layout::Algorithms::BaseAlgorithm) do
@@ -318,13 +356,15 @@ RSpec.describe "Elkrb layout corpus" do
           sleep 0.15
         end
       end
-      Elkrb::Layout::AlgorithmRegistry.register("corpus_runner_spec_slow", slow_algorithm)
+      Elkrb::Layout::AlgorithmRegistry
+        .register("corpus_runner_spec_slow", slow_algorithm)
       timeout_case = CorpusRunner::Case.new(
         id: "slow", algorithm: "corpus_runner_spec_slow",
         graph: { "id" => "root", "children" => [], "edges" => [] }
       )
 
-      allow(CorpusRunner).to receive(:cases).and_return([ok_case, error_case, force_case, timeout_case])
+      corpus = [ok_case, error_case, force_case, timeout_case]
+      allow(CorpusRunner).to receive(:cases).and_return(corpus)
 
       Dir.mktmpdir do |dir|
         summary = CorpusRunner.run(dir, timeout: 0.02)
@@ -351,7 +391,8 @@ RSpec.describe "Elkrb layout corpus" do
         timeout_payload = JSON.parse(File.read(File.join(dir, "slow.json")))
         expect(timeout_payload).to eq("error" => "Timeout")
 
-        expect(JSON.parse(File.read(File.join(dir, "summary.json")))).to eq(summary)
+        summary_path = File.join(dir, "summary.json")
+        expect(JSON.parse(File.read(summary_path))).to eq(summary)
 
         # Canonical means deep-sorted keys, floats rounded to 6 places,
         # and stable across repeated runs -- not just "some JSON got
@@ -366,7 +407,8 @@ RSpec.describe "Elkrb layout corpus" do
         Dir.mktmpdir do |second_dir|
           CorpusRunner.run(second_dir, timeout: 0.02)
           expect(File.read(File.join(second_dir, "ok.json"))).to eq(ok_text)
-          expect(File.read(File.join(second_dir, "force.json"))).to eq(force_text)
+          expect(File.read(File.join(second_dir, "force.json")))
+            .to eq(force_text)
         end
       end
     end
@@ -375,7 +417,8 @@ RSpec.describe "Elkrb layout corpus" do
   def assert_deep_sorted_keys(value)
     case value
     when Hash
-      expect(value.keys).to eq(value.keys.sort), "keys not sorted: #{value.keys.inspect}"
+      keys = value.keys
+      expect(keys).to eq(keys.sort), "keys not sorted: #{keys.inspect}"
       value.each_value { |v| assert_deep_sorted_keys(v) }
     when Array
       value.each { |v| assert_deep_sorted_keys(v) }
@@ -389,7 +432,10 @@ RSpec.describe "Elkrb layout corpus" do
     when Array
       value.each { |v| assert_rounded_floats(v) }
     when Float
-      expect(value.round(6)).to eq(value), "#{value} has more than 6 decimal places"
+      expect(value.round(6)).to(
+        eq(value),
+        "#{value} has more than 6 decimal places",
+      )
     end
   end
 end
