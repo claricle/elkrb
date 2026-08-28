@@ -82,7 +82,7 @@ module Elkrb
 
         # Get option value from layout options or default
         #
-        # @param layout_opts [Hash, LayoutOptions] The layout options
+        # @param layout_opts [Hash] The layout options
         # @param key [String] The option key
         # @param default [Object] The default value
         # @return [Object] The option value or default

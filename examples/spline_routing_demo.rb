@@ -11,13 +11,13 @@ require_relative "../lib/elkrb"
 def create_sample_graph(routing_style, curvature = 0.5)
   Elkrb::Graph::Graph.new(
     id: "root",
-    layout_options: Elkrb::Graph::LayoutOptions.new(
-      algorithm: "layered",
-      direction: "RIGHT",
+    layout_options: {
+      "elk.algorithm" => "layered",
+      "elk.direction" => "RIGHT",
       "elk.edgeRouting" => routing_style,
-      spline_curvature: curvature,
-      spacing_node_node: 80.0,
-    ),
+      "elk.spline.curvature" => curvature,
+      "elk.spacing.nodeNode" => 80.0,
+    },
     children: [
       Elkrb::Graph::Node.new(
         id: "n1",
@@ -159,12 +159,12 @@ puts "-" * 70
 
 port_graph = Elkrb::Graph::Graph.new(
   id: "port_demo",
-  layout_options: Elkrb::Graph::LayoutOptions.new(
-    algorithm: "layered",
-    direction: "RIGHT",
+  layout_options: {
+    "elk.algorithm" => "layered",
+    "elk.direction" => "RIGHT",
     "elk.edgeRouting" => "SPLINES",
-    spline_curvature: 0.6,
-  ),
+    "elk.spline.curvature" => 0.6,
+  },
   children: [
     Elkrb::Graph::Node.new(
       id: "source",

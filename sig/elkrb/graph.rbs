@@ -1,23 +1,5 @@
 module Elkrb
   module Graph
-    # Deprecated migration shim for 1.x call sites: a ::Hash that keeps every
-    # key a String. The typed accessors it used to carry are gone — options
-    # are read by id now.
-    class LayoutOptions < ::Hash[String, untyped]
-      def self.[]: (*untyped args) -> LayoutOptions
-      def self.wrap: (untyped value) -> LayoutOptions?
-
-      def initialize: (?Hash[String | Symbol, untyped]? hash, **untyped kw) -> void
-      def []: (String | Symbol key) -> untyped
-      def []=: (String | Symbol key, untyped value) -> untyped
-      def store: (String | Symbol key, untyped value) -> untyped
-      def merge: (Hash[String | Symbol, untyped]? other) -> self
-      def merge!: (*Hash[String | Symbol, untyped] others) ?{ (String key, untyped old_value, untyped new_value) -> untyped } -> self
-      def update: (*Hash[String | Symbol, untyped] others) ?{ (String key, untyped old_value, untyped new_value) -> untyped } -> self
-      def replace: (Hash[String | Symbol, untyped] other) -> self
-      def transform_keys!: (*untyped args) ?{ (String key) -> untyped } -> (self | Enumerator[String, self])
-    end
-
     class Label
       attr_accessor id: String?
       attr_accessor text: String?

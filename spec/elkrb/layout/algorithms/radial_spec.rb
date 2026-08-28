@@ -10,9 +10,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Radial do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "radial",
-          ),
+          layout_options: { "algorithm" => "radial" },
         )
       end
 
@@ -92,9 +90,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Radial do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "radial",
-          ),
+          layout_options: { "algorithm" => "radial" },
         )
       end
 
@@ -117,9 +113,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Radial do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "radial",
-          ),
+          layout_options: { "algorithm" => "radial" },
         )
       end
 
@@ -150,9 +144,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Radial do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "radial",
-          ),
+          layout_options: { "algorithm" => "radial" },
         )
       end
 
