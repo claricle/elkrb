@@ -394,5 +394,180 @@ RSpec.describe Elkrb::Layout::Algorithms::MRTree do
         expect(b.y).to be > a.y
       end
     end
+
+    context "with children that carry no size" do
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "root",
+          children: [
+            Elkrb::Graph::Node.new(id: "a"),
+            Elkrb::Graph::Node.new(id: "b"),
+            Elkrb::Graph::Node.new(id: "c"),
+          ],
+          edges: [
+            Elkrb::Graph::Edge.new(id: "e1", sources: ["a"], targets: ["b"]),
+            Elkrb::Graph::Edge.new(id: "e2", sources: ["b"], targets: ["c"]),
+          ],
+        )
+      end
+
+      it "treats the missing width as zero instead of crashing" do
+        expect { algorithm.layout(graph) }.not_to raise_error
+      end
+
+      it "still positions every node" do
+        algorithm.layout(graph)
+
+        expect(graph.children.map(&:x)).to all(be_a(Numeric))
+        expect(graph.children.map(&:y)).to all(be_a(Numeric))
+      end
+
+      it "leaves the width unset, since the node never had one" do
+        algorithm.layout(graph)
+
+        expect(graph.children.map(&:width)).to all(be_nil)
+      end
+    end
+  end
+end
+
+RSpec.describe "MRTree with a component that has no root of its own" do
+  # a -> b -> a is wholly cyclic, so it contains no root. c is isolated and
+  # is the graph's only root, which used to mean a and b were never reached
+  # and kept nil coordinates until padding tripped over them.
+  let(:graph) do
+    {
+      "id" => "r",
+      "children" => %w[a b c].map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => [
+        { "id" => "e1", "sources" => ["a"], "targets" => ["b"] },
+        { "id" => "e2", "sources" => ["b"], "targets" => ["a"] },
+      ],
+    }
+  end
+
+  it "lays out without tripping over a nil coordinate" do
+    expect { Elkrb.layout(graph, algorithm: "mrtree") }.not_to raise_error
+  end
+
+  it "gives every node real coordinates, cyclic component included" do
+    result = Elkrb.layout(graph, algorithm: "mrtree")
+
+    expect(result.children.map(&:x)).to all(be_a(Float))
+    expect(result.children.map(&:y)).to all(be_a(Float))
+  end
+end
+
+RSpec.describe "MRTree fallback trees must stay disjoint" do
+  # r -> u -> v -> c is a rooted chain. a <-> b is a cyclic component with no
+  # root of its own, and a also points at c. Seeding a as a fallback root must
+  # not let its tree reach back into c, which r's tree already owns — placing
+  # c twice drags it above its own parent.
+  let(:graph) do
+    {
+      "id" => "root",
+      "children" => %w[r u v c a b].map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => [
+        { "id" => "e1", "sources" => ["r"], "targets" => ["u"] },
+        { "id" => "e2", "sources" => ["u"], "targets" => ["v"] },
+        { "id" => "e3", "sources" => ["v"], "targets" => ["c"] },
+        { "id" => "e4", "sources" => ["a"], "targets" => ["b"] },
+        { "id" => "e5", "sources" => ["b"], "targets" => ["a"] },
+        { "id" => "e6", "sources" => ["a"], "targets" => ["c"] },
+      ],
+    }
+  end
+
+  it "keeps a shared child below its own parent" do
+    by_id = Elkrb.layout(graph, algorithm: "mrtree")
+      .children.to_h { |node| [node.id, node] }
+
+    expect(by_id["c"].y).to be > by_id["v"].y
+  end
+
+  it "still places every node" do
+    result = Elkrb.layout(graph, algorithm: "mrtree")
+
+    expect(result.children.map(&:y)).to all(be_a(Float))
+  end
+end
+
+RSpec.describe "MRTree with a node reachable by two paths of different depth" do
+  # r -> c is one hop. a -> b -> d -> c is three. c belongs at the deeper
+  # level, or it lands above d, its own parent.
+  let(:graph) do
+    {
+      "id" => "root",
+      "children" => %w[r a b d c].map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => [
+        { "id" => "e1", "sources" => ["r"], "targets" => ["c"] },
+        { "id" => "e2", "sources" => ["a"], "targets" => ["b"] },
+        { "id" => "e3", "sources" => ["b"], "targets" => ["d"] },
+        { "id" => "e4", "sources" => ["d"], "targets" => ["c"] },
+      ],
+    }
+  end
+
+  it "places the shared node below its deepest parent" do
+    by_id = Elkrb.layout(graph, algorithm: "mrtree")
+      .children.to_h { |node| [node.id, node] }
+
+    expect(by_id["c"].y).to be > by_id["d"].y
+  end
+
+  it "places every node exactly once" do
+    result = Elkrb.layout(graph, algorithm: "mrtree")
+
+    expect(result.children.map(&:id)).to match_array(%w[r a b d c])
+  end
+end
+
+RSpec.describe "MRTree on a densely cyclic graph" do
+  # Every node reachable from every other. Enumerating simple paths here is
+  # factorial: a complete 8-node cycle took 2.5s and each further node cost
+  # roughly ten times more. The bound is deliberately loose — it is guarding
+  # against a return to factorial growth, not measuring throughput.
+  def complete_cycle(size)
+    ids = (1..size).map { |i| "s#{i}" }
+    edges = [{ "id" => "seed", "sources" => ["root"],
+               "targets" => [ids.first] }]
+    ids.each_with_index do |from, i|
+      ids.each_with_index do |to, j|
+        next if i == j
+
+        edges << { "id" => "e#{i}_#{j}", "sources" => [from],
+                   "targets" => [to] }
+      end
+    end
+    {
+      "id" => "r",
+      "children" => (["root"] + ids).map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => edges,
+    }
+  end
+
+  it "lays out a complete 20-node cycle well inside a second" do
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+    Elkrb.layout(complete_cycle(20), algorithm: "mrtree")
+
+    elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+    expect(elapsed).to be < 5.0
+  end
+
+  it "places every node of a densely cyclic graph exactly once" do
+    result = Elkrb.layout(complete_cycle(12), algorithm: "mrtree")
+
+    ids = result.children.map(&:id)
+    expect(ids.uniq.size).to eq(ids.size)
+    expect(result.children.map(&:y)).to all(be_a(Float))
   end
 end
