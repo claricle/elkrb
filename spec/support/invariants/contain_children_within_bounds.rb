@@ -13,9 +13,7 @@ RSpec::Matchers.define :contain_children_within_bounds do |padding = 0|
   failure_message { @violations.join("\n") }
 
   # Same `|| 0.0` convention as `have_no_overlapping_siblings`: correct
-  # for width/height (Decision 5), a robustness convenience (not a
-  # correctness claim) for x/y — `have_finite_coordinates` owns flagging a
-  # genuinely missing position.
+  # for width/height (Decision 5).
   define_method(:check_level) do |node, pad|
     width = node.width || 0.0
     height = node.height || 0.0
@@ -27,6 +25,9 @@ RSpec::Matchers.define :contain_children_within_bounds do |padding = 0|
     end
   end
 
+  # The `|| 0.0` on x/y is a robustness convenience, not a correctness
+  # claim — `have_finite_coordinates` owns flagging a genuinely missing
+  # position. On width/height it is the Decision 5 convention, as above.
   define_method(:box) do |child|
     [child.x || 0.0, child.y || 0.0, child.width || 0.0, child.height || 0.0]
   end
