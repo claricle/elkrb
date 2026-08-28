@@ -135,14 +135,6 @@ module Elkrb
           require_relative "../graphviz_wrapper"
           graphviz = Elkrb::GraphvizWrapper.new
 
-          unless graphviz.available?
-            warn "⚠ Graphviz not found. Cannot render to #{format}."
-            warn "  Install Graphviz or export to DOT format instead."
-            discard_unrendered(dot_file, output_file)
-            raise Elkrb::GraphvizWrapper::GraphvizNotFoundError,
-                  "Graphviz not found; cannot render #{format}"
-          end
-
           graphviz.render(dot_file, output_file, format, engine: "dot", dpi: 96)
 
           # Clean up temp DOT file if we created one
