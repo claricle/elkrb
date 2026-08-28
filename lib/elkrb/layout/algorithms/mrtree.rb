@@ -102,6 +102,9 @@ module Elkrb
           end
 
           map.each_value { |children| children.uniq!(&:id) }
+          # Set AFTER the loop above, not before it. With the default already
+          # in place `(map[source.id] ||= [])` reads the frozen constant, finds
+          # it truthy, and concats into it — FrozenError on the first edge.
           map.default = NO_CHILDREN
           map
         end
@@ -115,6 +118,8 @@ module Elkrb
           # A node reachable by two paths belongs at the DEEPER one, or it
           # ends up above its own parent. Levels are settled for the whole
           # graph before any tree is built, so placement order stops mattering.
+          # That is a DAG guarantee: a cyclic component gets bounded fallback
+          # numbers instead, and #build_subtree's floor is what re-orders those.
           levels = {}
           seeds = roots.dup
           relax_levels(seeds, graph, adjacent, levels)
@@ -140,24 +145,32 @@ module Elkrb
           end
         end
 
-        # Deepest path wins. Walking every simple path to find it is factorial
-        # — a complete 8-node cycle took 2.5s and each extra node multiplied
-        # that by roughly ten. Relax instead: a longest path visits each node
-        # at most once, so `limit` passes settle every level the graph can
-        # produce, and a cycle cannot raise one past that bound.
+        # On a DAG this settles on the LONGEST path to each node, which is what
+        # puts a node reachable by two routes below its deepest parent. Walking
+        # every simple path to find that is factorial — a complete 8-node cycle
+        # took 2.5s and each extra node multiplied it by roughly ten. Relax
+        # instead: a longest path visits each node at most once, so one sweep
+        # per node settles every level a DAG can produce.
+        #
+        # A cyclic component has no longest path, so what its nodes get here is
+        # a bounded fallback number rather than a depth — `max_level` stops it
+        # climbing, it does not make it mean anything. Ordering inside such a
+        # component is restored afterwards by #build_subtree's floor.
+        #
+        # Mutates `levels` in place and returns nothing useful.
         def relax_levels(seeds, graph, adjacent, levels)
-          seeds.each { |seed| levels[seed.id] ||= 0 }
-          limit = graph.children.size
+          seeds.each { |seed| levels[seed.id] = 0 }
+          node_count = graph.children.size
 
-          limit.times do
-            break unless relax_pass(graph, adjacent, levels, limit)
+          node_count.times do
+            break unless relax_pass(graph, adjacent, levels, node_count)
           end
 
-          levels
+          nil
         end
 
         # One relaxation sweep. Answers whether any level moved.
-        def relax_pass(graph, adjacent, levels, limit)
+        def relax_pass(graph, adjacent, levels, max_level)
           changed = false
 
           graph.children.each do |node|
@@ -166,7 +179,8 @@ module Elkrb
 
             adjacent[node.id].each do |child|
               candidate = depth + 1
-              next if candidate > limit || candidate <= (levels[child.id] || -1)
+              next if candidate > max_level
+              next if candidate <= (levels[child.id] || -1)
 
               levels[child.id] = candidate
               changed = true
@@ -186,6 +200,8 @@ module Elkrb
         # levels rather than path depths, so a back edge can hand a node a level
         # deeper than its own child's and draw the parent underneath it. Taking
         # the floor forces every edge the forest actually picked to point down.
+        # The edge that CLOSES a cycle is not one of those, and still points
+        # upward — no tree can honour it, so it stays a violation.
         def build_subtree(node, adjacent, visited, levels, floor)
           visited << node.id
 
