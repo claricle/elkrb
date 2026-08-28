@@ -395,6 +395,206 @@ RSpec.describe Elkrb::Layout::Algorithms::MRTree do
       end
     end
 
+    # Every guard above asserts y only, and y comes from the relaxed
+    # levels, which stay right even when root finding gets a node wrong.
+    # What root finding really decides is which nodes START a tree, and
+    # each tree begins at its own x offset. That only shows when a child
+    # is listed BEFORE its own parent -- with the parent first it keeps
+    # x = 0 either way. So the contexts below all list b first and assert
+    # x as well as y.
+    context "with an edge onto a child's port, the child listed first" do
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "root",
+          layout_options: Elkrb::Graph::LayoutOptions.new(
+            "algorithm" => "mrtree",
+          ),
+        )
+      end
+
+      before do
+        a = Elkrb::Graph::Node.new(id: "a", width: 10, height: 10)
+        b = Elkrb::Graph::Node.new(
+          id: "b",
+          width: 10,
+          height: 10,
+          ports: [Elkrb::Graph::Port.new(id: "bp")],
+        )
+
+        graph.children = [b, a]
+        graph.edges = [
+          Elkrb::Graph::Edge.new(id: "e", sources: ["a"], targets: ["bp"]),
+        ]
+      end
+
+      it "keeps b under a instead of starting a tree of its own" do
+        algorithm.layout(graph)
+
+        a = graph.children.find { |n| n.id == "a" }
+        b = graph.children.find { |n| n.id == "b" }
+
+        expect(b.x).to eq(a.x)
+        expect(b.y).to be > a.y
+      end
+    end
+
+    context "with a hyperedge onto its own port, the child listed first" do
+      # Reading only the first source and the first target makes this whole
+      # edge look like a self-loop, which hides a -> b entirely.
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "root",
+          layout_options: Elkrb::Graph::LayoutOptions.new(
+            "algorithm" => "mrtree",
+          ),
+        )
+      end
+
+      before do
+        a = Elkrb::Graph::Node.new(
+          id: "a",
+          width: 10,
+          height: 10,
+          ports: [Elkrb::Graph::Port.new(id: "ap")],
+        )
+        b = Elkrb::Graph::Node.new(id: "b", width: 10, height: 10)
+
+        graph.children = [b, a]
+        graph.edges = [
+          Elkrb::Graph::Edge.new(id: "e", sources: ["a"], targets: %w[ap b]),
+        ]
+      end
+
+      it "keeps b under a instead of starting a tree of its own" do
+        algorithm.layout(graph)
+
+        a = graph.children.find { |n| n.id == "a" }
+        b = graph.children.find { |n| n.id == "b" }
+
+        expect(b.x).to eq(a.x)
+        expect(b.y).to be > a.y
+      end
+    end
+
+    context "with a multi-source edge onto a target listed first" do
+      # b is one of its own sources, with a as the other. Asking whether
+      # the sources merely `include?` the target calls that a self-loop and
+      # hands b a tree of its own; asking whether any source is a DIFFERENT
+      # node keeps it as a's child.
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "root",
+          layout_options: Elkrb::Graph::LayoutOptions.new(
+            "algorithm" => "mrtree",
+          ),
+        )
+      end
+
+      before do
+        graph.children = [
+          Elkrb::Graph::Node.new(id: "b", width: 10, height: 10),
+          Elkrb::Graph::Node.new(id: "a", width: 10, height: 10),
+        ]
+        graph.edges = [
+          Elkrb::Graph::Edge.new(id: "e", sources: %w[a b], targets: ["b"]),
+        ]
+      end
+
+      it "keeps b under a instead of starting a tree of its own" do
+        algorithm.layout(graph)
+
+        a = graph.children.find { |n| n.id == "a" }
+        b = graph.children.find { |n| n.id == "b" }
+
+        expect(b.x).to eq(a.x)
+        expect(b.y).to be > a.y
+      end
+    end
+
+    context "with a port-sourced hyperedge onto its own node and a child" do
+      # The source is a's port, never a itself. Resolving targets but not
+      # sources leaves this edge with no source at all, so nothing marks b
+      # as having incoming traffic and b becomes a root.
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "root",
+          layout_options: Elkrb::Graph::LayoutOptions.new(
+            "algorithm" => "mrtree",
+          ),
+        )
+      end
+
+      before do
+        a = Elkrb::Graph::Node.new(
+          id: "a",
+          width: 10,
+          height: 10,
+          ports: [
+            Elkrb::Graph::Port.new(id: "p1"),
+            Elkrb::Graph::Port.new(id: "p2"),
+          ],
+        )
+        b = Elkrb::Graph::Node.new(id: "b", width: 10, height: 10)
+
+        graph.children = [b, a]
+        graph.edges = [
+          Elkrb::Graph::Edge.new(id: "e", sources: ["p1"], targets: %w[p2 b]),
+        ]
+      end
+
+      it "keeps b under a instead of starting a tree of its own" do
+        algorithm.layout(graph)
+
+        a = graph.children.find { |n| n.id == "a" }
+        b = graph.children.find { |n| n.id == "b" }
+
+        expect(b.x).to eq(a.x)
+        expect(b.y).to be > a.y
+      end
+    end
+
+    context "with two edges onto two ports of the same child" do
+      # "bp1" and "bp2" are different ids that resolve to the same node, so
+      # de-duplicating the raw ids would leave b in the child list twice.
+      # A duplicate does not move a node, it adds a column, so the width is
+      # what shows it.
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "root",
+          layout_options: Elkrb::Graph::LayoutOptions.new(
+            "algorithm" => "mrtree",
+          ),
+        )
+      end
+
+      before do
+        a = Elkrb::Graph::Node.new(id: "a", width: 10, height: 10)
+        b = Elkrb::Graph::Node.new(
+          id: "b",
+          width: 10,
+          height: 10,
+          ports: [
+            Elkrb::Graph::Port.new(id: "bp1"),
+            Elkrb::Graph::Port.new(id: "bp2"),
+          ],
+        )
+
+        graph.children = [b, a]
+        graph.edges = [
+          Elkrb::Graph::Edge.new(id: "e1", sources: ["a"], targets: ["bp1"]),
+          Elkrb::Graph::Edge.new(id: "e2", sources: ["a"], targets: ["bp2"]),
+        ]
+      end
+
+      it "gives a one child, not the same node twice" do
+        algorithm.layout(graph)
+
+        # One 10-wide column between 12.0 of padding on each side. A second
+        # copy of b would add a column and widen this.
+        expect(graph.width).to eq(34.0)
+      end
+    end
+
     context "with children that carry no size" do
       let(:graph) do
         Elkrb::Graph::Graph.new(
@@ -487,12 +687,44 @@ RSpec.describe "MRTree fallback trees must stay disjoint" do
       .children.to_h { |node| [node.id, node] }
 
     expect(by_id["c"].y).to be > by_id["v"].y
+    # v owns c and is its only parent in the forest, so they share a
+    # column. Let a's fallback tree place c a second time and c slides
+    # right, while y stays exactly where it was.
+    expect(by_id["c"].x).to eq(by_id["v"].x)
   end
 
   it "still places every node" do
     result = Elkrb.layout(graph, algorithm: "mrtree")
 
     expect(result.children.map(&:y)).to all(be_a(Float))
+  end
+end
+
+RSpec.describe "MRTree claims every sibling before expanding any of them" do
+  # a's children are b and c, and c is reachable from b as well. The child
+  # list is settled before any of it is recursed into, so c has to be
+  # claimed as a's child straight away -- otherwise b's subtree reaches c,
+  # places it and d a second time, and the later placement wins.
+  let(:graph) do
+    {
+      "id" => "root",
+      "children" => %w[a b c d].map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => [
+        { "id" => "e1", "sources" => ["a"], "targets" => ["b"] },
+        { "id" => "e2", "sources" => ["a"], "targets" => ["c"] },
+        { "id" => "e3", "sources" => ["b"], "targets" => ["c"] },
+        { "id" => "e4", "sources" => ["c"], "targets" => ["d"] },
+      ],
+    }
+  end
+
+  it "leaves d under the c that a owns" do
+    by_id = Elkrb.layout(graph, algorithm: "mrtree")
+      .children.to_h { |node| [node.id, node] }
+
+    expect(by_id["d"].x).to eq(by_id["c"].x)
   end
 end
 
@@ -525,6 +757,11 @@ RSpec.describe "MRTree with a node reachable by two paths of different depth" do
     result = Elkrb.layout(graph, algorithm: "mrtree")
 
     expect(result.children.map(&:id)).to match_array(%w[r a b d c])
+    # The id list alone stays green even if every node landed on the same
+    # spot -- layout never adds or drops a child. Distinct positions are
+    # what says they were each laid out.
+    positions = result.children.map { |node| [node.x, node.y] }
+    expect(positions.uniq.size).to eq(positions.size)
   end
 end
 
@@ -563,11 +800,18 @@ RSpec.describe "MRTree on a densely cyclic graph" do
     expect(elapsed).to be < 5.0
   end
 
-  it "places every node of a densely cyclic graph exactly once" do
+  it "keeps the seed root above every node of the cycle" do
     result = Elkrb.layout(complete_cycle(12), algorithm: "mrtree")
 
     ids = result.children.map(&:id)
     expect(ids.uniq.size).to eq(ids.size)
     expect(result.children.map(&:y)).to all(be_a(Float))
+
+    # "root" is the one node outside the cycle and the only one with no
+    # incoming edge, so it is the sole real root. Every s-node has to be
+    # levelled from it and land below it.
+    by_id = result.children.to_h { |node| [node.id, node] }
+    root = by_id.delete("root")
+    expect(by_id.each_value.map(&:y)).to all(be > root.y)
   end
 end
