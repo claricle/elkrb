@@ -71,9 +71,7 @@ module Elkrb
 
       # Extract layout options from a node.
       def extract_node_options(node)
-        return {} unless node.layout_options
-
-        node.layout_options.properties || {}
+        node.layout_options || {}
       end
 
       # Apply the child graph layout back to the parent node.
@@ -116,8 +114,8 @@ module Elkrb
       def get_padding(node)
         return default_padding unless node.layout_options
 
-        padding_option = node.layout_options.properties&.[]("padding") ||
-          node.layout_options.properties&.[]("elk.padding")
+        padding_option = node.layout_options["padding"] ||
+          node.layout_options["elk.padding"]
 
         return default_padding unless padding_option
 

@@ -171,7 +171,9 @@ module Elkrb
 
           style = graph.layout_options["elk.edgeRouting"] ||
             graph.layout_options["edgeRouting"] ||
-            graph.layout_options.edge_routing ||
+            # legacy snake_case key; S5's resolver takes over alias handling
+            # and deletes this line
+            graph.layout_options["edge_routing"] ||
             option("elk.edgeRouting") ||
             option("edgeRouting")
 

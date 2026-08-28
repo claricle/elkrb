@@ -12,7 +12,8 @@ module Elkrb
       name: String,
       description: String,
       category: String,
-      supports_hierarchy: bool
+      supports_hierarchy: bool,
+      supported_options: Array[String]
     }
 
     class AlgorithmRegistry
@@ -24,13 +25,16 @@ module Elkrb
 
       private
 
+      def self.supported_options_for: (String name_str, Class algorithm_class) -> Array[String]
+      def self.resolve_key: (String name) -> String
       def self.normalize_name: (String name) -> String
+      def self.legacy_normalize_name: (String name) -> String
     end
 
     class LayoutEngine
       def self.layout: (Hash[String | Symbol, untyped] | Graph::Graph graph, Hash[String | Symbol, untyped] options) -> Graph::Graph
       def self.known_layout_algorithms: () -> Array[algorithmInfo]
-      def self.known_layout_options: () -> Array[untyped]
+      def self.known_layout_options: () -> Hash[String, Hash[Symbol, untyped]]
 
       private
 

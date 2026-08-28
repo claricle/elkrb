@@ -87,7 +87,11 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
         targets: ["n2"],
       )
     end
-    let(:node_map) { { "n1" => node1, "n2" => node2 } }
+    let(:node_map) do
+      Elkrb::Layout::NodeIndex.build(
+        Elkrb::Graph::Graph.new(children: [node1, node2]),
+      )
+    end
     let(:graph) { Elkrb::Graph::Graph.new(id: "g1") }
 
     it "creates edge section for node-to-node routing" do
@@ -123,8 +127,9 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
     end
 
     it "handles missing nodes gracefully" do
-      empty_map = {}
-      expect { router.route_edge(edge, empty_map, graph) }.not_to raise_error
+      empty_index = Elkrb::Layout::NodeIndex.build(Elkrb::Graph::Graph.new)
+      expect { router.route_edge(edge, empty_index, graph) }
+        .not_to raise_error
       expect(edge.sections).to be_nil
     end
 
@@ -274,7 +279,11 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
         targets: ["n2"],
       )
     end
-    let(:node_map) { { "n1" => node1, "n2" => node2 } }
+    let(:node_map) do
+      Elkrb::Layout::NodeIndex.build(
+        Elkrb::Graph::Graph.new(children: [node1, node2]),
+      )
+    end
 
     describe "#route_spline_edge" do
       let(:graph) { Elkrb::Graph::Graph.new(id: "g1") }
@@ -348,9 +357,7 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
           id: "g1",
           children: [node1, node2],
           edges: [edge],
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            edge_routing: "SPLINES",
-          ),
+          layout_options: { "elk.edgeRouting" => "SPLINES" },
         )
 
         router.route_edges(graph, nil, "SPLINES")
@@ -412,9 +419,7 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
       it "reads from edgeRouting option" do
         graph = Elkrb::Graph::Graph.new(
           id: "g1",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            edge_routing: "POLYLINE",
-          ),
+          layout_options: { "edgeRouting" => "POLYLINE" },
         )
 
         style = router.send(:get_routing_style, graph)
@@ -427,6 +432,16 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
           layout_options: Elkrb::Graph::LayoutOptions.new,
         )
         graph.layout_options["elk.edgeRouting"] = "splines"
+
+        style = router.send(:get_routing_style, graph)
+        expect(style).to eq("SPLINES")
+      end
+
+      it "reads from the legacy snake_case edge_routing option (Gate A finding 1, Gate B finding 3)" do
+        graph = Elkrb::Graph::Graph.new(
+          id: "g1",
+          layout_options: { "edge_routing" => "SPLINES" },
+        )
 
         style = router.send(:get_routing_style, graph)
         expect(style).to eq("SPLINES")
@@ -611,7 +626,8 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
         # Normal edge should have 2 bend points (orthogonal)
         normal_edge.layout_options = Elkrb::Graph::LayoutOptions.new
         normal_edge.layout_options["edge.routing"] = "orthogonal"
-        router.route_edge(normal_edge, { "n1" => node, "n2" => node2 },
+        router.route_edge(normal_edge,
+                          Elkrb::Layout::NodeIndex.build(mixed_graph),
                           mixed_graph)
         expect(normal_edge.sections.first.bend_points.length).to eq(2)
       end

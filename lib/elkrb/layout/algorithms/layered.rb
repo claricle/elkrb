@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "base_algorithm"
+require_relative "../node_index"
 require_relative "layered/cycle_breaker"
 require_relative "layered/layer_assigner"
 require_relative "layered/node_placer"
@@ -26,12 +27,14 @@ module Elkrb
         def layout_flat(graph, _options = {})
           return graph if graph.children.nil? || graph.children.empty?
 
+          index = NodeIndex.build(graph)
+
           # Phase 1: Break cycles
-          cycle_breaker = Layered::CycleBreaker.new(graph)
+          cycle_breaker = Layered::CycleBreaker.new(graph, index)
           cycle_breaker.break_cycles
 
           # Phase 2: Assign layers
-          layer_assigner = Layered::LayerAssigner.new(graph)
+          layer_assigner = Layered::LayerAssigner.new(graph, index)
           layers = layer_assigner.assign_layers
 
           # Phase 3: Place nodes

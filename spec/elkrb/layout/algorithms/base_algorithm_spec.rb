@@ -42,4 +42,12 @@ RSpec.describe Elkrb::Layout::Algorithms::BaseAlgorithm do
         .to raise_error(NotImplementedError)
     end
   end
+
+  describe "#get_edge_routing_style" do
+    it "reads from a bare edgeRouting option (Gate A finding 4)" do
+      graph = Elkrb::Graph::Graph.new(layout_options: { "edgeRouting" => "POLYLINE" })
+
+      expect(described_class.new.send(:get_edge_routing_style, graph)).to eq("POLYLINE")
+    end
+  end
 end
