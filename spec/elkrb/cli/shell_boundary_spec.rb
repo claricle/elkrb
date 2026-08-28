@@ -156,6 +156,31 @@ RSpec.describe "elkrb CLI shell boundary" do
       end
     end
 
+    # YAML is the dangerous half. Psych does not reject a marked document --
+    # it silently drops every key after the first, so the graph laid out as
+    # an empty one and the CLI exited 0. Asserting the children is what
+    # catches that; asserting the exit code is not, because 0 is exactly
+    # what the broken version returned.
+    it "reads a BOM-prefixed .yaml file" do
+      Dir.mktmpdir do |dir|
+        file = File.join(dir, "bom.yaml")
+        yaml = <<~YAML
+          id: root
+          children:
+            - id: a
+              width: 30
+              height: 30
+        YAML
+        File.write(file, "\uFEFF#{yaml}")
+
+        stdout, _stderr, status = run_elkrb("layout", file)
+
+        expect(status.exitstatus).to eq(0)
+        ids = JSON.parse(stdout)["children"].map { |child| child["id"] }
+        expect(ids).to eq(["a"])
+      end
+    end
+
     it "accepts a JSON file whose only recognized field is properties" do
       Dir.mktmpdir do |dir|
         file = File.join(dir, "props.noext")
