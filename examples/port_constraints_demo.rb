@@ -153,7 +153,7 @@ puts "=" * 60
 graph4 = Elkrb::Graph::Graph.new(id: "g4")
 
 # Set port constraint options
-graph4.layout_options = Elkrb::Graph::LayoutOptions.new
+graph4.layout_options = {}
 graph4.layout_options["elk.portConstraints"] = "FIXED_SIDE"
 graph4.layout_options["elk.portSideAssignment"] = "AUTOMATIC"
 graph4.layout_options["elk.portOrdering"] = "INDEX"
@@ -196,7 +196,7 @@ puts "Example 5: Complete Diagram with Port-Based Routing"
 puts "=" * 60
 
 graph5 = Elkrb::Graph::Graph.new(id: "g5")
-graph5.layout_options = Elkrb::Graph::LayoutOptions.new
+graph5.layout_options = {}
 graph5.layout_options["elk.algorithm"] = "layered"
 graph5.layout_options["elk.edgeRouting"] = "ORTHOGONAL"
 

@@ -8,7 +8,7 @@ RSpec.describe Elkrb::Layout::Algorithms::VertiFlex do
   describe "#layout" do
     context "with basic vertical layout (6 nodes, 3 columns)" do
       let(:graph) do
-        opts = Elkrb::Graph::LayoutOptions.new
+        opts = {}
         opts["algorithm"] = "vertiflex"
         opts["vertiflex.columnCount"] = 3
         opts["vertiflex.columnSpacing"] = 50.0
@@ -108,7 +108,7 @@ RSpec.describe Elkrb::Layout::Algorithms::VertiFlex do
 
     context "with single column" do
       let(:graph) do
-        opts = Elkrb::Graph::LayoutOptions.new
+        opts = {}
         opts["algorithm"] = "vertiflex"
         opts["vertiflex.columnCount"] = 1
         opts["vertiflex.verticalSpacing"] = 20.0
@@ -158,7 +158,7 @@ RSpec.describe Elkrb::Layout::Algorithms::VertiFlex do
 
     context "with many columns (5 columns)" do
       let(:graph) do
-        opts = Elkrb::Graph::LayoutOptions.new
+        opts = {}
         opts["algorithm"] = "vertiflex"
         opts["vertiflex.columnCount"] = 5
         opts["vertiflex.columnSpacing"] = 40.0
@@ -201,7 +201,7 @@ RSpec.describe Elkrb::Layout::Algorithms::VertiFlex do
       [2, 3, 4, 5].each do |col_count|
         context "with #{col_count} columns" do
           let(:graph) do
-            opts = Elkrb::Graph::LayoutOptions.new
+            opts = {}
             opts["algorithm"] = "vertiflex"
             opts["vertiflex.columnCount"] = col_count
 
@@ -243,7 +243,7 @@ RSpec.describe Elkrb::Layout::Algorithms::VertiFlex do
 
     context "column width calculation" do
       let(:graph) do
-        opts = Elkrb::Graph::LayoutOptions.new
+        opts = {}
         opts["algorithm"] = "vertiflex"
         opts["vertiflex.columnCount"] = 2
         opts["vertiflex.columnSpacing"] = 50.0
@@ -281,7 +281,7 @@ RSpec.describe Elkrb::Layout::Algorithms::VertiFlex do
 
     context "with custom vertical spacing" do
       let(:graph) do
-        opts = Elkrb::Graph::LayoutOptions.new
+        opts = {}
         opts["algorithm"] = "vertiflex"
         opts["vertiflex.columnCount"] = 2
         opts["vertiflex.verticalSpacing"] = 50.0
@@ -323,7 +323,7 @@ RSpec.describe Elkrb::Layout::Algorithms::VertiFlex do
     context "with balanced distribution option" do
       let(:balance) { true }
       let(:graph) do
-        opts = Elkrb::Graph::LayoutOptions.new
+        opts = {}
         opts["algorithm"] = "vertiflex"
         opts["vertiflex.columnCount"] = 3
         opts["vertiflex.balanceColumns"] = balance
@@ -377,7 +377,7 @@ RSpec.describe Elkrb::Layout::Algorithms::VertiFlex do
 
     context "with empty graph" do
       let(:graph) do
-        opts = Elkrb::Graph::LayoutOptions.new
+        opts = {}
         opts["algorithm"] = "vertiflex"
 
         Elkrb::Graph::Graph.new(
@@ -400,7 +400,7 @@ RSpec.describe Elkrb::Layout::Algorithms::VertiFlex do
 
     context "with single node" do
       let(:graph) do
-        opts = Elkrb::Graph::LayoutOptions.new
+        opts = {}
         opts["algorithm"] = "vertiflex"
 
         Elkrb::Graph::Graph.new(
@@ -434,7 +434,7 @@ RSpec.describe Elkrb::Layout::Algorithms::VertiFlex do
 
     context "with custom column spacing" do
       let(:graph) do
-        opts = Elkrb::Graph::LayoutOptions.new
+        opts = {}
         opts["algorithm"] = "vertiflex"
         opts["vertiflex.columnCount"] = 3
         opts["vertiflex.columnSpacing"] = 100.0
@@ -480,7 +480,7 @@ RSpec.describe Elkrb::Layout::Algorithms::VertiFlex do
 
     context "with elk.spacing.nodeNode override" do
       let(:graph) do
-        opts = Elkrb::Graph::LayoutOptions.new
+        opts = {}
         opts["algorithm"] = "vertiflex"
         opts["vertiflex.columnCount"] = 2
         opts["vertiflex.verticalSpacing"] = 30.0
@@ -523,7 +523,7 @@ RSpec.describe Elkrb::Layout::Algorithms::VertiFlex do
 
     context "with varying node heights" do
       let(:graph) do
-        opts = Elkrb::Graph::LayoutOptions.new
+        opts = {}
         opts["algorithm"] = "vertiflex"
         opts["vertiflex.columnCount"] = 2
         opts["vertiflex.verticalSpacing"] = 20.0
