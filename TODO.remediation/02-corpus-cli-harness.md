@@ -1,15 +1,18 @@
 # 02 — Corpus and CLI harness
 Slice S0b · branch `fix/s0b-corpus-cli-harness`
 
-Status: built, **not gated, not merged**. Branch `fix/s0b-corpus-cli-harness`
-@ 37bb0ce, 5 commits ahead of `origin/v2`.
+Status: built, lint-clean, **not gated, not merged**. Branch
+`fix/s0b-corpus-cli-harness` @ `5c05156`, 9 commits ahead of `origin/v2`
+(`f6ba3e0`). `origin/v2` was merged in at `bc19cb8`, so it is an ancestor of
+the tip. Everything below was measured at `5c05156` unless it says otherwise.
 
-**One Blocker is open.** `prune_stale_dumps` in
-`spec/cross_validation/corpus_runner.rb` can delete JSON out of directories
-the caller never named.
+**The Blocker is fixed.** It was fixed at `1716de0`, "Scope dump pruning to
+the directory it was given".
 
-The guard added at 37bb0ce ("harden dump guard") narrows it but does not
-close it:
+## The Blocker, and how it was closed
+
+`prune_stale_dumps` deleted JSON out of directories the caller never named.
+The guard at `37bb0ce` narrowed it but did not close it:
 
 ```ruby
 return unless File.file?(File.join(outdir, "summary.json"))
@@ -20,15 +23,8 @@ Dir[File.join(outdir, "*.json")].each do |path|
 end
 ```
 
-`summary.json` is in `keep`, which is why it survives in the transcript
-below while the siblings' JSON does not. The sibling **directories**
-survive — it is their `*.json` contents that are deleted.
-
-`File.file?` treats the path literally. `Dir[]` does not. So a destination
-that is a real directory whose *name contains* `*` passes the guard on the
-second run, and the `Dir[]` then expands across its siblings.
-
-Measured 2026-08-27:
+`File.file?` reads a path literally. `Dir[]` globs it. So the two disagreed
+about which directory `outdir` meant. Measured 2026-08-27:
 
 ```
   dump*/      summary.json + live_case.json     (a real directory)
@@ -42,46 +38,136 @@ Measured 2026-08-27:
   dumpyard/   its also_precious.json was DELETED
 ```
 
-An earlier retraction of this Blocker was wrong. It rested on a probe that
-used a metacharacter in a path with no matching literal directory, so the
-guard returned early and nothing was deleted. One input shape, generalised.
+The fix scopes the glob to the directory itself instead of joining the path
+into the pattern:
 
-The fix has to compare against a resolved real path, or escape the
-destination before it reaches `Dir[]` — `File.file?` and `Dir[]` must not
-disagree about what `outdir` means.
+```ruby
+Dir.glob("*.json", base: outdir).each do |name|
+  next if keep.include?(name)
 
-Can start: now — this item depends on nothing. It was **planned** as the
-first thing to land after 01 (S1); that is no longer what happened. 04, 06,
-08 and 11 all merged first while this branch sat ungated, so it now lands
-into a `v2` that has moved well past the seed. Three of those four — 06, 08
-and 11 — are the ones that gated against this branch's driver uncommitted;
-04 needed no execution-diff gate at all.
+  path = File.join(outdir, name)
+  File.delete(path) if File.file?(path)
+end
+```
 
-It was branched from `main` before `v2` existed, then
-rebased onto `v2` and force-pushed; that predates the no-rebase rule and is
-grandfathered, recorded here, and is the one exception. Blocks the START of 05
-(S2, which un-pends this item's `cli_spec` examples and uses its
-`cli_runner`/`fake_dot`). Blocks the CLOSE of 03 (S0a, which merges after this
-item and rewrites its `corpus_spec` invariant set) — that branch is rooted
-on `v2` and built in parallel; only their merges are ordered (`git merge-base
-v2 fix/s0a-golden-harness` is a008889). Gates the CLOSE of every
-execution-diff-gated item from 05 onward: `rake corpus:dump` is the sole XD
-driver.
+`base:` takes the directory as a value, not as pattern text, so no byte of
+`outdir` can reach the matcher. `File.file?` and `Dir` now agree.
 
-**That claim used to say no XD gate runs before this item is in the base.
-That is not what happened.** 06, 08 and 11 all ran their execution-diff gates
-with the driver materialised uncommitted from this branch, and all three
-merged first. So the rule as practised is weaker: a gate may run against a
+Evidence, at `5c05156`:
+
+- `spec/cross_validation/corpus_runner_prune_spec.rb` pins it. 5 examples,
+  each building its own `Dir.mktmpdir` parent so the patterns cannot match
+  each other's directories and manufacture a finding.
+- Mutation-checked. Put the old `Dir[File.join(outdir, "*.json")]` form back
+  and 3 of the 5 go red. Restore it and all 5 pass.
+
+An earlier retraction of this Blocker was wrong. It rested on a probe that put
+a metacharacter in a path with no matching literal directory, so the guard
+returned early and nothing was deleted. One input shape, generalised.
+
+## The metacharacter rule has two families, not one
+
+Split on whether the pattern still matches the directory it was built from.
+The card used to tell only the `*` story. Both halves belong here.
+
+**`*` and `?` DO match their own directory.** They act as a superset. The
+intended directory is listed, so its own stale files are pruned correctly, and
+siblings' files are quietly added to the delete set on top. That is the
+`dump*` transcript above.
+
+**`[...]`, `{...}` and an unclosed bracket do NOT match their own directory.**
+The real directory is never listed at all, so the delete set is entirely
+foreign. What that costs depends on what sits beside it:
+
+- With a matching sibling present, the glob returns only that sibling's JSON.
+  The intended directory keeps its stale dumps and the neighbour loses files
+  it never offered.
+- With no matching sibling, the glob returns nothing. Nothing is deleted, and
+  the intended directory silently keeps every stale dump forever.
+
+Do not write "any metacharacter empties the corpus", and do not write "`*` or
+`?` raises duplicate ids". Both are single shapes generalised.
+
+## The class is NOT closed. Six sites, one fixed
+
+Six sites in this branch carry the literal-vs-pattern shape. **One is fixed.**
+The plan claimed four; that is wrong at this tip, and the plan contradicts
+itself on it (it also says the three `ROOT` globs were deferred).
+
+| # | Site | State |
+|---|---|---|
+| 1 | `corpus_runner.rb` `prune_stale_dumps` | **fixed** at `1716de0` |
+| 2 | `corpus_runner.rb` `top_level_fixture_cases` | open |
+| 3 | `corpus_runner.rb` `corpus_fixture_cases` | open |
+| 4 | `corpus_runner.rb` `imported_cases` | open |
+| 5 | `elkjs_test_importer.rb:61` | deferred, reason measured |
+| 6 | `java_elk_test_importer.rb:60` | deferred, reason measured |
+
+Sites 2-4 build a pattern from `ROOT`, which is `File.expand_path("../..",
+__dir__)` — the checkout path. They read rather than delete, which is not a
+reason to leave them, because they feed the site that does: `cases` builds
+`run`'s corpus, which builds `prune_stale_dumps`' `keep`.
+
+**That chain is live.** Measured at `5c05156` by extracting the tip into
+`/private/tmp/elk[x]root` with a sibling `/private/tmp/elkxroot` holding one
+`spec/fixtures/foreign_case.json`:
+
+```
+  ROOT = /private/tmp/elk[x]root
+  CorpusRunner.cases      => 1 case, and it is "foreign_case"
+                             (the real 47 never listed)
+
+  CorpusRunner.run("/tmp/probe_dump") on a directory already holding
+  cycle3.json, self_loop.json, simple_graph.json, summary.json
+
+  BEFORE: cycle3.json self_loop.json simple_graph.json summary.json
+  AFTER:  foreign_case.json summary.json
+```
+
+Every real dump was deleted. The fix at `1716de0` closed the destination side
+of the Blocker. The source side is still open.
+
+The two importer sites are deferred with the reason recorded in the plan: all
+three external checkouts are absent here, so a fix cannot be
+integration-checked against the real corpora, and the java_elk one writes over
+a tracked 17-case fixture. It belongs in its own change, run where those
+checkouts exist.
+
+## Can start
+
+Now — this item depends on nothing. It was **planned** as the first thing to
+land after 01 (S1); that is not what happened. 04, 06, 08 and 11 all merged
+first while this branch sat ungated, so it now lands into a `v2` that has
+moved well past the seed. Three of those four — 06, 08 and 11 — gated against
+this branch's driver uncommitted; 04 needed no execution-diff gate at all.
+
+It was branched from `main` before `v2` existed, then rebased onto `v2` and
+force-pushed. That predates the no-rebase rule, is grandfathered, and is the
+one exception.
+
+Blocks the START of 05 (S2, which un-pends this item's `cli_spec` examples and
+uses its `cli_runner`/`fake_dot`). Blocks the CLOSE of 03 (S0a, which merges
+after this item and rewrites its `corpus_spec` invariant set) — that branch is
+rooted on `v2` and built in parallel; only their merges are ordered
+(`git merge-base v2 fix/s0a-golden-harness` is `a008889`). Gates the CLOSE of
+every execution-diff-gated item from 05 onward: `rake corpus:dump` is the sole
+XD driver.
+
+**That claim used to say no XD gate runs before this item is in the base. That
+is not what happened.** 06, 08 and 11 all ran their execution-diff gates with
+the driver materialised uncommitted from this branch, and all three merged
+first. So the rule as practised is weaker: a gate may run against a
 materialised driver, and what 02 actually gates is the point at which that
-stops being a manual step. Items from 05 on should not repeat the
-workaround — but three already did, and pretending otherwise would make the
-next person distrust the rest of this file. Medium (~860
-lines, spec-only). Not BREAKING: no `lib/` change, one guard in a spec-side
-importer.
+stops being a manual step. Items from 05 on should not repeat the workaround —
+but three already did, and pretending otherwise would make the next person
+distrust the rest of this file.
+
+Medium (~860 lines, spec-only). Not BREAKING: no `lib/` change, one guard in a
+spec-side importer.
 
 ## Facts
 
-Measured on `v2` (a008889) unless stated.
+Measured on `v2` (`a008889`) unless stated.
 
 - **No CLI spec exists.** `git cat-file -e v2:spec/elkrb/cli_spec.rb` → *does
   not exist in 'v2'*. `Elkrb::Cli` has never been exercised through a
@@ -114,8 +200,45 @@ Measured on `v2` (a008889) unless stated.
   ```sh
   bundle exec ruby -e 'require "./spec/cross_validation/corpus_runner"; p CorpusRunner.cases.size'   # => 47
   ```
-- `bundle exec rspec` on 22231fd → **729 examples, 0 failures, 16 pending**
-  (measured 2026-08-21). Base was 625/0.
+
+### The expected-error set at this tip
+
+Three cases error, and all three declare `"expect": "error"`. That is why the
+dump exits 0.
+
+- `duplicate_ids` → `Elkrb::ValidationError: duplicate id: a`. Declared in
+  `spec/fixtures/corpus/duplicate_ids.json`. **This is not a bug.** Item 11
+  (S7) is merged and this raise is the behaviour it shipped on purpose. The
+  card used to call it an expected error "until item 11"; item 11 has landed
+  and the raise is now permanent and correct.
+- `java_elk_sporeOverlap` and `java_elk_sporeCompaction` →
+  `NoMethodError: undefined method '-' for nil`, both from
+  `lib/elkrb/layout/algorithms/spore_overlap.rb:49` in `overlapping?`.
+  Declared in `spec/cross_validation/fixtures/java_elk/imported_tests.json`.
+
+**`hyperedge` does not error.** Its dump status is `ok` and its fixture
+carries no `expect` key. The card used to list it as a permanent expected
+error "until item 12 (S8)". That has the direction backwards: item 12 is the
+thing that will make it raise. Its own step 8 says to add `"expect": "error"`
+to `spec/fixtures/corpus/hyperedge.json` once layered raises
+`Elkrb::UnsupportedConfigurationException` on `a→[b,c]`. Until then the case
+lays out fine.
+
+**The RC14 attribution on the spore cases is wrong at this tip.** The claim is
+that `AlgorithmRegistry.normalize_name` does not convert camelCase, so
+`sporeOverlap` resolves to nil and `LayoutEngine.layout` raises "Unknown
+layout algorithm". Measured:
+
+```sh
+Elkrb::Layout::AlgorithmRegistry.get("sporeOverlap")
+# => Elkrb::Layout::Algorithms::SporeOverlap
+```
+
+It resolves. An empty graph on `sporeOverlap` lays out without raising. The
+real failure is arithmetic on a nil coordinate inside the algorithm on the
+4-node fixture. `corpus_spec.rb`'s `KNOWN_FAILURES` still files both spore
+rows under RC14, and `CLAUDE.md` still repeats the registry story. Neither is
+corrected here — item 03 (S0a) rewrites that ledger wholesale.
 
 ## Do
 
@@ -141,10 +264,10 @@ Measured on `v2` (a008889) unless stated.
    later XD gate would be noise.
 4. `corpus:dump` **always writes every file**, and its exit status is
    informational only. XD compares dump directories with `diff -r` and never
-   chains on the rake exit code. Settled, because `duplicate_ids` and
-   `hyperedge` are permanent expected errors until items 11 (S7) and 12 (S8).
-   Mark such cases `"expect": "error"` in the wrapper so the exit status
-   reflects unexpected regressions, not tracked ones.
+   chains on the rake exit code. Mark a permanently-failing case
+   `"expect": "error"` in its wrapper so the exit status reflects unexpected
+   regressions, not tracked ones. Three cases carry that marker today; see
+   "The expected-error set at this tip".
 5. `spec/fixtures/corpus/` inputs, each a wrapper `{"algorithm":, "graph":}`:
    `self_loop`, `sizeless_node`, `no_children_key`, `duplicate_ids` (two
    children `a`), `hyperedge`, `cycle3`, `port_id_edges`,
@@ -191,57 +314,101 @@ Measured on `v2` (a008889) unless stated.
 
 ## Done when
 
-Done. What was verified:
+Re-measured at `5c05156`. Each command and its exact output:
 
-- `bundle exec rake "corpus:dump[/tmp/corpus_base]"` (quote the brackets — zsh
-  globs them) writes one file per case plus `summary.json`. Non-zero exit is
-  expected while any case errors; it is not a failure signal.
-- `bundle exec rspec spec/cross_validation spec/elkrb/cli_spec.rb` → 0
-  failures.
-- `bundle exec rspec` on 22231fd → **729 examples, 0 failures, 16 pending**.
-- `bundle exec rake validate:import_elkjs` with no `ELKJS_DIR` exits 1 with
-  the refusal message (rake aborts when the importer refuses) and leaves
-  `spec/cross_validation/fixtures/elkjs/imported_tests.json` byte-identical.
+1. `bundle exec rake "corpus:dump[/tmp/corpus_base]"` (quote the brackets —
+   zsh globs them) →
+   ```
+   corpus: 44 ok, 3 error, 0 timeout (47 total)
+   exit status 0
+   48 files written (47 cases + summary.json)
+   ```
+   **Exit 0 is the healthy signal.** All three errors declare `"expect"`, so
+   none counts as unexpected. A non-zero exit means a failure that was *not*
+   declared — a real regression. The card used to predict a non-zero exit here
+   and call it expected; that would make the next reader think the harness had
+   broken.
 
-**Nothing in this section describes the current tip.** It was written
-while the branch was at `22231fd`; it is now at `37bb0ce` ("preserve
-import expectations and harden dump guard"), which changed
-`corpus_runner.rb`, `corpus_spec.rb` and `cli_spec.rb`.
+   `corpus_runner.rb` is what makes that true: `unexpected_failure?` counts
+   only an undeclared failure, `run` writes it to
+   `summary["unexpected_failures"]`, `exit_code` maps it, and the CLI
+   entrypoint exits on it.
 
-- **Re-run all four checks above**, not just the suite count. Three are
-  directly invalidated: `37bb0ce` changed `corpus_runner.rb`,
-  `corpus_spec.rb` and `cli_spec.rb` and added
-  `java_elk_test_importer_spec.rb`, which between them cover the
-  `corpus:dump` run, the focused RSpec run and the full suite. Only the
-  elkjs-import check is re-run purely so the evidence names one SHA —
-  that commit left the `Rakefile` and the elkjs importer alone and
-  changed the Java importer instead.
-- **The gate record below is history, and not all of it ran at one
-  SHA.** Gate A came before the fixes committed at `aaf4efb`; Gate B
-  round 1 came before the fixes at `22231fd`; only Gate B round 2 ran on
-  `22231fd` itself. None of them names the current tip, so none of them
-  is a live approval.
+2. `bundle exec rspec spec/cross_validation spec/elkrb/cli_spec.rb` →
+   **120 examples, 0 failures, 17 pending**.
 
-Gates that were mandatory and what they found:
+3. `bundle exec rspec` → **887 examples, 0 failures, 17 pending**.
+   (`22231fd` was 729/0/16; the base before this branch was 625/0.)
+
+4. `bundle exec rake validate:import_elkjs` with no `ELKJS_DIR` → exit 1 with
+   the refusal message ("elkjs checkout not found at … - refusing to overwrite
+   …"), rake aborting on it, and the fixture untouched:
+   ```
+   before  212dbc9f9573067ecc5b07492a44c01b00867d31eae984ed53f9b12c9258e872
+   after   212dbc9f9573067ecc5b07492a44c01b00867d31eae984ed53f9b12c9258e872
+           spec/cross_validation/fixtures/elkjs/imported_tests.json
+   ```
+
+5. `bundle exec rubocop --ignore-parent-exclusion` → **126 files inspected, no
+   offenses detected**. Cleared in code at `1df5bef` and `5c05156`: no new
+   `.rubocop_todo.yml` entries, no `rubocop:disable` comments, no widening of
+   `.rubocop.yml`. In this nested worktree `--ignore-parent-exclusion` is
+   required, because the worktree sits under a checkout whose `main` lacks
+   `.rubocop_todo.yml`.
+
+6. The lint work changed no output. A pristine `1716de0` dump and a `5c05156`
+   dump compared with `diff -r` are byte-identical across all 48 files.
+
+## Gates
+
+**The old gate record is history. None of it is a live approval.** Gate A ran
+before the fixes committed at `aaf4efb`. Gate B round 1 ran before the fixes
+at `22231fd`. Only Gate B round 2 ran on `22231fd` itself. The tip is now
+`5c05156`, four commits past that, so every one of them is invalidated by
+arithmetic.
+
+What they found, for the record:
 
 - **thermo-nuclear** — run on plan and diff.
 - **dependency-contract-check** — mandatory, because the whole slice is a
   subprocess boundary. Constructed the real thing: exit-status propagation
-  through `Open3.capture3`, `PATH` lookup actually finding the fake `dot`,
-  and argv logging surviving shell metacharacters.
-- **execution-diff** — not applicable and skipped; nothing under `lib/` or
-  `exe/` changes, so there is no runtime behaviour to diff. Said so
-  explicitly.
-- **Codex** — APPROVE.
+  through `Open3.capture3`, `PATH` lookup actually finding the fake `dot`, and
+  argv logging surviving shell metacharacters.
+- **execution-diff** — skipped at the time, on the ground that nothing under
+  `lib/` or `exe/` changed. Said so explicitly.
+- **Codex** — APPROVE, on `22231fd`.
 - **copilot-review** — run last.
-- **Gate A** (orchestrator multi-agent) found 4 Medium findings; all fixed at
-  aaf4efb.
-- **Gate B** (Codex `ultra` on the exact SHA) round 1 found 2 Medium
-  mutation-vacuity findings — the specs passed with the code neutered. Fixed
-  with mutation-kill proof. Round 2 on 22231fd: APPROVE, mutations verified
+- **Gate A** (orchestrator multi-agent) — 4 Medium findings, all fixed at
+  `aaf4efb`.
+- **Gate B** (Codex `ultra` on the exact SHA) — round 1 found 2 Medium
+  mutation-vacuity findings: the specs passed with the code neutered. Fixed
+  with mutation-kill proof. Round 2 on `22231fd`: APPROVE, mutations verified
   fatal.
 
-Carried forward, not fixed here: `java_elk_test_importer.rb` does not re-emit
-`"expect": "error"` when it regenerates `fixtures/java_elk/imported_tests.json`
-(the two rows exist in the committed file today). Whoever next regenerates that
-fixture must re-add them or the corpus exit status starts lying.
+### This run's gates — TO BE FILLED
+
+<!-- Placeholder. Fill from the gate artifacts under
+     .claude/gate-runs/<branch-leaf>@<sha>.md and
+     .claude/codex-approvals/<branch>@<sha>.txt once they exist for the tip.
+     A gate with no artifact did not run. -->
+
+| Gate | SHA | Verdict | Findings |
+|---|---|---|---|
+| thermo-nuclear | — | NOT RUN | — |
+| dependency-contract-check | — | NOT RUN | — |
+| execution-diff | — | NOT RUN | — |
+| Codex | — | NOT RUN | — |
+| copilot-review | — | NOT RUN | — |
+
+## Carried forward, not fixed here
+
+- `java_elk_test_importer.rb` does not re-emit `"expect": "error"` when it
+  regenerates `fixtures/java_elk/imported_tests.json`. The two rows exist in
+  the committed file today. Whoever next regenerates that fixture must re-add
+  them or the corpus exit status starts lying.
+- Sites 2-4 above: `ROOT` still reaches a glob pattern unescaped, and the
+  measured consequence is that the corpus goes foreign and every real dump is
+  deleted. The destination side is fixed; the source side is not.
+- `corpus_spec.rb` files both spore rows under RC14, and `CLAUDE.md` repeats
+  the registry-resolution story. The measurement says otherwise. Item 03 (S0a)
+  rewrites that ledger.
