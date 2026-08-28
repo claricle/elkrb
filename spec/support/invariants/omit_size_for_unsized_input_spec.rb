@@ -16,9 +16,19 @@ RSpec.describe "omit_size_for_unsized_input" do
     expect(result).to omit_size_for_unsized_input(input_hash)
   end
 
+  # `q` is what gives this example teeth. An EMPTY compound like `p` comes
+  # back from layout with width and height still nil, so it reaches
+  # `check_dimensions` with nothing to flag and would pass with the
+  # exemption deleted. `q` has a real child, so layout computes it a
+  # 44x44 size it never declared, and the exemption is then the only
+  # reason no violation is reported. `p` stays to cover the empty case.
   it "exempts a node with a children key present, even empty" do
     input_hash = { "id" => "root",
-                   "children" => [{ "id" => "p", "children" => [] }],
+                   "children" => [{ "id" => "p", "children" => [] },
+                                  { "id" => "q",
+                                    "children" => [{ "id" => "c",
+                                                     "width" => 20,
+                                                     "height" => 20 }] }],
                    "edges" => [] }
     graph = Elkrb::Graph::Graph.from_hash(input_hash)
     result = Elkrb.layout(graph, {})
