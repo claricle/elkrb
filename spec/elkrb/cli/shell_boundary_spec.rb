@@ -387,6 +387,12 @@ RSpec.describe "an empty but recognized collection is real content" do
     expect(graph.edges).to eq([])
   end
 
+  it "accepts a graph whose only content is an empty properties map" do
+    graph = Elkrb::FormatSniffer.read('{"properties":{}}', "")
+
+    expect(graph.properties).to eq({})
+  end
+
   it "still rejects an empty mapping" do
     expect do
       Elkrb::FormatSniffer.read("{}", "")
