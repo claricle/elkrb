@@ -138,6 +138,24 @@ RSpec.describe "elkrb CLI shell boundary" do
       expect(ids).to eq(%w[a b])
     end
 
+    # JSON is the tool's primary format and was the only one the mark broke:
+    # lutaml passes the leading U+FEFF to the JSON parser, which rejects the
+    # document. The sniffed and ELKT paths stripped it, .json did not.
+    it "reads a BOM-prefixed .json file" do
+      Dir.mktmpdir do |dir|
+        file = File.join(dir, "bom.json")
+        File.write(file, "\uFEFF" \
+                         '{"id":"root","children":' \
+                         '[{"id":"a","width":30,"height":30}]}')
+
+        stdout, _stderr, status = run_elkrb("layout", file)
+
+        expect(status.exitstatus).to eq(0)
+        ids = JSON.parse(stdout)["children"].map { |child| child["id"] }
+        expect(ids).to eq(["a"])
+      end
+    end
+
     it "accepts a JSON file whose only recognized field is properties" do
       Dir.mktmpdir do |dir|
         file = File.join(dir, "props.noext")

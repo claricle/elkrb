@@ -70,6 +70,12 @@ module Elkrb
       # offending token, and a document Psych declines to load surfaces
       # Psych's own refusal. Only the sniffed path normalizes to UNPARSEABLE.
       #
+      # The byte order mark comes off here rather than per branch, because
+      # every branch needs it gone and `.json` was the one that forgot:
+      # lutaml hands the leading U+FEFF straight to the JSON parser, which
+      # rejects the document. String#strip does NOT remove a BOM, so it is
+      # no substitute.
+      #
       # @param content [String] raw file content
       # @param extension [String] the file's downcased extension
       # @return [Elkrb::Graph::Graph, Hash] the parsed graph
@@ -83,11 +89,13 @@ module Elkrb
       def read(content, extension)
         require_relative "graph/graph"
 
+        text = content.delete_prefix(BYTE_ORDER_MARK)
+
         case extension
-        when ".json", ".yml", ".yaml" then read_model(content, extension)
-        when ".elkt" then parse_elkt(content, unparseable_message: UNPARSEABLE)
+        when ".json", ".yml", ".yaml" then read_model(text, extension)
+        when ".elkt" then parse_elkt(text, unparseable_message: UNPARSEABLE)
         when ".dot", ".gv" then raise ArgumentError, DOT_UNSUPPORTED
-        else parse(content, unparseable_message: UNPARSEABLE)
+        else parse(text, unparseable_message: UNPARSEABLE)
         end
       end
 
@@ -122,9 +130,8 @@ module Elkrb
       end
 
       def parse_elkt(content, unparseable_message:)
-        text = content.delete_prefix(BYTE_ORDER_MARK)
-        graph = parse_elkt!(text, unparseable_message)
-        if hollow_hash?(graph) && declarations?(text)
+        graph = parse_elkt!(content, unparseable_message)
+        if hollow_hash?(graph) && declarations?(content)
           raise ArgumentError, unparseable_message
         end
 
