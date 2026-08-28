@@ -151,8 +151,18 @@ class CorpusRunner
       return unless File.file?(File.join(outdir, "summary.json"))
 
       keep = corpus.map { |kase| "#{kase.id}.json" } + ["summary.json"]
-      Dir[File.join(outdir, "*.json")].each do |path|
-        File.delete(path) if File.file?(path) && !keep.include?(File.basename(path))
+      # `base:` scopes the glob to the directory itself. Joining the path into
+      # the pattern instead let a metacharacter in a caller-supplied `outdir`
+      # escape it: `File.file?` reads the path literally while `Dir[]` globs
+      # it, so the two disagreed about which directory was meant. A `*` or `?`
+      # still matched its own directory and quietly added siblings' files; a
+      # `[...]` or `{...}` did not match it at all, so the real directory was
+      # never listed and the delete set became entirely foreign.
+      Dir.glob("*.json", base: outdir).each do |name|
+        next if keep.include?(name)
+
+        path = File.join(outdir, name)
+        File.delete(path) if File.file?(path)
       end
     end
 
