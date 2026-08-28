@@ -13,16 +13,20 @@ The cross-validation suite:
 
 ```
 spec/cross_validation/
-├── README.md                           # This file
-├── elkjs_test_importer.rb             # Imports test cases from elkjs
-├── java_elk_test_importer.rb          # Imports test cases from Java ELK
-├── corpus_runner.rb                    # Runs corpus cases, writes canonical dumps
-├── corpus_spec.rb                      # Asserts corpus invariants
+├── README.md                             # This file
+├── elkjs_test_importer.rb                # Imports test cases from elkjs
+├── elkjs_test_importer_spec.rb           # Its refusal guards and glob
+├── java_elk_test_importer.rb             # Imports test cases from Java ELK
+├── java_elk_test_importer_spec.rb        # Its refusal guard and glob
+├── corpus_runner.rb                      # Runs corpus cases, writes canonical dumps
+├── corpus_runner_fixture_paths_spec.rb   # What the source globs may list
+├── corpus_runner_prune_spec.rb           # What a dump directory may delete
+├── corpus_spec.rb                        # Asserts corpus invariants
 └── fixtures/
     ├── elkjs/
-    │   └── imported_tests.json        # Imported elkjs test cases
+    │   └── imported_tests.json          # Imported elkjs test cases
     └── java_elk/
-        └── imported_tests.json        # Imported Java ELK test cases
+        └── imported_tests.json          # Imported Java ELK test cases
 ```
 
 ## Usage
@@ -42,6 +46,19 @@ rake validate:import_java_elk
 Import all test cases:
 ```bash
 rake validate:import_all
+```
+
+Both importers rewrite their `imported_tests.json` wholesale. Neither will
+write an empty one: if an import collects nothing, it warns and exits 1
+instead of overwriting the committed fixture. `rake validate:all` stops
+there, so a broken checkout aborts the pipeline rather than emptying the
+corpus.
+
+The elkjs importer reads `~/src/external/elkjs` by default. Point it
+somewhere else with `ELKJS_DIR`:
+
+```bash
+ELKJS_DIR=/path/to/elkjs rake validate:import_elkjs
 ```
 
 ### Run Validation
@@ -110,37 +127,17 @@ Features:
 
 ## Current Results
 
-**Overall Pass Rate: 87.88% (29/33 tests)**
+47 corpus cases. 44 lay out cleanly, 3 error, none time out. All three
+errors are declared in their own fixture with `"expect": "error"`, so a
+healthy dump still exits 0:
 
-### elkjs Compatibility: 100% ✅
-- All 16 elkjs test cases pass
-- Full compatibility with elkjs reference implementation
+- `duplicate_ids` — the graph declares the same id twice (RC4).
+- `java_elk_sporeOverlap`, `java_elk_sporeCompaction` — both algorithms
+  resolve and then crash on nil arithmetic inside themselves.
 
-### Java ELK Compatibility: 76.47%
-- 13 of 17 tests pass
-- 4 failing tests:
-  1. `sporeOverlap` - Algorithm not yet implemented
-  2. `sporeCompaction` - Algorithm not yet implemented
-  3. `labels` - Label initialization issue
-  4. `self_loops` - Cycle detection causing stack overflow
-
-## Known Issues
-
-### Missing Algorithms
-- `sporeOverlap` - Not implemented
-- `sporeCompaction` - Not implemented
-
-### Implementation Issues
-1. **Label Initialization**: Label model expects no arguments but receiving 1
-2. **Self-Loop Detection**: Layer assignment creates infinite recursion with self-loops
-
-## Next Steps
-
-1. Implement missing spore algorithms
-2. Fix Label model initialization
-3. Add cycle detection to prevent infinite recursion in layer assignment
-4. Import real test cases from elk-models repository if available
-5. Add more comprehensive test coverage for edge cases
+`corpus_spec.rb` runs the same 47 cases as examples and holds each result
+to the layout invariants. Its `KNOWN_FAILURES` ledger is the list of
+cases that are still pending, with the id that tracks each one.
 
 ## Adding New Test Cases
 

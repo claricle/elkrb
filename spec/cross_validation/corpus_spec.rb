@@ -285,6 +285,17 @@ RSpec.describe "Elkrb layout corpus" do
   end
 
   describe CorpusRunner, ".run" do
+    # AlgorithmRegistry holds process-wide state, and one example below
+    # registers a deliberately slow algorithm into it.
+    around do |example|
+      registry = Elkrb::Layout::AlgorithmRegistry
+      algorithms = registry.instance_variable_get(:@algorithms).dup
+      metadata = registry.instance_variable_get(:@metadata).dup
+      example.run
+      registry.instance_variable_set(:@algorithms, algorithms)
+      registry.instance_variable_set(:@metadata, metadata)
+    end
+
     it "refuses the destination before creating it when the guard says so" do
       allow(CorpusRunner).to receive(:source_directory?).and_return(true)
 
@@ -436,9 +447,13 @@ RSpec.describe "Elkrb layout corpus" do
         },
       )
 
+      # Far longer than the 0.02s timeout below, so a loaded CI box cannot
+      # let this case finish before the timeout it is here to trigger.
+      # Nothing waits it out: Timeout interrupts the sleep, so the margin
+      # is free.
       slow_algorithm = Class.new(Elkrb::Layout::Algorithms::BaseAlgorithm) do
         def layout_flat(_graph, _options = {})
-          sleep 0.15
+          sleep 5
         end
       end
       Elkrb::Layout::AlgorithmRegistry

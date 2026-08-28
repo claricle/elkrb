@@ -30,7 +30,7 @@ RSpec.describe "elkrb CLI" do
   describe "layout" do
     it "exits 0 and prints JSON to stdout" do
       stdout, _stderr, status = run_elkrb(
-        "layout", "spec/fixtures/simple_graph.json"
+        "layout", File.join(CliRunner::ROOT, "spec/fixtures/simple_graph.json")
       )
 
       expect(status.exitstatus).to eq(0)
@@ -41,7 +41,8 @@ RSpec.describe "elkrb CLI" do
       pending("RC10")
 
       stdout, _stderr, status = run_elkrb(
-        "layout", "spec/fixtures/simple_graph.json", "--verbose"
+        "layout", File.join(CliRunner::ROOT, "spec/fixtures/simple_graph.json"),
+        "--verbose"
       )
 
       expect(status.exitstatus).to eq(0)
@@ -59,7 +60,9 @@ RSpec.describe "elkrb CLI" do
     it "reports a missing file on stderr, not stdout" do
       pending("RC10")
 
-      stdout, stderr, status = run_elkrb("layout", "missing.json")
+      stdout, stderr, status = run_elkrb(
+        "layout", File.join(CliRunner::ROOT, "missing.json")
+      )
 
       expect(stdout).to eq("")
       expect(stderr).not_to eq("")
@@ -69,13 +72,14 @@ RSpec.describe "elkrb CLI" do
 
   describe "render" do
     if Gem.win_platform?
-      windows_skip_reason = "fake_dot.rb's script needs a POSIX shell; " \
-                            "not portable to Windows"
+      windows_skip_reason = "fake_dot.rb installs a shebang script, which " \
+                            "Windows will not execute from PATH"
     end
 
     it "never shells out to a string built from the output path",
        skip: windows_skip_reason do
-      malicious_dot_file = File.join(CliRunner::ROOT, "spec/fixtures/x.dot")
+      malicious_dot_file = File.join(CliRunner::ROOT,
+                                     "spec/fixtures/render_input.dot")
 
       with_fake_dot do |log_path|
         Dir.mktmpdir do |dir|
@@ -115,12 +119,16 @@ RSpec.describe "elkrb CLI" do
       File.join(CliRunner::ROOT, "spec/fixtures/corpus", name)
     end
 
-    it "exits 1 when no format can parse the file" do
-      _stdout, _stderr, status = run_elkrb(
+    it "exits 1 and says why when no format can parse the file" do
+      stdout, stderr, status = run_elkrb(
         "layout", corpus_fixture("garbage.txt")
       )
 
       expect(status.exitstatus).to eq(1)
+      # Which stream carries it is RC10's business; that it is reported at
+      # all is this example's, so an unrelated crash cannot pass for a
+      # parse refusal.
+      expect(stdout + stderr).to include("input format")
     end
 
     # A UTF-8 BOM makes the ELKT parser drop the file's first declaration,

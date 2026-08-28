@@ -39,6 +39,8 @@ module FakeDot
     end
   end
 
+  private
+
   # Writes the script into `dir`, puts `dir` first on PATH, and returns the
   # log path the caller reads argv from. PATH is still the original here --
   # with_fake_dot only restores it after the block.
