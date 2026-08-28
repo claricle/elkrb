@@ -2,13 +2,21 @@
 Slice S0b · branch `fix/s0b-corpus-cli-harness`
 
 Status: built, lint-clean, **not gated, not merged**. Branch
-`fix/s0b-corpus-cli-harness` @ `23ed0de`, 11 commits ahead of `origin/v2`
-(`f6ba3e0`). `origin/v2` was merged in at `bc19cb8`, so it is an ancestor of
-the tip. Everything below was measured at `23ed0de` unless it says otherwise.
+`fix/s0b-corpus-cli-harness`, ahead of `origin/v2` (`f6ba3e0`). `origin/v2`
+was merged in at `bc19cb8`, so it is an ancestor of the tip. Round one was
+measured at `23ed0de`; round two lands on top of it and every figure below
+says which.
 
-**The Blocker is fixed, both sides.** The destination side at `1716de0`,
+**The Blocker is fixed, all three sides.** The destination side at `1716de0`,
 "Scope dump pruning to the directory it was given"; the source side at
-`23ed0de`, "glob corpus source dirs literally with base".
+`23ed0de`, "glob corpus source dirs literally with base"; the delete set
+itself at `bcdb349`, "prune only dumps the previous summary recorded".
+
+Round two also closed the java importer wiping its own tracked fixture, the
+last two glob sites, the `Kernel.srand` leak, and the invariant set's blind
+spot for lost ids. Measured at `f6ca42c`: 907 examples, 0 failures, 17
+pending; rubocop 128 files, 0 offenses; `cases.map(&:id)` still 47 ids with
+SHA-1 `daf0ea1`, and a `diff -r` of dumps before and after is identical.
 
 ## The Blocker, and how it was closed
 
@@ -39,32 +47,74 @@ about which directory `outdir` meant. Measured 2026-08-27:
   dumpyard/   its also_precious.json was DELETED
 ```
 
-The fix scopes the glob to the directory itself instead of joining the path
-into the pattern:
-
-```ruby
-Dir.glob("*.json", base: outdir).each do |name|
-  next if keep.include?(name)
-
-  path = File.join(outdir, name)
-  File.delete(path) if File.file?(path)
-end
-```
-
-`base:` takes the directory as a value, not as pattern text, so no byte of
-`outdir` can reach the matcher. `File.file?` and `Dir` now agree.
-
-Evidence, at `5c05156`:
-
-- `spec/cross_validation/corpus_runner_prune_spec.rb` pins it. 5 examples,
-  each building its own `Dir.mktmpdir` parent so the patterns cannot match
-  each other's directories and manufacture a finding.
-- Mutation-checked. Put the old `Dir[File.join(outdir, "*.json")]` form back
-  and 3 of the 5 go red. Restore it and all 5 pass.
+The first half of the fix scopes the glob to the directory itself instead of
+joining the path into the pattern. `base:` takes the directory as a value,
+not as pattern text, so no byte of `outdir` can reach the matcher, and
+`File.file?` and `Dir` agree again.
 
 An earlier retraction of this Blocker was wrong. It rested on a probe that put
 a metacharacter in a path with no matching literal directory, so the guard
 returned early and nothing was deleted. One input shape, generalised.
+
+### The delete set authorised itself. Second Blocker, closed at `bcdb349`
+
+Scoping the glob fixed which directory was read. It did not fix what could
+be deleted out of it. The set was still "every `*.json` in there that is not
+a current case", gated on the directory holding a `summary.json` — and `run`
+is what WRITES summary.json. So the first run manufactured the second run's
+licence:
+
+```
+  userdir/    someones.json + notes.txt
+
+  CorpusRunner.run(userdir) once    someones.json PRESENT (no summary yet)
+  CorpusRunner.run(userdir) twice   someones.json DELETED
+                                    notes.txt     PRESENT (only *.json swept)
+```
+
+Reachable through the documented `rake 'corpus:dump[dir]'` and through the
+bare CLI, both of which take any path.
+
+The delete set is now derived from the previous dump's own record, not from
+the directory's contents:
+
+```ruby
+def prune_stale_dumps(outdir, corpus)
+  dropped = recorded_case_ids(outdir) - corpus.map(&:id)
+  stale = dropped.map { |id| "#{id}.json" }
+  Dir.glob("*.json", base: outdir).each do |name|
+    next unless stale.include?(name)
+
+    path = File.join(outdir, name)
+    File.delete(path) if File.file?(path)
+  end
+end
+```
+
+`recorded_case_ids` reads the existing `summary.json` and returns the ids it
+recorded. A summary that is absent, unreadable, not JSON, or not the shape
+`new_summary` writes returns none, so nothing is pruned — deleting on a guess
+is the failure being closed. A file this runner never wrote is not a
+candidate at all, so run 1's summary can only ever name run 1's own cases.
+The loop walks what the directory actually holds, so a recorded id is only
+resolved against a name in it: a summary this runner did not write cannot
+name a path outside the directory.
+
+Evidence, at `bcdb349`:
+
+- `corpus_runner_prune_spec.rb` pins the unit: 9 examples, each in its own
+  `Dir.mktmpdir` parent. They cover the delete set (a recorded id is dropped,
+  an unrecorded file is kept, an unreadable or shapeless summary prunes
+  nothing, a recorded id cannot escape the directory) and both metacharacter
+  families.
+- `corpus_spec.rb` pins the sequence, because one run cannot see this bug.
+  "keeps a file it never wrote across two runs of one directory" drives the
+  real `run` twice over a directory holding `someones.json` and `notes.txt`.
+  Only the case list is stubbed; the prune, the summary and every write are
+  the real thing.
+- Mutation-checked. Put the old `keep`-based delete set back and 4 examples
+  go red, including the two-run one. Restore it and all pass. Drop the
+  directory-listing containment and the escape example goes red.
 
 ## The metacharacter rule has two families, not one
 
@@ -89,12 +139,12 @@ foreign. What that costs depends on what sits beside it:
 Do not write "any metacharacter empties the corpus", and do not write "`*` or
 `?` raises duplicate ids". Both are single shapes generalised.
 
-## The class is NOT closed. Six sites, four fixed
+## The class IS closed. Six sites, six fixed
 
-Six sites in this branch carry the literal-vs-pattern shape. **Four are
+Six sites in this branch carry the literal-vs-pattern shape. **All six are
 fixed.** The plan claimed four and also called the three `ROOT` globs
-deferred, so it contradicted itself. Four are fixed now, and what stayed
-deferred is sites 5 and 6, the two importers.
+deferred, so it contradicted itself; four were fixed in round one and the
+two importers in round two.
 
 | # | Site | State |
 |---|---|---|
@@ -102,8 +152,8 @@ deferred is sites 5 and 6, the two importers.
 | 2 | `corpus_runner.rb` `top_level_fixture_cases` | **fixed** at `23ed0de` |
 | 3 | `corpus_runner.rb` `corpus_fixture_cases` | **fixed** at `23ed0de` |
 | 4 | `corpus_runner.rb` `imported_cases` | **fixed** at `23ed0de` |
-| 5 | `elkjs_test_importer.rb:61` | deferred, reason measured |
-| 6 | `java_elk_test_importer.rb:60` | deferred, reason measured |
+| 5 | `elkjs_test_importer.rb` `import_bug_tests` | **fixed** at `8b4b1e8` |
+| 6 | `java_elk_test_importer.rb` `import_from_models_repo` | **fixed** at `8b4b1e8` |
 
 Sites 2-4 built their pattern from `ROOT`, which is
 `File.expand_path("../..", __dir__)` — the checkout path. They only read, and
@@ -153,11 +203,35 @@ shape. Mutation-checked: put the old `Dir[File.join(dir, pattern)]` form back
 and 6 of the 8 go red. The two that stay green are the plain-name baselines,
 where the old form behaves identically. Restore it and all 8 pass.
 
-The two importer sites are deferred with the reason recorded in the plan: all
-three external checkouts are absent here, so a fix cannot be
-integration-checked against the real corpora, and the java_elk one writes over
-a tracked 17-case fixture. It belongs in its own change, run where those
-checkouts exist.
+### The deferral premise, withdrawn on measurement
+
+Round one deferred sites 5 and 6. The premise was: all three external
+checkouts are absent here, so a fix cannot be integration-checked against
+the real corpora, and the java_elk one writes over a tracked 17-case
+fixture — so it belongs in its own change, run where those checkouts exist.
+
+**That premise is withdrawn. It was measured false.** A synthetic checkout
+is sufficient; the real corpora were never needed. Site 5 was demonstrated
+pulling a foreign case out of a sibling directory and into the committed
+fixture, using the same technique `corpus_runner_fixture_paths_spec.rb`
+already uses. The importer specs build their checkouts under
+`Dir.mktmpdir` and run with the cwd inside it, so nothing a test run writes
+can reach `spec/`.
+
+The branch had also **widened site 5 itself**, swapping a hardcoded path
+for `ENV["ELKJS_DIR"]`. That exposure is introduced here, not inherited, so
+carrying it forward would have shipped a hole this branch opened.
+
+Both sites now pass their directory as `base:` and join it back on, the
+same one-line shape used three times already in `corpus_runner.rb`.
+Specs, each driving `import_all` with a real synthetic checkout:
+
+- `elkjs_test_importer_spec.rb` — with a checkout named `elkjs*` beside a
+  sibling `elkjs2`, the fixture came out holding
+  `["elkjs_bug-mine", "elkjs_bug-foreign"]`. After the fix,
+  `["elkjs_bug-mine"]`.
+- `java_elk_test_importer_spec.rb` — same shape for `**/*.elkt`:
+  `["java_elk_mine", "java_elk_foreign"]` before, `["java_elk_mine"]` after.
 
 ## Can start
 
@@ -300,7 +374,7 @@ corrected here — item 03 (S0a) rewrites that ledger wholesale.
    `labelled_only_text`, `compound_unsized`, `compound_declared_size`,
    `stale_sections` (edge with a pre-filled `sections` array); plus
    `bom.elkt` and `garbage.txt` for the CLI specs only, and
-   `spec/fixtures/x.dot` for the `render` spec.
+   `spec/fixtures/render_input.dot` for the `render` spec.
 6. `spec/cross_validation/corpus_spec.rb` — for every case × its algorithm, a
    "does not raise" example and a minimal **inline** invariant set (finite
    coordinates, ids preserved). Inline, not shared: item 03 (S0a) is not built
@@ -431,14 +505,10 @@ What they found, for the record:
 
 ## Carried forward, not fixed here
 
-- `java_elk_test_importer.rb` does not re-emit `"expect": "error"` when it
-  regenerates `fixtures/java_elk/imported_tests.json`. The two rows exist in
-  the committed file today. Whoever next regenerates that fixture must re-add
-  them or the corpus exit status starts lying.
-- Sites 5 and 6 above, the two importers: their checkout path still reaches a
-  glob pattern unescaped. Deferred for the measured reason above — neither
-  external checkout exists here, so a fix cannot be integration-checked
-  against the real corpora.
 - `corpus_spec.rb` files both spore rows under RC14, and `CLAUDE.md` repeats
-  the registry-resolution story. The measurement says otherwise. Item 03 (S0a)
-  rewrites that ledger.
+  the registry-resolution story. The measurement says otherwise: the registry
+  folds camelCase, both algorithms resolve, and they then crash on nil
+  arithmetic inside themselves. Item 03 (S0a) rewrites that ledger.
+- The `render` example's security assertion is still `pending("RC10")`. The
+  shell-injection site in `lib/elkrb/graphviz_wrapper.rb` is pre-existing and
+  `lib/` is untouched by this branch, so it is not fixed here.
