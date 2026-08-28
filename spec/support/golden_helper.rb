@@ -707,10 +707,10 @@ module GoldenComparator
                  ))
   end
 
-  # Where `incomingShape`/`outgoingShape` are populated is stated once,
-  # above `diff_edge_endpoints`. Without one, which node the point
-  # SHOULD clip to isn't just unlabelled, it isn't even reliably
-  # source-then-target: `random3`'s committed golden
+  # Where `incomingShape`/`outgoingShape` are populated is stated
+  # once, above `diff_edge_endpoints`. Without one, which node the
+  # point SHOULD clip to isn't just unlabelled, it isn't
+  # even reliably source-then-target: `random3`'s committed golden
   # anchors both this edge's start AND end on its SOURCE node's
   # border, never the target's (verified by running
   # `diff_structural(expected, expected)` against the real golden).
