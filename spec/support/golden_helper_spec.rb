@@ -259,8 +259,11 @@ RSpec.describe GoldenComparator do
     # no x at all
     a_node = { "id" => "n1", "y" => 0.0, "width" => 10.0, "height" => 10.0 }
 
-    diffs = described_class.diff_normalised_position(e_node, 0.0, 100.0,
-                                                     a_node, 0.0, 100.0, "/n1")
+    diffs = described_class.diff_normalised_position(
+      { node: e_node, width: 0.0, height: 100.0 },
+      { node: a_node, width: 0.0, height: 100.0 },
+      "/n1",
+    )
     expect(diffs.join).to include("missing")
   end
 
