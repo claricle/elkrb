@@ -1,6 +1,5 @@
 module Elkrb
   module Graph
-
     class Label
       attr_accessor id: String?
       attr_accessor text: String?

@@ -234,7 +234,7 @@ RSpec.describe "layoutOptions on every model" do
         .to eq(Hash)
     end
 
-    it "stringifies top-level keys when the cast yields a non-Hash" do
+    it "stringifies top-level keys when a to_h-able non-Hash is assigned" do
       node = Elkrb::Graph::Node.new(id: "n")
       node.layout_options = Struct.new(:padding, :direction).new(10, "RIGHT")
 

@@ -10,7 +10,8 @@ module Elkrb
     # a bare `text` or `elements` key as its own wrapper and casts the map
     # down to that key's value, so anything but a Hash means a reserved key
     # was used. Saying so beats letting the next line fail with a bare
-    # NoMethodError. The message is pinned by a spec and must stay verbatim.
+    # NoMethodError. The message is pinned by a matcher in
+    # spec/elkrb/graph/layout_options_spec.rb and must stay verbatim.
     #
     # Stringifies the TOP LEVEL only, matching the constructor this replaces.
     # Deliberately not DeepStringifyKeys: that one walks nested Hashes and
