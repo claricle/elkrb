@@ -4,6 +4,7 @@ require "json"
 
 module GoldenHelper
   DEFAULT_DIR = File.join(__dir__, "..", "fixtures", "golden")
+  DEFAULT_FIELDS = %i[nodes sections labels ports graph].freeze
 
   def golden_input(name, dir: DEFAULT_DIR)
     data = JSON.parse(File.read(File.join(dir, "inputs", "#{name}.json")))
@@ -112,8 +113,12 @@ module GoldenComparator
     keys.filter_map do |key|
       e = numeric_or_zero(expected, key)
       a = numeric_or_zero(actual, key)
-      next "#{path}/#{key}: expected is non-finite (#{expected[key].inspect})" unless e.finite?
-      next "#{path}/#{key}: actual is non-finite (#{actual[key].inspect})" unless a.finite?
+      unless e.finite?
+        next "#{path}/#{key}: expected is non-finite (#{expected[key].inspect})"
+      end
+      unless a.finite?
+        next "#{path}/#{key}: actual is non-finite (#{actual[key].inspect})"
+      end
 
       "#{path}/#{key}: expected #{e}, got #{a}" if (e - a).abs > 1e-6
     end
@@ -145,39 +150,55 @@ module GoldenComparator
   # item_path) for every id present on both sides. Id-less items have no
   # key to match by, so they're compared separately, positionally, by
   # their order within the id-less subset of each side.
-  def diff_by_id(expected_items, actual_items, path)
-    expected_items ||= []
-    actual_items ||= []
-    expected_named, expected_unnamed = expected_items.partition do |item|
-      item["id"]
-    end
-    actual_named, actual_unnamed = actual_items.partition { |item| item["id"] }
+  def diff_by_id(expected_items, actual_items, path, &)
+    expected_named, expected_unnamed = partition_by_id(expected_items)
+    actual_named, actual_unnamed = partition_by_id(actual_items)
 
+    diff_named_items(expected_named, actual_named, path, &) +
+      diff_unnamed_items(expected_unnamed, actual_unnamed, path, &)
+  end
+
+  def partition_by_id(items)
+    (items || []).partition { |item| item["id"] }
+  end
+
+  def index_by_id(items)
+    items.to_h { |item| [item["id"], item] }
+  end
+
+  def diff_named_items(expected_named, actual_named, path, &)
     diffs = duplicate_id_diffs(expected_named, "#{path}: expected")
     diffs.concat(duplicate_id_diffs(actual_named, "#{path}: actual"))
 
-    expected_by_id = expected_named.to_h { |item| [item["id"], item] }
-    actual_by_id = actual_named.to_h { |item| [item["id"], item] }
+    expected_by_id = index_by_id(expected_named)
+    actual_by_id = index_by_id(actual_named)
+    diffs.concat(diff_id_sets(expected_by_id.keys, actual_by_id.keys, path))
+    diffs.concat(diff_matched_items(expected_by_id, actual_by_id, path, &))
+  end
 
-    diffs.concat((expected_by_id.keys - actual_by_id.keys).map do |id|
+  def diff_id_sets(expected_ids, actual_ids, path)
+    (expected_ids - actual_ids).map do |id|
       "#{path}/#{id}: missing from actual"
-    end)
-    diffs.concat((actual_by_id.keys - expected_by_id.keys).map do |id|
+    end + (actual_ids - expected_ids).map do |id|
       "#{path}/#{id}: unexpected in actual"
-    end)
+    end
+  end
 
-    (expected_by_id.keys & actual_by_id.keys).each do |id|
-      diffs.concat(yield(expected_by_id[id], actual_by_id[id], "#{path}/#{id}"))
+  def diff_matched_items(expected_by_id, actual_by_id, path)
+    (expected_by_id.keys & actual_by_id.keys).flat_map do |id|
+      yield(expected_by_id[id], actual_by_id[id], "#{path}/#{id}")
+    end
+  end
+
+  def diff_unnamed_items(expected_unnamed, actual_unnamed, path)
+    unless expected_unnamed.size == actual_unnamed.size
+      return ["#{path}: expected #{expected_unnamed.size} id-less item(s), " \
+              "got #{actual_unnamed.size}"]
     end
 
-    if expected_unnamed.size == actual_unnamed.size
-      expected_unnamed.each_with_index do |item, i|
-        diffs.concat(yield(item, actual_unnamed[i], "#{path}[#{i}]"))
-      end
-    else
-      diffs << "#{path}: expected #{expected_unnamed.size} id-less item(s), got #{actual_unnamed.size}"
+    expected_unnamed.each_with_index.flat_map do |item, i|
+      yield(item, actual_unnamed[i], "#{path}[#{i}]")
     end
-    diffs
   end
 
   # Root entry point — called once, with `expected`/`actual` as the root
@@ -256,16 +277,37 @@ module GoldenComparator
       diffs = fields.include?(:labels) ? diff_labels(e, a, port_path) : []
       next diffs unless fields.include?(:ports)
 
-      diffs.concat(diff_exact_geometry(e, a, port_path))
-      e_side = e["side"] || "UNDEFINED"
-      a_side = a["side"] || "UNDEFINED"
-      diffs << "#{port_path}/side: expected #{e_side}, got #{a_side}" if e_side != a_side
-      diffs << "#{port_path}/index: expected #{e['index']}, got #{a['index']}" if e["index"] != a["index"]
-      e_offset = (e["offset"] || 0.0).to_f
-      a_offset = (a["offset"] || 0.0).to_f
-      diffs << "#{port_path}/offset: expected #{e_offset}, got #{a_offset}" unless (e_offset - a_offset).abs <= 1e-6
-      diffs
+      diffs.concat(diff_port_attributes(e, a, port_path))
     end
+  end
+
+  def diff_port_attributes(expected, actual, path)
+    diff_exact_geometry(expected, actual, path) +
+      diff_port_side(expected, actual, path) +
+      diff_port_index(expected, actual, path) +
+      diff_port_offset(expected, actual, path)
+  end
+
+  def diff_port_side(expected, actual, path)
+    e_side = expected["side"] || "UNDEFINED"
+    a_side = actual["side"] || "UNDEFINED"
+    return [] if e_side == a_side
+
+    ["#{path}/side: expected #{e_side}, got #{a_side}"]
+  end
+
+  def diff_port_index(expected, actual, path)
+    return [] if expected["index"] == actual["index"]
+
+    ["#{path}/index: expected #{expected['index']}, got #{actual['index']}"]
+  end
+
+  def diff_port_offset(expected, actual, path)
+    e_offset = (expected["offset"] || 0.0).to_f
+    a_offset = (actual["offset"] || 0.0).to_f
+    return [] if (e_offset - a_offset).abs <= 1e-6
+
+    ["#{path}/offset: expected #{e_offset}, got #{a_offset}"]
   end
 
   def diff_edges(expected_owner, actual_owner, fields, path)
@@ -319,32 +361,44 @@ module GoldenComparator
   # A shape naming something that is not one of this edge's own endpoints
   # is a bug regardless of what the golden says.
   def diff_edge_endpoints(expected_edge, actual_edge, path)
-    diffs = []
-    if expected_edge["sources"] != actual_edge["sources"] || expected_edge["targets"] != actual_edge["targets"]
-      diffs << "#{path}: endpoints changed from " \
-               "#{expected_edge['sources']}->#{expected_edge['targets']} to " \
-               "#{actual_edge['sources']}->#{actual_edge['targets']}"
+    diff_endpoint_lists(expected_edge, actual_edge, path) +
+      diff_section_shapes(expected_edge, actual_edge, path)
+  end
+
+  def diff_endpoint_lists(expected_edge, actual_edge, path)
+    if expected_edge["sources"] == actual_edge["sources"] &&
+        expected_edge["targets"] == actual_edge["targets"]
+      return []
     end
 
+    ["#{path}: endpoints changed from " \
+     "#{expected_edge['sources']}->#{expected_edge['targets']} to " \
+     "#{actual_edge['sources']}->#{actual_edge['targets']}"]
+  end
+
+  def diff_section_shapes(expected_edge, actual_edge, path)
     expected_sections = expected_edge["sections"] || []
-    actual_sections = actual_edge["sections"] || []
     endpoint_ids = edge_endpoint_ids(actual_edge)
 
-    actual_sections.each_with_index do |a_sec, i|
+    (actual_edge["sections"] || []).each_with_index.flat_map do |a_sec, i|
       e_sec = expected_sections[i]
-      SHAPE_KEYS.each do |shape_key|
-        actual_shape = a_sec[shape_key]
-        expected_shape = e_sec && e_sec[shape_key]
-        sec_path = "#{path}/sections[#{i}]/#{shape_key}"
-
-        if actual_shape && !endpoint_ids.include?(actual_shape)
-          diffs << "#{sec_path}: #{actual_shape.inspect} is not an endpoint of this edge (#{endpoint_ids.inspect})"
-        elsif expected_shape && expected_shape != actual_shape
-          diffs << "#{sec_path}: expected #{expected_shape.inspect}, got #{actual_shape.inspect}"
-        end
+      SHAPE_KEYS.flat_map do |shape_key|
+        shape_diff(a_sec[shape_key], e_sec && e_sec[shape_key], endpoint_ids,
+                   "#{path}/sections[#{i}]/#{shape_key}")
       end
     end
-    diffs
+  end
+
+  def shape_diff(actual_shape, expected_shape, endpoint_ids, sec_path)
+    if actual_shape && !endpoint_ids.include?(actual_shape)
+      ["#{sec_path}: #{actual_shape.inspect} is not an endpoint of this " \
+       "edge (#{endpoint_ids.inspect})"]
+    elsif expected_shape && expected_shape != actual_shape
+      ["#{sec_path}: expected #{expected_shape.inspect}, " \
+       "got #{actual_shape.inspect}"]
+    else
+      []
+    end
   end
 
   # Sections are matched POSITIONALLY within an edge (by index), never by
@@ -361,27 +415,31 @@ module GoldenComparator
     actual_sections = actual_edge["sections"] || []
 
     if expected_sections.size != actual_sections.size
-      return ["#{path}/sections: expected #{expected_sections.size}, got #{actual_sections.size}"]
+      return ["#{path}/sections: expected #{expected_sections.size}, " \
+              "got #{actual_sections.size}"]
     end
 
     expected_sections.each_with_index.flat_map do |e_sec, i|
-      a_sec = actual_sections[i]
-      sec_path = "#{path}/sections[#{i}]"
-      diffs = diff_point(e_sec["startPoint"], a_sec["startPoint"],
-                         "#{sec_path}/startPoint")
-      diffs.concat(diff_point(e_sec["endPoint"], a_sec["endPoint"],
-                              "#{sec_path}/endPoint"))
-      diffs.concat(diff_bend_points(e_sec["bendPoints"], a_sec["bendPoints"],
-                                    "#{sec_path}/bendPoints"))
-      diffs
+      diff_section_geometry(e_sec, actual_sections[i], "#{path}/sections[#{i}]")
     end
+  end
+
+  def diff_section_geometry(expected_section, actual_section, sec_path)
+    diffs = diff_point(expected_section["startPoint"],
+                       actual_section["startPoint"], "#{sec_path}/startPoint")
+    diffs.concat(diff_point(expected_section["endPoint"],
+                            actual_section["endPoint"], "#{sec_path}/endPoint"))
+    diffs.concat(diff_bend_points(expected_section["bendPoints"],
+                                  actual_section["bendPoints"],
+                                  "#{sec_path}/bendPoints"))
   end
 
   def diff_bend_points(expected_points, actual_points, path)
     expected_points ||= []
     actual_points ||= []
     if expected_points.size != actual_points.size
-      return ["#{path}: expected #{expected_points.size} bend points, got #{actual_points.size}"]
+      return ["#{path}: expected #{expected_points.size} bend points, " \
+              "got #{actual_points.size}"]
     end
 
     expected_points.each_with_index.flat_map do |point, i|
@@ -412,8 +470,12 @@ module GoldenComparator
     %w[width height].filter_map do |key|
       e = numeric_or_zero(expected, key)
       a = numeric_or_zero(actual, key)
-      next "graph/#{key}: expected is non-finite (#{expected[key].inspect})" unless e.finite?
-      next "graph/#{key}: actual is non-finite (#{actual[key].inspect})" unless a.finite?
+      unless e.finite?
+        next "graph/#{key}: expected is non-finite (#{expected[key].inspect})"
+      end
+      unless a.finite?
+        next "graph/#{key}: actual is non-finite (#{actual[key].inspect})"
+      end
 
       "graph/#{key}: expected #{e}, got #{a} (>1px)" if (e - a).abs > 1
     end
@@ -472,7 +534,8 @@ module GoldenComparator
     value = hash[key]
     unless value.is_a?(Numeric)
       return [nil,
-              "#{path}/#{key}: #{side} is missing or not numeric (#{value.inspect})"]
+              "#{path}/#{key}: #{side} is missing or not " \
+              "numeric (#{value.inspect})"]
     end
 
     value = value.to_f
@@ -485,21 +548,24 @@ module GoldenComparator
   end
 
   def diff_node_geometry(expected_level, actual_level, path)
-    expected_box_width = numeric_or_zero(expected_level, "width")
-    expected_box_height = numeric_or_zero(expected_level, "height")
-    actual_box_width = numeric_or_zero(actual_level, "width")
-    actual_box_height = numeric_or_zero(actual_level, "height")
+    expected_box = box_of(expected_level)
+    actual_box = box_of(actual_level)
 
     diff_by_id(expected_level["children"], actual_level["children"],
                path) do |e_node, a_node, node_path|
-      diffs = %w[width height].flat_map do |key|
+      diffs = SIZE_FIELDS.flat_map do |key|
         diff_strict_dimension(e_node, a_node, node_path, key)
       end
-      diffs.concat(diff_normalised_position(e_node, expected_box_width, expected_box_height,
-                                            a_node, actual_box_width, actual_box_height, node_path))
+      diffs.concat(diff_normalised_position(expected_box.merge(node: e_node),
+                                            actual_box.merge(node: a_node),
+                                            node_path))
       diffs.concat(diff_node_geometry(e_node, a_node, node_path))
-      diffs
     end
+  end
+
+  def box_of(level)
+    { width: numeric_or_zero(level, "width"),
+      height: numeric_or_zero(level, "height") }
   end
 
   def diff_strict_dimension(e_node, a_node, path, key)
@@ -510,11 +576,16 @@ module GoldenComparator
     (e - a).abs > 1 ? ["#{path}/#{key}: expected #{e}, got #{a} (>1px)"] : []
   end
 
-  def diff_normalised_position(e_node, e_box_width, e_box_height, a_node,
-a_box_width, a_box_height, path)
-    diff_strict_axis_position(e_node, e_box_width, a_node, a_box_width, path,
-                              "x", "width") +
-      diff_strict_axis_position(e_node, e_box_height, a_node, a_box_height,
+  # Each side arrives as `{node:, width:, height:}` -- the node plus the
+  # dimensions of the level that contains it, which is the box its
+  # position is normalised against.
+  def diff_normalised_position(expected, actual, path)
+    diff_strict_axis_position({ node: expected[:node], box: expected[:width] },
+                              { node: actual[:node], box: actual[:width] },
+                              path, "x", "width") +
+      diff_strict_axis_position({ node: expected[:node],
+                                  box: expected[:height] },
+                                { node: actual[:node], box: actual[:height] },
                                 path, "y", "height")
   end
 
@@ -523,19 +594,23 @@ a_box_width, a_box_height, path)
   # degenerate box on one axis (e.g. a zero-height container) is a reason
   # to skip THAT axis's fraction, not a reason to also skip strict
   # validation of the OTHER axis's x/y, or to skip validating x/y at all.
-  def diff_strict_axis_position(e_node, e_box, a_node, a_box, path, key,
-box_label)
-    e, e_error = strict_numeric(e_node, key, path, "expected")
-    a, a_error = strict_numeric(a_node, key, path, "actual")
+  def diff_strict_axis_position(expected, actual, path, key, box_label)
+    e, e_error = strict_numeric(expected[:node], key, path, "expected")
+    a, a_error = strict_numeric(actual[:node], key, path, "actual")
     return [e_error, a_error].compact if e_error || a_error
-    return [] if e_box <= 0 || a_box <= 0
+    return [] if expected[:box] <= 0 || actual[:box] <= 0
 
-    e_fraction = e / e_box
-    a_fraction = a / a_box
+    normalised_position_diffs(e / expected[:box], a / actual[:box], path, key,
+                              box_label)
+  end
+
+  def normalised_position_diffs(e_fraction, a_fraction, path, key, box_label)
     return [] unless (e_fraction - a_fraction).abs > POSITION_TOLERANCE_FRACTION
 
-    ["#{path}/#{key}: normalised position expected #{e_fraction.round(3)}, got #{a_fraction.round(3)} " \
-     "(off by more than #{POSITION_TOLERANCE_FRACTION} of the graph's own #{box_label})"]
+    ["#{path}/#{key}: normalised position " \
+     "expected #{e_fraction.round(3)}, got #{a_fraction.round(3)} " \
+     "(off by more than #{POSITION_TOLERANCE_FRACTION} " \
+     "of the graph's own #{box_label})"]
   end
 
   # Every edge section's start/end point lies on the border (within 1px) of
@@ -549,112 +624,134 @@ box_label)
   # each matched compound child), since section coordinates are only
   # comparable within their own container's frame.
   def diff_section_borders(expected, actual)
-    diffs = []
-    check_level_sections(expected, actual, "", diffs)
-    diffs
+    check_level_sections(expected, actual, "")
   end
 
-  def check_level_sections(expected_level, actual_level, path, diffs)
+  def check_level_sections(expected_level, actual_level, path)
     # rect_index merges node ids and port ids into one flat lookup (an
     # edge endpoint can name either) — a duplicate within that COMBINED
     # namespace (two ports sharing an id, or a port id colliding with a
     # node id) would otherwise silently collapse the same way a
     # duplicate node/edge id would.
-    diffs.concat(duplicate_id_diffs(reference_ids(actual_level),
-                                    "#{path}/(nodes+ports): actual"))
+    diffs = duplicate_id_diffs(reference_ids(actual_level),
+                               "#{path}/(nodes+ports): actual")
+    diffs.concat(check_level_edges(expected_level, actual_level, path))
+    diffs.concat(check_level_children(expected_level, actual_level, path))
+  end
+
+  def check_level_edges(expected_level, actual_level, path)
     rects = rect_index(actual_level)
     expected_edges = expected_level["edges"] || []
     actual_edges_list = actual_level["edges"] || []
-    diffs.concat(duplicate_id_diffs(expected_edges, "#{path}/edges: expected"))
+    diffs = duplicate_id_diffs(expected_edges, "#{path}/edges: expected")
     diffs.concat(duplicate_id_diffs(actual_edges_list, "#{path}/edges: actual"))
 
+    actual_edges = index_by_id(actual_edges_list)
+    diffs.concat(diff_edge_membership(expected_edges, actual_edges.keys, path))
+    diffs.concat(check_matched_edges(expected_edges, actual_edges, rects, path))
+  end
+
+  # Deliberately Array-based, not `diff_by_id`: `expected_edges.map` keeps
+  # duplicate ids, so an id repeated on the expected side is reported once
+  # per occurrence. Indexing it into a Hash first would collapse those and
+  # silently report the duplicate a single time.
+  def diff_edge_membership(expected_edges, actual_edge_ids, path)
     expected_edge_ids = expected_edges.map { |e| e["id"] }
-    actual_edges = actual_edges_list.to_h { |e| [e["id"], e] }
-    actual_edge_ids = actual_edges.keys
-
-    (expected_edge_ids - actual_edge_ids).each do |id|
-      diffs << "#{path}/edges/#{id}: missing from actual"
+    (expected_edge_ids - actual_edge_ids).map do |id|
+      "#{path}/edges/#{id}: missing from actual"
+    end + (actual_edge_ids - expected_edge_ids).map do |id|
+      "#{path}/edges/#{id}: unexpected in actual"
     end
-    (actual_edge_ids - expected_edge_ids).each do |id|
-      diffs << "#{path}/edges/#{id}: unexpected in actual"
-    end
+  end
 
-    (expected_level["edges"] || []).each do |edge|
+  # Iterates the expected Array, not its id set, for the same reason
+  # `diff_edge_membership` does: a duplicated expected id runs the
+  # per-edge body once per occurrence.
+  def check_matched_edges(expected_edges, actual_edges, rects, path)
+    expected_edges.flat_map do |edge|
       actual_edge = actual_edges[edge["id"]]
-      next unless actual_edge # already recorded above as missing
+      next [] unless actual_edge # already recorded above as missing
 
-      # Checked BEFORE using `actual_edge`'s own sources/targets as the
-      # geometry reference below: without this, an edge silently rewired
-      # to different endpoints (elkrb connecting the wrong nodes) would
-      # still pass, because the border check only asks "does the section
-      # land on ACTUAL's own (rewired) endpoint's border" — trivially
-      # true, since that endpoint IS what routed it. `diff_edge_endpoints`
-      # is the same helper exact tier's `diff_edges` calls, so the two
-      # tiers can't diverge on what counts as a rewired edge.
-      diffs.concat(diff_edge_endpoints(edge, actual_edge,
-                                       "#{path}/edges/#{edge['id']}"))
-
-      sections = actual_edge["sections"] || []
-      next diffs << "#{path}/edges/#{edge['id']}: no sections in actual" if sections.empty?
-
-      first_section = sections.first
-      last_section = sections.last
-      # `incomingShape`/`outgoingShape` are set by layered and its
-      # relatives but not by force/stress/random/radial (confirmed
-      # empirically across the committed goldens) — without one, which
-      # node the point SHOULD clip to isn't just unlabelled, it isn't
-      # even reliably source-then-target: `random3`'s committed golden
-      # anchors both this edge's start AND end on its SOURCE node's
-      # border, never the target's (verified by running
-      # `diff_structural(expected, expected)` against the real golden).
-      # A single fixed candidate (always source for start, always target
-      # for end) would guess wrong there, so both the start and end
-      # checks use the SAME either-endpoint candidate list and accept
-      # either. Candidates come from the ACTUAL edge's own sources/
-      # targets (never the expected edge's — elkrb's endpoints are the
-      # ground truth for what its own sections should clip to);
-      # `point_near_any_reference` still requires every candidate to
-      # resolve to a real rectangle before applying the geometry check,
-      # so a genuinely dangling reference (an id naming no real node/
-      # port) is reported on its own rather than silently forgiven by a
-      # valid candidate elsewhere in the list. Taking the ACTUAL section's
-      # own shape as the reference is only safe because
-      # `diff_edge_endpoints` above has already rejected a shape naming
-      # anything other than this edge's own endpoints — otherwise the
-      # point would be measured against whatever rectangle elkrb chose to
-      # name, which is no check at all.
-      start_ids = first_section["incomingShape"] ? [first_section["incomingShape"]] : endpoint_candidates(actual_edge)
-      end_ids = last_section["outgoingShape"] ? [last_section["outgoingShape"]] : endpoint_candidates(actual_edge)
-
-      diffs.concat(point_near_any_reference(first_section["startPoint"], rects,
-                                            start_ids, "#{path}/edges/#{edge['id']}/start"))
-      diffs.concat(point_near_any_reference(last_section["endPoint"], rects,
-                                            end_ids, "#{path}/edges/#{edge['id']}/end"))
+      check_edge_sections(edge, actual_edge, rects,
+                          "#{path}/edges/#{edge['id']}")
     end
+  end
 
+  def check_edge_sections(edge, actual_edge, rects, edge_path)
+    # Checked BEFORE using `actual_edge`'s own sources/targets as the
+    # geometry reference below: without this, an edge silently rewired
+    # to different endpoints (elkrb connecting the wrong nodes) would
+    # still pass, because the border check only asks "does the section
+    # land on ACTUAL's own (rewired) endpoint's border" — trivially
+    # true, since that endpoint IS what routed it. `diff_edge_endpoints`
+    # is the same helper exact tier's `diff_edges` calls, so the two
+    # tiers can't diverge on what counts as a rewired edge.
+    diffs = diff_edge_endpoints(edge, actual_edge, edge_path)
+
+    sections = actual_edge["sections"] || []
+    return diffs << "#{edge_path}: no sections in actual" if sections.empty?
+
+    diffs.concat(check_section_border(sections.first,
+                                      %w[startPoint incomingShape],
+                                      actual_edge, rects, "#{edge_path}/start"))
+    diffs.concat(check_section_border(sections.last,
+                                      %w[endPoint outgoingShape],
+                                      actual_edge, rects, "#{edge_path}/end"))
+  end
+
+  # `incomingShape`/`outgoingShape` are set by layered and its
+  # relatives but not by force/stress/random/radial (confirmed
+  # empirically across the committed goldens) — without one, which
+  # node the point SHOULD clip to isn't just unlabelled, it isn't
+  # even reliably source-then-target: `random3`'s committed golden
+  # anchors both this edge's start AND end on its SOURCE node's
+  # border, never the target's (verified by running
+  # `diff_structural(expected, expected)` against the real golden).
+  # A single fixed candidate (always source for start, always target
+  # for end) would guess wrong there, so both the start and end
+  # checks use the SAME either-endpoint candidate list and accept
+  # either. Candidates come from the ACTUAL edge's own sources/
+  # targets (never the expected edge's — elkrb's endpoints are the
+  # ground truth for what its own sections should clip to);
+  # `point_near_any_reference` still requires every candidate to
+  # resolve to a real rectangle before applying the geometry check,
+  # so a genuinely dangling reference (an id naming no real node/
+  # port) is reported on its own rather than silently forgiven by a
+  # valid candidate elsewhere in the list. Taking the ACTUAL section's
+  # own shape as the reference is only safe because
+  # `diff_edge_endpoints` above has already rejected a shape naming
+  # anything other than this edge's own endpoints — otherwise the
+  # point would be measured against whatever rectangle elkrb chose to
+  # name, which is no check at all.
+  def check_section_border(section, keys, actual_edge, rects, point_path)
+    point_key, shape_key = keys
+    shape_id = section[shape_key]
+    ids = shape_id ? [shape_id] : endpoint_candidates(actual_edge)
+    point_near_any_reference(section[point_key], rects, ids, point_path)
+  end
+
+  def check_level_children(expected_level, actual_level, path)
     expected_children_list = expected_level["children"] || []
     actual_children_list = actual_level["children"] || []
-    diffs.concat(duplicate_id_diffs(expected_children_list,
-                                    "#{path}/children: expected"))
+    diffs = duplicate_id_diffs(expected_children_list,
+                               "#{path}/children: expected")
     diffs.concat(duplicate_id_diffs(actual_children_list,
                                     "#{path}/children: actual"))
 
-    expected_children = expected_children_list.to_h { |c| [c["id"], c] }
-    actual_children = actual_children_list.to_h { |c| [c["id"], c] }
+    expected_children = index_by_id(expected_children_list)
+    actual_children = index_by_id(actual_children_list)
+    diffs.concat(diff_id_sets(expected_children.keys, actual_children.keys,
+                              "#{path}/children"))
+    diffs.concat(recurse_matched_children(expected_children, actual_children,
+                                          path))
+  end
 
-    (expected_children.keys - actual_children.keys).each do |id|
-      diffs << "#{path}/children/#{id}: missing from actual"
-    end
-    (actual_children.keys - expected_children.keys).each do |id|
-      diffs << "#{path}/children/#{id}: unexpected in actual"
-    end
-
-    expected_children.each do |id, child|
+  def recurse_matched_children(expected_children, actual_children, path)
+    expected_children.flat_map do |id, child|
       match = actual_children[id]
-      if match
-        check_level_sections(child, match, "#{path}/children/#{id}",
-                             diffs)
-      end
+      next [] unless match
+
+      check_level_sections(child, match, "#{path}/children/#{id}")
     end
   end
 
@@ -684,25 +781,28 @@ box_label)
   end
 
   def rect_index(level)
-    index = {}
-    (level["children"] || []).each do |node|
+    (level["children"] || []).each_with_object({}) do |node, index|
       index[node["id"]] = numeric_rect(node)
       (node["ports"] || []).each do |port|
-        index[port["id"]] = {
-          x: numeric_or_zero(node, "x") + numeric_or_zero(port, "x"),
-          y: numeric_or_zero(node, "y") + numeric_or_zero(port, "y"),
-          width: numeric_or_zero(port, "width"),
-          height: numeric_or_zero(port, "height"),
-        }
+        index[port["id"]] = port_rect(node, port)
       end
     end
-    index
+  end
+
+  def port_rect(node, port)
+    {
+      x: numeric_or_zero(node, "x") + numeric_or_zero(port, "x"),
+      y: numeric_or_zero(node, "y") + numeric_or_zero(port, "y"),
+      width: numeric_or_zero(port, "width"),
+      height: numeric_or_zero(port, "height"),
+    }
   end
 
   def numeric_rect(hash)
     {
       x: numeric_or_zero(hash, "x"), y: numeric_or_zero(hash, "y"),
-      width: numeric_or_zero(hash, "width"), height: numeric_or_zero(hash, "height")
+      width: numeric_or_zero(hash, "width"),
+      height: numeric_or_zero(hash, "height")
     }
   end
 
@@ -725,31 +825,50 @@ box_label)
     return ["#{path}: no reference for any of #{ids.inspect}"] if ids.empty?
 
     unresolved = ids.reject { |id| index.key?(id) }
-    return ["#{path}: no reference rectangle for #{unresolved.inspect} (candidates: #{ids.inspect})"] unless unresolved.empty?
+    unless unresolved.empty?
+      return ["#{path}: no reference rectangle for #{unresolved.inspect} " \
+              "(candidates: #{ids.inspect})"]
+    end
 
+    nearest_border_diffs(point, index, ids, path)
+  end
+
+  def nearest_border_diffs(point, index, ids, path)
     results = ids.map { |id| point_on_border(point, index[id], path) }
     results.any?(&:empty?) ? [] : results.first
   end
 
   def point_on_border(point, rect, path)
-    return ["#{path}: point missing x/y"] unless point && point["x"].is_a?(Numeric) && point["y"].is_a?(Numeric)
+    return ["#{path}: point missing x/y"] unless numeric_point?(point)
 
-    px = point["x"].to_f
-    py = point["y"].to_f
-    return ["#{path}: (#{px},#{py}) is non-finite"] unless px.finite? && py.finite?
+    point_x = point["x"].to_f
+    point_y = point["y"].to_f
+    unless point_x.finite? && point_y.finite?
+      return ["#{path}: (#{point_x},#{point_y}) is non-finite"]
+    end
+    return [] if on_border?(point_x, point_y, rect)
 
+    ["#{path}: (#{point_x},#{point_y}) not on border of #{rect}"]
+  end
+
+  def numeric_point?(point)
+    point && point["x"].is_a?(Numeric) && point["y"].is_a?(Numeric)
+  end
+
+  def on_border?(point_x, point_y, rect)
     left = rect[:x]
-    right = rect[:x] + rect[:width]
     top = rect[:y]
-    bottom = rect[:y] + rect[:height]
+    right = left + rect[:width]
+    bottom = top + rect[:height]
 
-    on_vertical_edge = (px - left).abs <= 1 || (px - right).abs <= 1
-    on_horizontal_edge = (py - top).abs <= 1 || (py - bottom).abs <= 1
-    within_x = px >= left - 1 && px <= right + 1
-    within_y = py >= top - 1 && py <= bottom + 1
+    (near_either?(point_x, left, right) &&
+      point_y.between?(top - 1, bottom + 1)) ||
+      (near_either?(point_y, top, bottom) &&
+        point_x.between?(left - 1, right + 1))
+  end
 
-    on_border = (on_vertical_edge && within_y) || (on_horizontal_edge && within_x)
-    on_border ? [] : ["#{path}: (#{px},#{py}) not on border of #{rect}"]
+  def near_either?(value, low, high)
+    (value - low).abs <= 1 || (value - high).abs <= 1
   end
 
   # Per-layer membership/order, layered cases only: skipped at any level
@@ -768,43 +887,53 @@ box_label)
   # this slice authors — a future slice adding a non-layered nested pin
   # revisits this.
   def diff_layer_membership(expected, actual, path = "root")
-    # Same normalisation as `AlgorithmRegistry.normalize_name`
-    # (algorithm_registry.rb): a fully-qualified id like
-    # "org.eclipse.elk.layered" resolves to "layered", not to a literal
-    # mismatch against the bare form.
-    algorithm = expected.dig("layoutOptions", "elk.algorithm")&.then do |a|
+    diffs = diff_layer_grouping(expected, actual, path)
+    diffs.concat(diff_layer_children(expected, actual, path))
+  end
+
+  # Same normalisation as `AlgorithmRegistry.normalize_name`
+  # (algorithm_registry.rb): a fully-qualified id like
+  # "org.eclipse.elk.layered" resolves to "layered", not to a literal
+  # mismatch against the bare form. A level that pins nothing is treated
+  # as layered.
+  def layered?(level)
+    algorithm = level.dig("layoutOptions", "elk.algorithm")&.then do |a|
       a.to_s.split(".").last.downcase
     end
-    diffs =
-      if algorithm && algorithm != "layered"
-        []
-      else
-        direction = expected.dig("layoutOptions", "elk.direction") || "RIGHT"
-        axis = %w[UP DOWN].include?(direction) ? :y : :x
-        cross_axis = axis == :y ? :x : :y
+    algorithm.nil? || algorithm == "layered"
+  end
 
-        expected_layers = group_by_layer(expected["children"] || [], axis,
-                                         cross_axis)
-        actual_layers = group_by_layer(actual["children"] || [], axis,
-                                       cross_axis)
+  def layer_axes(level)
+    direction = level.dig("layoutOptions", "elk.direction") || "RIGHT"
+    axis = %w[UP DOWN].include?(direction) ? :y : :x
+    [axis, axis == :y ? :x : :y]
+  end
 
-        if expected_layers == actual_layers
-          []
-        else
-          ["#{path}: layer membership/order: expected #{expected_layers.inspect}, got #{actual_layers.inspect}"]
-        end
-      end
+  # Only the LAYER message is skipped for a non-layered level. The child
+  # recursion in `diff_layer_children` is not, and must not be folded in
+  # here as an early return -- a non-layered root still has to reach a
+  # mismatching compound child.
+  def diff_layer_grouping(expected, actual, path)
+    return [] unless layered?(expected)
 
-    expected_children = (expected["children"] || []).to_h { |c| [c["id"], c] }
-    actual_children = (actual["children"] || []).to_h { |c| [c["id"], c] }
-    expected_children.each do |id, child|
+    axis, cross_axis = layer_axes(expected)
+    expected_layers = group_by_layer(expected["children"] || [], axis,
+                                     cross_axis)
+    actual_layers = group_by_layer(actual["children"] || [], axis, cross_axis)
+    return [] if expected_layers == actual_layers
+
+    ["#{path}: layer membership/order: " \
+     "expected #{expected_layers.inspect}, got #{actual_layers.inspect}"]
+  end
+
+  def diff_layer_children(expected, actual, path)
+    actual_children = index_by_id(actual["children"] || [])
+    index_by_id(expected["children"] || []).flat_map do |id, child|
       match = actual_children[id]
-      if match
-        diffs.concat(diff_layer_membership(child, match,
-                                           "#{path}/children/#{id}"))
-      end
+      next [] unless match
+
+      diff_layer_membership(child, match, "#{path}/children/#{id}")
     end
-    diffs
   end
 
   # Returns an Array of Arrays of node ids: grouped by ascending rounded
@@ -820,11 +949,12 @@ box_label)
       .group_by { |n| numeric_or_zero(n, axis.to_s).round }
       .sort.to_h
       .values
-      .map do |group|
-      group.sort_by do |n|
-        [numeric_or_zero(n, cross_axis.to_s), n["id"]]
-      end.map { |n| n["id"] }
-    end
+      .map { |group| layer_ids(group, cross_axis) }
+  end
+
+  def layer_ids(group, cross_axis)
+    group.sort_by { |n| [numeric_or_zero(n, cross_axis.to_s), n["id"]] }
+      .map { |n| n["id"] }
   end
 
   # smoke tier: same node ids present (order-independent), every node's
@@ -840,7 +970,8 @@ box_label)
     actual_ids = collect_ids(actual)
     diffs = []
     if expected_ids.sort != actual_ids.sort
-      diffs << "node ids differ: expected #{expected_ids.sort}, got #{actual_ids.sort}"
+      diffs << "node ids differ: expected #{expected_ids.sort}, " \
+               "got #{actual_ids.sort}"
     end
     diffs.concat(collect_non_finite_positions(actual))
     diffs
@@ -854,33 +985,45 @@ box_label)
   def collect_non_finite_positions(level, path = "")
     (level["children"] || []).flat_map do |child|
       node_path = "#{path}/#{child['id']}"
-      diffs = %w[x y].filter_map do |key|
+      diffs = POSITION_FIELDS.filter_map do |key|
         value = child[key]
-        "#{node_path}/#{key}=#{value.inspect}" unless value.is_a?(Numeric) && value.finite?
+        unless value.is_a?(Numeric) && value.finite?
+          "#{node_path}/#{key}=#{value.inspect}"
+        end
       end
       diffs + collect_non_finite_positions(child, node_path)
     end
   end
 end
 
-RSpec::Matchers.define :match_elkjs_golden do |name, tier:, fields: %i[nodes
-                                                                       sections labels ports graph], dir: GoldenHelper::DEFAULT_DIR|
+RSpec::Matchers.define :match_elkjs_golden do |
+  name,
+  tier:,
+  fields: GoldenHelper::DEFAULT_FIELDS,
+  dir: GoldenHelper::DEFAULT_DIR|
   match do |actual|
     expected = golden_expected(name, dir: dir)
-    comparable_actual = GoldenComparator.error_hash?(actual) ? actual : GoldenComparator.to_comparable(actual)
+    comparable_actual =
+      if GoldenComparator.error_hash?(actual)
+        actual
+      else
+        GoldenComparator.to_comparable(actual)
+      end
 
     @diffs =
-      if GoldenComparator.error_hash?(expected) || GoldenComparator.error_hash?(comparable_actual)
+      if GoldenComparator.error_hash?(expected) ||
+          GoldenComparator.error_hash?(comparable_actual)
         error_diffs(expected, comparable_actual)
       else
         case tier
-        when :exact then GoldenComparator.diff_exact(expected,
-                                                     comparable_actual, fields)
-        when :structural then GoldenComparator.diff_structural(expected,
-                                                               comparable_actual)
-        when :smoke then GoldenComparator.diff_smoke(expected,
-                                                     comparable_actual)
-        else raise ArgumentError, "unknown tier: #{tier.inspect}"
+        when :exact
+          GoldenComparator.diff_exact(expected, comparable_actual, fields)
+        when :structural
+          GoldenComparator.diff_structural(expected, comparable_actual)
+        when :smoke
+          GoldenComparator.diff_smoke(expected, comparable_actual)
+        else
+          raise ArgumentError, "unknown tier: #{tier.inspect}"
         end
       end
 
@@ -897,7 +1040,8 @@ RSpec::Matchers.define :match_elkjs_golden do |name, tier:, fields: %i[nodes
       return [] if GoldenComparator.same_error_condition?(expected_message,
                                                           actual_message)
 
-      return ["expected an error naming the same condition as #{expected_message.inspect}, got #{actual_message.inspect}"]
+      return ["expected an error naming the same condition as " \
+              "#{expected_message.inspect}, got #{actual_message.inspect}"]
     end
 
     if expected_error
@@ -908,8 +1052,8 @@ RSpec::Matchers.define :match_elkjs_golden do |name, tier:, fields: %i[nodes
   end
 
   failure_message do |_actual|
-    "#{name} (tier: #{tier}) — first #{[@diffs.size,
-                                        10].min} of #{@diffs.size} differences:\n" +
-      @diffs.first(10).join("\n")
+    shown = [@diffs.size, 10].min
+    "#{name} (tier: #{tier}) — first #{shown} of #{@diffs.size} " \
+    "differences:\n" + @diffs.first(10).join("\n")
   end
 end
