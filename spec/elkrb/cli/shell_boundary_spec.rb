@@ -571,8 +571,11 @@ RSpec.describe "every command reads input through one path" do
       File.write(path,
                  '{"id":"r","children":[{"id":"a","width":10,"height":10}]}')
 
-      %w[layout validate].each do |command|
-        _stdout, _stderr, status = run_elkrb(command, path)
+      readers = { "layout" => [], "validate" => [],
+                  "diagram" => ["-o", File.join(dir, "out.dot")] }
+
+      readers.each do |command, extra|
+        _stdout, _stderr, status = run_elkrb(command, path, *extra)
 
         expect(status.exitstatus).to eq(0), "#{command} rejected a valid graph"
       end
