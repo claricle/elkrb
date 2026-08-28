@@ -421,6 +421,29 @@ RSpec.describe "malformed collection shapes" do
   end
 end
 
+RSpec.describe "input that exhausts the parser's stack" do
+  # Psych recurses once per level, and SystemStackError is not a
+  # StandardError -- so it walked straight past try_yaml's rescue, parse's
+  # Psych::Exception rescue and the CLI's own, and the user got a raw
+  # "stack level too deep" trace. Depth 5000 is enough to overflow and
+  # costs about half a second; the 200_000 the report used takes minutes.
+  let(:nested_yaml) { ("[" * 5000) + ("]" * 5000) }
+
+  let(:unparseable) do
+    "Unable to parse input file. Supported formats: JSON, YAML, ELKT"
+  end
+
+  it "normalizes the overflow on the sniffed path" do
+    expect { Elkrb::FormatSniffer.read(nested_yaml, "") }
+      .to raise_error(ArgumentError, unparseable)
+  end
+
+  it "normalizes the overflow on the declared .yaml path" do
+    expect { Elkrb::FormatSniffer.read(nested_yaml, ".yaml") }
+      .to raise_error(ArgumentError, unparseable)
+  end
+end
+
 RSpec.describe "an empty but recognized collection is real content" do
   # A mapped field that came back present-but-empty means lutaml-model
   # understood the document. Only an all-nil model means it matched nothing,

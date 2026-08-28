@@ -60,12 +60,28 @@ module Elkrb
       #   Psych's safe loader refuses -- a !ruby/object tag
       #   (Psych::DisallowedClass) or an alias (Psych::AliasesNotEnabled)
       # @raise [ArgumentError] for .dot/.gv, for a parsed-but-unusable
-      #   JSON/YAML model, and for ELKT or sniffed content that yields nothing
+      #   JSON/YAML model, for ELKT or sniffed content that yields nothing,
+      #   and for YAML nested deeper than Psych's recursion can survive
       def read(content, extension)
         require_relative "graph/graph"
 
-        text = strip_byte_order_mark(content)
+        read_by_extension(strip_byte_order_mark(content), extension)
+      rescue SystemStackError
+        # Psych recurses once per nesting level, so a few thousand open
+        # brackets overflow the stack. SystemStackError is not a
+        # StandardError, so it walked past every rescue below AND the CLI's
+        # own, and the user got a raw trace. Caught here because this is
+        # where the module states what it raises, and both the sniffed and
+        # the declared YAML branch can reach it.
+        raise ArgumentError, UNPARSEABLE
+      end
 
+      private
+
+      # Every branch here runs inside #read's SystemStackError rescue, and
+      # needs to: the declared .yml/.yaml branch overflows Psych's recursion
+      # as readily as the sniffed one does.
+      def read_by_extension(text, extension)
         case extension
         when ".json", ".yml", ".yaml" then read_model(text, extension)
         when ".elkt" then parse_elkt(text)
@@ -73,8 +89,6 @@ module Elkrb
         else parse(text)
         end
       end
-
-      private
 
       # The mark is the three bytes EF BB BF, so it comes off by byte rather
       # than by character. String#delete_prefix compares CHARACTERS, and a
