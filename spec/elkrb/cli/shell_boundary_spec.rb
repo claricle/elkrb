@@ -76,18 +76,56 @@ RSpec.describe "elkrb CLI shell boundary" do
       end
     end
 
-    it "exits 0 for an ELKT file with only a layout option, no nodes" do
+    it "exits 1 for an options-only file with no recognized extension" do
       Dir.mktmpdir do |dir|
         file = File.join(dir, "options_only.noext")
         # Valid YAML (a one-key mapping with no recognized Graph fields),
-        # so from_yaml succeeds silently with an empty/hollow model. The
-        # guard must still fall through to ElktParser rather than treating
-        # that hollow "success" as a real (if empty) graph.
+        # so from_yaml succeeds silently with an empty/hollow model and the
+        # sniff falls through to ElktParser. Nothing here declares the file
+        # to be ELKT, and the ELKT parser reads any `key: value` line as a
+        # layout option, so a graph with no children and no edges is the
+        # parser finding nothing rather than a real empty graph.
         File.write(file, "algorithm: layered\n")
 
-        _stdout, _stderr, status = run_elkrb("layout", file)
+        _stdout, stderr, status = run_elkrb("layout", file)
+
+        expect(status.exitstatus).to eq(1)
+        expect(stderr).to include("Unable to parse")
+      end
+    end
+
+    it "exits 0 for an options-only file whose extension declares ELKT" do
+      Dir.mktmpdir do |dir|
+        file = File.join(dir, "options_only.elkt")
+        # Same bytes as the example above. The extension names the format,
+        # so an options-only graph is legitimate content and the sniffed
+        # path's children-or-edges requirement must not reach this path.
+        File.write(file, "algorithm: layered\n")
+
+        stdout, _stderr, status = run_elkrb("layout", file)
 
         expect(status.exitstatus).to eq(0)
+        expect(JSON.parse(stdout)["layoutOptions"])
+          .to eq({ "elk.algorithm" => "layered" })
+      end
+    end
+
+    it "exits 1 for malformed YAML with no recognized extension" do
+      Dir.mktmpdir do |dir|
+        file = File.join(dir, "broken.noext")
+        # Byte-identical content named .yaml exits 1. Unnamed, the failed
+        # YAML parse fell through to the lenient ELKT parser, which turned
+        # `width: [unclosed` into layout option elk.width and returned a
+        # graph whose children were simply gone -- exit 0 on a document the
+        # same bytes under a .yaml name are rejected for.
+        File.write(file,
+                   "id: root\nchildren:\n  - id: a\n    width: [unclosed\n")
+
+        stdout, stderr, status = run_elkrb("layout", file)
+
+        expect(status.exitstatus).to eq(1)
+        expect(stdout).to eq("")
+        expect(stderr).to include("Unable to parse")
       end
     end
 

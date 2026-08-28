@@ -176,14 +176,13 @@ RSpec.describe Elkrb::Commands::ConvertCommand do
                                             /Unable to parse input file/)
     end
 
-    it "preserves options-only ELKT content that also parses as valid " \
-       "(hollow) YAML" do
-      input_file = File.join(temp_dir, "options_only.noext")
+    it "preserves options-only content from a file that declares ELKT" do
+      input_file = File.join(temp_dir, "options_only.elkt")
       output_file = File.join(temp_dir, "output.json")
-      # Valid YAML on its own (succeeds silently with an empty/hollow
-      # model), so this only reaches ElktParser via the empty-graph guard.
-      # Proves the guard doesn't just avoid raising -- the option itself
-      # survives the parse.
+      # The extension names the format, so a graph carrying only options is
+      # legitimate content. Proves the .elkt path doesn't just avoid
+      # raising -- the option itself survives the parse. The same bytes with
+      # no extension are rejected: nothing there declares them to be ELKT.
       File.write(input_file, "algorithm: layered\n")
 
       command = described_class.new(input_file, { output: output_file })

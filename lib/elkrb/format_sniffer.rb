@@ -208,11 +208,25 @@ module Elkrb
         NIL_WHEN_HOLLOW.all? { |field| graph.public_send(field).nil? }
       end
 
+      # The sniffed path reaches ELKT only because nothing else could read
+      # the document, and no extension declared it to be ELKT either. The
+      # parser is lenient -- it skips every line it does not understand and
+      # reads any `key: value` as a layout option -- so arbitrary text comes
+      # back as a graph carrying junk options and no nodes. Requiring
+      # children or edges is what keeps `layout garbage.txt` exiting 1.
+      #
+      # parse_elkt applies a looser guard on purpose: there the extension
+      # names the format, so an options-only or geometry-only graph is
+      # content the author meant to write.
       def parse_elkt_or_fail(content)
         graph = parse_elkt!(content)
-        return graph unless hollow_hash?(graph)
+        return graph unless childless?(graph)
 
         raise ArgumentError, UNPARSEABLE
+      end
+
+      def childless?(graph)
+        blank?(graph[:children]) && blank?(graph[:edges])
       end
 
       def parse_elkt!(content)
