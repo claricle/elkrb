@@ -4,9 +4,9 @@ require_relative "be_deterministic"
 
 RSpec.describe "be_deterministic" do
   let(:input_hash) do
-    { "id" => "root", "children" => [{ "id" => "a", "width" => 30, "height" => 30 },
-                                     { "id" => "b", "width" => 30,
-                                       "height" => 30 }],
+    { "id" => "root",
+      "children" => [{ "id" => "a", "width" => 30, "height" => 30 },
+                     { "id" => "b", "width" => 30, "height" => 30 }],
       "edges" => [{ "id" => "e1", "sources" => ["a"], "targets" => ["b"] }] }
   end
 

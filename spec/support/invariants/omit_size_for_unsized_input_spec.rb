@@ -4,8 +4,12 @@ require_relative "omit_size_for_unsized_input"
 
 RSpec.describe "omit_size_for_unsized_input" do
   it "passes when an unsized leaf node stays unsized" do
-    input_hash = { "id" => "root", "children" => [{ "id" => "a" }, { "id" => "b", "width" => 30, "height" => 30 }],
-                   "edges" => [{ "id" => "e1", "sources" => ["a"], "targets" => ["b"] }] }
+    input_hash = {
+      "id" => "root",
+      "children" => [{ "id" => "a" },
+                     { "id" => "b", "width" => 30, "height" => 30 }],
+      "edges" => [{ "id" => "e1", "sources" => ["a"], "targets" => ["b"] }],
+    }
     graph = Elkrb::Graph::Graph.from_hash(input_hash)
     result = Elkrb.layout(graph, {})
 
@@ -14,7 +18,8 @@ RSpec.describe "omit_size_for_unsized_input" do
 
   it "exempts a node with a children key present, even empty" do
     input_hash = { "id" => "root",
-                   "children" => [{ "id" => "p", "children" => [] }], "edges" => [] }
+                   "children" => [{ "id" => "p", "children" => [] }],
+                   "edges" => [] }
     graph = Elkrb::Graph::Graph.from_hash(input_hash)
     result = Elkrb.layout(graph, {})
 
