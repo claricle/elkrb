@@ -711,4 +711,15 @@ RSpec.describe "byte order mark removal across input encodings" do
 
     expect(elkt_node_ids(graph)).to eq(%w[a b])
   end
+
+  # The one combination where both halves of the fix have to hold at once.
+  # The mark goes on as BYTES: a UTF-8 mark literal interpolated
+  # into a Latin-1 receiver raises in the spec, not in the code.
+  it "reads a marked .elkt file in ISO-8859-1 holding a non-ASCII byte" do
+    content = latin1("\xEF\xBB\xBF#{accented_elkt}")
+
+    graph = Elkrb::FormatSniffer.read(content, ".elkt")
+
+    expect(elkt_node_ids(graph)).to eq(%w[a b])
+  end
 end
