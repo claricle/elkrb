@@ -34,35 +34,50 @@ RSpec::Matchers.define :preserve_ids_and_endpoints do |input_hash|
   define_method(:check_level) do |input_level, actual_owner|
     actual_children = actual_owner.children || []
     actual_edges = actual_owner.edges || []
-    @violations.concat(duplicate_id_violations(actual_children, "node",
-                                               actual_owner.id))
-    @violations.concat(duplicate_id_violations(actual_edges, "edge",
-                                               actual_owner.id))
+    check_duplicates(actual_owner.id, actual_children, actual_edges)
+    check_children(input_level["children"] || [], actual_children)
+    check_edges(input_level["edges"] || [], actual_edges)
+  end
 
-    actual_children_by_id = actual_children.to_h { |n| [n.id, n] }
-    (input_level["children"] || []).each do |input_child|
-      actual_child = actual_children_by_id[input_child["id"]]
+  define_method(:check_duplicates) do |owner_id, actual_children, actual_edges|
+    @violations.concat(duplicate_id_violations(actual_children, "node",
+                                               owner_id))
+    @violations.concat(duplicate_id_violations(actual_edges, "edge",
+                                               owner_id))
+  end
+
+  define_method(:check_children) do |input_children, actual_children|
+    actual_by_id = actual_children.to_h { |n| [n.id, n] }
+    input_children.each do |input_child|
+      actual_child = actual_by_id[input_child["id"]]
       unless actual_child
         @violations << "missing node #{input_child['id']}"
         next
       end
       check_level(input_child, actual_child)
     end
+  end
 
-    actual_edges_by_id = actual_edges.to_h { |e| [e.id, e] }
-    (input_level["edges"] || []).each do |input_edge|
-      actual_edge = actual_edges_by_id[input_edge["id"]]
+  define_method(:check_edges) do |input_edges, actual_edges|
+    actual_by_id = actual_edges.to_h { |e| [e.id, e] }
+    input_edges.each do |input_edge|
+      actual_edge = actual_by_id[input_edge["id"]]
       unless actual_edge
         @violations << "missing edge #{input_edge['id']}"
         next
       end
 
-      if actual_edge.sources != input_edge["sources"] || actual_edge.targets != input_edge["targets"]
-        @violations << "#{input_edge['id']}: endpoints changed from " \
-                       "#{input_edge['sources']}->#{input_edge['targets']} to " \
-                       "#{actual_edge.sources}->#{actual_edge.targets}"
-      end
+      check_endpoints(input_edge, actual_edge)
     end
+  end
+
+  define_method(:check_endpoints) do |input_edge, actual_edge|
+    input_endpoints = [input_edge["sources"], input_edge["targets"]]
+    return if [actual_edge.sources, actual_edge.targets] == input_endpoints
+
+    @violations << "#{input_edge['id']}: endpoints changed from " \
+                   "#{input_edge['sources']}->#{input_edge['targets']} to " \
+                   "#{actual_edge.sources}->#{actual_edge.targets}"
   end
 
   # `to_h` on an id-keyed collection keeps only the LAST entry for a
