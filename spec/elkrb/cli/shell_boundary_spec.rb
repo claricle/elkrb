@@ -181,6 +181,38 @@ RSpec.describe "elkrb CLI shell boundary" do
                              "Supported formats: JSON, YAML, ELKT\n")
       end
     end
+
+    # Psych's safe loader refuses these rather than failing to parse them,
+    # and lutaml-model does not normalize its refusals, so they reach the
+    # sniffer as raw Psych errors. The user must still see the normalized
+    # message, not "Tried to load unspecified class: Struct".
+    it "exits 1 for YAML naming a disallowed class, not a Psych error" do
+      Dir.mktmpdir do |dir|
+        file = File.join(dir, "disallowed.noext")
+        File.write(file, "--- !ruby/object:Struct\nfoo: 1\n")
+
+        stdout, stderr, status = run_elkrb("layout", file)
+
+        expect(status.exitstatus).to eq(1)
+        expect(stdout).to eq("")
+        expect(stderr).to eq("Error: Unable to parse input file. " \
+                             "Supported formats: JSON, YAML, ELKT\n")
+      end
+    end
+
+    it "exits 1 for YAML using an alias, not a Psych error" do
+      Dir.mktmpdir do |dir|
+        file = File.join(dir, "alias.noext")
+        File.write(file, "a: &x\n  b: *x\n")
+
+        stdout, stderr, status = run_elkrb("layout", file)
+
+        expect(status.exitstatus).to eq(1)
+        expect(stdout).to eq("")
+        expect(stderr).to eq("Error: Unable to parse input file. " \
+                             "Supported formats: JSON, YAML, ELKT\n")
+      end
+    end
   end
 
   describe "batch" do

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "yaml"
+
 module Elkrb
   # @api private
   #
@@ -37,11 +39,25 @@ module Elkrb
       #   hash
       # @raise [ArgumentError] when neither JSON/YAML nor ELKT yields real
       #   content
+      # lutaml-model normalizes only the errors in its own
+      # format_error_types list, measured at runtime as
+      # Psych::SyntaxError, JSON::ParserError, NoMethodError,
+      # Lutaml::Model::TypeError, ArgumentError, Moxml::ParseError,
+      # Nokogiri::XML::SyntaxError. Psych's safe-load REFUSALS are not in
+      # it, so a !ruby/object tag (Psych::DisallowedClass) or an alias
+      # (Psych::AliasesNotEnabled) arrives here unconverted. Those are valid
+      # YAML we decline to load, not "maybe this is ELKT" -- letting them fall
+      # through would hand the text to the ELKT parser, which reads
+      # `foo: 1` as layout option elk.foo and exits 0 on it. Normalize
+      # here instead, so the caller sees the same message as any other
+      # unreadable input.
       def parse(content, unparseable_message:)
         require_relative "graph/graph"
 
         text = content.delete_prefix(BYTE_ORDER_MARK)
         sniff(text) || parse_elkt_or_fail(text, unparseable_message)
+      rescue Psych::Exception
+        raise ArgumentError, unparseable_message
       end
 
       # The single entry point every command reads input through. Extension
@@ -51,13 +67,17 @@ module Elkrb
       # The two paths raise differently, by design. A named JSON/YAML
       # extension hands lutaml-model the content directly, so a document it
       # cannot tokenize surfaces lutaml's own parse error, which names the
-      # offending token. Only the sniffed path normalizes to UNPARSEABLE.
+      # offending token, and a document Psych declines to load surfaces
+      # Psych's own refusal. Only the sniffed path normalizes to UNPARSEABLE.
       #
       # @param content [String] raw file content
       # @param extension [String] the file's downcased extension
       # @return [Elkrb::Graph::Graph, Hash] the parsed graph
       # @raise [Lutaml::Model::InvalidFormatError] when .json/.yml/.yaml
       #   content will not parse as that format
+      # @raise [Psych::Exception] when .yml/.yaml content is valid YAML that
+      #   Psych's safe loader refuses -- a !ruby/object tag
+      #   (Psych::DisallowedClass) or an alias (Psych::AliasesNotEnabled)
       # @raise [ArgumentError] for .dot/.gv, for a parsed-but-unusable
       #   JSON/YAML model, and for ELKT or sniffed content that yields nothing
       def read(content, extension)
