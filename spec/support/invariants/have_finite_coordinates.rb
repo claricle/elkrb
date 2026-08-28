@@ -6,7 +6,8 @@ require_relative "../invariants"
 RSpec::Matchers.define :have_finite_coordinates do
   match do |graph|
     @offenders = []
-    check_dimensions(graph, "root") # root has no position of its own (see below), only a possible size
+    # root has no position of its own (see below), only a possible size
+    check_dimensions(graph, "root")
     walk(graph, "root")
     @offenders.empty?
   end
@@ -27,7 +28,7 @@ RSpec::Matchers.define :have_finite_coordinates do
   define_method(:check_position) do |owner, path|
     %i[x y].each do |attr|
       value = owner.public_send(attr)
-      @offenders << "#{path}.#{attr}=#{value.inspect}" if value.nil? || !value.finite?
+      @offenders << "#{path}.#{attr}=#{value.inspect}" unless value&.finite?
     end
   end
 
@@ -36,7 +37,8 @@ RSpec::Matchers.define :have_finite_coordinates do
       value = owner.public_send(attr)
       next if value.nil?
 
-      @offenders << "#{path}.#{attr}=#{value.inspect}" unless value.finite? && value >= 0
+      in_range = value.finite? && value >= 0
+      @offenders << "#{path}.#{attr}=#{value.inspect}" unless in_range
     end
   end
 
@@ -68,19 +70,25 @@ RSpec::Matchers.define :have_finite_coordinates do
       return
     end
 
-    @offenders << "#{path}=#{point.inspect}" unless point.x&.finite? && point.y&.finite?
+    finite = point.x&.finite? && point.y&.finite?
+    @offenders << "#{path}=#{point.inspect}" unless finite
+  end
+
+  define_method(:check_section_points) do |section, edge_path|
+    check_point(section.start_point, "#{edge_path}/start_point")
+    check_point(section.end_point, "#{edge_path}/end_point")
+    (section.bend_points || []).each_with_index do |point, i|
+      check_point(point, "#{edge_path}/bend_points[#{i}]")
+    end
   end
 
   define_method(:check_sections) do |owner, path|
     (owner.edges || []).each do |edge|
+      edge_path = "#{path}/edges/#{edge.id}"
       (edge.sections || []).each do |section|
-        check_point(section.start_point, "#{path}/edges/#{edge.id}/start_point")
-        check_point(section.end_point, "#{path}/edges/#{edge.id}/end_point")
-        (section.bend_points || []).each_with_index do |point, i|
-          check_point(point, "#{path}/edges/#{edge.id}/bend_points[#{i}]")
-        end
+        check_section_points(section, edge_path)
       end
-      check_labels(edge, "#{path}/edges/#{edge.id}")
+      check_labels(edge, edge_path)
     end
   end
 
