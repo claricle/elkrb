@@ -436,3 +436,59 @@ RSpec.describe "every command reads input through one path" do
     end
   end
 end
+
+RSpec.describe "byte order mark removal across input encodings" do
+  # File.read tags content with Encoding.default_external, which RUBYOPT=-E,
+  # an explicit -E, or the locale is free to set to anything. A character
+  # level String#delete_prefix against a UTF-8 mark literal raises
+  # Encoding::CompatibilityError on any receiver in another encoding that
+  # holds a non-ASCII byte, so the mark comes off by byte instead.
+  let(:json) do
+    '{"id":"root","children":[{"id":"a","width":30,"height":30}]}'
+  end
+
+  let(:yaml) do
+    "id: root\nchildren:\n  - id: a\n    width: 30\n    height: 30\n"
+  end
+
+  # A lone high byte: e-acute in ISO-8859-1, not valid UTF-8 on its own.
+  let(:accented_json) { json.sub("root", "caf\xE9") }
+
+  let(:accented_yaml) { yaml.sub("root", "caf\xE9") }
+
+  def child_ids(content, extension)
+    Elkrb::FormatSniffer.read(content, extension).children.map(&:id)
+  end
+
+  it "strips the mark from UTF-8 content" do
+    expect(child_ids("\uFEFF#{json}", ".json")).to eq(["a"])
+  end
+
+  it "leaves UTF-8 content without a mark alone" do
+    expect(child_ids(json, ".json")).to eq(["a"])
+  end
+
+  it "reads unmarked ISO-8859-1 JSON holding a non-ASCII byte" do
+    content = accented_json.force_encoding(Encoding::ISO_8859_1)
+
+    expect(child_ids(content, ".json")).to eq(["a"])
+  end
+
+  it "reads unmarked ISO-8859-1 YAML holding a non-ASCII byte" do
+    content = accented_yaml.force_encoding(Encoding::ISO_8859_1)
+
+    expect(child_ids(content, ".yaml")).to eq(["a"])
+  end
+
+  it "strips the mark from BINARY content" do
+    content = "\uFEFF#{json}".force_encoding(Encoding::BINARY)
+
+    expect(child_ids(content, ".json")).to eq(["a"])
+  end
+
+  it "reads unmarked BINARY content holding a non-ASCII byte" do
+    content = accented_json.force_encoding(Encoding::BINARY)
+
+    expect(child_ids(content, ".json")).to eq(["a"])
+  end
+end

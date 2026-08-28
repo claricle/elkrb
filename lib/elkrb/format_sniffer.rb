@@ -15,7 +15,7 @@ module Elkrb
   # field nil -- silent "success" on garbage is exactly the bug this slice
   # exists to kill).
   module FormatSniffer
-    BYTE_ORDER_MARK = "\uFEFF"
+    BYTE_ORDER_MARK = "\xEF\xBB\xBF".b.freeze
     private_constant :BYTE_ORDER_MARK
 
     UNPARSEABLE =
@@ -62,7 +62,7 @@ module Elkrb
       def read(content, extension)
         require_relative "graph/graph"
 
-        text = content.delete_prefix(BYTE_ORDER_MARK)
+        text = strip_byte_order_mark(content)
 
         case extension
         when ".json", ".yml", ".yaml" then read_model(text, extension)
@@ -73,6 +73,19 @@ module Elkrb
       end
 
       private
+
+      # The mark is the three bytes EF BB BF, so it comes off by byte rather
+      # than by character. String#delete_prefix compares CHARACTERS, and a
+      # UTF-8 literal raises Encoding::CompatibilityError against a receiver
+      # in another encoding that holds any non-ASCII byte -- File.read tags
+      # content with Encoding.default_external, which the locale sets.
+      #
+      # @return [String] the content without its mark, in its own encoding
+      def strip_byte_order_mark(content)
+        return content unless content.byteslice(0, 3).b == BYTE_ORDER_MARK
+
+        content.byteslice(3..)
+      end
 
       # @param content [String] raw file content
       # @return [Elkrb::Graph::Graph, Hash] a parsed graph model, or an ELKT
