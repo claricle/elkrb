@@ -221,6 +221,40 @@ RSpec.describe Elkrb::GraphvizWrapper do
       end
     end
 
+    it "hands dot an input path that cannot be read as an option" do
+      with_fake_dot do |log_path|
+        Dir.mktmpdir do |dir|
+          dash_input = File.join(dir, "-V")
+          File.write(dash_input, "digraph{a->b}")
+          output = File.join(dir, "output.png")
+
+          Dir.chdir(dir) { wrapper.render("-V", output, :png) }
+
+          # Real graphviz reads a bare "-V" as the version flag: it prints
+          # the banner, exits 0 and writes nothing, so the CLI reported a
+          # render that never happened.
+          argv = logged_argv(log_path)
+          expect(argv.last).not_to start_with("-")
+          expect(File.identical?(argv.last, dash_input)).to be true
+        end
+      end
+    end
+
+    it "hands dot an output path that cannot be read as an option" do
+      with_fake_dot do |log_path|
+        Dir.mktmpdir do |dir|
+          input = write_fake_input(dir)
+          dash_output = File.join(dir, "-Tsvg.png")
+
+          Dir.chdir(dir) { wrapper.render(input, "-Tsvg.png", :png) }
+
+          argv = logged_argv(log_path)
+          expect(argv[argv.index("-o") + 1]).not_to start_with("-")
+          expect(File.exist?(dash_output)).to be true
+        end
+      end
+    end
+
     it "raises error when Graphviz is not available" do
       with_empty_path do
         expect do

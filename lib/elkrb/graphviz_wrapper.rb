@@ -113,9 +113,16 @@ module Elkrb
       File.file?(path) && File.executable?(path)
     end
 
+    # Both file paths are anchored so neither can begin with a dash. dot
+    # takes the input as a bare positional, so a file literally named "-V"
+    # was parsed as the version flag: dot printed its banner, exited 0 and
+    # wrote nothing, and the wrapper reported a successful render. The
+    # output path is anchored for the same reason, one step milder -- dot
+    # rejects "-o -V" with "Missing argument for -o flag" rather than
+    # writing the file the caller asked for.
     def build_command(engine, format, input_file, output_file, dpi)
       [@dot_path, "-K#{engine}", "-T#{format}", "-Gdpi=#{dpi}",
-       "-o", output_file, input_file]
+       "-o", File.absolute_path(output_file), File.absolute_path(input_file)]
     end
 
     def execute_command(argv)
