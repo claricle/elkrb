@@ -90,11 +90,6 @@ module Elkrb
         content.byteslice(3..)
       end
 
-      # @param content [String] raw file content
-      # @return [Elkrb::Graph::Graph, Hash] a parsed graph model, or an ELKT
-      #   hash
-      # @raise [ArgumentError] when neither JSON/YAML nor ELKT yields real
-      #   content
       # lutaml-model normalizes only the errors in its own
       # format_error_types list, measured at runtime as
       # Psych::SyntaxError, JSON::ParserError, NoMethodError,
@@ -107,6 +102,12 @@ module Elkrb
       # `foo: 1` as layout option elk.foo and exits 0 on it. Normalize
       # here instead, so the caller sees the same message as any other
       # unreadable input.
+      #
+      # @param content [String] raw file content
+      # @return [Elkrb::Graph::Graph, Hash] a parsed graph model, or an ELKT
+      #   hash
+      # @raise [ArgumentError] when neither JSON/YAML nor ELKT yields real
+      #   content
       def parse(content)
         sniff(content) || parse_elkt_or_fail(content)
       rescue Psych::Exception
