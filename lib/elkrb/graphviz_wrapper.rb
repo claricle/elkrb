@@ -72,12 +72,18 @@ module Elkrb
     # neither PATH nor a fallback location is tried if it doesn't point at a
     # real executable. An unset or empty ELKRB_DOT is treated as no override:
     # every `dot` on PATH is tried in order, then the fallback locations.
+    #
+    # The override is anchored to the working directory because a bare name
+    # like "dot" resolves two different ways: File.file? reads it against the
+    # working directory, while the OS resolves an argv[0] carrying no
+    # separator through PATH. Unanchored, this method validated one binary
+    # and #render ran another.
     def find_graphviz
       override = ENV.fetch("ELKRB_DOT", nil)
       candidates = if override.nil? || override.empty?
                      path_dot_candidates + FALLBACK_DOT_PATHS
                    else
-                     [override]
+                     [File.absolute_path(override)]
                    end
       candidates.find { |candidate| valid_executable?(candidate) }
     end

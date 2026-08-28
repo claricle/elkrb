@@ -105,6 +105,26 @@ RSpec.describe Elkrb::GraphvizWrapper do
       end
     end
 
+    it "runs the ELKRB_DOT it validated when the override names no directory" do
+      with_fake_dot do
+        Dir.mktmpdir("cwd_dot") do |dir|
+          # A bare name is what File.file? resolves against the working
+          # directory but what the OS resolves through PATH, so before the
+          # anchor the wrapper validated this script and ran the one on PATH
+          # (2.44.1) instead.
+          write_fake_dot(dir, "echo 'dot - graphviz version 9.9.9'")
+
+          Dir.chdir(dir) do
+            ENV["ELKRB_DOT"] = "dot"
+            wrapper = described_class.new
+
+            expect(wrapper.available?).to be true
+            expect(wrapper.version).to eq("9.9.9")
+          end
+        end
+      end
+    end
+
     it "finds dot in a fallback location when PATH holds none" do
       Dir.mktmpdir do |dir|
         fallback = write_fake_dot(dir, "exit 0")
