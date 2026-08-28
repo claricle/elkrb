@@ -296,17 +296,22 @@ RSpec.describe "failures that must not look like successes" do
 end
 
 RSpec.describe "malformed collection shapes" do
+  # An empty extension takes read's else branch, which is the sniffed path
+  # these examples are about. Asserting the real UNPARSEABLE text pins the
+  # message a user actually sees, which a custom one never could.
+  let(:unparseable) do
+    "Unable to parse input file. Supported formats: JSON, YAML, ELKT"
+  end
+
   it "reports a normalized parse error rather than leaking NoMethodError" do
     expect do
-      Elkrb::FormatSniffer.parse('{"id":"r","children":{"a":1}}',
-                                 unparseable_message: "not a graph")
-    end.to raise_error(ArgumentError, "not a graph")
+      Elkrb::FormatSniffer.read('{"id":"r","children":{"a":1}}', "")
+    end.to raise_error(ArgumentError, unparseable)
   end
 
   it "still accepts a properly shaped children list" do
-    graph = Elkrb::FormatSniffer.parse(
-      '{"id":"r","children":[{"id":"a","width":10,"height":10}]}',
-      unparseable_message: "not a graph",
+    graph = Elkrb::FormatSniffer.read(
+      '{"id":"r","children":[{"id":"a","width":10,"height":10}]}', ""
     )
 
     expect(graph.children).to be_an(Array)

@@ -33,33 +33,6 @@ module Elkrb
     private_constant :BLANK_WHEN_HOLLOW
 
     class << self
-      # @param content [String] raw file content
-      # @param unparseable_message [String] message for the final ArgumentError
-      # @return [Elkrb::Graph::Graph, Hash] a parsed graph model, or an ELKT
-      #   hash
-      # @raise [ArgumentError] when neither JSON/YAML nor ELKT yields real
-      #   content
-      # lutaml-model normalizes only the errors in its own
-      # format_error_types list, measured at runtime as
-      # Psych::SyntaxError, JSON::ParserError, NoMethodError,
-      # Lutaml::Model::TypeError, ArgumentError, Moxml::ParseError,
-      # Nokogiri::XML::SyntaxError. Psych's safe-load REFUSALS are not in
-      # it, so a !ruby/object tag (Psych::DisallowedClass) or an alias
-      # (Psych::AliasesNotEnabled) arrives here unconverted. Those are valid
-      # YAML we decline to load, not "maybe this is ELKT" -- letting them fall
-      # through would hand the text to the ELKT parser, which reads
-      # `foo: 1` as layout option elk.foo and exits 0 on it. Normalize
-      # here instead, so the caller sees the same message as any other
-      # unreadable input.
-      def parse(content, unparseable_message:)
-        require_relative "graph/graph"
-
-        text = content.delete_prefix(BYTE_ORDER_MARK)
-        sniff(text) || parse_elkt_or_fail(text, unparseable_message)
-      rescue Psych::Exception
-        raise ArgumentError, unparseable_message
-      end
-
       # The single entry point every command reads input through. Extension
       # dispatch plus shape validation lived in four places and drifted apart;
       # a guard added to one silently left the other three open.
@@ -93,13 +66,38 @@ module Elkrb
 
         case extension
         when ".json", ".yml", ".yaml" then read_model(text, extension)
-        when ".elkt" then parse_elkt(text, unparseable_message: UNPARSEABLE)
+        when ".elkt" then parse_elkt(text)
         when ".dot", ".gv" then raise ArgumentError, DOT_UNSUPPORTED
-        else parse(text, unparseable_message: UNPARSEABLE)
+        else parse(text)
         end
       end
 
       private
+
+      # @param content [String] raw file content
+      # @return [Elkrb::Graph::Graph, Hash] a parsed graph model, or an ELKT
+      #   hash
+      # @raise [ArgumentError] when neither JSON/YAML nor ELKT yields real
+      #   content
+      # lutaml-model normalizes only the errors in its own
+      # format_error_types list, measured at runtime as
+      # Psych::SyntaxError, JSON::ParserError, NoMethodError,
+      # Lutaml::Model::TypeError, ArgumentError, Moxml::ParseError,
+      # Nokogiri::XML::SyntaxError. Psych's safe-load REFUSALS are not in
+      # it, so a !ruby/object tag (Psych::DisallowedClass) or an alias
+      # (Psych::AliasesNotEnabled) arrives here unconverted. Those are valid
+      # YAML we decline to load, not "maybe this is ELKT" -- letting them fall
+      # through would hand the text to the ELKT parser, which reads
+      # `foo: 1` as layout option elk.foo and exits 0 on it. Normalize
+      # here instead, so the caller sees the same message as any other
+      # unreadable input.
+      def parse(content)
+        require_relative "graph/graph"
+
+        sniff(content) || parse_elkt_or_fail(content)
+      rescue Psych::Exception
+        raise ArgumentError, UNPARSEABLE
+      end
 
       # JSON and YAML differ only in the deserializer; both then need the same
       # shape check.
@@ -112,7 +110,7 @@ module Elkrb
                   Elkrb::Graph::Graph.from_yaml(content)
                 end
 
-        validate_model!(model, unparseable_message: UNPARSEABLE)
+        validate_model!(model)
       end
 
       # A file whose extension names the format skips sniffing, so it also
@@ -121,18 +119,18 @@ module Elkrb
       # nil-filled model, and every downstream reader then breaks on it.
       #
       # @raise [ArgumentError] when the parsed model is not usable
-      def validate_model!(graph, unparseable_message:)
+      def validate_model!(graph)
         unless graph.is_a?(Elkrb::Graph::Graph) && !malformed_model?(graph)
-          raise ArgumentError, unparseable_message
+          raise ArgumentError, UNPARSEABLE
         end
 
         graph
       end
 
-      def parse_elkt(content, unparseable_message:)
-        graph = parse_elkt!(content, unparseable_message)
+      def parse_elkt(content)
+        graph = parse_elkt!(content)
         if hollow_hash?(graph) && declarations?(content)
-          raise ArgumentError, unparseable_message
+          raise ArgumentError, UNPARSEABLE
         end
 
         graph
@@ -196,18 +194,18 @@ module Elkrb
           BLANK_WHEN_HOLLOW.all? { |field| blank?(graph.public_send(field)) }
       end
 
-      def parse_elkt_or_fail(content, unparseable_message)
-        graph = parse_elkt!(content, unparseable_message)
+      def parse_elkt_or_fail(content)
+        graph = parse_elkt!(content)
         return graph unless hollow_hash?(graph)
 
-        raise ArgumentError, unparseable_message
+        raise ArgumentError, UNPARSEABLE
       end
 
-      def parse_elkt!(content, unparseable_message)
+      def parse_elkt!(content)
         require_relative "parsers/elkt_parser"
         Elkrb::Parsers::ElktParser.parse(content)
       rescue StandardError
-        raise ArgumentError, unparseable_message
+        raise ArgumentError, UNPARSEABLE
       end
 
       # An empty or comment-only ELKT file is a valid empty graph, so the
