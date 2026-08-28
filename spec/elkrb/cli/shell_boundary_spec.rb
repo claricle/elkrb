@@ -274,6 +274,29 @@ RSpec.describe "elkrb CLI shell boundary" do
       end
     end
   end
+
+  describe "diagram" do
+    # The command's rescue cleans up and re-raises; Cli's own rescue is what
+    # prints. A warn in both put the whole eleven-line installation notice
+    # on stderr twice for one failure, and a three-file batch printed it six
+    # times.
+    it "reports a missing Graphviz once, and leaves no half-rendered file" do
+      Dir.mktmpdir do |dir|
+        input = File.join(dir, "g.json")
+        File.write(input,
+                   '{"id":"r","children":[{"id":"a","width":10,"height":10}]}')
+
+        _stdout, stderr, status = run_elkrb(
+          "diagram", input, "-o", File.join(dir, "out.svg"),
+          env: { "ELKRB_DOT" => "/nonexistent/dot" }
+        )
+
+        expect(status.exitstatus).to eq(1)
+        expect(stderr.scan("Graphviz is required").size).to eq(1)
+        expect(Dir.children(dir)).to eq(["g.json"])
+      end
+    end
+  end
 end
 
 RSpec.describe "failures that must not look like successes" do

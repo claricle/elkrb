@@ -139,8 +139,7 @@ module Elkrb
 
           # Clean up temp DOT file if we created one
           File.delete(dot_file) if dot_file != output_file && File.exist?(dot_file)
-        rescue Elkrb::GraphvizWrapper::GraphvizNotFoundError => e
-          warn "⚠ #{e.message}"
+        rescue Elkrb::GraphvizWrapper::GraphvizNotFoundError
           discard_unrendered(dot_file, output_file)
           raise
         end
