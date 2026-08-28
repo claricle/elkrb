@@ -5,15 +5,24 @@ require "yaml"
 module Elkrb
   # @api private
   #
-  # Shared "sniff JSON/YAML, fall back to ELKT" input-format detection for
-  # Cli#read_input_file and the convert/diagram/validate commands'
-  # detect_and_parse. One tested home for logic all four call sites need
-  # identical, instead of four private methods that can quietly drift (as
-  # happened when the empty-graph guard needed a matching fix on the
-  # from_json/from_yaml side: lutaml-model 0.8.19 succeeds on any YAML/JSON
-  # mapping, even one with no recognized keys, returning a graph with every
-  # field nil -- silent "success" on garbage is exactly the bug this slice
-  # exists to kill).
+  # Shared "sniff JSON/YAML, fall back to ELKT" input-format detection.
+  # Every command reads its input through here: Cli#read_input_file,
+  # ConvertCommand#load_any_format, ValidateCommand#load_any_format and
+  # DiagramCommand#load_graph. One tested home for logic all four call
+  # sites need identical, instead of four private methods that can quietly
+  # drift.
+  #
+  # The two paths guard differently, and only one of them is finished.
+  # lutaml-model 0.8.19 succeeds on any YAML/JSON mapping, even one with no
+  # recognized keys, and returns a graph with every field nil. The SNIFFED
+  # path rejects that (hollow_model?). The DECLARED .json/.yml/.yaml path
+  # applies the malformed-shape check only, so it does not. Measured:
+  # `{"foo":1}` named .json and `foo: 1` named .yaml each exit 0 printing
+  # `{}`, while the same bytes with no extension exit 1.
+  #
+  # That asymmetry is deliberate here, not an oversight -- this slice
+  # scopes the hollow guard to the sniffed path in as many words. Widening
+  # it to the declared path is a known limitation left to a later item.
   module FormatSniffer
     BYTE_ORDER_MARK = "\xEF\xBB\xBF".b.freeze
     private_constant :BYTE_ORDER_MARK
