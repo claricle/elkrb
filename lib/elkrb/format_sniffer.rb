@@ -236,10 +236,16 @@ module Elkrb
         raise ArgumentError, UNPARSEABLE
       end
 
-      # An empty or comment-only ELKT file is a valid empty graph, so the
-      # hollow guard must not reject it. A file that DOES carry declarations
-      # and still parses to nothing is unrecognized content — the parser skips
-      # lines it does not understand, so without this it exits 0 on junk.
+      # Only parse_elkt consults this, and the scope matters. There the
+      # extension declares the format, so an empty or comment-only file is a
+      # valid empty graph and the hollow guard must not reject it. A file
+      # that DOES carry declarations and still parses to nothing is
+      # unrecognized content — the parser skips lines it does not
+      # understand, so without this it exits 0 on junk.
+      #
+      # The sniffed path rejects both, because nothing there declares the
+      # file to be ELKT in the first place. That is the same "two paths
+      # raise differently, by design" rule #read states.
       def declarations?(text)
         text.gsub(%r{/\*.*?\*/}m, "")
           .each_line

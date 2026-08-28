@@ -111,6 +111,21 @@ RSpec.describe "elkrb CLI shell boundary" do
       end
     end
 
+    it "exits 1 for a comment-only file with no recognized extension" do
+      Dir.mktmpdir do |dir|
+        file = File.join(dir, "comment.noext")
+        # The same bytes named .elkt are a valid empty graph. Unnamed,
+        # nothing declares the file to be ELKT, so a parse that yields
+        # nothing is the parser finding nothing rather than an empty graph.
+        File.write(file, "// just a comment\n")
+
+        _stdout, stderr, status = run_elkrb("layout", file)
+
+        expect(status.exitstatus).to eq(1)
+        expect(stderr).to include("Unable to parse")
+      end
+    end
+
     it "exits 1 for malformed YAML with no recognized extension" do
       Dir.mktmpdir do |dir|
         file = File.join(dir, "broken.noext")
