@@ -21,9 +21,18 @@ RSpec::Matchers.define :omit_size_for_unsized_input do |input_hash|
   # unique within a level, per `NodeIndex.build`'s contract) — walking
   # both trees together avoids both.
   define_method(:check_level) do |input_level, actual_owner|
-    actual_children_by_id = (actual_owner.children || []).to_h { |n| [n.id, n] }
-    (input_level["children"] || []).each do |input_child|
-      actual_child = actual_children_by_id[input_child["id"]]
+    check_child_levels(input_level["children"] || [], actual_owner.children)
+    check_edge_labels(input_level["edges"] || [], actual_owner.edges)
+  end
+
+  define_method(:index_by_id) do |items|
+    (items || []).to_h { |item| [item.id, item] }
+  end
+
+  define_method(:check_child_levels) do |input_children, actual_children|
+    actual_by_id = index_by_id(actual_children)
+    input_children.each do |input_child|
+      actual_child = actual_by_id[input_child["id"]]
       unless actual_child
         @violations << "#{input_child['id']}: missing from actual result"
         next
@@ -35,18 +44,22 @@ RSpec::Matchers.define :omit_size_for_unsized_input do |input_hash|
       check_ports(input_child, actual_child)
       check_level(input_child, actual_child)
     end
+  end
 
-    actual_edges_by_id = (actual_owner.edges || []).to_h { |e| [e.id, e] }
-    (input_level["edges"] || []).each do |input_edge|
-      actual_edge = actual_edges_by_id[input_edge["id"]]
-      next unless actual_edge # a missing edge is preserve_ids_and_endpoints's violation, not this matcher's
+  define_method(:check_edge_labels) do |input_edges, actual_edges|
+    actual_by_id = index_by_id(actual_edges)
+    input_edges.each do |input_edge|
+      actual_edge = actual_by_id[input_edge["id"]]
+      # a missing edge is preserve_ids_and_endpoints's violation, not this
+      # matcher's
+      next unless actual_edge
 
       check_labels(input_edge["labels"], actual_edge.labels, input_edge["id"])
     end
   end
 
   define_method(:check_ports) do |input_node, actual_node|
-    actual_ports_by_id = (actual_node.ports || []).to_h { |p| [p.id, p] }
+    actual_ports_by_id = index_by_id(actual_node.ports)
     (input_node["ports"] || []).each do |input_port|
       actual_port = actual_ports_by_id[input_port["id"]]
       unless actual_port
@@ -71,7 +84,8 @@ RSpec::Matchers.define :omit_size_for_unsized_input do |input_hash|
   # `children`), so this same check applies to them unconditionally.
   define_method(:check_dimensions) do |input_owner, actual_owner|
     return if input_owner.key?("children")
-    return if input_owner.key?("width") || input_owner.key?("height") # was sized
+    # was sized
+    return if input_owner.key?("width") || input_owner.key?("height")
 
     if actual_owner.width || actual_owner.height
       @violations << "#{input_owner['id']} gained a size " \
@@ -87,29 +101,35 @@ RSpec::Matchers.define :omit_size_for_unsized_input do |input_hash|
   # and an id-less label sit on the same owner (an earlier version of
   # this method did exactly that).
   define_method(:check_labels) do |input_labels, actual_labels, owner_id|
-    input_labels ||= []
-    actual_labels ||= []
-    input_named, input_unnamed = input_labels.partition { |l| l["id"] }
-    actual_named, actual_unnamed = actual_labels.partition(&:id)
-    actual_by_id = actual_named.to_h { |l| [l.id, l] }
+    input_named, input_unnamed = (input_labels || []).partition { |l| l["id"] }
+    actual_named, actual_unnamed = (actual_labels || []).partition(&:id)
+    check_named_labels(input_named, index_by_id(actual_named), owner_id)
+    check_unnamed_labels(input_unnamed, actual_unnamed, owner_id)
+  end
 
+  define_method(:check_named_labels) do |input_named, actual_by_id, owner_id|
     input_named.each do |input_label|
+      path = "#{owner_id}/labels/#{input_label['id']}"
       actual_label = actual_by_id[input_label["id"]]
       unless actual_label
-        @violations << "#{owner_id}/labels/#{input_label['id']}: missing from actual result"
+        @violations << "#{path}: missing from actual result"
         next
       end
-      check_label_size(input_label, actual_label,
-                       "#{owner_id}/labels/#{input_label['id']}")
+      check_label_size(input_label, actual_label, path)
+    end
+  end
+
+  define_method(:check_unnamed_labels) do |input_labels, actual_labels,
+                                           owner_id|
+    unless input_labels.size == actual_labels.size
+      @violations << "#{owner_id}: expected #{input_labels.size} " \
+                     "id-less label(s), got #{actual_labels.size}"
+      return
     end
 
-    if input_unnamed.size == actual_unnamed.size
-      input_unnamed.each_with_index do |input_label, i|
-        check_label_size(input_label, actual_unnamed[i],
-                         "#{owner_id}/labels[#{i}]")
-      end
-    else
-      @violations << "#{owner_id}: expected #{input_unnamed.size} id-less label(s), got #{actual_unnamed.size}"
+    input_labels.each_with_index do |input_label, i|
+      check_label_size(input_label, actual_labels[i],
+                       "#{owner_id}/labels[#{i}]")
     end
   end
 
@@ -117,7 +137,8 @@ RSpec::Matchers.define :omit_size_for_unsized_input do |input_hash|
     return if input_label.key?("width") || input_label.key?("height")
 
     if actual_label.width || actual_label.height
-      @violations << "#{path} gained a size (#{actual_label.width}x#{actual_label.height})"
+      @violations << "#{path} gained a size " \
+                     "(#{actual_label.width}x#{actual_label.height})"
     end
   end
 end
