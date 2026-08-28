@@ -235,6 +235,14 @@ module Elkrb
       # An ELKT graph is itself a node and may carry only its own position or
       # size (`layout [ size: 30, 40 ]`). That is meaningful content, so the
       # root geometry counts alongside children, edges and options.
+      #
+      # This blank-checks the collections where hollow_model? nil-checks
+      # them, and the difference is forced rather than an oversight. The ELKT
+      # parser always fills children, edges and layoutOptions -- `foo: 1`
+      # comes back as `children: [], edges: [], layoutOptions: {...}` -- so
+      # nothing here is ever nil and emptiness is the only signal there is.
+      # On the model path absence and emptiness are distinguishable, so an
+      # empty collection means the document was understood.
       def hollow_hash?(graph)
         blank?(graph[:children]) && blank?(graph[:edges]) &&
           blank?(graph[:layoutOptions]) &&
