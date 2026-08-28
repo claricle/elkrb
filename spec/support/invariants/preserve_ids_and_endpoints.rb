@@ -34,8 +34,10 @@ RSpec::Matchers.define :preserve_ids_and_endpoints do |input_hash|
   define_method(:check_level) do |input_level, actual_owner|
     actual_children = actual_owner.children || []
     actual_edges = actual_owner.edges || []
-    @violations.concat(duplicate_id_violations(actual_children, "node", actual_owner.id))
-    @violations.concat(duplicate_id_violations(actual_edges, "edge", actual_owner.id))
+    @violations.concat(duplicate_id_violations(actual_children, "node",
+                                               actual_owner.id))
+    @violations.concat(duplicate_id_violations(actual_edges, "edge",
+                                               actual_owner.id))
 
     actual_children_by_id = actual_children.to_h { |n| [n.id, n] }
     (input_level["children"] || []).each do |input_child|
@@ -57,8 +59,8 @@ RSpec::Matchers.define :preserve_ids_and_endpoints do |input_hash|
 
       if actual_edge.sources != input_edge["sources"] || actual_edge.targets != input_edge["targets"]
         @violations << "#{input_edge['id']}: endpoints changed from " \
-                        "#{input_edge['sources']}->#{input_edge['targets']} to " \
-                        "#{actual_edge.sources}->#{actual_edge.targets}"
+                       "#{input_edge['sources']}->#{input_edge['targets']} to " \
+                       "#{actual_edge.sources}->#{actual_edge.targets}"
       end
     end
   end

@@ -30,7 +30,8 @@ RSpec::Matchers.define :omit_size_for_unsized_input do |input_hash|
       end
 
       check_dimensions(input_child, actual_child)
-      check_labels(input_child["labels"], actual_child.labels, input_child["id"])
+      check_labels(input_child["labels"], actual_child.labels,
+                   input_child["id"])
       check_ports(input_child, actual_child)
       check_level(input_child, actual_child)
     end
@@ -74,7 +75,7 @@ RSpec::Matchers.define :omit_size_for_unsized_input do |input_hash|
 
     if actual_owner.width || actual_owner.height
       @violations << "#{input_owner['id']} gained a size " \
-                      "(#{actual_owner.width}x#{actual_owner.height})"
+                     "(#{actual_owner.width}x#{actual_owner.height})"
     end
   end
 
@@ -98,15 +99,17 @@ RSpec::Matchers.define :omit_size_for_unsized_input do |input_hash|
         @violations << "#{owner_id}/labels/#{input_label['id']}: missing from actual result"
         next
       end
-      check_label_size(input_label, actual_label, "#{owner_id}/labels/#{input_label['id']}")
+      check_label_size(input_label, actual_label,
+                       "#{owner_id}/labels/#{input_label['id']}")
     end
 
-    if input_unnamed.size != actual_unnamed.size
-      @violations << "#{owner_id}: expected #{input_unnamed.size} id-less label(s), got #{actual_unnamed.size}"
-    else
+    if input_unnamed.size == actual_unnamed.size
       input_unnamed.each_with_index do |input_label, i|
-        check_label_size(input_label, actual_unnamed[i], "#{owner_id}/labels[#{i}]")
+        check_label_size(input_label, actual_unnamed[i],
+                         "#{owner_id}/labels[#{i}]")
       end
+    else
+      @violations << "#{owner_id}: expected #{input_unnamed.size} id-less label(s), got #{actual_unnamed.size}"
     end
   end
 

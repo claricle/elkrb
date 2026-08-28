@@ -20,8 +20,10 @@ RSpec::Matchers.define :contain_children_within_bounds do |padding = 0|
     width = node.width || 0.0
     height = node.height || 0.0
     (node.children || []).each do |child|
-      cx, cy = child.x || 0.0, child.y || 0.0
-      cw, ch = child.width || 0.0, child.height || 0.0
+      cx = child.x || 0.0
+      cy = child.y || 0.0
+      cw = child.width || 0.0
+      ch = child.height || 0.0
       out_of_bounds = cx < pad || cy < pad || (cx + cw) > (width - pad) || (cy + ch) > (height - pad)
       @violations << "#{child.id} escapes #{node.id}'s bounds" if out_of_bounds
 

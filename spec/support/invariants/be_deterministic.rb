@@ -15,7 +15,8 @@ RSpec::Matchers.define :be_deterministic do
   match do |block|
     first = block.call.to_json
     second = block.call.to_json
-    @first, @second = first, second
+    @first = first
+    @second = second
     first == second
   end
 
