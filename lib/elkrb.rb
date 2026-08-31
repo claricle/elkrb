@@ -21,6 +21,10 @@ require_relative "elkrb/graph/graph"
 
 # Serializers
 require_relative "elkrb/serializers/dot_serializer"
+require_relative "elkrb/serializers/elkt_serializer"
+
+# Parsers
+require_relative "elkrb/parsers/elkt_parser"
 
 # Options parsers
 require_relative "elkrb/options/elk_padding"
