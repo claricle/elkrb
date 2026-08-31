@@ -21,43 +21,62 @@ module Elkrb
         end
 
         def resolve!
-          resolve_container(@tree)
+          resolve_container(@tree, [])
           assign_edge_ids
           @tree
         end
 
         private
 
-        # Indexes are per container, never one flat map: the same id may
-        # legitimately repeat at another level, so `shared.lp` must resolve
-        # against the container that owns the edge.
-        def resolve_container(container)
-          index = build_index(container)
-          (container[:edges] || []).each do |edge|
-            resolve_endpoints(edge, index)
-          end
+        # `scopes` is the enclosing chain, innermost first. ELKT binds Xtext's
+        # ImportedNamespaceAwareLocalScopeProvider, so a name unresolved in the
+        # edge's own container falls outward to the enclosing ones -- while a
+        # local match still wins, which is what keeps a repeated id at another
+        # level from binding to the wrong node.
+        def resolve_container(container, outer)
+          scopes = [build_index(container), *outer]
+          (container[:edges] || []).each { |edge| resolve_edge(edge, scopes) }
           (container[:children] || []).each do |child|
-            resolve_container(child)
+            resolve_container(child, scopes)
           end
         end
 
-        def resolve_endpoints(edge, index)
+        def resolve_edge(edge, scopes)
           %i[sources targets].each do |key|
-            edge[key] = edge[key].map { |ref| resolve_ref(ref, index) }
+            edge[key] = edge[key].map { |ref| resolve_ref(ref, scopes) }
+          end
+          (edge[:sections] || []).each { |s| resolve_section(s, scopes) }
+        end
+
+        # incoming/outgoing are cross-references to ElkConnectableShape, the
+        # same as an endpoint; ELK's JsonExporter writes the terminal id.
+        def resolve_section(section, scopes)
+          %i[incomingShape outgoingShape].each do |key|
+            next unless section[key]
+
+            section[key] = resolve_ref(section[key], scopes)
           end
         end
 
         # An unresolvable reference is kept verbatim rather than collapsed to
         # its head segment, which would silently point the edge at a different,
         # real node.
-        def resolve_ref(reference, index)
+        def resolve_ref(reference, scopes)
+          scopes.each do |index|
+            resolved = resolve_in(reference, index)
+            return resolved if resolved
+          end
+          reference
+        end
+
+        def resolve_in(reference, index)
           parts = reference.split(".")
           current = index[parts.first]
-          return reference unless current
+          return nil unless current
 
           parts.drop(1).each do |part|
             current = descend(current, part)
-            return reference unless current
+            return nil unless current
           end
           current[:id]
         end
@@ -72,12 +91,15 @@ module Elkrb
           (node[:children] || []).find { |entry| entry[:id] == name }
         end
 
+        # Children go in FIRST so a same-id port overwrites one: inserting
+        # ports first let a child win the first path segment, inverting the
+        # rule `descend` applies to every later segment.
         def build_index(container)
           entries = {}
-          (container[:ports] || []).each { |port| entries[port[:id]] = port }
           (container[:children] || []).each do |child|
             entries[child[:id]] = child
           end
+          (container[:ports] || []).each { |port| entries[port[:id]] = port }
           entries
         end
 

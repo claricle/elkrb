@@ -1,0 +1,6 @@
+node c {
+  port same
+  node same { node leaf }
+  edge same.leaf -> sink
+}
+node sink

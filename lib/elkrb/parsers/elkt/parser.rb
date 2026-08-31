@@ -297,8 +297,11 @@ module Elkrb
           token.value
         end
 
+        # A surrogate pair is matched as ONE unit, before the single-unit
+        # alternative: decoding `\uD83D` and `\uDE00` separately packs two
+        # lone surrogates and yields a String that is not valid UTF-8.
         def decode_label(raw, token)
-          raw.gsub(/\\(u[0-9a-fA-F]{4}|.)/m) do
+          raw.gsub(/\\(u[dD][89abAB]\h{2}\\u[dD][c-fC-F]\h{2}|u\h{4}|.)/m) do
             decode_escape(Regexp.last_match(1), token)
           end
         end
@@ -306,11 +309,30 @@ module Elkrb
         # Xtext's STRINGValueConverter rejects an unknown escape outright; the
         # bare character is only the recovery value on its exception.
         def decode_escape(sequence, token)
-          return [sequence[1..].hex].pack("U") if sequence.length == 5
+          return decode_surrogate_pair(sequence) if sequence.length == 11
+          return decode_code_unit(sequence, token) if sequence.length == 5
 
           ESCAPES.fetch(sequence) do
             raise_at(token, "invalid escape \\#{sequence} in label text")
           end
+        end
+
+        def decode_surrogate_pair(sequence)
+          high = sequence[1, 4].hex
+          low = sequence[7, 4].hex
+          [0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00)].pack("U")
+        end
+
+        # A surrogate that reached here is unpaired, so it cannot encode to
+        # UTF-8 at all -- emitting it would produce a String that breaks every
+        # downstream serializer.
+        def decode_code_unit(sequence, token)
+          value = sequence[1..].hex
+          if value.between?(0xD800, 0xDFFF)
+            raise_at(token, "lone surrogate \\#{sequence} in label text")
+          end
+
+          [value].pack("U")
         end
 
         def expect_identifier

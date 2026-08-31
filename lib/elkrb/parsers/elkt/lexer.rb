@@ -32,7 +32,7 @@ module Elkrb
         ].freeze
 
         def initialize(source)
-          @src = source.to_s
+          @src = normalize(source.to_s)
           @pos = 0
           @line = 1
           @col = 1
@@ -48,6 +48,21 @@ module Elkrb
 
         private
 
+        # ELKT is UTF-8. A caller handing us bytes read in binary mode, or text
+        # that is not valid UTF-8, would otherwise escape the facade's
+        # documented ParseError boundary as an Encoding::CompatibilityError or
+        # a bare ArgumentError from the first regexp match.
+        def normalize(text)
+          unless text.encoding == Encoding::UTF_8
+            text = text.dup.force_encoding(Encoding::UTF_8)
+          end
+          return text if text.valid_encoding?
+
+          raise Elkrb::ParseError.new(
+            "Input is not valid UTF-8 at line 1, column 1", line: 1, column: 1
+          )
+        end
+
         def scan_one
           SCANNERS.each { |name| return if send(:"take_#{name}") }
           raise_at(@line, @col,
@@ -61,10 +76,12 @@ module Elkrb
           text
         end
 
+        # Xtext's SL_COMMENT is `'//' !('\n'|'\r')*`, so a lone CR ends it too.
+        # Stopping only at LF swallowed the rest of a CR-delimited file.
         def take_line_comment
           return unless @src[@pos, 2] == "//"
 
-          stop = @src.index("\n", @pos)
+          stop = @src.index(/[\r\n]/, @pos)
           text = stop ? @src[@pos...stop] : @src[@pos..]
           advance(text)
           text

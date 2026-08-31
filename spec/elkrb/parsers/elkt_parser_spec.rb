@@ -9,6 +9,48 @@ require "json"
 # self-consistency.
 ELKT_FIXTURES = File.expand_path("../../fixtures/elkt", __dir__)
 
+# Exact expected [line, column] per invalid fixture, each checked by hand
+# against the source. Asserting only that a location is PRESENT passes even
+# when every error reports 1:1, which is no assertion at all.
+ELKT_ERROR_LOCATIONS = {
+  "bare_arrow" => [2, 9],
+  "bare_keyword_property_key" => [1, 1],
+  "edge_in_port_body" => [1, 19],
+  "escaped_keyword_stmt" => [1, 1],
+  "escaped_property_in_shape_layout" => [1, 19],
+  "garbage" => [1, 34],
+  "geometry_after_bends" => [1, 49],
+  "html" => [1, 1],
+  "layout_extra_key" => [1, 19],
+  "literal_false_as_id" => [1, 6],
+  "literal_null_as_key" => [1, 1],
+  "literal_true_as_id" => [1, 6],
+  "lone_surrogate" => [1, 16],
+  "mid_file_bom" => [2, 1],
+  "node_in_label_body" => [1, 13],
+  "property_after_member" => [2, 1],
+  "qualified_declaration_id" => [1, 6],
+  "qualified_edge_id" => [1, 6],
+  "qualified_graph_id" => [1, 7],
+  "qualified_label_id" => [1, 16],
+  "qualified_outgoing_section_ref" => [1, 37],
+  "qualified_port_id" => [1, 15],
+  "qualified_section_id" => [1, 32],
+  "repeated_bends" => [1, 49],
+  "repeated_position" => [1, 35],
+  "repeated_section_member" => [1, 49],
+  "repeated_size" => [1, 31],
+  "spaced_property_key" => [1, 1],
+  "stray_brace" => [1, 1],
+  "stray_char" => [2, 1],
+  "unbalanced_brace" => [2, 1],
+  "unescaped_keyword_segment" => [1, 6],
+  "unknown_label_escape" => [1, 16],
+  "unterminated_comment" => [1, 1],
+  "unterminated_string" => [1, 16],
+  "unterminated_string_newline" => [1, 16],
+}.freeze
+
 RSpec.describe Elkrb::Parsers::ElktParser do
   def parse_fixture(name)
     described_class.parse(File.read("#{ELKT_FIXTURES}/#{name}.elkt"))
@@ -33,12 +75,13 @@ RSpec.describe Elkrb::Parsers::ElktParser do
     Dir["#{ELKT_FIXTURES}/invalid/*.elkt"].each do |path|
       name = File.basename(path, ".elkt")
 
-      it "rejects #{name} with a located ParseError" do
+      it "rejects #{name} at its expected line and column" do
+        line, column = ELKT_ERROR_LOCATIONS.fetch(name)
+
         expect { described_class.parse(File.read(path)) }
           .to raise_error(Elkrb::ParseError) { |error|
-            expect(error.line).to be_a(Integer).and be_positive
-            expect(error.column).to be_a(Integer).and be_positive
-            expect(error.message).to match(/line \d+, column \d+/)
+            expect([error.line, error.column]).to eq([line, column])
+            expect(error.message).to include("line #{line}, column #{column}")
           }
       end
     end
@@ -116,6 +159,45 @@ RSpec.describe Elkrb::Parsers::ElktParser do
       expect(label[:labels].first).to include(text: "inner")
     end
 
+    it "keeps an empty label rather than dropping it" do
+      labels = parse_fixture("quote_styles")[:children].first[:labels]
+
+      # The committed JSON cannot distinguish "" from a missing :text.
+      expect(labels.map do |label|
+        label[:text]
+      end).to eq(["single", "double", ""])
+    end
+
+    it "keeps labels and ports declared on the root graph" do
+      # Graph has neither attribute, so Graph#to_json drops both silently.
+      graph = parse(%(label "root label"\nport rp\nnode n\n))
+
+      expect(graph[:labels].first[:text]).to eq("root label")
+      expect(graph[:ports].first[:id]).to eq("rp")
+    end
+
+    it "resolves an endpoint against an enclosing container" do
+      graph = parse_fixture("enclosing_scope_ref")
+
+      expect(graph[:children][1][:edges].first[:targets]).to eq(["p"])
+    end
+
+    it "keeps a first-segment port ahead of a same-named child" do
+      # Reaches build_index, not descend: `same` is both a port and a child,
+      # the port wins, and a port has no `leaf`, so nothing resolves.
+      graph = parse_fixture("port_child_collision_first_segment")
+
+      expect(graph[:children].first[:edges].first[:sources])
+        .to eq(["same.leaf"])
+    end
+
+    it "resolves incoming and outgoing section references" do
+      section = parse_fixture("section_shape_refs")
+        .dig(:edges, 0, :sections, 0)
+
+      expect(section).to include(incomingShape: "p", outgoingShape: "a")
+    end
+
     it "keeps backslashes in a property value but decodes them in a label" do
       graph = parse_fixture("string_decoding_by_context")
 
@@ -136,6 +218,23 @@ RSpec.describe Elkrb::Parsers::ElktParser do
       graph = parse("﻿algorithm: force\nnode n1\n")
 
       expect(graph[:layoutOptions]).to eq("algorithm" => "force")
+    end
+
+    it "raises ParseError for input that is not valid UTF-8" do
+      # Would otherwise escape the documented boundary as an ArgumentError
+      # from the first regexp match.
+      malformed = +"node \xC3\x28\n"
+      malformed.force_encoding(Encoding::UTF_8)
+
+      expect { parse(malformed) }
+        .to raise_error(Elkrb::ParseError, /not valid UTF-8/)
+    end
+
+    it "accepts a UTF-8 source handed over in binary encoding" do
+      binary = +"\xEF\xBB\xBFnode a\n"
+      binary.force_encoding(Encoding::ASCII_8BIT)
+
+      expect(parse(binary)[:children].first[:id]).to eq("a")
     end
 
     it "raises on non-ELKT input instead of returning an empty graph" do
