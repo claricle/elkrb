@@ -16,6 +16,7 @@ ELKT_ERROR_LOCATIONS = {
   "bare_arrow" => [2, 9],
   "bare_keyword_property_key" => [1, 1],
   "edge_in_port_body" => [1, 19],
+  "cr_line_location" => [2, 1],
   "escaped_keyword_stmt" => [1, 1],
   "escaped_property_in_shape_layout" => [1, 19],
   "garbage" => [1, 34],
@@ -192,10 +193,56 @@ RSpec.describe Elkrb::Parsers::ElktParser do
     end
 
     it "resolves incoming and outgoing section references" do
+      # Both refs are qualified and land on DIFFERENT ports, so dropping
+      # either branch is observable; `outgoing: a` was "a" either way.
       section = parse_fixture("section_shape_refs")
         .dig(:edges, 0, :sections, 0)
 
-      expect(section).to include(incomingShape: "p", outgoingShape: "a")
+      expect(section).to include(incomingShape: "p", outgoingShape: "q")
+    end
+
+    it "resolves references qualified by the graph name" do
+      graph = parse_fixture("graph_qualified_refs")
+
+      expect(graph[:edges][0]).to include(sources: ["p"], targets: ["b"])
+      expect(graph[:edges][1][:sections].first)
+        .to include(incomingShape: "p", outgoingShape: "b")
+    end
+
+    it "does not invent a root scope without a graph header" do
+      graph = parse(%(node a { port p }\nedge root.a.p -> b\n))
+
+      expect(graph[:edges].first[:sources]).to eq(["root.a.p"])
+    end
+
+    # RSpec's eq treats 30 == 30.0, so this asserts the CLASS. ELK types
+    # Number as EDouble; origin/v2 coerced with to_f and the rewrite dropped
+    # it, changing the public Hash's types without any fixture noticing.
+    it "emits geometry as Float even when spelled as an integer" do
+      node = parse(%(node n { layout [ position: 1, 2  size: 30, 40 ] }\n))
+        .dig(:children, 0)
+
+      expect([node[:x], node[:y], node[:width], node[:height]])
+        .to all(be_a(Float))
+      expect(node[:x]).to eql(1.0)
+    end
+
+    it "emits section geometry as Float" do
+      section = parse(<<~ELKT).dig(:edges, 0, :sections, 0)
+        edge a -> b { layout [ section S [ start: 1, 2  bends: 3, 4 ] ] }
+      ELKT
+
+      expect(section[:startPoint].values).to all(be_a(Float))
+      expect(section[:bendPoints].first.values).to all(be_a(Float))
+    end
+
+    it "counts a lone CR as a line ending" do
+      # The comment fix made CR-delimited files parse; without the same
+      # change in `advance`, every location in them is wrong.
+      expect { parse("node a\r@\r") }
+        .to raise_error(Elkrb::ParseError) { |error|
+          expect([error.line, error.column]).to eq([2, 1])
+        }
     end
 
     it "keeps backslashes in a property value but decodes them in a label" do

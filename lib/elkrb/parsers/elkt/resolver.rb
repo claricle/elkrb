@@ -21,12 +21,22 @@ module Elkrb
         end
 
         def resolve!
-          resolve_container(@tree, [])
+          resolve_container(@tree, root_scope)
           assign_edge_ids
           @tree
         end
 
         private
+
+        # `graph G` names the root, and ELK resolves `G.a.p` through it. The
+        # scope exists only when a header was actually written: the parser
+        # records that id in `declared_ids`, while the default "root" is never
+        # recorded, so membership is exactly the right test.
+        def root_scope
+          return [] unless @declared_ids.include?(@tree[:id])
+
+          [{ @tree[:id] => @tree }]
+        end
 
         # `scopes` is the enclosing chain, innermost first. ELKT binds Xtext's
         # ImportedNamespaceAwareLocalScopeProvider, so a name unresolved in the

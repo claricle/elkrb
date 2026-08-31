@@ -193,10 +193,12 @@ module Elkrb
           section[:bendPoints] = points
         end
 
+        # ElkGraph.xtext types Number as EDouble, so `position: 1, 2` is
+        # 1.0, 2.0 -- not Integer, whatever the source spelling.
         def point
-          x = expect(:number)
+          x = expect(:number).to_f
           expect(:comma)
-          { x: x, y: expect(:number) }
+          { x: x, y: expect(:number).to_f }
         end
 
         # `position` and `size` are an Xtext unordered group: either order,

@@ -17,6 +17,7 @@ module Elkrb
       class Lexer
         BOM = "﻿"
         WS = /\G[ \t\r\n]+/
+        NEWLINE = /\r\n|\r|\n/
         # The exponent alternative MUST precede the plain-decimal one: Ruby
         # alternation is ordered, so `\d+\.\d+` first matches "1.5" of
         # "1.5e-3" and leaves "e-3" to lex as an identifier.
@@ -197,13 +198,16 @@ module Elkrb
           @tokens.last
         end
 
+        # CRLF, lone CR and lone LF each end one line. Counting only LF left
+        # every location wrong in the CR-delimited files the comment fix
+        # started accepting.
         def advance(text)
-          newlines = text.count("\n")
-          if newlines.zero?
+          parts = text.split(NEWLINE, -1)
+          if parts.length <= 1
             @col += text.length
           else
-            @line += newlines
-            @col = text.length - text.rindex("\n")
+            @line += parts.length - 1
+            @col = parts.last.length + 1
           end
           @pos += text.length
         end
