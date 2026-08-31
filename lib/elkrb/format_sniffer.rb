@@ -49,7 +49,10 @@ module Elkrb
       # extension hands lutaml-model the content directly, so a document it
       # cannot tokenize surfaces lutaml's own parse error, which names the
       # offending token, and a document Psych declines to load surfaces
-      # Psych's own refusal. Only the sniffed path normalizes to UNPARSEABLE.
+      # Psych's own refusal. The sniffed path normalizes those to
+      # UNPARSEABLE instead. The one refusal both paths share is the
+      # SystemStackError rescue below, which the declared YAML branch
+      # reaches as well.
       #
       # The byte order mark comes off here rather than per branch, because
       # every branch needs it gone and neither named branch stripped it.

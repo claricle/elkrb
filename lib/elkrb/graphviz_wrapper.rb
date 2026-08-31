@@ -98,8 +98,11 @@ module Elkrb
       candidates.find { |candidate| valid_executable?(candidate) }
     end
 
-    # File.basename strips a directory on either separator, so a path that
-    # already carries one comes back different from itself.
+    # File.basename strips a directory, so a path that already carries one
+    # comes back different from itself. Backslash counts as a separator on
+    # Windows only, where File::ALT_SEPARATOR is set. On POSIX it is nil, so
+    # a backslash is an ordinary character in a name and such a path anchors
+    # -- which is right, because there it really is a bare name.
     def anchor_bare_name(path)
       File.basename(path) == path ? File.join(Dir.pwd, path) : path
     end
@@ -135,9 +138,10 @@ module Elkrb
     # banner, exit 0 and write nothing, and the wrapper called that a
     # successful render. The output side fails the same way for any name
     # whose leading dash spells a real flag: measured against graphviz
-    # 15.1.1, "-o -x.png" and "-o -v.png" exit 0, write nothing and print
-    # nothing, because -x and -v are the reduce and verbose flags. Other
-    # names there are merely loud ("Missing argument for -o flag").
+    # 15.1.1, "-o -x.png" and "-o -v.png" both exit 0 and write nothing,
+    # because -x and -v are the reduce and verbose flags. -x says nothing
+    # while it does it; -v prints a verbose dump. Other names there are
+    # merely loud ("Missing argument for -o flag").
     #
     # This closes only the dash-named half of report-success-on-no-output;
     # the input side also has to reject a directory, which
