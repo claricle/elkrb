@@ -1,0 +1,4 @@
+﻿algorithm: force
+node a
+node b
+edge a -> b

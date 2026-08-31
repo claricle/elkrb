@@ -1,0 +1,1 @@
+{"id":"root","children":[{"id":"edge","width":40.0,"height":40.0,"ports":[{"id":"port","index":-1,"offset":0.0}]}],"edges":[{"id":"e0","sources":["CW1"],"targets":["edge"]}],"layoutOptions":{"port.side":"WEST","org.eclipse.elk.port.index":3}}

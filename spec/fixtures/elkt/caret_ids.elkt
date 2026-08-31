@@ -1,0 +1,6 @@
+^port.side: WEST
+org.eclipse.elk.^port.index: 3
+node ^edge {
+  port ^port
+}
+edge ^CW1 -> ^edge

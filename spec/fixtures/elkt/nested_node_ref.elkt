@@ -1,0 +1,6 @@
+node p {
+  node c
+}
+node q
+edge p.c -> q
+edge x.y -> q

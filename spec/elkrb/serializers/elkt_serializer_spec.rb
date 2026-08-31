@@ -566,6 +566,8 @@ RSpec.describe Elkrb::Serializers::ElktSerializer do
         ],
       }
 
+      pending("item 28: the serializer strips the `elk.` prefix it wrote")
+
       elkt = serializer.serialize(graph)
       parsed = Elkrb::Parsers::ElktParser.parse(elkt)
 

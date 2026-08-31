@@ -1,0 +1,1 @@
+node n { port p { edge a -> b } }

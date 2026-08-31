@@ -62,7 +62,7 @@ module Elkrb
         end
 
         def parse_members(container, allowed)
-          until peek.type == :rbrace || peek.type == :eof
+          until %i[rbrace eof].include?(peek.type)
             name = allowed.find { |key| peek.keyword?(key) }
             raise_at(peek, "expected #{allowed.join(', ')}") unless name
 
@@ -148,7 +148,7 @@ module Elkrb
         def parse_outgoing_refs
           advance
           single_id(record: false)
-          single_id(record: false) while consume(:comma)
+          single_id(record: false) while consume?(:comma)
         end
 
         # Ordered phases, matching ElkGraph.xtext: an unordered geometry group
@@ -189,7 +189,7 @@ module Elkrb
           advance
           expect(:colon)
           points = [point]
-          points << point while consume(:pipe)
+          points << point while consume?(:pipe)
           section[:bendPoints] = points
         end
 
@@ -267,7 +267,7 @@ module Elkrb
 
         def parse_endpoints
           list = [qualified_id]
-          list << qualified_id while consume(:comma)
+          list << qualified_id while consume?(:comma)
           list
         end
 
@@ -276,7 +276,7 @@ module Elkrb
         # already guarantees one token.
         def qualified_id
           parts = [expect_identifier.value]
-          parts << expect_identifier.value while consume(:dot)
+          parts << expect_identifier.value while consume?(:dot)
           parts.join(".")
         end
 
@@ -349,7 +349,7 @@ module Elkrb
           token
         end
 
-        def consume(type)
+        def consume?(type)
           return false unless peek.type == type
 
           advance
@@ -371,7 +371,7 @@ module Elkrb
         def raise_at(token, message)
           raise Elkrb::ParseError.new(
             "#{message} at line #{token.line}, column #{token.column}",
-            line: token.line, column: token.column
+            line: token.line, column: token.column,
           )
         end
       end

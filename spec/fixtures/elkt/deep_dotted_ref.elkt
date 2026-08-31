@@ -1,0 +1,5 @@
+node N1
+node N2 { node M2 { port P3 } }
+node N3 { node N3_1 { port FourD } }
+edge N1 -> N2.M2.P3
+edge E1: N2.M2.P3 -> N3.N3_1.FourD

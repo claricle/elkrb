@@ -1,0 +1,2 @@
+org.eclipse.elk.^port.side: WEST
+edge a.^edge -> b

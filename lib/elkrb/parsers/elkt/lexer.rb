@@ -16,12 +16,12 @@ module Elkrb
       # @api private
       class Lexer
         BOM = "﻿"
-        WS = /\G[ \t\r\n]+/.freeze
+        WS = /\G[ \t\r\n]+/
         # The exponent alternative MUST precede the plain-decimal one: Ruby
         # alternation is ordered, so `\d+\.\d+` first matches "1.5" of
         # "1.5e-3" and leaves "e-3" to lex as an identifier.
-        NUMBER = /\G[+-]?(?:\d+(?:\.\d+)?[eE][+-]?\d+|\d+\.\d+|\d+)/.freeze
-        IDENT = /\G\^?[A-Za-z_]\w*(?:\.\^?[A-Za-z_]\w*)*/.freeze
+        NUMBER = /\G[+-]?(?:\d+(?:\.\d+)?[eE][+-]?\d+|\d+\.\d+|\d+)/
+        IDENT = /\G\^?[A-Za-z_]\w*(?:\.\^?[A-Za-z_]\w*)*/
         PUNCT = {
           "{" => :lbrace, "}" => :rbrace, "[" => :lbracket,
           "]" => :rbracket, ":" => :colon, "," => :comma, "." => :dot
@@ -49,94 +49,91 @@ module Elkrb
         private
 
         def scan_one
-          SCANNERS.each { |name| return if send(:"try_#{name}") }
+          SCANNERS.each { |name| return if send(:"take_#{name}") }
           raise_at(@line, @col,
                    "Unexpected character #{@src[@pos].inspect}")
         end
 
-        def try_whitespace
-          text = match(WS) or return false
+        def take_whitespace
+          text = match(WS) or return nil
 
           advance(text)
-          true
+          text
         end
 
-        def try_line_comment
-          return false unless @src[@pos, 2] == "//"
+        def take_line_comment
+          return unless @src[@pos, 2] == "//"
 
           stop = @src.index("\n", @pos)
-          advance(stop ? @src[@pos...stop] : @src[@pos..])
-          true
+          text = stop ? @src[@pos...stop] : @src[@pos..]
+          advance(text)
+          text
         end
 
-        def try_block_comment
-          return false unless @src[@pos, 2] == "/*"
+        def take_block_comment
+          return unless @src[@pos, 2] == "/*"
 
           line = @line
           col = @col
           close = @src.index("*/", @pos + 2)
           raise_at(line, col, "Unterminated block comment") unless close
 
-          advance(@src[@pos...(close + 2)])
-          true
+          text = @src[@pos...(close + 2)]
+          advance(text)
+          text
         end
 
-        def try_arrow
-          return false unless @src[@pos, 2] == "->"
+        def take_arrow
+          return unless @src[@pos, 2] == "->"
 
           emit(:arrow, "->", nil)
-          true
         end
 
-        def try_number
-          text = match(NUMBER) or return false
+        def take_number
+          text = match(NUMBER) or return nil
 
           emit(:number, text, cast_number(text))
-          true
         end
 
-        def try_identifier
-          text = match(IDENT) or return false
+        def take_identifier
+          text = match(IDENT) or return nil
 
           segments = build_segments(text)
           emit(:identifier, text, segments.map(&:first).join("."), segments)
-          true
         end
 
-        def try_pipe
-          return false unless @src[@pos] == "|"
+        def take_pipe
+          return unless @src[@pos] == "|"
 
           emit(:pipe, "|", "|")
-          true
         end
 
-        def try_punctuation
-          type = PUNCT[@src[@pos]] or return false
+        def take_punctuation
+          type = PUNCT[@src[@pos]] or return nil
 
           emit(type, @src[@pos], @src[@pos])
-          true
         end
 
         # Consumes the whole literal and keeps the RAW inner lexeme: label text
         # and property values decode differently upstream, so decoding belongs
         # at the parse site.
-        def try_string
+        def take_string
           quote = @src[@pos]
-          return false unless ['"', "'"].include?(quote)
+          return unless ['"', "'"].include?(quote)
 
           line = @line
           col = @col
           inner = read_string_body(quote, line, col)
           @tokens << Token.new(type: :string, value: inner, segments: nil,
                                line: line, column: col)
-          true
+          inner
         end
 
         def read_string_body(quote, line, col)
           advance(quote)
           inner = +""
           inner << take_string_char while @pos < @src.length &&
-                                         @src[@pos] != quote
+              @src[@pos] != quote
           raise_at(line, col, "Unterminated string") if @pos >= @src.length
 
           advance(quote)
@@ -180,6 +177,7 @@ module Elkrb
           @tokens << Token.new(type: type, value: value, segments: segments,
                                line: @line, column: @col)
           advance(text)
+          @tokens.last
         end
 
         def advance(text)
@@ -196,7 +194,7 @@ module Elkrb
         def raise_at(line, col, message)
           raise Elkrb::ParseError.new(
             "#{message} at line #{line}, column #{col}",
-            line: line, column: col
+            line: line, column: col,
           )
         end
       end

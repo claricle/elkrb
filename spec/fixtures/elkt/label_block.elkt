@@ -1,0 +1,6 @@
+node n {
+  label "T" {
+    layout [ size: 64, 21 ]
+    nodeLabels.placement: "[H_CENTER]"
+  }
+}
