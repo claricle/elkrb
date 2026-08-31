@@ -1,7 +1,7 @@
 # 02 — Corpus and CLI harness
 Slice S0b · branch `fix/s0b-corpus-cli-harness`
 
-Status: built, lint-clean, **not gated, not merged**. Branch
+Status: built, lint-clean, **gated, not merged**. Branch
 `fix/s0b-corpus-cli-harness`, ahead of `origin/v2` (`f6ba3e0`). `origin/v2`
 was merged in at `bc19cb8`, so it is an ancestor of the tip. Round one was
 measured at `23ed0de`; round two lands on top of it and every figure below
