@@ -25,6 +25,7 @@ module Elkrb
       attr_accessor y: Float?
       attr_accessor width: Float?
       attr_accessor height: Float?
+      attr_accessor properties: Hash[String | Symbol, untyped]?
 
       def self.from_hash: (Hash[String | Symbol, untyped] hash) -> Label
       def to_json: () -> String
@@ -51,6 +52,8 @@ module Elkrb
       attr_accessor bend_points: Array[Hash[String, Float]]?
       attr_accessor incoming_shape: String?
       attr_accessor outgoing_shape: String?
+      attr_accessor incoming_sections: Array[String]?
+      attr_accessor outgoing_sections: Array[String]?
 
       def self.from_hash: (Hash[String | Symbol, untyped] hash) -> EdgeSection
       def to_json: () -> String
@@ -65,7 +68,9 @@ module Elkrb
       attr_accessor sections: Array[EdgeSection]?
       def layout_options: () -> Hash[String, untyped]?
       def layout_options=: (Hash[String | Symbol, untyped]? value) -> void
-      attr_accessor properties: Hash[String, untyped]?
+      attr_accessor properties: Hash[String | Symbol, untyped]?
+      attr_accessor junction_points: Array[::Elkrb::Geometry::Point]?
+      attr_accessor container: String?
 
       def self.from_hash: (Hash[String | Symbol, untyped] hash) -> Edge
       def to_json: () -> String
@@ -84,7 +89,7 @@ module Elkrb
       attr_accessor edges: Array[Edge]?
       def layout_options: () -> Hash[String, untyped]?
       def layout_options=: (Hash[String | Symbol, untyped]? value) -> void
-      attr_accessor properties: Hash[String, untyped]?
+      attr_accessor properties: Hash[String | Symbol, untyped]?
 
       def self.from_hash: (Hash[String | Symbol, untyped] hash) -> Node
       def to_json: () -> String
@@ -104,7 +109,7 @@ module Elkrb
       attr_accessor edges: Array[Edge]?
       def layout_options: () -> Hash[String, untyped]?
       def layout_options=: (Hash[String | Symbol, untyped]? value) -> void
-      attr_accessor properties: Hash[String, untyped]?
+      attr_accessor properties: Hash[String | Symbol, untyped]?
 
       def self.from_hash: (Hash[String | Symbol, untyped] hash) -> Graph
       def to_json: () -> String
