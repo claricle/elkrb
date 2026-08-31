@@ -36,11 +36,12 @@ module Elkrb
           @pos = 0
           @declared_ids = []
           @edge_refs = []
+          @graph_id = nil
         end
 
         def parse
           tree = parse_root
-          Resolver.new(tree, @declared_ids, @edge_refs).resolve!
+          Resolver.new(tree, @declared_ids, @edge_refs, @graph_id).resolve!
           tree
         end
 
@@ -58,7 +59,7 @@ module Elkrb
 
         def parse_graph_header
           advance
-          single_id
+          @graph_id = single_id
         end
 
         def parse_members(container, allowed)
@@ -312,7 +313,7 @@ module Elkrb
         # bare character is only the recovery value on its exception.
         def decode_escape(sequence, token)
           return decode_surrogate_pair(sequence) if sequence.length == 11
-          return decode_code_unit(sequence, token) if sequence.length == 5
+          return decode_code_unit(sequence) if sequence.length == 5
 
           ESCAPES.fetch(sequence) do
             raise_at(token, "invalid escape \\#{sequence} in label text")
@@ -325,16 +326,13 @@ module Elkrb
           [0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00)].pack("U")
         end
 
-        # A surrogate that reached here is unpaired, so it cannot encode to
-        # UTF-8 at all -- emitting it would produce a String that breaks every
-        # downstream serializer.
-        def decode_code_unit(sequence, token)
-          value = sequence[1..].hex
-          if value.between?(0xD800, 0xDFFF)
-            raise_at(token, "lone surrogate \\#{sequence} in label text")
-          end
-
-          [value].pack("U")
+        # An unpaired surrogate is accepted: ELK emits the single UTF-16 code
+        # unit with no diagnostic, so raising here rejected valid input --
+        # exactly the failure this rewrite exists to remove. Ruby packs it to
+        # CESU-8 bytes, giving a String that is not valid UTF-8, so anything
+        # serializing it downstream must expect that.
+        def decode_code_unit(sequence)
+          [sequence[1..].hex].pack("U")
         end
 
         def expect_identifier

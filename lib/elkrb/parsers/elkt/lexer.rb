@@ -158,14 +158,24 @@ module Elkrb
           inner
         end
 
+        # Raw newlines are legal inside an Xtext STRING, and this walks the
+        # body one character at a time -- so CRLF has to be consumed as a pair
+        # here too, or the two halves reach the counter separately and every
+        # later location is a line out.
         def take_string_char
           char = @src[@pos]
+          return advance_with("\r\n") if crlf?
+
           return advance_with(char) unless char == "\\"
 
           nxt = @src[@pos + 1]
           raise_at(@line, @col, "Unterminated escape") if nxt.nil?
 
           advance_with(char + nxt)
+        end
+
+        def crlf?
+          @src[@pos] == "\r" && @src[@pos + 1] == "\n"
         end
 
         def advance_with(text)

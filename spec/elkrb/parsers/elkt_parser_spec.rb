@@ -26,7 +26,6 @@ ELKT_ERROR_LOCATIONS = {
   "literal_false_as_id" => [1, 6],
   "literal_null_as_key" => [1, 1],
   "literal_true_as_id" => [1, 6],
-  "lone_surrogate" => [1, 16],
   "mid_file_bom" => [2, 1],
   "node_in_label_body" => [1, 13],
   "property_after_member" => [2, 1],
@@ -114,10 +113,37 @@ RSpec.describe Elkrb::Parsers::ElktParser do
         .to eq(["x.y"])
     end
 
-    it "prefers a port over a child of the same name" do
-      # `b` is both; the port wins, so `.c` cannot resolve any further.
+    # Oracle is ELK 0.12.0, not ElkGraph.xtext and not elkrb's NodeIndex --
+    # both of those yielded a port-first rule that ELK contradicts.
+    #
+    # Mutating these: the discriminating mutation is the WHOLE prior rule --
+    # ports before children AND first-match-wins in both resolve_in and
+    # resolve_path. Measured: either half alone is NEUTRAL, because
+    # backtracking recovers from a ports-first ordering and children-first
+    # ordering never needs to backtrack. Only the combination is observable.
+    it "prefers a complete node chain over a dead-end port prefix" do
+      # `b` is both a port and a child. ELK resolves a.b.c to `c`.
       expect(parse_fixture("port_child_collision")[:edges].first[:sources])
-        .to eq(["a.b.c"])
+        .to eq(["c"])
+    end
+
+    it "applies the same rule to the first path segment" do
+      graph = parse_fixture("port_child_collision_first_segment")
+
+      expect(graph[:children].first[:edges].first[:sources]).to eq(["leaf"])
+    end
+
+    # A regression guard, not a discriminator: a terminal port resolves the
+    # same under both rules, so no mutation of this rule turns it red.
+    it "still resolves a port that is the terminal segment" do
+      expect(parse_fixture("port_terminal_ref")[:edges].first)
+        .to include(sources: ["p"], targets: ["b"])
+    end
+
+    it "does not treat a node named root as a root scope" do
+      # ELK leaves this unresolved; only a `graph` header names the root.
+      expect(parse_fixture("root_named_node")[:edges].first[:sources])
+        .to eq(["root.a.p"])
     end
 
     it "scopes resolution to the container that owns the edge" do
@@ -183,15 +209,6 @@ RSpec.describe Elkrb::Parsers::ElktParser do
       expect(graph[:children][1][:edges].first[:targets]).to eq(["p"])
     end
 
-    it "keeps a first-segment port ahead of a same-named child" do
-      # Reaches build_index, not descend: `same` is both a port and a child,
-      # the port wins, and a port has no `leaf`, so nothing resolves.
-      graph = parse_fixture("port_child_collision_first_segment")
-
-      expect(graph[:children].first[:edges].first[:sources])
-        .to eq(["same.leaf"])
-    end
-
     it "resolves incoming and outgoing section references" do
       # Both refs are qualified and land on DIFFERENT ports, so dropping
       # either branch is observable; `outgoing: a` was "a" either way.
@@ -242,6 +259,37 @@ RSpec.describe Elkrb::Parsers::ElktParser do
       expect { parse("node a\r@\r") }
         .to raise_error(Elkrb::ParseError) { |error|
           expect([error.line, error.column]).to eq([2, 1])
+        }
+    end
+
+    # ELK accepts a lone surrogate and emits one UTF-16 code unit with no
+    # diagnostic, so raising here rejected valid input. Ruby packs it to
+    # CESU-8, giving a String that is NOT valid UTF-8 -- which is why this is
+    # asserted at the Hash layer and has no committed .json: Graph#to_json
+    # raises JSON::GeneratorError on it. Pair-combining still applies and is
+    # what keeps ordinary astral characters JSON-safe; the two rules do not
+    # conflict, they cover paired and unpaired input respectively.
+    it "accepts a lone surrogate as one UTF-16 code unit" do
+      text = parse(%(node n { label "\\uD83D" }\n))
+        .dig(:children, 0, :labels, 0, :text)
+
+      expect(text.unpack1("U")).to eq(0xD83D)
+      expect(text.valid_encoding?).to be(false)
+      expect { Elkrb::Graph::Graph.from_hash(parse(%(node n { label "\\uD83D" }\n))).to_json }
+        .to raise_error(JSON::GeneratorError)
+    end
+
+    it "still combines a surrogate pair into one JSON-safe character" do
+      graph = parse(%(node n { label "\\uD83D\\uDE00" }\n))
+
+      expect(graph.dig(:children, 0, :labels, 0, :text)).to eq("😀")
+      expect(Elkrb::Graph::Graph.from_hash(graph).to_json).to include("😀")
+    end
+
+    it "counts a CRLF inside a string body as one line ending" do
+      expect { parse(%(node n { label "a\r\nb" }\n@\n)) }
+        .to raise_error(Elkrb::ParseError) { |error|
+          expect([error.line, error.column]).to eq([3, 1])
         }
     end
 

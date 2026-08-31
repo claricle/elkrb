@@ -14,10 +14,11 @@ module Elkrb
       #
       # @api private
       class Resolver
-        def initialize(tree, declared_ids, edge_refs)
+        def initialize(tree, declared_ids, edge_refs, graph_id = nil)
           @tree = tree
           @declared_ids = declared_ids
           @edge_refs = edge_refs
+          @graph_id = graph_id
         end
 
         def resolve!
@@ -28,14 +29,14 @@ module Elkrb
 
         private
 
-        # `graph G` names the root, and ELK resolves `G.a.p` through it. The
-        # scope exists only when a header was actually written: the parser
-        # records that id in `declared_ids`, while the default "root" is never
-        # recorded, so membership is exactly the right test.
+        # `graph G` names the root, and ELK resolves `G.a.p` through it. Whether
+        # a header was written is tracked as its own fact: inferring it from
+        # `declared_ids` gave a document containing `node root` a root scope it
+        # never declared.
         def root_scope
-          return [] unless @declared_ids.include?(@tree[:id])
+          return [] unless @graph_id
 
-          [{ @tree[:id] => @tree }]
+          [{ @graph_id => [@tree] }]
         end
 
         # `scopes` is the enclosing chain, innermost first. ELKT binds Xtext's
@@ -81,35 +82,44 @@ module Elkrb
 
         def resolve_in(reference, index)
           parts = reference.split(".")
-          current = index[parts.first]
-          return nil unless current
-
-          parts.drop(1).each do |part|
-            current = descend(current, part)
-            return nil unless current
+          index.fetch(parts.first, []).each do |entry|
+            resolved = resolve_path(entry, parts.drop(1))
+            return resolved if resolved
           end
-          current[:id]
+          nil
         end
 
-        # A port outranks a child of the same name: an edge endpoint denotes an
-        # ElkConnectableShape, and NodeIndex already lets a port keep a
-        # contested id.
-        def descend(node, name)
-          port = (node[:ports] || []).find { |entry| entry[:id] == name }
-          return port if port
+        # Backtracks rather than committing to the first candidate segment.
+        # ELK builds a fully qualified name from the containing elements, so a
+        # COMPLETE node chain beats a port whose prefix matches but whose path
+        # dead-ends. Measured against ELK 0.12.0: with `port b` and
+        # `node b { node c }` in one node, `a.b.c` resolves to `c`.
+        def resolve_path(node, parts)
+          return node[:id] if parts.empty?
 
-          (node[:children] || []).find { |entry| entry[:id] == name }
+          head = parts.first
+          rest = parts.drop(1)
+          candidates(node, head).each do |entry|
+            resolved = resolve_path(entry, rest)
+            return resolved if resolved
+          end
+          nil
         end
 
-        # Children go in FIRST so a same-id port overwrites one: inserting
-        # ports first let a child win the first path segment, inverting the
-        # rule `descend` applies to every later segment.
+        # Children first: a port is a leaf, so it can only ever satisfy the
+        # final segment, and preferring it earlier truncates a longer path.
+        def candidates(node, name)
+          (node[:children] || []).select { |entry| entry[:id] == name } +
+            (node[:ports] || []).select { |entry| entry[:id] == name }
+        end
+
+        # Every candidate for an id, not one winner: the first segment needs
+        # the same backtracking as every later one, so a contested name keeps
+        # both the child and the port in play.
         def build_index(container)
-          entries = {}
-          (container[:children] || []).each do |child|
-            entries[child[:id]] = child
-          end
-          (container[:ports] || []).each { |port| entries[port[:id]] = port }
+          entries = Hash.new { |hash, key| hash[key] = [] }
+          (container[:children] || []).each { |c| entries[c[:id]] << c }
+          (container[:ports] || []).each { |port| entries[port[:id]] << port }
           entries
         end
 
