@@ -726,4 +726,32 @@ RSpec.describe "byte order mark removal across input encodings" do
 
     expect(elkt_node_ids(graph)).to eq(%w[a b])
   end
+  describe "the hollow-mapping guard, on both paths" do
+    # lutaml-model accepts ANY mapping and hands back a graph with every
+    # field nil, so `{"foo":1}` laid out as `{}` and exited 0 when the file
+    # was named .json, while the SAME BYTES with no extension exited 1. A
+    # guard that holds in one direction only is not a guard.
+    #
+    # One property, three namings, so the namings are a table rather than
+    # three copies of the example.
+    [["", '{"foo":1}'], [".json", '{"foo":1}'],
+     [".yaml", "foo: 1\n"]].each do |extension, content|
+      naming = extension.empty? ? "no extension" : extension
+
+      it "rejects a mapping with no recognized keys given #{naming}" do
+        expect { Elkrb::FormatSniffer.read(content, extension) }
+          .to raise_error(ArgumentError, /Unable to parse/)
+      end
+    end
+
+    it "still reads a real graph that declares its extension" do
+      graph = Elkrb::FormatSniffer.read(
+        '{"id":"r","children":[{"id":"a","width":1,"height":1}],"edges":[]}',
+        ".json",
+      )
+
+      expect(graph).to be_a(Elkrb::Graph::Graph)
+      expect(graph.children.map(&:id)).to eq(["a"])
+    end
+  end
 end

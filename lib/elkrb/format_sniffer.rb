@@ -12,17 +12,19 @@ module Elkrb
   # sites need identical, instead of four private methods that can quietly
   # drift.
   #
-  # The two paths guard differently, and only one of them is finished.
+  # Both paths guard the same way, and that is load-bearing.
   # lutaml-model 0.8.19 succeeds on any YAML/JSON mapping, even one with no
-  # recognized keys, and returns a graph with every field nil. The SNIFFED
-  # path rejects that (hollow_model?). The DECLARED .json/.yml/.yaml path
-  # applies the malformed-shape check only, so it does not. Measured:
-  # `{"foo":1}` named .json and `foo: 1` named .yaml each exit 0 printing
-  # `{}`, while the same bytes with no extension exit 1.
+  # recognized keys, and returns a graph with every field nil. Both the
+  # SNIFFED path and the DECLARED .json/.yml/.yaml path reject that, via
+  # hollow_model?.
   #
-  # That asymmetry is deliberate here, not an oversight -- this slice
-  # scopes the hollow guard to the sniffed path in as many words. Widening
-  # it to the declared path is a known limitation left to a later item.
+  # The declared path used to skip it, which made the guard true in one
+  # direction only: `{"foo":1}` named .json exited 0 printing `{}` while the
+  # SAME BYTES with no extension exited 1. An earlier slice scoped the hollow
+  # check to the sniffed path deliberately and left widening it to a later
+  # item; review rated the resulting hole a High, so it is closed here rather
+  # than deferred again. Measured after the change: both namings exit 1, and
+  # the fixture corpus still loads.
   module FormatSniffer
     BYTE_ORDER_MARK = "\xEF\xBB\xBF".b.freeze
     private_constant :BYTE_ORDER_MARK
@@ -160,9 +162,10 @@ module Elkrb
       #
       # @raise [ArgumentError] when the parsed model is not usable
       def validate_model!(graph)
-        unless graph.is_a?(Elkrb::Graph::Graph) && !malformed_model?(graph)
-          raise ArgumentError, UNPARSEABLE
-        end
+        usable = graph.is_a?(Elkrb::Graph::Graph) &&
+          !malformed_model?(graph) &&
+          !hollow_model?(graph)
+        raise ArgumentError, UNPARSEABLE unless usable
 
         graph
       end

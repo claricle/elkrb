@@ -123,15 +123,18 @@ module Elkrb
         # Re-read the content we just wrote (which is DOT)
         dot_content = File.read(output_file)
 
-        # If output is not already DOT, we need to export it
-        if File.extname(output_file).downcase == ".dot"
-          dot_file = output_file
-        else
-          File.write(dot_file, dot_content)
-        end
+        dot_file = output_file if File.extname(output_file).downcase == ".dot"
 
-        # Render using Graphviz
+        # Staging is INSIDE this block deliberately. It used to sit above the
+        # begin, so a staging failure escaped before any cleanup ran and left
+        # the requested image file holding DOT text -- measured: precreating
+        # `out.svg.tmp.dot` as a directory gave exit 1 with an `out.svg` that
+        # began `digraph G{`. The rescue is StandardError for the same reason:
+        # a render that fails for any cause leaves the same lie behind, not
+        # only a missing Graphviz.
         begin
+          File.write(dot_file, dot_content) if dot_file != output_file
+
           require_relative "../graphviz_wrapper"
           graphviz = Elkrb::GraphvizWrapper.new
 
@@ -139,7 +142,7 @@ module Elkrb
 
           # Clean up temp DOT file if we created one
           File.delete(dot_file) if dot_file != output_file && File.exist?(dot_file)
-        rescue Elkrb::GraphvizWrapper::GraphvizNotFoundError
+        rescue StandardError
           discard_unrendered(dot_file, output_file)
           raise
         end
@@ -149,8 +152,15 @@ module Elkrb
       # Leaving it there hands the caller a .svg that is not an SVG, so take
       # it away rather than let a failed render look like a rendered file.
       def discard_unrendered(dot_file, output_file)
-        File.delete(dot_file) if dot_file != output_file && File.exist?(dot_file)
-        FileUtils.rm_f(output_file)
+        # Order matters. Removing the misleading image file is the guarantee;
+        # clearing the staging file is only tidiness. Doing the tidying first
+        # meant a staging path that could not be deleted -- a directory of
+        # that name raises EPERM from File.delete -- threw before the image
+        # file was ever touched, and the caller was left with an `out.svg`
+        # holding DOT text. Measured with `out.svg.tmp.dot` precreated as a
+        # directory.
+        FileUtils.rm_f(output_file) if dot_file != output_file
+        FileUtils.rm_f(dot_file) if dot_file != output_file && File.file?(dot_file)
       end
 
       def preview(file)
