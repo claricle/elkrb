@@ -123,18 +123,15 @@ module Elkrb
           x_offset = 0.0
 
           components.each do |component|
-            # Calculate component bounds
-            min_x = component[:nodes].map(&:x).min || 0.0
-            max_x = component[:nodes].map { |n| n.x + n.width }.max || 0.0
-            component_width = max_x - min_x
+            box = calculate_bounding_box(component[:nodes])
 
             # Offset all nodes in component
-            offset_x = x_offset - min_x
+            offset_x = x_offset - box.x
             component[:nodes].each do |node|
               node.x += offset_x
             end
 
-            x_offset += component_width + spacing
+            x_offset += box.width + spacing
           end
         end
 
@@ -142,18 +139,15 @@ module Elkrb
           y_offset = 0.0
 
           components.each do |component|
-            # Calculate component bounds
-            min_y = component[:nodes].map(&:y).min || 0.0
-            max_y = component[:nodes].map { |n| n.y + n.height }.max || 0.0
-            component_height = max_y - min_y
+            box = calculate_bounding_box(component[:nodes])
 
             # Offset all nodes in component
-            offset_y = y_offset - min_y
+            offset_y = y_offset - box.y
             component[:nodes].each do |node|
               node.y += offset_y
             end
 
-            y_offset += component_height + spacing
+            y_offset += box.height + spacing
           end
         end
 
@@ -177,23 +171,16 @@ module Elkrb
 
               component = components[index]
 
-              # Calculate component bounds
-              min_x = component[:nodes].map(&:x).min || 0.0
-              min_y = component[:nodes].map(&:y).min || 0.0
-              max_x = component[:nodes].map { |n| n.x + n.width }.max || 0.0
-              max_y = component[:nodes].map { |n| n.y + n.height }.max || 0.0
-
-              component_width = max_x - min_x
-              component_height = max_y - min_y
+              box = calculate_bounding_box(component[:nodes])
 
               # Offset nodes
               component[:nodes].each do |node|
-                node.x += x_offset - min_x
-                node.y += y_offset - min_y
+                node.x += x_offset - box.x
+                node.y += y_offset - box.y
               end
 
-              x_offset += component_width + spacing
-              max_row_height = [max_row_height, component_height].max
+              x_offset += box.width + spacing
+              max_row_height = [max_row_height, box.height].max
             end
 
             row_heights << max_row_height
