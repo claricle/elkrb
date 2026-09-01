@@ -88,4 +88,33 @@ RSpec.describe "elkrb CLI" do
       end
     end
   end
+  describe "with a diagnostic stream the consumer has closed" do
+    # `layout` emits its first --verbose line before it reads the input, so a
+    # closed stderr raised EPIPE, the generic rescue caught it, and the run
+    # aborted before writing anything -- while still exiting 0. A caller
+    # piping stderr to `head -1` got success and no output file.
+    it "still writes the output file when stderr is gone" do
+      Dir.mktmpdir do |dir|
+        out = File.join(dir, "out.json")
+
+        status = run_elkrb_with_stream_closed(
+          :err, "layout", "--verbose", "-o", out,
+          File.join(CliRunner::ROOT, "spec/fixtures/simple_graph.json")
+        )
+
+        # Name the file, not just the status: exiting 0 was exactly the bug.
+        expect(File.exist?(out)).to be(true)
+        expect(JSON.parse(File.read(out))).to include("id")
+        expect(status).to eq(0)
+      end
+    end
+
+    it "still reports a real failure when stderr is gone" do
+      status = run_elkrb_with_stream_closed(
+        :err, "layout", "/nope/missing.json"
+      )
+
+      expect(status).to eq(1)
+    end
+  end
 end

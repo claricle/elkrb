@@ -202,10 +202,18 @@ module Elkrb
       end
     end
 
+    # A consumer that stopped reading our DIAGNOSTICS must not change what the
+    # command does or what it reports. `layout` emits its first verbose line
+    # before it reads the input, so a closed stderr used to raise EPIPE, get
+    # caught by the generic rescue below, and abort the run before it wrote
+    # anything -- measured: `layout --verbose -o out.json` exited 0 with
+    # out.json never created.
     def verbose_output(message)
       return unless options[:verbose]
 
       say_error message, :yellow
+    rescue Errno::EPIPE
+      nil
     end
 
     def error_output(message)
@@ -218,6 +226,11 @@ module Elkrb
       # rubocop:disable Style/StderrPuts
       $stderr.puts message
       # rubocop:enable Style/StderrPuts
+    rescue Errno::EPIPE
+      # Same reason as verbose_output. A closed stderr must not turn a real
+      # failure into a different one, or mask the exit status the caller
+      # needs to see.
+      nil
     end
   end
 end

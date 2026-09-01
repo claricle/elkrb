@@ -17,4 +17,21 @@ module CliRunner
     capture_opts = stdin.nil? ? {} : { stdin_data: stdin }
     Open3.capture3(env, RbConfig.ruby, "-I#{LIB}", EXE, *, **capture_opts)
   end
+
+  # Runs the CLI with one of its output streams closed before it writes a
+  # byte, which is what a consumer like `| head -1` looks like from the
+  # child's side. Returns the exit status.
+  #
+  # Open3.capture3 always keeps both streams open, so it cannot express this;
+  # the point of the check is a stream that is NOT there.
+  def run_elkrb_with_stream_closed(stream, *)
+    read_end, write_end = IO.pipe
+    read_end.close
+    opts = { stream => write_end }
+    pid = Process.spawn(RbConfig.ruby, "-I#{LIB}", EXE, *,
+                        **opts, (stream == :out ? :err : :out) => File::NULL)
+    write_end.close
+    _, status = Process.waitpid2(pid)
+    status.exitstatus
+  end
 end
