@@ -47,9 +47,9 @@ module Elkrb
 
     class EdgeSection
       attr_accessor id: String?
-      attr_accessor start_point: Hash[String, Float]?
-      attr_accessor end_point: Hash[String, Float]?
-      attr_accessor bend_points: Array[Hash[String, Float]]?
+      attr_accessor start_point: ::Elkrb::Geometry::Point?
+      attr_accessor end_point: ::Elkrb::Geometry::Point?
+      attr_accessor bend_points: Array[::Elkrb::Geometry::Point]?
       attr_accessor incoming_shape: String?
       attr_accessor outgoing_shape: String?
       attr_accessor incoming_sections: Array[String]?
