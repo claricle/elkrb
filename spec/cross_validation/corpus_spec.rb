@@ -287,7 +287,11 @@ RSpec.describe "Elkrb layout corpus" do
     # a differently-cased id passed the guard and then had its payload
     # overwritten by the dump's own index. One example per casing would be
     # four examples asserting one property, so the casings are a table.
-    %w[SUMMARY Summary sUmMaRy].each do |cased|
+    # "\u017Fummary" is not a casing, it is a FOLD: Unicode folds long s to s,
+    # and macOS resolves it to the same file as summary.json. A bytewise
+    # downcase misses it entirely, which is why the comparison stays
+    # encoding-aware for any id whose encoding is valid.
+    ["SUMMARY", "Summary", "sUmMaRy", "\u017Fummary"].each do |cased|
       it "refuses the id #{cased} on a case-insensitive disk" do
         reserved = CorpusRunner::Case.new(id: cased)
         allow(CorpusRunner).to receive(:imported_cases).and_return([reserved])

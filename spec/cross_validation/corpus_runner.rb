@@ -220,13 +220,26 @@ class CorpusRunner
 
     # Every case is dumped to "#{id}.json", so a case called "summary"
     # would write the dump's own index and then be overwritten by it.
+    # Two hazards, and only one comparison handles each.
+    #
+    # `casecmp?` folds case the way a filesystem does -- "\u017Fummary" (long s)
+    # folds to "summary", and macOS resolves `\u017Fummary.json` and
+    # `summary.json` to ONE file -- so it is what a valid id must be compared
+    # with. Downcasing bytes instead misses that entirely.
+    #
+    # But `casecmp?` RAISES "input string invalid" on a string whose encoding
+    # is broken, rather than answering, so such an id used to surface Ruby's
+    # own error from inside this guard. Those get the byte comparison, which
+    # always answers.
+    def reserved_id?(id)
+      text = id.to_s
+      return text.casecmp?(RESERVED_ID) if text.valid_encoding?
+
+      text.b.downcase == RESERVED_ID.b.downcase
+    end
+
     def refuse_reserved_id!(all_cases)
-      # `casecmp?` RAISES on a string whose encoding is invalid rather than
-      # answering, so an id like that crashed with Ruby's own error instead of
-      # this guard's. Comparing downcased bytes answers for any id.
-      clashing = all_cases.find do |kase|
-        kase.id.to_s.b.downcase == RESERVED_ID.b.downcase
-      end
+      clashing = all_cases.find { |kase| reserved_id?(kase.id) }
       return unless clashing
 
       # Compared case-INSENSITIVELY on purpose. macOS and Windows resolve
