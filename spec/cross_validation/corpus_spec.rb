@@ -282,6 +282,29 @@ RSpec.describe "Elkrb layout corpus" do
       expect { CorpusRunner.cases }
         .to raise_error(ArgumentError, /collides with summary\.json/)
     end
+
+    # macOS and Windows resolve SUMMARY.json and summary.json to ONE file, so
+    # a differently-cased id passed the guard and then had its payload
+    # overwritten by the dump's own index. One example per casing would be
+    # four examples asserting one property, so the casings are a table.
+    %w[SUMMARY Summary sUmMaRy].each do |cased|
+      it "refuses the id #{cased} on a case-insensitive disk" do
+        reserved = CorpusRunner::Case.new(id: cased)
+        allow(CorpusRunner).to receive(:imported_cases).and_return([reserved])
+
+        expect { CorpusRunner.cases }
+          .to raise_error(ArgumentError, /collides with summary\.json/)
+      end
+    end
+
+    it "still accepts an id that merely contains the reserved word" do
+      fine = CorpusRunner::Case.new(id: "notsummary")
+      allow(CorpusRunner).to receive(:imported_cases).and_return([fine])
+
+      # `cases` returns the fixture corpus alongside the imported ones, so
+      # this asserts the id survived rather than that it is the only one.
+      expect(CorpusRunner.cases.map(&:id)).to include("notsummary")
+    end
   end
 
   describe CorpusRunner, ".run" do

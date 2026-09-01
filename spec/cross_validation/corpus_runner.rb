@@ -204,11 +204,21 @@ class CorpusRunner
     # Every case is dumped to "#{id}.json", so a case called "summary"
     # would write the dump's own index and then be overwritten by it.
     def refuse_reserved_id!(all_cases)
-      return unless all_cases.any? { |kase| kase.id == RESERVED_ID }
+      clashing = all_cases.find { |kase| kase.id.to_s.casecmp?(RESERVED_ID) }
+      return unless clashing
 
+      # Compared case-INSENSITIVELY on purpose. macOS and Windows resolve
+      # `SUMMARY.json` and `summary.json` to one file, so an id of "SUMMARY"
+      # slipped this guard and then had its payload overwritten by the dump's
+      # own index. Measured: both names came back File.identical? and the file
+      # on disk held the summary, not the case.
+      #
+      # This refuses "SUMMARY" on a case-sensitive filesystem too, where the
+      # two names really are different files. A corpus that works on Linux and
+      # quietly corrupts a case on macOS is the worse outcome.
       raise ArgumentError,
-            "corpus case id #{RESERVED_ID.inspect} collides with " \
-            "#{RESERVED_ID}.json"
+            "corpus case id #{clashing.id.inspect} collides with " \
+            "#{RESERVED_ID}.json, which the runner writes itself"
     end
 
     # Counts the case, records its summary entry, and writes its dump. The
