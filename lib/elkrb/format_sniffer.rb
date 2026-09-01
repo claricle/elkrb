@@ -220,10 +220,36 @@ module Elkrb
       # back as a single empty Node instead of a list. That is a malformed
       # document, not a graph: hand it back and every downstream reader breaks
       # on it. Fall through to the normalized parse error instead.
-      def malformed_model?(graph)
-        [graph.children, graph.edges].any? do |value|
-          !value.nil? && !value.is_a?(::Array)
+      # Walks the WHOLE model, not just the root. lutaml coerces a mapping
+      # where a sequence belongs, and it does so at every level: a nested
+      # `"children": {...}` comes back as a single Node rather than an Array,
+      # and an edge's `"sources": {...}` comes back as a String. Checking only
+      # the root let both through -- `validate` printed "is valid" for each,
+      # and `convert` succeeded.
+      def malformed_model?(node)
+        return true if malformed_collections?(node)
+
+        # Recurse only where the shape is already known good, or the walk
+        # would iterate the very value it just rejected.
+        collection(node.children).any? { |child| malformed_model?(child) }
+      end
+
+      # The collections on one node: its own two, plus the endpoint lists of
+      # any edge it holds.
+      def malformed_collections?(node)
+        return true if sequence_expected?(node.children, node.edges)
+
+        collection(node.edges).any? do |edge|
+          sequence_expected?(edge.sources, edge.targets)
         end
+      end
+
+      def sequence_expected?(*values)
+        values.any? { |value| !value.nil? && !value.is_a?(::Array) }
+      end
+
+      def collection(value)
+        value.is_a?(::Array) ? value : []
       end
 
       # Mirrors the field list in Graph's json and yaml mapping blocks: when

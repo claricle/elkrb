@@ -754,4 +754,35 @@ RSpec.describe "byte order mark removal across input encodings" do
       expect(graph.children.map(&:id)).to eq(["a"])
     end
   end
+  describe "the malformed-collection check, below the root" do
+    # lutaml coerces a mapping where a sequence belongs, at EVERY level, and
+    # silently: a nested `"children": {...}` comes back as one Node instead of
+    # an Array, and an edge's `"sources": {...}` comes back as a String. The
+    # check only looked at the root's own two collections, so `validate`
+    # printed "is valid" for both of these and `convert` succeeded.
+    {
+      "a nested children mapping" =>
+        '{"id":"r","children":[{"id":"a","children":{"bad":1}}],"edges":[]}',
+      "an object-valued edge source" =>
+        '{"id":"r","children":[],"edges":[{"id":"e",' \
+        '"sources":{"bad":1},"targets":["a"]}]}',
+    }.each do |name, json|
+      it "rejects #{name}" do
+        expect { Elkrb::FormatSniffer.read(json, ".json") }
+          .to raise_error(ArgumentError, /Unable to parse/)
+      end
+    end
+
+    it "still accepts a graph with a genuinely nested child" do
+      graph = Elkrb::FormatSniffer.read(
+        '{"id":"r","children":[{"id":"g","width":9,"height":9,' \
+        '"children":[{"id":"x","width":1,"height":1}],"edges":[]}],"edges":[]}',
+        ".json",
+      )
+
+      # Name the nested id: asserting only "did not raise" would stay green
+      # if the recursion stopped descending altogether.
+      expect(graph.children.first.children.map(&:id)).to eq(["x"])
+    end
+  end
 end
