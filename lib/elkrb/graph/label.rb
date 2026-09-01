@@ -12,6 +12,7 @@ module Elkrb
       attribute :width, :float
       attribute :height, :float
       attribute :layout_options, :hash
+      attribute :properties, :hash
 
       key_value do
         map "id", to: :id
@@ -21,6 +22,7 @@ module Elkrb
         map "width", to: :width
         map "height", to: :height
         map "layoutOptions", to: :layout_options
+        map "properties", to: :properties
       end
 
       yaml do
@@ -31,6 +33,7 @@ module Elkrb
         map "width", to: :width
         map "height", to: :height
         map "layout_options", to: :layout_options
+        map "properties", to: :properties
       end
 
       def initialize(**attributes)

@@ -16,10 +16,15 @@ module Elkrb
       # @param end_point [Point] The ending point (P3)
       # @param control1 [Point] The first control point (P1)
       # @param control2 [Point] The second control point (P2)
-      # @param segments [Integer] Number of line segments to generate
+      # @param segments [Integer] Number of sample points to generate, so the
+      #   curve it describes has one fewer connecting segment: 20 yields 20
+      #   points and 19 segments. Fewer than two yields just the two
+      #   endpoints, since a curve cannot be sampled from a single point.
       # @return [Array<Point>] Array of points along the curve
       def self.calculate_curve(start_point, end_point, control1, control2,
                                segments = 20)
+        return [start_point, end_point] if segments < 2
+
         points = []
         segments.times do |i|
           t = i.to_f / (segments - 1)

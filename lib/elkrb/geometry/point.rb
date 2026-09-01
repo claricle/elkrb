@@ -18,16 +18,11 @@ module Elkrb
         map "y", to: :y
       end
 
+      # The explicit zeros matter: a lutaml default is not marked as set and so
+      # would not be rendered, making a bare Point serialize to {} instead of
+      # {"x":0.0,"y":0.0}.
       def initialize(**attributes)
-        # Handle both keyword args and positional args
-        if attributes.empty?
-          super(x: 0.0, y: 0.0)
-        elsif attributes.key?(:x) || attributes.key?(:y)
-          super
-        else
-          # Handle case where first two positional args might be passed
-          super(x: 0.0, y: 0.0)
-        end
+        attributes.empty? ? super(x: 0.0, y: 0.0) : super
       end
 
       def +(other)

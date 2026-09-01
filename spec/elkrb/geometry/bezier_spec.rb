@@ -68,6 +68,32 @@ RSpec.describe Elkrb::Geometry::Bezier do
   end
 
   describe ".calculate_curve" do
+    # A degenerate segment count used to divide by zero (segments == 1, which
+    # then compared a Float with NaN) or silently return nothing
+    # (segments == 0).
+    context "with fewer than two segments" do
+      let(:start_point) { Elkrb::Geometry::Point.new(x: 0.0, y: 0.0) }
+      let(:end_point) { Elkrb::Geometry::Point.new(x: 50.0, y: 50.0) }
+      let(:control1) { Elkrb::Geometry::Point.new(x: 10.0, y: 20.0) }
+      let(:control2) { Elkrb::Geometry::Point.new(x: 30.0, y: 40.0) }
+
+      it "returns both endpoints for one segment" do
+        points = described_class.calculate_curve(
+          start_point, end_point, control1, control2, 1
+        )
+
+        expect(points).to eq([start_point, end_point])
+      end
+
+      it "returns both endpoints for zero segments" do
+        points = described_class.calculate_curve(
+          start_point, end_point, control1, control2, 0
+        )
+
+        expect(points).to eq([start_point, end_point])
+      end
+    end
+
     it "generates correct number of points" do
       start_point = Elkrb::Geometry::Point.new(x: 0.0, y: 0.0)
       end_point = Elkrb::Geometry::Point.new(x: 100.0, y: 100.0)

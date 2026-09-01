@@ -2,6 +2,7 @@
 
 require "lutaml/model"
 require_relative "../geometry/point"
+require_relative "read_only_mapping"
 
 module Elkrb
   module Graph
@@ -13,6 +14,8 @@ module Elkrb
       attribute :bend_points, Geometry::Point, collection: true
       attribute :incoming_shape, :string
       attribute :outgoing_shape, :string
+      attribute :incoming_sections, :string, collection: true
+      attribute :outgoing_sections, :string, collection: true
 
       key_value do
         map "id", to: :id
@@ -21,6 +24,8 @@ module Elkrb
         map "bendPoints", to: :bend_points
         map "incomingShape", to: :incoming_shape
         map "outgoingShape", to: :outgoing_shape
+        map "incomingSections", to: :incoming_sections
+        map "outgoingSections", to: :outgoing_sections
       end
 
       yaml do
@@ -30,6 +35,8 @@ module Elkrb
         map "bend_points", to: :bend_points
         map "incoming_shape", to: :incoming_shape
         map "outgoing_shape", to: :outgoing_shape
+        map "incoming_sections", to: :incoming_sections
+        map "outgoing_sections", to: :outgoing_sections
       end
 
       def initialize(**attributes)
@@ -63,6 +70,8 @@ module Elkrb
     end
 
     class Edge < Lutaml::Model::Serializable
+      include ReadOnlyMapping
+
       attribute :id, :string
       attribute :sources, :string, collection: true
       attribute :targets, :string, collection: true
@@ -70,7 +79,21 @@ module Elkrb
       attribute :sections, EdgeSection, collection: true
       attribute :layout_options, :hash
       attribute :properties, :hash
+      attribute :junction_points, Geometry::Point, collection: true
+      attribute :container, :string
 
+      # The legacy elkjs endpoint keys mapped at the end of the block below are
+      # read-only, and they reach every key-value format -- JSON, Hash, TOML,
+      # JSONL, YAMLS -- but NOT YAML, which declares its own block after it.
+      # Precedence: a non-empty sources/targets wins, an explicit [] counts as
+      # absent, and a NONBLANK sourcePort precedes source (in ELK JSON the port
+      # id IS the endpoint) by declaration order rather than key order. A blank
+      # sourcePort is dropped before its hook runs (transform.rb:251), so
+      # source wins there; targetPort and target behave the same way.
+      #
+      # Do NOT "simplify" the pairs into a second `map "source", to: :sources`:
+      # a plain rule fires even when its key is absent, clobbering sources with
+      # nil, and emits both spellings on write.
       key_value do
         map "id", to: :id
         map "sources", to: :sources
@@ -79,6 +102,18 @@ module Elkrb
         map "sections", to: :sections
         map "layoutOptions", to: :layout_options
         map "properties", to: :properties
+        map "junctionPoints", to: :junction_points
+        map "container", to: :container
+
+        # Read-only legacy keys; see the note above the block. Order matters.
+        map "sourcePort", with: { from: :merge_legacy_source,
+                                  to: :omit_from_output }
+        map "source", with: { from: :merge_legacy_source,
+                              to: :omit_from_output }
+        map "targetPort", with: { from: :merge_legacy_target,
+                                  to: :omit_from_output }
+        map "target", with: { from: :merge_legacy_target,
+                              to: :omit_from_output }
       end
 
       yaml do
@@ -89,6 +124,8 @@ module Elkrb
         map "sections", to: :sections
         map "layout_options", to: :layout_options
         map "properties", to: :properties
+        map "junction_points", to: :junction_points
+        map "container", to: :container
       end
 
       # Normalizes a Symbol key however the options arrive — a constructor,
@@ -100,6 +137,19 @@ module Elkrb
         attr = self.class.attributes(lutaml_register)[:layout_options]
         cast = attr.cast_value(DeepStringifyKeys.call(value), lutaml_register)
         instance_variable_set(:@layout_options, LayoutOptions.wrap(cast))
+      end
+
+      # Serialization hooks for the legacy endpoint keys above. Public because
+      # lutaml invokes them with `public_send`; not part of the supported API.
+      #
+      # @api private
+      def merge_legacy_source(model, value)
+        model.sources = Array(value) if Array(model.sources).empty?
+      end
+
+      # @api private
+      def merge_legacy_target(model, value)
+        model.targets = Array(value) if Array(model.targets).empty?
       end
     end
   end
