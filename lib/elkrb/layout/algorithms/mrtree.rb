@@ -211,7 +211,14 @@ module Elkrb
         end
 
         # Seed the given nodes at level 0 and relax only the components they
-        # belong to, bounded by those components' sizes.
+        # belong to, bounded by those components' sizes. Seeds may span
+        # SEVERAL components -- the roots do on a forest -- so the groups are
+        # deduplicated and each is relaxed once.
+        #
+        # `filter_map` drops a seed with no component, which cannot happen:
+        # `members` is built from the same `graph.children` the seeds come
+        # from. It is written this way so a future disagreement between the
+        # two skips that seed rather than raising mid-layout.
         def relax_component_of(seeds, members, adjacent, levels)
           seeds.each { |seed| levels[seed.id] = 0 }
 
@@ -316,9 +323,10 @@ module Elkrb
         # index without walking the tree again.
         #
         # It matters: reading the extent by re-walking the subtree at every
-        # level costs n^2/2 node visits on a deep tree. Instrumented on a
-        # chain before this change -- 20,099 visits for 200 nodes and 320,399
-        # for 800, which is exactly n^2/2.
+        # level is quadratic on a deep tree. Instrumented on a chain before
+        # this change -- 20,099 visits for 200 nodes and 320,399 for 800.
+        # That is (n+2)(n-1)/2, not n^2/2; the shape is what matters, and
+        # doubling n multiplies the visits by four.
         def layout_tree(tree, x_offset, y_offset, placed = [])
           node = tree[:node]
           start = placed.size

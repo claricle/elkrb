@@ -1137,7 +1137,10 @@ end
 RSpec.describe "MRTree forest spacing and component cost" do
   let(:spacing) { 31.0 }
 
-  # r0 owns a, b and c; r1 owns only d, because a node belongs to one tree.
+  # r0 owns a, b and c; r1 ends up with only d. Both roots point at c (e3 and
+  # e4), and a node belongs to exactly ONE tree -- the first walk to reach it
+  # keeps it, and r0 is walked first. That is the point of the fixture: r1's
+  # tree is narrower than its edge list suggests.
   # The forest offset used to come from a width that summed leaf widths and
   # skipped the gaps between them, so the next tree started too far left and
   # its nodes touched the previous tree's.
