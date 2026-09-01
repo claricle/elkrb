@@ -166,13 +166,19 @@ RSpec.describe Elkrb::Parsers::ElktParser do
       expect(parse_fixture("auto_edge_ids")[:edges].last[:id]).to eq("e6")
     end
 
-    it "accepts a property inside an edge section without recording it" do
+    # The PARSER keeps these; it is the MODEL that drops them, since
+    # EdgeSection has no layout_options attribute. So the committed JSON shows
+    # only {"id":"S1"} whether the parser preserves them or throws them away,
+    # and this has to assert the options hash directly or it observes nothing.
+    it "keeps a property inside an edge section" do
       section = parse(<<~ELKT)[:edges].first[:sections].first
         edge a -> b { layout [ section S1 [ ^start: foo  myProp: 3 ] ] }
       ELKT
 
       expect(section).to include(id: "S1")
+      # An escaped ^start is a property, not the geometry field.
       expect(section).not_to have_key(:startPoint)
+      expect(section[:layoutOptions]).to eq("start" => "foo", "myProp" => 3)
     end
 
     it "reads an escaped ^section as an unnamed section property" do
