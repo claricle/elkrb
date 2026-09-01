@@ -80,8 +80,11 @@ class CorpusRunner
     def run(outdir, timeout: TIMEOUT_SECONDS)
       outdir = File.expand_path(outdir)
       refuse_source_directory!(outdir)
-      claim_output_directory!(outdir)
+      # `cases` before the claim. Claiming creates the directory and writes
+      # the marker, so doing it first left a claimed, empty directory behind
+      # whenever case discovery raised -- the reserved-id guard, say.
       corpus = cases
+      claim_output_directory!(outdir)
       prune_stale_dumps(outdir, corpus)
 
       summary = new_summary

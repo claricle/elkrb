@@ -320,6 +320,21 @@ RSpec.describe "Elkrb layout corpus" do
     end
   end
 
+  describe CorpusRunner, ".run ordering" do
+    it "creates no directory when case discovery fails" do
+      Dir.mktmpdir do |dir|
+        out = File.join(dir, "fresh")
+        allow(CorpusRunner).to receive(:cases).and_raise(ArgumentError, "boom")
+
+        expect { CorpusRunner.run(out) }.to raise_error(ArgumentError, "boom")
+
+        # Claiming creates the directory and writes the marker. Doing it
+        # before discovery left one behind on every failed run.
+        expect(File.directory?(out)).to be(false)
+      end
+    end
+  end
+
   describe CorpusRunner, ".case_path" do
     # A case id becomes a filename, and importers are a documented extension
     # point, so an id is not assumed to be a plain name. This guard had NO
