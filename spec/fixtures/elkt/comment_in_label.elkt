@@ -1,0 +1,3 @@
+node n1 { label "a /* b" }
+/* a real comment */
+node n2

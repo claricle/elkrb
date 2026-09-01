@@ -1,0 +1,12 @@
+node a {
+  port p
+  port q
+}
+edge x -> y {
+  layout [
+    section S [
+      incoming: a.p
+      outgoing: a.q
+    ]
+  ]
+}

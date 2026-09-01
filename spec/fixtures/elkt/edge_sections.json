@@ -1,0 +1,1 @@
+{"id":"root","edges":[{"id":"e0","sources":["a"],"targets":["b"],"sections":[{"id":"ES1","startPoint":{"x":0.0,"y":0.0},"endPoint":{"x":0.0,"y":30.0},"bendPoints":[{"x":-20.0,"y":-20.0},{"x":-20.0,"y":51.0}]}]}]}

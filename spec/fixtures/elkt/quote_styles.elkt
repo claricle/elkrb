@@ -1,0 +1,5 @@
+node n {
+  label 'single'
+  label "double"
+  label ""
+}

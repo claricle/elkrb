@@ -14,6 +14,13 @@ module Elkrb
   class ValidationError < Error
   end
 
+  class ParseError < Error
+    attr_reader line: Integer?
+    attr_reader column: Integer?
+
+    def initialize: (String message, ?line: Integer?, ?column: Integer?) -> void
+  end
+
   class AlgorithmNotFoundError < Error
     attr_reader algorithm_name: String
 

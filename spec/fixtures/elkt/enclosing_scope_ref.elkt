@@ -1,0 +1,4 @@
+node outside { port p }
+node inner {
+  edge x -> outside.p
+}
