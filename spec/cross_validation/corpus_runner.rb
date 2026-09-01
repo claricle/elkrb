@@ -92,10 +92,8 @@ class CorpusRunner
       summary
     end
 
-    # 1 when `summary` has a failure that was not declared "expect" on its
-    # wrapper, OR when the run found no cases at all, and 0 otherwise. The
-    # empty case matters as much as the failing one: a corpus that silently
-    # stopped being discovered used to exit 0 and read as green.
+    # 1 when `summary` records an unexpected failure, 0 otherwise. What
+    # counts as one is `unexpected_failure?`'s decision, not this method's.
     #
     # Extracted so the CLI entrypoint's exit decision is directly testable --
     # calling `exit` from inside an example would end the test run, not just
@@ -139,14 +137,25 @@ class CorpusRunner
     # extension point, so an id is not assumed to be a bare name. An id of
     # `../victim` used to resolve outside `outdir` and overwrite a sibling.
     def case_path(outdir, id)
-      name = "#{id}.json"
-      path = File.expand_path(name, outdir)
+      text = id.to_s
+      name = "#{text}.json"
+      # `File.join`, not `expand_path`: expand_path performs ~ and ~user
+      # expansion, so an id beginning with ~ either escaped before the guard
+      # ran or raised Ruby's own "user doesn't exist" instead of the message
+      # here. Joining keeps the check about what the id literally says.
+      path = File.join(outdir, name)
 
-      unless File.basename(name) == name && File.dirname(path) == outdir
+      # An EMPTY id passes both shape checks -- `".json"` has no separator and
+      # its dirname is `outdir` -- and would quietly write `outdir/.json`, a
+      # dotfile no listing shows. It is refused explicitly.
+      usable = !text.strip.empty? &&
+        File.basename(name) == name &&
+        File.dirname(path) == outdir
+      unless usable
         raise ArgumentError,
               "case id #{id.inspect} does not name a file inside the output " \
-              "directory. Ids become filenames, so they may not contain a " \
-              "path separator or traverse upwards."
+              "directory. Ids become filenames, so they may not be blank, " \
+              "contain a path separator, or traverse upwards."
       end
 
       path
@@ -209,7 +218,12 @@ class CorpusRunner
     # Every case is dumped to "#{id}.json", so a case called "summary"
     # would write the dump's own index and then be overwritten by it.
     def refuse_reserved_id!(all_cases)
-      clashing = all_cases.find { |kase| kase.id.to_s.casecmp?(RESERVED_ID) }
+      # `casecmp?` RAISES on a string whose encoding is invalid rather than
+      # answering, so an id like that crashed with Ruby's own error instead of
+      # this guard's. Comparing downcased bytes answers for any id.
+      clashing = all_cases.find do |kase|
+        kase.id.to_s.b.downcase == RESERVED_ID.b.downcase
+      end
       return unless clashing
 
       # Compared case-INSENSITIVELY on purpose. macOS and Windows resolve

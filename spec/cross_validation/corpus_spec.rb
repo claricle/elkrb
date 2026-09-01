@@ -297,6 +297,19 @@ RSpec.describe "Elkrb layout corpus" do
       end
     end
 
+    it "answers for an id whose encoding is invalid, instead of raising" do
+      # `casecmp?` RAISES on a string with invalid encoding rather than
+      # answering false, so such an id used to surface Ruby's own
+      # "input string invalid" from inside the guard. It is not a collision --
+      # "SUMMARY\xff.json" is a different filename -- so the guard must let it
+      # through, and the point is that it decides rather than blowing up.
+      broken = "SUMMARY\xff".dup.force_encoding("UTF-8")
+      allow(CorpusRunner).to receive(:imported_cases)
+        .and_return([CorpusRunner::Case.new(id: broken)])
+
+      expect(CorpusRunner.cases.map(&:id)).to include(broken)
+    end
+
     it "still accepts an id that merely contains the reserved word" do
       fine = CorpusRunner::Case.new(id: "notsummary")
       allow(CorpusRunner).to receive(:imported_cases).and_return([fine])
@@ -307,6 +320,37 @@ RSpec.describe "Elkrb layout corpus" do
     end
   end
 
+  describe CorpusRunner, ".case_path" do
+    # A case id becomes a filename, and importers are a documented extension
+    # point, so an id is not assumed to be a plain name. This guard had NO
+    # spec at all -- the traversal its own comment names was never exercised.
+    outdir = "/tmp/corpus-outdir"
+
+    {
+      "climbing out of the directory" => "../victim",
+      "carrying a separator" => "a/b",
+      "empty" => "",
+      "only whitespace" => "   ",
+    }.each do |name, id|
+      it "refuses an id that is #{name}" do
+        expect { CorpusRunner.send(:case_path, outdir, id) }
+          .to raise_error(ArgumentError, /does not name a file inside/)
+      end
+    end
+
+    it "keeps an ordinary id inside the output directory" do
+      expect(CorpusRunner.send(:case_path, outdir, "simple_graph"))
+        .to eq(File.join(outdir, "simple_graph.json"))
+    end
+
+    it "treats a leading tilde as a literal name, not a home directory" do
+      # File.expand_path would have expanded this, escaping outdir before the
+      # guard ran, or raising Ruby's own "user doesn't exist" instead.
+      expect(CorpusRunner.send(:case_path, outdir, "~root"))
+        .to eq(File.join(outdir, "~root.json"))
+    end
+  end
+
   describe CorpusRunner, ".exit_code" do
     # The measured truth table proved this behaves correctly, but nothing
     # committed preserved it: deleting the zero-total branch left every
@@ -314,6 +358,7 @@ RSpec.describe "Elkrb layout corpus" do
     # table rather than four hand-written examples.
     {
       "an empty run" => [{ "total" => 0, "cases" => [] }, 1],
+      "a summary with no total at all" => [{ "cases" => [] }, 1],
       "an all-ok run" => [{ "total" => 2,
                             "cases" => [{ "status" => "ok" },
                                         { "status" => "ok" }] }, 0],
@@ -438,6 +483,10 @@ RSpec.describe "Elkrb layout corpus" do
         CorpusRunner.run(empty)
 
         expect(File.exist?(File.join(empty, "kept.json"))).to be(true)
+        # The marker has to SURVIVE the second run. Stale-dump pruning runs
+        # over this directory, and a regression that swept the marker away
+        # would make every later run refuse the directory it owns.
+        expect(File.exist?(File.join(empty, ".elkrb-corpus-dump"))).to be(true)
       end
     end
 
