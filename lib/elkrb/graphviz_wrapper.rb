@@ -82,12 +82,19 @@ module Elkrb
     # because a bare name like "dot" resolves two different ways: File.file?
     # reads it against the working directory, while the OS resolves an
     # argv[0] carrying no separator through PATH. Unanchored, this method
-    # validated one binary and #render ran another. An override that already
-    # names a directory has no such split -- File.file? and the kernel both
-    # resolve it against the working directory -- so it is left exactly as
-    # given. Rewriting it would be worse than useless: the anchor cannot
-    # consult the filesystem, so on a path crossing a symlinked directory
-    # into a "..", it names a different file than the OS reaches.
+    # validated one binary and #render ran another.
+    #
+    # The chosen candidate is then resolved to a REAL path. Every relative
+    # candidate -- a directory-bearing override like "bin/dot", and the
+    # entries built from relative PATH components -- otherwise stays
+    # relative, and a later `chdir` silently repoints it: measured, a wrapper
+    # that validated "bin/dot" in one directory ran a DIFFERENT binary of the
+    # same relative name after moving to another.
+    #
+    # `File.realpath`, not `File.expand_path`. Expansion is lexical and gets
+    # a path crossing a symlinked directory into a ".." wrong; realpath asks
+    # the filesystem, which is what the kernel will do. If it cannot resolve,
+    # the candidate is kept as found rather than discarded.
     def find_graphviz
       override = ENV.fetch("ELKRB_DOT", nil)
       candidates = if override.nil? || override.empty?
@@ -95,7 +102,14 @@ module Elkrb
                    else
                      [anchor_bare_name(override)]
                    end
-      candidates.find { |candidate| valid_executable?(candidate) }
+      found = candidates.find { |candidate| valid_executable?(candidate) }
+      found && resolve_real(found)
+    end
+
+    def resolve_real(path)
+      File.realpath(path)
+    rescue SystemCallError
+      path
     end
 
     # File.basename strips a directory, so a path that already carries one

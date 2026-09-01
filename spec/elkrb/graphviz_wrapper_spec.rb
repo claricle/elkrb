@@ -464,4 +464,33 @@ RSpec.describe Elkrb::GraphvizWrapper do
       end
     end
   end
+  describe "the executable it settles on" do
+    # A relative candidate -- a directory-bearing ELKRB_DOT like "bin/dot", or
+    # an entry built from a relative PATH component -- used to be recorded as
+    # given. A later chdir then silently repointed it: measured, a wrapper
+    # that validated "bin/dot" in one directory named a DIFFERENT binary of
+    # the same relative name after moving to another. #available? and #render
+    # disagreed about which program would run.
+    it "records a path that survives a change of working directory" do
+      Dir.mktmpdir do |tmp|
+        %w[A B].each do |dir|
+          FileUtils.mkdir_p(File.join(tmp, dir, "bin"))
+          path = File.join(tmp, dir, "bin", "dot")
+          File.write(path, "#!/bin/sh\necho #{dir}-DOT\n")
+          FileUtils.chmod(0o755, path)
+        end
+
+        # The surrounding hook already saves and restores ELKRB_DOT, so this
+        # matches the file's own convention rather than adding a dependency.
+        ENV["ELKRB_DOT"] = "bin/dot"
+        found = Dir.chdir(File.join(tmp, "A")) do
+          described_class.new.send(:find_graphviz)
+        end
+
+        # Name the directory, not merely "it is absolute": an absolute path
+        # pointing at B would satisfy a weaker assertion.
+        expect(found).to eq(File.realpath(File.join(tmp, "A", "bin", "dot")))
+      end
+    end
+  end
 end
