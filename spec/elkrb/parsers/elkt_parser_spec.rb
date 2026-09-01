@@ -209,6 +209,40 @@ RSpec.describe Elkrb::Parsers::ElktParser do
       expect(graph[:children][1][:edges].first[:targets]).to eq(["p"])
     end
 
+    # The committed JSON CANNOT see this: EdgeSection has no
+    # outgoing_sections attribute, so Graph#to_json drops the links whether
+    # they are stored or discarded. Asserting at the Hash layer is the only
+    # way the fix is observable.
+    it "keeps the outgoing links of a named section" do
+      sections = parse_fixture("edge_section_refs").dig(:edges, 0, :sections)
+
+      expect(sections.first[:outgoingSections]).to eq(%w[S2 S3])
+    end
+
+    # ELK measures a label in UTF-16 code units, as Java's String#length does.
+    # Ruby's String#length counts characters -- and BYTES once the string is
+    # not valid UTF-8 -- so a lone surrogate was billed as three characters.
+    it "measures label width in UTF-16 code units" do
+      width = ->(src) { parse(src).dig(:children, 0, :labels, 0, :width) }
+
+      # The property that matters: a lone surrogate costs the same as any
+      # other single code unit, regardless of UTF-8 representability.
+      expect(width[%(node n { label "\\uD83D" }\n)])
+        .to eq(width[%(node n { label "A" }\n)])
+      # And an astral character is two units, exactly like two ASCII ones.
+      expect(width[%(node n { label "\\uD83D\\uDE00" }\n)])
+        .to eq(width[%(node n { label "AB" }\n)])
+    end
+
+    it "counts an escaped CRLF as one line ending" do
+      # The raw-string path was fixed first; the escape path consumed the
+      # backslash and CR together and left the LF to be counted again.
+      expect { parse(%(node n { label "a\\\r\nb" }\n@\n)) }
+        .to raise_error(Elkrb::ParseError) { |error|
+          expect([error.line, error.column]).to eq([3, 1])
+        }
+    end
+
     it "resolves incoming and outgoing section references" do
       # Both refs are qualified and land on DIFFERENT ports, so dropping
       # either branch is observable; `outgoing: a` was "a" either way.

@@ -98,10 +98,19 @@ module Elkrb
           id = optional_prefix_id
           token = peek
           text = decode_label(expect(:string), token)
-          label = { text: text, width: text.length * 7.0, height: 14.0 }
+          label = { text: text, width: label_width(text), height: 14.0 }
           label[:id] = id if id
           (container[:labels] ||= []) << label
           parse_body(label, %w[label]) if brace?
+        end
+
+        # Java's String#length counts UTF-16 code units, so that is the unit
+        # ELK measures a label in. Ruby's String#length counts characters --
+        # and counts BYTES once the string is not valid UTF-8, which billed a
+        # single accepted lone surrogate as three characters.
+        def label_width(text)
+          units = text.unpack("U*").sum { |point| point > 0xFFFF ? 2 : 1 }
+          units * 7.0
         end
 
         def parse_edge(container)
@@ -139,17 +148,22 @@ module Elkrb
         def parse_section(edge)
           advance
           section = { id: single_id }
-          parse_outgoing_refs if peek.type == :arrow
+          section[:outgoingSections] = parse_outgoing_refs if
+            peek.type == :arrow
           expect(:lbracket)
           parse_section_body(section)
           expect(:rbracket)
           (edge[:sections] ||= []) << section
         end
 
+        # These are references to sibling sections, not declarations, so they
+        # are not recorded in `declared_ids` -- but they must be KEPT: parsing
+        # them and dropping them lost every link ELK retains.
         def parse_outgoing_refs
           advance
-          single_id(record: false)
-          single_id(record: false) while consume?(:comma)
+          refs = [single_id(record: false)]
+          refs << single_id(record: false) while consume?(:comma)
+          refs
         end
 
         # Ordered phases, matching ElkGraph.xtext: an unordered geometry group

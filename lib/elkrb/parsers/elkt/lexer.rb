@@ -163,19 +163,24 @@ module Elkrb
         # here too, or the two halves reach the counter separately and every
         # later location is a line out.
         def take_string_char
-          char = @src[@pos]
-          return advance_with("\r\n") if crlf?
+          return advance_with("\r\n") if crlf?(@pos)
+          return take_escape if @src[@pos] == "\\"
 
-          return advance_with(char) unless char == "\\"
-
-          nxt = @src[@pos + 1]
-          raise_at(@line, @col, "Unterminated escape") if nxt.nil?
-
-          advance_with(char + nxt)
+          advance_with(@src[@pos])
         end
 
-        def crlf?
-          @src[@pos] == "\r" && @src[@pos + 1] == "\n"
+        # The escape branch consumed the backslash and the CR together, which
+        # left the LF for the next advance and counted the pair as two lines.
+        def take_escape
+          nxt = @src[@pos + 1]
+          raise_at(@line, @col, "Unterminated escape") if nxt.nil?
+          return advance_with("\\\r\n") if crlf?(@pos + 1)
+
+          advance_with("\\#{nxt}")
+        end
+
+        def crlf?(pos)
+          @src[pos] == "\r" && @src[pos + 1] == "\n"
         end
 
         def advance_with(text)
