@@ -1176,21 +1176,24 @@ RSpec.describe "MRTree forest spacing and component cost" do
     end
   end
 
-  # Disjoint two-node cycles, every node paired. Levelling used to be bounded
-  # by the whole graph's node count rather than each component's size, so
-  # every a <-> b pair kept incrementing until it hit that bound.
+  # Two isolated roots plus a pile of disjoint 2-cycles. The two roots are
+  # LOAD-BEARING, not an off-by-one: they are what makes this the cubic
+  # shape. Nothing reaches the cycles from a root, so each cycle costs its
+  # own fallback seed, and levelling used to run graph-wide per seed against
+  # a graph-sized bound.
   #
-  # This shape has NO roots, so the old code seeded every node at once and
-  # relaxed once: quadratic, not cubic. Instrumented, it visited 24 nodes for
-  # 6 and 60 for 10. The cubic case is `disjoint_cycles` above, which keeps
-  # two isolated roots and so pays a fresh fallback seed per component.
-  # Quadratic is still enough to measure: 160 nodes 0.45s, 320 nodes 3.21s,
-  # 480 nodes 10.58s, 640 nodes 35.9s before the fix.
+  # Pairing every node instead removes the roots, and the old code then
+  # seeded everything at once and relaxed once -- quadratic, fast enough to
+  # pass this example's bound with the defect still present. That was tried
+  # and reverted; a version of this fixture with no roots proves nothing.
+  #
+  # Measured against the old code on this shape: 120 nodes 0.24s, 240 nodes
+  # 1.61s -- doubling the size multiplies the time by 6.7.
   def disjoint_two_cycles(size)
     ids = (0...size).map { |i| "n#{i}" }
-    edges = (size / 2).times.flat_map do |k|
-      a = ids[k * 2]
-      b = ids[(k * 2) + 1]
+    edges = ((size - 2) / 2).times.flat_map do |k|
+      a = ids[2 + (k * 2)]
+      b = ids[3 + (k * 2)]
       [{ "id" => "f#{k}", "sources" => [a], "targets" => [b] },
        { "id" => "r#{k}", "sources" => [b], "targets" => [a] }]
     end
