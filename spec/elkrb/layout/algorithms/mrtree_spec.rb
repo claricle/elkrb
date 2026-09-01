@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "timeout"
+
 require "spec_helper"
 
 RSpec.describe Elkrb::Layout::Algorithms::MRTree do
@@ -810,12 +812,14 @@ RSpec.describe "MRTree on a densely cyclic graph" do
   end
 
   it "lays out a complete 20-node cycle well inside a second" do
-    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-
-    Elkrb.layout(complete_cycle(20), algorithm: "mrtree")
-
-    elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
-    expect(elapsed).to be < 5.0
+    # The bound has to interrupt the call, not be read after it returns. A
+    # regression to unbounded growth never reaches the assertion, so the old
+    # form stalled the whole suite instead of failing this one example.
+    expect do
+      Timeout.timeout(5.0) do
+        Elkrb.layout(complete_cycle(20), algorithm: "mrtree")
+      end
+    end.not_to raise_error
   end
 
   it "keeps the seed root above every node of the cycle" do
@@ -1052,8 +1056,9 @@ RSpec.describe "MRTree on many disjoint cyclic components" do
   # where one dense component with a real root only ever seeds once.
   #
   # The bound is deliberately loose. It is here to catch a hang, not to
-  # certify the current cost: levelling this shape is superlinear and that
-  # is known, unfixed, and out of this change's scope.
+  # certify a cost. Levelling this shape WAS superlinear -- relaxation ran
+  # graph-wide per seed against a graph-sized level bound. It is now scoped
+  # to each component, and the 480-node example below is what measures that.
   def disjoint_cycles(size)
     ids = (0...size).map { |i| "n#{i}" }
     edges = ((size - 2) / 2).times.flat_map do |k|
@@ -1126,5 +1131,156 @@ RSpec.describe "MRTree levelling a cycle it cannot find a path through" do
     root = by_id.delete("root")
 
     expect(by_id.each_value.map(&:y)).to all(be > root.y)
+  end
+end
+
+RSpec.describe "MRTree forest spacing and component cost" do
+  let(:spacing) { 31.0 }
+
+  # r0 owns a, b and c; r1 owns only d, because a node belongs to one tree.
+  # The forest offset used to come from a width that summed leaf widths and
+  # skipped the gaps between them, so the next tree started too far left and
+  # its nodes touched the previous tree's.
+  def two_trees
+    {
+      "id" => "r",
+      "children" => %w[r0 r1 a b c d].map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => [
+        { "id" => "e1", "sources" => ["r0"], "targets" => ["a"] },
+        { "id" => "e2", "sources" => ["r0"], "targets" => ["b"] },
+        { "id" => "e3", "sources" => ["r0"], "targets" => ["c"] },
+        { "id" => "e4", "sources" => ["r1"], "targets" => ["c"] },
+        { "id" => "e5", "sources" => ["r1"], "targets" => ["d"] },
+      ],
+    }
+  end
+
+  it "keeps the configured gap between nodes that share a row" do
+    # Passed as an option, not in the graph's layoutOptions: measured on this
+    # branch, a graph-level "elk.spacing.nodeNode" does not reach mrtree's
+    # node_spacing and the layout silently uses the 20.0 default. Using a
+    # non-default value is what stops this example passing on that default.
+    result = Elkrb.layout(two_trees, algorithm: "mrtree",
+                                     spacing_node_node: spacing)
+
+    by_row = result.children.group_by(&:y)
+    by_row.each_value do |row|
+      row.sort_by(&:x).each_cons(2) do |left, right|
+        gap = right.x - (left.x + (left.width || 0.0))
+        # Name the gap, not merely "they do not overlap": a zero gap is
+        # already the defect, and >= 0 would pass with it.
+        expect(gap).to be >= spacing
+      end
+    end
+  end
+
+  # Disjoint two-node cycles, every node paired. Levelling used to be bounded
+  # by the whole graph's node count rather than each component's size, so
+  # every a <-> b pair kept incrementing until it hit that bound.
+  #
+  # This shape has NO roots, so the old code seeded every node at once and
+  # relaxed once: quadratic, not cubic. Instrumented, it visited 24 nodes for
+  # 6 and 60 for 10. The cubic case is `disjoint_cycles` above, which keeps
+  # two isolated roots and so pays a fresh fallback seed per component.
+  # Quadratic is still enough to measure: 160 nodes 0.45s, 320 nodes 3.21s,
+  # 480 nodes 10.58s, 640 nodes 35.9s before the fix.
+  def disjoint_two_cycles(size)
+    ids = (0...size).map { |i| "n#{i}" }
+    edges = (size / 2).times.flat_map do |k|
+      a = ids[k * 2]
+      b = ids[(k * 2) + 1]
+      [{ "id" => "f#{k}", "sources" => [a], "targets" => [b] },
+       { "id" => "r#{k}", "sources" => [b], "targets" => [a] }]
+    end
+    {
+      "id" => "r",
+      "children" => ids.map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => edges,
+    }
+  end
+
+  # A tree whose LAST child is narrow but has descendants reaching further
+  # right than itself. The consumed width used to be read off that last
+  # child's own edge, which sits left of its subtree's real extent, so the
+  # next tree started inside this one. Found by review with this exact shape.
+  def deep_then_wide
+    pairs = [%w[r0 deep1], %w[deep1 deep2], %w[deep2 deep3],
+             %w[r0 wide], %w[wide a], %w[wide b], %w[wide c],
+             %w[r1 q1], %w[q1 q2], %w[q2 q3]]
+    {
+      "id" => "r",
+      "children" => %w[r0 r1 deep1 deep2 deep3 wide a b c q1 q2 q3].map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => pairs.each_with_index.map do |(source, target), i|
+        { "id" => "e#{i}", "sources" => [source], "targets" => [target] }
+      end,
+    }
+  end
+
+  # A parent WIDER than all its children combined. Centring puts it either
+  # side of them, so the consumed width has to come from where the nodes
+  # actually landed, not from what the children were allotted. Found by
+  # review: a 200px parent over two 10px children reported 60 and the next
+  # tree began 60px inside it.
+  def wide_parent
+    {
+      "id" => "r",
+      "children" => [{ "id" => "big", "width" => 200, "height" => 10 },
+                     { "id" => "c1", "width" => 10, "height" => 10 },
+                     { "id" => "c2", "width" => 10, "height" => 10 },
+                     { "id" => "r2", "width" => 10, "height" => 10 },
+                     { "id" => "d1", "width" => 10, "height" => 10 }],
+      "edges" => [{ "id" => "e1", "sources" => ["big"], "targets" => ["c1"] },
+                  { "id" => "e2", "sources" => ["big"], "targets" => ["c2"] },
+                  { "id" => "e3", "sources" => ["r2"], "targets" => ["d1"] }],
+    }
+  end
+
+  it "counts a parent wider than its children as part of its tree's width" do
+    result = Elkrb.layout(wide_parent, algorithm: "mrtree",
+                                       spacing_node_node: 20)
+    by_id = result.children.to_h { |node| [node.id, node] }
+    big = by_id.fetch("big")
+    other = by_id.fetch("r2")
+
+    expect(big.y).to eq(other.y)
+    # Signed gap, so an overlap reads as negative rather than as a near miss.
+    expect(other.x - (big.x + big.width)).to be >= 20
+  end
+
+  it "separates trees by a last child's descendants, not the child itself" do
+    result = Elkrb.layout(deep_then_wide, algorithm: "mrtree",
+                                          spacing_node_node: 37)
+    by_id = result.children.to_h { |node| [node.id, node] }
+    left = by_id.fetch("c")
+    right = by_id.fetch("q2")
+
+    # These two land on the same row and belong to different trees. Naming
+    # the gap matters: they used to overlap by 10px, so a >= 0 assertion
+    # would have passed with the defect in place.
+    expect(left.y).to eq(right.y)
+    expect(right.x - (left.x + left.width)).to be >= 37
+  end
+
+  it "lays out 480 disjoint-cycle nodes in the bound, placing them all" do
+    # The timeout interrupts the call rather than being read after it returns,
+    # for the same reason as the complete-cycle example above. Asserting the
+    # positions in the same example keeps the bound honest: a layout that
+    # returned early having placed nothing would beat any time bound.
+    result = nil
+
+    expect do
+      result = Timeout.timeout(5.0) do
+        Elkrb.layout(disjoint_two_cycles(480), algorithm: "mrtree")
+      end
+    end.not_to raise_error
+
+    expect(result.children.size).to eq(480)
+    expect(result.children.map(&:x)).to all(be_a(Numeric).and(be_finite))
   end
 end
