@@ -80,7 +80,7 @@ class CorpusRunner
     def run(outdir, timeout: TIMEOUT_SECONDS)
       outdir = File.expand_path(outdir)
       refuse_source_directory!(outdir)
-      FileUtils.mkdir_p(outdir)
+      claim_output_directory!(outdir)
       corpus = cases
       prune_stale_dumps(outdir, corpus)
 
@@ -98,6 +98,53 @@ class CorpusRunner
     # example would end the test run, not just the example.
     def exit_code(summary)
       summary["unexpected_failures"] ? 1 : 0
+    end
+
+    # The runner DELETES files it believes are stale, so it may only write
+    # into a directory that is its own. An empty or absent directory becomes
+    # its own and gets the marker; a directory already carrying the marker is
+    # its own already. Anything else is somebody's working directory and is
+    # refused, because a `summary.json` that merely looks right is not
+    # provenance -- a run once adopted an unrelated one and deleted a file
+    # named in it.
+    OWNER_MARKER = ".elkrb-corpus-dump"
+
+    def claim_output_directory!(outdir)
+      if File.directory?(outdir)
+        marker = File.join(outdir, OWNER_MARKER)
+        return if File.file?(marker)
+
+        unless Dir.empty?(outdir)
+          raise ArgumentError,
+                "#{outdir} was not written by the corpus runner and holds " \
+                "files it does not own. Point --out at a new or empty " \
+                "directory, or delete that one yourself."
+        end
+      end
+
+      FileUtils.mkdir_p(outdir)
+      File.write(File.join(outdir, OWNER_MARKER), <<~TEXT)
+        Written by spec/cross_validation/corpus_runner.rb.
+        Its presence is what lets the runner delete stale dumps here.
+        Delete this file and the directory stops being the runner's.
+      TEXT
+    end
+
+    # A case id reaches the filesystem, and importers are a documented
+    # extension point, so an id is not assumed to be a bare name. An id of
+    # `../victim` used to resolve outside `outdir` and overwrite a sibling.
+    def case_path(outdir, id)
+      name = "#{id}.json"
+      path = File.expand_path(name, outdir)
+
+      unless File.basename(name) == name && File.dirname(path) == outdir
+        raise ArgumentError,
+              "case id #{id.inspect} does not name a file inside the output " \
+              "directory. Ids become filenames, so they may not contain a " \
+              "path separator or traverse upwards."
+      end
+
+      path
     end
 
     # True when `outdir` is, or sits under, one of SOURCE_DIRS.
@@ -135,7 +182,12 @@ class CorpusRunner
 
     # A failure whose wrapper did not declare it. Derived from the recorded
     # entries so summary.json and the exit code cannot disagree.
+    # An EMPTY run is a failure, not a pass. A corpus that silently stopped
+    # being found wrote `total: 0` and exited 0, so a caller could not tell
+    # "everything passed" from "nothing ran" -- and CI reads the exit code.
     def unexpected_failure?(summary)
+      return true if summary["total"].to_i.zero?
+
       summary["cases"].any? do |entry|
         entry["status"] != "ok" && !entry["expected"]
       end
@@ -167,7 +219,7 @@ class CorpusRunner
       summary["total"] += 1
       summary[status] += 1
       summary["cases"] << case_entry(kase, status)
-      write_json(File.join(outdir, "#{kase.id}.json"), payload)
+      write_json(case_path(outdir, kase.id), payload)
     end
 
     # "expected" is recorded only for a failure the wrapper declared, so a
@@ -248,9 +300,16 @@ class CorpusRunner
       []
     end
 
-    # srand returns the seed it replaces. Kernel's generator is process-wide
-    # and the spec suite seeds it deliberately, so the reseed is undone
-    # rather than left to decide what runs after the corpus.
+    # Kernel's generator is process-wide and the spec suite seeds it
+    # deliberately, so the seed is put back on the way out.
+    #
+    # Putting the SEED back is not the same as putting the STREAM back, and
+    # this comment used to claim it was. `srand(previous_seed)` restarts that
+    # seed's sequence from its first value rather than resuming where the
+    # caller had reached -- measured, the next value repeated 0.929616...
+    # instead of continuing to 0.316375... Ruby exposes no way to snapshot the
+    # global generator's position, so what is guaranteed here is only that a
+    # later `srand`-based reproduction sees the seed it expects.
     def run_case(kase, timeout)
       previous_seed = Kernel.srand(DETERMINISTIC_SEED)
       result = Timeout.timeout(timeout) do

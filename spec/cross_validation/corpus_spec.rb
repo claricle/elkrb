@@ -347,46 +347,77 @@ RSpec.describe "Elkrb layout corpus" do
       end
     end
 
-    it "deletes nothing from a directory that is not a previous dump" do
+    it "refuses a directory it does not own, and touches nothing in it" do
       corpus_of("kept")
 
       Dir.mktmpdir do |dir|
-        # Pruning is aimed at a path the caller typed, so a directory this
-        # runner has never written to keeps everything it already holds.
+        # This used to RUN here and merely promise not to delete. That promise
+        # rested on reading the directory's own summary.json as proof of
+        # provenance, and an unrelated file of the right shape was accepted as
+        # that proof. Refusing outright is the guarantee that does not depend
+        # on guessing who wrote what.
         File.write(File.join(dir, "someones.json"), "{}")
 
-        CorpusRunner.run(dir)
+        expect do
+          CorpusRunner.run(dir)
+        end.to raise_error(ArgumentError, /does not own/)
 
-        expect(File.exist?(File.join(dir, "someones.json"))).to be(true)
-        expect(File.exist?(File.join(dir, "kept.json"))).to be(true)
+        expect(File.read(File.join(dir, "someones.json"))).to eq("{}")
+        expect(File.exist?(File.join(dir, "kept.json"))).to be(false)
+      end
+    end
+
+    it "adopts an empty directory and runs there again afterwards" do
+      corpus_of("kept")
+
+      Dir.mktmpdir do |dir|
+        empty = File.join(dir, "dump")
+
+        2.times { CorpusRunner.run(empty) }
+
+        # The marker is what makes the second run legal, so assert it exists
+        # rather than only that the run did not raise.
+        expect(File.exist?(File.join(empty, ".elkrb-corpus-dump"))).to be(true)
+        expect(File.exist?(File.join(empty, "kept.json"))).to be(true)
       end
     end
 
     # One run is not enough to see this. `run` is what writes summary.json,
-    # so a delete set of "every *.json that is not a current case" made the
-    # first run manufacture the second run's licence to sweep the directory:
-    # run 1 left a summary behind, and run 2 read it as proof the whole
-    # directory was ours. The set is the ids the previous summary recorded,
-    # so a file this runner never wrote is never a candidate, however many
-    # times it is pointed at the directory.
-    it "keeps a file it never wrote across two runs of one directory" do
+    # so the first run used to manufacture the second run's licence: run 1
+    # left a summary behind and run 2 read it as proof the directory was
+    # ours. Reading the directory's own summary as provenance is the part
+    # that was wrong -- an unrelated file of the same shape was accepted as
+    # that proof. Ownership is now an explicit marker the runner writes.
+    it "refuses the same directory on a second run, not just the first" do
       corpus_of("kept")
 
       Dir.mktmpdir do |dir|
         File.write(File.join(dir, "someones.json"), "{}")
         File.write(File.join(dir, "notes.txt"), "mine")
 
-        2.times { CorpusRunner.run(dir) }
+        2.times do
+          expect do
+            CorpusRunner.run(dir)
+          end.to raise_error(ArgumentError, /does not own/)
+        end
 
-        expect(File.exist?(File.join(dir, "someones.json"))).to be(true)
-        expect(File.exist?(File.join(dir, "notes.txt"))).to be(true)
-        expect(File.exist?(File.join(dir, "kept.json"))).to be(true)
+        # One run used to manufacture the next run's licence: it left a
+        # summary.json behind, and the second run read that as proof the whole
+        # directory was its own. Refusing both times is what closes that.
+        expect(File.read(File.join(dir, "someones.json"))).to eq("{}")
+        expect(File.read(File.join(dir, "notes.txt"))).to eq("mine")
       end
     end
 
     # Kernel.srand is process-wide. The suite seeds deliberately, and two
     # algorithms call bare `rand`, so a reseed left in place would decide
     # what every later example sees.
+    #
+    # This asserts the SEED is put back, which is all `srand` can do. It does
+    # NOT assert the stream resumes where the caller left off, because it does
+    # not: `srand(previous)` restarts that seed's sequence from its first
+    # value. Naming the weaker property is the point -- the example used to
+    # read as though position were restored.
     it "restores the caller's random seed" do
       corpus_of("kept")
 
