@@ -291,7 +291,18 @@ RSpec.describe "Elkrb layout corpus" do
     # and macOS resolves it to the same file as summary.json. A bytewise
     # downcase misses it entirely, which is why the comparison stays
     # encoding-aware for any id whose encoding is valid.
-    ["SUMMARY", "Summary", "sUmMaRy", "\u017Fummary"].each do |cased|
+    # The last two are not casings. "\u017Fummary" is a FOLD -- Unicode folds
+    # long s to s and macOS resolves it to the same file. The BINARY one is
+    # the same bytes in ASCII-8BIT, which is what `Dir.glob` hands back under
+    # LC_ALL=C: it is `valid_encoding?`, so a plain `casecmp?` accepted it as
+    # a valid string and then folded nothing, and it walked past the guard.
+    [
+      "SUMMARY",
+      "Summary",
+      "sUmMaRy",
+      "\u017Fummary",
+      "\u017Fummary".dup.force_encoding(Encoding::ASCII_8BIT),
+    ].each do |cased|
       it "refuses the id #{cased} on a case-insensitive disk" do
         reserved = CorpusRunner::Case.new(id: cased)
         allow(CorpusRunner).to receive(:imported_cases).and_return([reserved])

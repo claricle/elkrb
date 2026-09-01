@@ -233,9 +233,32 @@ class CorpusRunner
     # always answers.
     def reserved_id?(id)
       text = id.to_s
-      return text.casecmp?(RESERVED_ID) if text.valid_encoding?
+      folded = as_utf8(text)
+      return folded.casecmp?(RESERVED_ID) if folded
 
       text.b.downcase == RESERVED_ID.b.downcase
+    end
+
+    # The id read as UTF-8, or nil when its bytes are not valid UTF-8.
+    #
+    # Checking `valid_encoding?` alone is not enough. An ASCII-8BIT string IS
+    # valid, but `casecmp?` will not Unicode-fold its bytes -- and under
+    # LC_ALL=C `Dir.glob` hands filenames back as ASCII-8BIT, so a fixture
+    # actually named `\u017Fummary` arrived binary, folded to nothing, and
+    # walked past the guard onto a path that aliases summary.json.
+    #
+    # Reinterpreting the same bytes as UTF-8 folds them the way the filesystem
+    # does. Bytes that are NOT valid UTF-8 -- a latin-1 name, say -- fall
+    # through to the byte comparison, which is right: those do not alias.
+    def as_utf8(text)
+      candidate =
+        if text.encoding == Encoding::UTF_8
+          text
+        else
+          text.dup.force_encoding(Encoding::UTF_8)
+        end
+
+      candidate if candidate.valid_encoding?
     end
 
     def refuse_reserved_id!(all_cases)
