@@ -118,9 +118,19 @@ module Elkrb
         # both the child and the port in play.
         def build_index(container)
           entries = Hash.new { |hash, key| hash[key] = [] }
+          index_members(entries, container)
+          # The mutating default is load-bearing during construction -- `<<`
+          # relies on it to create and STORE the array -- but a bare read of a
+          # missing key would then insert one, growing the index
+          # mid-resolution. Clearing it leaves construction working and makes
+          # reads inert.
+          entries.default_proc = nil
+          entries
+        end
+
+        def index_members(entries, container)
           (container[:children] || []).each { |c| entries[c[:id]] << c }
           (container[:ports] || []).each { |port| entries[port[:id]] << port }
-          entries
         end
 
         # One graph-wide counter over a taken set seeded with every declared id

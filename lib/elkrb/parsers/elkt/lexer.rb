@@ -15,7 +15,7 @@ module Elkrb
       #
       # @api private
       class Lexer
-        BOM = "﻿"
+        BOM = "\uFEFF"
         WS = /\G[ \t\r\n]+/
         NEWLINE = /\r\n|\r|\n/
         # The exponent alternative MUST precede the plain-decimal one: Ruby
@@ -41,7 +41,7 @@ module Elkrb
         end
 
         def tokenize
-          advance(BOM) if @src.start_with?(BOM)
+          @pos += BOM.length if @src.start_with?(BOM)
           scan_one while @pos < @src.length
           emit(:eof, "", nil)
           @tokens
@@ -49,6 +49,10 @@ module Elkrb
 
         private
 
+        # Skipped by moving @pos alone: a byte-order mark is a zero-width
+        # marker, so the first real character is still at column 1. Routing it
+        # through `advance` shifted every first-line column by one.
+        #
         # ELKT is UTF-8. A caller handing us bytes read in binary mode, or text
         # that is not valid UTF-8, would otherwise escape the facade's
         # documented ParseError boundary as an Encoding::CompatibilityError or

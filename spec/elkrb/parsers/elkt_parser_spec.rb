@@ -16,6 +16,7 @@ ELKT_ERROR_LOCATIONS = {
   "bare_arrow" => [2, 9],
   "bare_keyword_property_key" => [1, 1],
   "edge_in_port_body" => [1, 19],
+  "bom_then_stray_char" => [1, 1],
   "cr_line_location" => [2, 1],
   "escaped_keyword_stmt" => [1, 1],
   "escaped_property_in_shape_layout" => [1, 19],
@@ -42,6 +43,7 @@ ELKT_ERROR_LOCATIONS = {
   "repeated_size" => [1, 31],
   "spaced_property_key" => [1, 1],
   "stray_brace" => [1, 1],
+  "stray_char_no_bom" => [1, 1],
   "stray_char" => [2, 1],
   "unbalanced_brace" => [2, 1],
   "unescaped_keyword_segment" => [1, 6],
@@ -232,6 +234,21 @@ RSpec.describe Elkrb::Parsers::ElktParser do
       # And an astral character is two units, exactly like two ASCII ones.
       expect(width[%(node n { label "\\uD83D\\uDE00" }\n)])
         .to eq(width[%(node n { label "AB" }\n)])
+    end
+
+    # A byte-order mark is a zero-width marker, not a character in the text,
+    # so it must not shift any column. The pair is the assertion: identical
+    # sources differing only by a leading BOM must report the same location.
+    it "reports identical locations with and without a leading BOM" do
+      locate = lambda do |src|
+        parse(src)
+        nil
+      rescue Elkrb::ParseError => e
+        [e.line, e.column]
+      end
+
+      expect(locate["\uFEFF@"]).to eq(locate["@"])
+      expect(locate["\uFEFF@"]).to eq([1, 1])
     end
 
     it "counts an escaped CRLF as one line ending" do
