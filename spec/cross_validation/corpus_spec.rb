@@ -307,6 +307,31 @@ RSpec.describe "Elkrb layout corpus" do
     end
   end
 
+  describe CorpusRunner, ".exit_code" do
+    # The measured truth table proved this behaves correctly, but nothing
+    # committed preserved it: deleting the zero-total branch left every
+    # committed example green. The outcomes ARE the property, so they are a
+    # table rather than four hand-written examples.
+    {
+      "an empty run" => [{ "total" => 0, "cases" => [] }, 1],
+      "an all-ok run" => [{ "total" => 2,
+                            "cases" => [{ "status" => "ok" },
+                                        { "status" => "ok" }] }, 0],
+      "a declared failure" => [{ "total" => 1,
+                                 "cases" => [{ "status" => "error",
+                                               "expected" => true }] }, 0],
+      "a fresh regression" => [{ "total" => 1,
+                                 "cases" => [{ "status" => "error" }] }, 1],
+    }.each do |name, (summary, expected)|
+      it "exits #{expected} for #{name}" do
+        summary["unexpected_failures"] =
+          CorpusRunner.send(:unexpected_failure?, summary)
+
+        expect(CorpusRunner.exit_code(summary)).to eq(expected)
+      end
+    end
+  end
+
   describe CorpusRunner, ".run" do
     # AlgorithmRegistry holds process-wide state, and one example below
     # registers a deliberately slow algorithm into it.
@@ -380,13 +405,17 @@ RSpec.describe "Elkrb layout corpus" do
         # that proof. Refusing outright is the guarantee that does not depend
         # on guessing who wrote what.
         File.write(File.join(dir, "someones.json"), "{}")
+        before_entries = Dir.children(dir).sort
 
         expect do
           CorpusRunner.run(dir)
         end.to raise_error(ArgumentError, /does not own/)
 
+        # Compare the WHOLE listing, not just the file we planted: a run that
+        # dropped its own marker in before raising would leave someones.json
+        # intact and still pass a narrower assertion.
+        expect(Dir.children(dir).sort).to eq(before_entries)
         expect(File.read(File.join(dir, "someones.json"))).to eq("{}")
-        expect(File.exist?(File.join(dir, "kept.json"))).to be(false)
       end
     end
 
@@ -394,13 +423,20 @@ RSpec.describe "Elkrb layout corpus" do
       corpus_of("kept")
 
       Dir.mktmpdir do |dir|
+        # An EXISTING empty directory, not an absent one. Those are different
+        # branches and only the absent one was covered.
         empty = File.join(dir, "dump")
+        FileUtils.mkdir_p(empty)
 
-        2.times { CorpusRunner.run(empty) }
-
-        # The marker is what makes the second run legal, so assert it exists
-        # rather than only that the run did not raise.
+        CorpusRunner.run(empty)
         expect(File.exist?(File.join(empty, ".elkrb-corpus-dump"))).to be(true)
+
+        # Make the second run's work observable. Delete the case dump and
+        # require the second run to put it back -- otherwise a second run
+        # that did nothing at all would pass.
+        FileUtils.rm_f(File.join(empty, "kept.json"))
+        CorpusRunner.run(empty)
+
         expect(File.exist?(File.join(empty, "kept.json"))).to be(true)
       end
     end

@@ -92,10 +92,14 @@ class CorpusRunner
       summary
     end
 
-    # 1 when `summary` has a failure that was not declared "expect" on
-    # its wrapper, 0 otherwise. Extracted so the CLI entrypoint's exit
-    # decision is directly testable -- calling `exit` from inside an
-    # example would end the test run, not just the example.
+    # 1 when `summary` has a failure that was not declared "expect" on its
+    # wrapper, OR when the run found no cases at all, and 0 otherwise. The
+    # empty case matters as much as the failing one: a corpus that silently
+    # stopped being discovered used to exit 0 and read as green.
+    #
+    # Extracted so the CLI entrypoint's exit decision is directly testable --
+    # calling `exit` from inside an example would end the test run, not just
+    # the example.
     def exit_code(summary)
       summary["unexpected_failures"] ? 1 : 0
     end
@@ -117,8 +121,9 @@ class CorpusRunner
         unless Dir.empty?(outdir)
           raise ArgumentError,
                 "#{outdir} was not written by the corpus runner and holds " \
-                "files it does not own. Point --out at a new or empty " \
-                "directory, or delete that one yourself."
+                "files it does not own. Name a new or empty directory " \
+                "instead -- `rake 'corpus:dump[dir]'`, or the positional " \
+                "argument to this script -- or clear that one yourself."
         end
       end
 
