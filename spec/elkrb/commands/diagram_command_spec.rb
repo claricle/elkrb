@@ -252,4 +252,42 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
                                             /Unable to parse input file/)
     end
   end
+  describe "when staging the DOT fails" do
+    # I claimed this was covered and it was not. The existing cleanup
+    # examples all run AFTER a successful staging write, so none of them
+    # exercised the path where staging itself raises.
+    #
+    # The image path must never hold DOT. It used to: the DOT was written
+    # under `out.svg` and read back, so any failure between those points left
+    # a `.svg` beginning `digraph G{`. Cleanup could not be relied on to undo
+    # that either -- `FileUtils.rm_f` swallows an unlink failure.
+    let(:input_file) do
+      File.join(temp_dir, "graph.json").tap do |path|
+        File.write(path, graph_data.to_json)
+      end
+    end
+    let(:output_file) { File.join(temp_dir, "out.svg") }
+
+    before { FileUtils.mkdir_p("#{output_file}.tmp.dot") }
+
+    it "leaves no image file behind" do
+      expect do
+        described_class.new(input_file, { output: output_file }).run
+      end.to raise_error(StandardError)
+
+      expect(File.exist?(output_file)).to be(false)
+    end
+
+    it "does not clobber a file already at the image path" do
+      File.write(output_file, "PRE-EXISTING USER CONTENT")
+
+      expect do
+        described_class.new(input_file, { output: output_file }).run
+      end.to raise_error(StandardError)
+
+      # Naming the content, not just "it still exists": the defect wrote DOT
+      # over it, and a bare existence check would pass on that.
+      expect(File.read(output_file)).to eq("PRE-EXISTING USER CONTENT")
+    end
+  end
 end

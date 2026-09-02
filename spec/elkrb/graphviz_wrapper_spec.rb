@@ -480,12 +480,23 @@ RSpec.describe Elkrb::GraphvizWrapper do
           FileUtils.chmod(0o755, path)
         end
 
-        # The surrounding hook already saves and restores ELKRB_DOT, so this
-        # matches the file's own convention rather than adding a dependency.
-        ENV["ELKRB_DOT"] = "bin/dot"
-        found = Dir.chdir(File.join(tmp, "A")) do
-          described_class.new.send(:find_graphviz)
-        end
+        # I claimed a surrounding hook restored ELKRB_DOT. There is none, and
+        # a focused run of this example left it set for every later example.
+        # Restored here explicitly.
+        previous = ENV.fetch("ELKRB_DOT", nil)
+        found =
+          begin
+            ENV["ELKRB_DOT"] = "bin/dot"
+            Dir.chdir(File.join(tmp, "A")) do
+              described_class.new.send(:find_graphviz)
+            end
+          ensure
+            if previous.nil?
+              ENV.delete("ELKRB_DOT")
+            else
+              ENV["ELKRB_DOT"] = previous
+            end
+          end
 
         # Name the directory, not merely "it is absolute": an absolute path
         # pointing at B would satisfy a weaker assertion.

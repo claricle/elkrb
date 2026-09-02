@@ -220,36 +220,41 @@ module Elkrb
       # back as a single empty Node instead of a list. That is a malformed
       # document, not a graph: hand it back and every downstream reader breaks
       # on it. Fall through to the normalized parse error instead.
-      # Walks the WHOLE model, not just the root. lutaml coerces a mapping
-      # where a sequence belongs, and it does so at every level: a nested
-      # `"children": {...}` comes back as a single Node rather than an Array,
-      # and an edge's `"sources": {...}` comes back as a String. Checking only
-      # the root let both through -- `validate` printed "is valid" for each,
-      # and `convert` succeeded.
-      def malformed_model?(node)
-        return true if malformed_collections?(node)
+      # Walks the WHOLE model, and every collection field on it.
+      #
+      # lutaml coerces a mapping where a sequence belongs, at every level and
+      # in every field: a nested `"children": {...}` comes back as a single
+      # Node, an edge's `"sources": {...}` as a String, and a node's
+      # `"labels": {...}` as a single Label. Checking only children and edges
+      # let the rest through -- `validate` printed "is valid" for an
+      # object-valued `labels` and `layout` then died with
+      # `undefined method 'empty?' for an instance of Elkrb::Graph::Label`.
+      #
+      # The field list is every `collection: true` attribute in graph/.
+      COLLECTIONS = %i[
+        children edges labels ports sections sources targets bend_points
+      ].freeze
+      private_constant :COLLECTIONS
 
-        # Recurse only where the shape is already known good, or the walk
-        # would iterate the very value it just rejected.
-        collection(node.children).any? { |child| malformed_model?(child) }
+      def malformed_model?(node)
+        values = present_collections(node)
+        return true if values.any? { |value| !value.is_a?(::Array) }
+
+        # Recurse only through a value already known to be an Array --
+        # otherwise the walk would iterate the very value it just rejected.
+        values.any? { |value| value.any? { |item| nested_malformed?(item) } }
       end
 
-      # The collections on one node: its own two, plus the endpoint lists of
-      # any edge it holds.
-      def malformed_collections?(node)
-        return true if sequence_expected?(node.children, node.edges)
-
-        collection(node.edges).any? do |edge|
-          sequence_expected?(edge.sources, edge.targets)
+      def present_collections(node)
+        COLLECTIONS.filter_map do |field|
+          node.public_send(field) if node.respond_to?(field)
         end
       end
 
-      def sequence_expected?(*values)
-        values.any? { |value| !value.nil? && !value.is_a?(::Array) }
-      end
+      def nested_malformed?(item)
+        return false unless COLLECTIONS.any? { |field| item.respond_to?(field) }
 
-      def collection(value)
-        value.is_a?(::Array) ? value : []
+        malformed_model?(item)
       end
 
       # Mirrors the field list in Graph's json and yaml mapping blocks: when

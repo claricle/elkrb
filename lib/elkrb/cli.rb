@@ -201,10 +201,16 @@ module Elkrb
         say output
       end
     rescue Errno::EPIPE
-      # The reader went away -- `elkrb layout g.json | head -1`. That is not
-      # an application failure, and the generic rescue below was turning it
-      # into one: a valid layout exited 1 reporting "Broken pipe" where the
-      # base exits 0. Every other unix filter stops quietly here, so do that.
+      # The reader went away. That is not an application failure, and the
+      # generic rescue below was turning it into one: a valid layout exited 1
+      # reporting "Broken pipe" where the base exits 0. Every other unix
+      # filter stops quietly here, so do that.
+      #
+      # `| head -1` is NOT how to reproduce it, though it reads like it should
+      # be: the JSON is compact and therefore one physical line, so `head`
+      # consumes all of it and both ends exit 0. The spec closes the stream
+      # before the child writes a byte, which is what a vanished reader
+      # actually looks like from in here.
       #
       # `exit` raises SystemExit, which is not a StandardError, so it passes
       # through the command's rescue rather than being reported as an error.

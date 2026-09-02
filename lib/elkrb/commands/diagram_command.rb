@@ -28,12 +28,19 @@ module Elkrb
         # Export to format
         content = export_to_format(result, output_format)
 
-        # Write output
-        write_output(content, @options[:output])
-
-        # Render to image if needed
+        # An image format NEVER has DOT written under its own name. The DOT
+        # went to `out.svg` first and was read back for rendering, so any
+        # failure between those two points left the caller an `out.svg` that
+        # began `digraph G{`. Cleanup could not be relied on to undo it
+        # either: `FileUtils.rm_f` swallows an unlink failure, so in a
+        # non-writable directory the misleading file simply stayed.
+        #
+        # Staging under a separate name means the image path is only ever
+        # written by a render that succeeded.
         if image_format?(output_format)
-          render_to_image(@options[:output], output_format)
+          render_to_image(content, @options[:output], output_format)
+        else
+          write_output(content, @options[:output])
         end
 
         # Preview if requested
@@ -115,52 +122,37 @@ module Elkrb
         %i[png svg pdf ps eps].include?(format)
       end
 
-      def render_to_image(output_file, format)
-        # For image formats, we need to render DOT -> image
-        # First write DOT to temp file
+      def render_to_image(dot_content, output_file, format)
         dot_file = "#{output_file}.tmp.dot"
+        # Whether the image path was OURS to remove. Cleanup used to delete it
+        # unconditionally, which took a file the caller already had there --
+        # one we never wrote to, since staging goes elsewhere now.
+        pre_existing = File.exist?(output_file)
 
-        # Re-read the content we just wrote (which is DOT)
-        dot_content = File.read(output_file)
-
-        dot_file = output_file if File.extname(output_file).downcase == ".dot"
-
-        # Staging is INSIDE this block deliberately. It used to sit above the
-        # begin, so a staging failure escaped before any cleanup ran and left
-        # the requested image file holding DOT text -- measured: precreating
-        # `out.svg.tmp.dot` as a directory gave exit 1 with an `out.svg` that
-        # began `digraph G{`. The rescue is StandardError for the same reason:
-        # a render that fails for any cause leaves the same lie behind, not
-        # only a missing Graphviz.
         begin
-          File.write(dot_file, dot_content) if dot_file != output_file
+          write_output(dot_content, dot_file)
 
           require_relative "../graphviz_wrapper"
           graphviz = Elkrb::GraphvizWrapper.new
 
           graphviz.render(dot_file, output_file, format, engine: "dot", dpi: 96)
 
-          # Clean up temp DOT file if we created one
-          File.delete(dot_file) if dot_file != output_file && File.exist?(dot_file)
+          FileUtils.rm_f(dot_file)
         rescue StandardError
-          discard_unrendered(dot_file, output_file)
+          discard_unrendered(dot_file, output_file, pre_existing)
           raise
         end
       end
 
-      # The DOT text was already written under the requested image filename.
-      # Leaving it there hands the caller a .svg that is not an SVG, so take
-      # it away rather than let a failed render look like a rendered file.
-      def discard_unrendered(dot_file, output_file)
-        # Order matters. Removing the misleading image file is the guarantee;
-        # clearing the staging file is only tidiness. Doing the tidying first
-        # meant a staging path that could not be deleted -- a directory of
-        # that name raises EPERM from File.delete -- threw before the image
-        # file was ever touched, and the caller was left with an `out.svg`
-        # holding DOT text. Measured with `out.svg.tmp.dot` precreated as a
-        # directory.
-        FileUtils.rm_f(output_file) if dot_file != output_file
-        FileUtils.rm_f(dot_file) if dot_file != output_file && File.file?(dot_file)
+      # Nothing should exist at the image path unless a render put it there,
+      # so both the staging file and any partial image are cleared. The image
+      # goes FIRST: a staging path that cannot be deleted -- a directory of
+      # that name raises EPERM -- must not stop the image being cleaned up.
+      def discard_unrendered(dot_file, output_file, pre_existing)
+        # Only a file this run created is ours to take away. A half-written
+        # image from a failed render is; the caller's own file is not.
+        FileUtils.rm_f(output_file) unless pre_existing
+        FileUtils.rm_f(dot_file) if File.file?(dot_file)
       end
 
       def preview(file)

@@ -726,6 +726,9 @@ RSpec.describe "byte order mark removal across input encodings" do
 
     expect(elkt_node_ids(graph)).to eq(%w[a b])
   end
+end
+
+RSpec.describe "input shape validation at the CLI boundary" do
   describe "the hollow-mapping guard, on both paths" do
     # lutaml-model accepts ANY mapping and hands back a graph with every
     # field nil, so `{"foo":1}` laid out as `{}` and exited 0 when the file
@@ -780,8 +783,10 @@ RSpec.describe "byte order mark removal across input encodings" do
         ".json",
       )
 
-      # Name the nested id: asserting only "did not raise" would stay green
-      # if the recursion stopped descending altogether.
+      # Name the nested id rather than only "did not raise". This example
+      # guards against OVER-rejection -- it does not detect a lost recursion,
+      # because removing the recursion still returns ["x"]. The malformed
+      # examples above are what catch that.
       expect(graph.children.first.children.map(&:id)).to eq(["x"])
     end
   end

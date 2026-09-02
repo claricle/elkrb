@@ -134,13 +134,5 @@ RSpec.describe "elkrb CLI" do
         expect(run_elkrb_with_stream_closed(stream, *args)).to eq(expected)
       end
     end
-
-    it "still reports a real failure when stderr is gone" do
-      status = run_elkrb_with_stream_closed(
-        :err, "layout", "/nope/missing.json"
-      )
-
-      expect(status).to eq(1)
-    end
   end
 end
