@@ -377,6 +377,24 @@ RSpec.describe "Elkrb layout corpus" do
       end
     end
 
+    it "refuses an id whose path is a link to summary.json" do
+      # The fold and casing examples below only exercise refusal where the
+      # VOLUME folds; on a case-sensitive disk they take the accepting branch
+      # and prove nothing. A symlink aliases on EVERY filesystem, so this
+      # covers the refusal path on every machine.
+      #
+      # The exact name "summary" would not work here: the ASCII guard rejects
+      # it at `cases` time, so it never reaches `case_path` at all.
+      Dir.mktmpdir do |dir|
+        summary = File.join(dir, "summary.json")
+        File.write(summary, "{}")
+        File.symlink("summary.json", File.join(dir, "aliased.json"))
+
+        expect { CorpusRunner.send(:case_path, dir, "aliased") }
+          .to raise_error(ArgumentError, /names the same file as summary/)
+      end
+    end
+
     # These are the ids the early ASCII guard cannot settle. Unicode folds
     # long s to s and macOS resolves it to one file; the same bytes arrive as
     # ASCII-8BIT from `Dir.glob` under LC_ALL=C, and as other encodings under
