@@ -7,24 +7,26 @@ This directory contains the cross-validation test suite for validating ElkRb aga
 The cross-validation suite:
 - Imports test cases from elkjs and Java ELK
 - Runs them through ElkRb's layout engine
-- Validates outputs and generates compatibility reports
 - Helps ensure ElkRb maintains compatibility with reference implementations
 
 ## Directory Structure
 
 ```
 spec/cross_validation/
-├── README.md                           # This file
-├── elkjs_test_importer.rb             # Imports test cases from elkjs
-├── java_elk_test_importer.rb          # Imports test cases from Java ELK
-├── validation_runner.rb                # Runs validation tests
-├── generate_validation_report.rb       # Generates AsciiDoc report
-├── validation_report.json              # JSON validation results
+├── README.md                             # This file
+├── elkjs_test_importer.rb                # Imports test cases from elkjs
+├── elkjs_test_importer_spec.rb           # Its refusal guards and glob
+├── java_elk_test_importer.rb             # Imports test cases from Java ELK
+├── java_elk_test_importer_spec.rb        # Its refusal guard and glob
+├── corpus_runner.rb                      # Runs corpus cases, writes canonical dumps
+├── corpus_runner_fixture_paths_spec.rb   # What the source globs may list
+├── corpus_runner_prune_spec.rb           # What a dump directory may delete
+├── corpus_spec.rb                        # Asserts corpus invariants
 └── fixtures/
     ├── elkjs/
-    │   └── imported_tests.json        # Imported elkjs test cases
+    │   └── imported_tests.json          # Imported elkjs test cases
     └── java_elk/
-        └── imported_tests.json        # Imported Java ELK test cases
+        └── imported_tests.json          # Imported Java ELK test cases
 ```
 
 ## Usage
@@ -46,31 +48,31 @@ Import all test cases:
 rake validate:import_all
 ```
 
+Both importers rewrite their `imported_tests.json` wholesale. Neither will
+write an empty one: if an import collects nothing, it warns and exits 1
+instead of overwriting the committed fixture. `rake validate:all` stops
+there, so a broken checkout aborts the pipeline rather than emptying the
+corpus.
+
+The elkjs importer reads `~/src/external/elkjs` by default. Point it
+somewhere else with `ELKJS_DIR`:
+
+```bash
+ELKJS_DIR=/path/to/elkjs rake validate:import_elkjs
+```
+
 ### Run Validation
 
-Run cross-validation tests:
+Run cross-validation cases:
 ```bash
 rake validate:run
 ```
 
 This will:
 - Load imported test cases
-- Run each test through ElkRb
-- Validate outputs
-- Generate validation_report.json
-
-### Generate Report
-
-Generate AsciiDoc validation report:
-```bash
-rake validate:report
-```
-
-This creates `docs/VALIDATION_REPORT.adoc` with:
-- Summary statistics
-- Per-source compatibility rates
-- Failed test details
-- Recommendations
+- Lay out each corpus case through ElkRb
+- Write one canonical JSON file per case plus `summary.json` to the
+  output directory (`tmp/corpus` for this task)
 
 ### Full Pipeline
 
@@ -82,7 +84,6 @@ rake validate:all
 This executes:
 1. Import all test cases
 2. Run validation
-3. Generate report (optional: add `rake validate:report` after)
 
 ## Test Importers
 
@@ -114,50 +115,29 @@ If not found, generates sample test cases for:
 - Self-loops
 - Compound graphs
 
-## Validation Runner
+## Corpus Runner
 
-Located at: `spec/cross_validation/validation_runner.rb`
+Located at: `spec/cross_validation/corpus_runner.rb`
 
 Features:
-- Timeout protection (5s per test) to prevent infinite loops
+- Timeout protection (30s per case) to prevent infinite loops
 - Stack overflow detection for cycle detection
 - Detailed error reporting
-- Progress indicators (. = pass, F = fail)
-- JSON report generation
+- Writes one canonical JSON file per case plus a summary
 
 ## Current Results
 
-**Overall Pass Rate: 87.88% (29/33 tests)**
+47 corpus cases. 44 lay out cleanly, 3 error, none time out. All three
+errors are declared in their own fixture with `"expect": "error"`, so a
+healthy dump still exits 0:
 
-### elkjs Compatibility: 100% ✅
-- All 16 elkjs test cases pass
-- Full compatibility with elkjs reference implementation
+- `duplicate_ids` — the graph declares the same id twice (RC4).
+- `java_elk_sporeOverlap`, `java_elk_sporeCompaction` — both algorithms
+  resolve and then crash on nil arithmetic inside themselves.
 
-### Java ELK Compatibility: 76.47%
-- 13 of 17 tests pass
-- 4 failing tests:
-  1. `sporeOverlap` - Algorithm not yet implemented
-  2. `sporeCompaction` - Algorithm not yet implemented
-  3. `labels` - Label initialization issue
-  4. `self_loops` - Cycle detection causing stack overflow
-
-## Known Issues
-
-### Missing Algorithms
-- `sporeOverlap` - Not implemented
-- `sporeCompaction` - Not implemented
-
-### Implementation Issues
-1. **Label Initialization**: Label model expects no arguments but receiving 1
-2. **Self-Loop Detection**: Layer assignment creates infinite recursion with self-loops
-
-## Next Steps
-
-1. Implement missing spore algorithms
-2. Fix Label model initialization
-3. Add cycle detection to prevent infinite recursion in layer assignment
-4. Import real test cases from elk-models repository if available
-5. Add more comprehensive test coverage for edge cases
+`corpus_spec.rb` runs the same 47 cases as examples and holds each result
+to the layout invariants. Its `KNOWN_FAILURES` ledger is the list of
+cases that are still pending, with the id that tracks each one.
 
 ## Adding New Test Cases
 
@@ -191,7 +171,6 @@ Add to CI pipeline:
   run: |
     bundle exec rake validate:import_all
     bundle exec rake validate:run
-    bundle exec rake validate:report
 ```
 
 ## Contributing
