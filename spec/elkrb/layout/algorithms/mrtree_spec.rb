@@ -811,7 +811,7 @@ RSpec.describe "MRTree on a densely cyclic graph" do
     }
   end
 
-  it "lays out a complete 20-node cycle well inside a second" do
+  it "lays out a complete 20-node cycle inside five seconds" do
     # The bound has to interrupt the call, not be read after it returns. A
     # regression to unbounded growth never reaches the assertion, so the old
     # form stalled the whole suite instead of failing this one example.
