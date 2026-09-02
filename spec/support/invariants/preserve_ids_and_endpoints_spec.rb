@@ -75,4 +75,33 @@ RSpec.describe "preserve_ids_and_endpoints duplicate detection" do
 
     expect(nested).not_to preserve_ids_and_endpoints(nested_input)
   end
+  # A one-way subset test cannot see either of these. Both passed before the
+  # matcher compared the id SEQUENCE.
+  describe "differences a subset check cannot see" do
+    let(:input) do
+      { "id" => "root",
+        "children" => [{ "id" => "a" }, { "id" => "b" }],
+        "edges" => [] }
+    end
+
+    def graph_with(ids)
+      graph = Elkrb::Graph::Graph.new
+      graph.children = ids.map { |id| Elkrb::Graph::Node.new(id: id) }
+      graph.edges = []
+      graph
+    end
+
+    it "rejects a node the layout added" do
+      expect(graph_with(%w[a b extra]))
+        .not_to preserve_ids_and_endpoints(input)
+    end
+
+    it "rejects a reordered sequence" do
+      expect(graph_with(%w[b a])).not_to preserve_ids_and_endpoints(input)
+    end
+
+    it "still accepts the unchanged sequence" do
+      expect(graph_with(%w[a b])).to preserve_ids_and_endpoints(input)
+    end
+  end
 end
