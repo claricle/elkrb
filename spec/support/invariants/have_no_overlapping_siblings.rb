@@ -29,13 +29,10 @@ RSpec::Matchers.define :have_no_overlapping_siblings do
   # position is `have_finite_coordinates`'s violation to report, run
   # alongside this matcher in the same spec — this one stays robust rather
   # than raising on it.
-  define_method(:box) do |node|
-    [node.x || 0.0, node.y || 0.0, node.width || 0.0, node.height || 0.0]
-  end
 
   define_method(:strictly_overlap?) do |a, b|
-    ax, ay, aw, ah = box(a)
-    bx, by, bw, bh = box(b)
+    ax, ay, aw, ah = InvariantGeometry.box(a)
+    bx, by, bw, bh = InvariantGeometry.box(b)
     ax < bx + bw && bx < ax + aw && ay < by + bh && by < ay + ah
   end
 end
