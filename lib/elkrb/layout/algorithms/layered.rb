@@ -77,9 +77,35 @@ module Elkrb
         end
 
         def validate_simple_edge!(edge)
-          return if (edge.sources || []).length == 1 &&
-            (edge.targets || []).length == 1
+          sources = edge.sources || []
+          targets = edge.targets || []
 
+          raise_missing_endpoint!(edge) if missing_endpoint?(sources, targets)
+
+          return if sources.length == 1 && targets.length == 1
+
+          raise_hyperedge!(edge)
+        end
+
+        def missing_endpoint?(sources, targets)
+          [sources, targets].any? do |endpoints|
+            endpoints.empty? || !endpoint_present?(endpoints.first)
+          end
+        end
+
+        def endpoint_present?(endpoint)
+          endpoint && !endpoint.to_s.empty?
+        end
+
+        def raise_missing_endpoint!(edge)
+          raise Elkrb::UnsupportedConfigurationException.new(
+            "layered requires non-empty edge endpoints (edge #{edge.id})",
+            option: "edge",
+            value: edge.id,
+          )
+        end
+
+        def raise_hyperedge!(edge)
           raise Elkrb::UnsupportedConfigurationException.new(
             "layered does not support hyperedges (edge #{edge.id})",
             option: "edge",
