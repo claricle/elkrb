@@ -89,6 +89,11 @@ RSpec.describe "elkrb CLI" do
     end
   end
   describe "with a diagnostic stream the consumer has closed" do
+    let(:fixture) do
+      File.join(CliRunner::ROOT, "spec/fixtures/simple_graph.json")
+    end
+    let(:missing) { "/nope/missing.json" }
+
     # `layout` emits its first --verbose line before it reads the input, so a
     # closed stderr raised EPIPE, the generic rescue caught it, and the run
     # aborted before writing anything -- while still exiting 0. A caller
@@ -106,6 +111,27 @@ RSpec.describe "elkrb CLI" do
         expect(File.exist?(out)).to be(true)
         expect(JSON.parse(File.read(out))).to include("id")
         expect(status).to eq(0)
+      end
+    end
+
+    # The full truth table, because this guard was wrong in BOTH directions:
+    # a valid layout with stdout closed exited 1 reporting "Broken pipe",
+    # while a genuine failure with stderr closed exited 0. One example per
+    # outcome, since the outcomes are the property.
+    {
+      "a valid layout with stdout closed" => [:out, :ok, 0],
+      "a valid layout with stderr closed" => [:err, :verbose, 0],
+      "a missing file with stdout closed" => [:out, :missing, 1],
+      "a missing file with stderr closed" => [:err, :missing, 1],
+    }.each do |label, (stream, shape, expected)|
+      it "exits #{expected} for #{label}" do
+        args = case shape
+               when :ok then ["layout", fixture]
+               when :verbose then ["layout", "--verbose", fixture]
+               else ["layout", missing]
+               end
+
+        expect(run_elkrb_with_stream_closed(stream, *args)).to eq(expected)
       end
     end
 

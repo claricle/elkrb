@@ -200,6 +200,15 @@ module Elkrb
       else
         say output
       end
+    rescue Errno::EPIPE
+      # The reader went away -- `elkrb layout g.json | head -1`. That is not
+      # an application failure, and the generic rescue below was turning it
+      # into one: a valid layout exited 1 reporting "Broken pipe" where the
+      # base exits 0. Every other unix filter stops quietly here, so do that.
+      #
+      # `exit` raises SystemExit, which is not a StandardError, so it passes
+      # through the command's rescue rather than being reported as an error.
+      exit 0
     end
 
     # A consumer that stopped reading our DIAGNOSTICS must not change what the
