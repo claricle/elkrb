@@ -268,7 +268,13 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
     end
     let(:output_file) { File.join(temp_dir, "out.svg") }
 
-    before { FileUtils.mkdir_p("#{output_file}.tmp.dot") }
+    # Staging is forced to fail by making the DESTINATION unwritable. The
+    # older mechanism -- pre-creating `out.svg.tmp.dot` as a directory --
+    # stopped working once scratch names became random, which is the point:
+    # a caller can no longer predict or occupy them.
+    before { FileUtils.chmod(0o500, temp_dir) }
+
+    after { FileUtils.chmod(0o700, temp_dir) }
 
     it "leaves no image file behind" do
       expect do
@@ -278,8 +284,42 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
       expect(File.exist?(output_file)).to be(false)
     end
 
+    it "does not follow a symlink planted at a scratch name" do
+      # Found by review. With a fixed scratch name, a symlink sitting there
+      # and pointing back at the requested file sent a failed render's partial
+      # output straight onto the caller's content. Two concurrent renders of
+      # the same target collided the same way. Unique, exclusively-created
+      # scratch names close both.
+      FileUtils.chmod(0o700, temp_dir)
+      File.write(output_file, "ORIGINAL")
+      File.symlink(output_file, "#{output_file}.tmp.svg")
+      fake_dot = File.join(temp_dir, "dot")
+      File.write(fake_dot, <<~SH)
+        #!/bin/sh
+        out=""
+        while [ $# -gt 0 ]; do case "$1" in -o) shift; out="$1";; esac; shift; done
+        printf '<?xml partial' > "$out"
+        exit 1
+      SH
+      FileUtils.chmod(0o755, fake_dot)
+
+      previous = ENV.fetch("ELKRB_DOT", nil)
+      begin
+        ENV["ELKRB_DOT"] = fake_dot
+        expect do
+          described_class.new(input_file, { output: output_file }).run
+        end.to raise_error(StandardError)
+      ensure
+        previous.nil? ? ENV.delete("ELKRB_DOT") : ENV["ELKRB_DOT"] = previous
+      end
+
+      expect(File.read(output_file)).to eq("ORIGINAL")
+    end
+
     it "does not clobber a file already at the image path" do
+      FileUtils.chmod(0o700, temp_dir)
       File.write(output_file, "PRE-EXISTING USER CONTENT")
+      FileUtils.chmod(0o500, temp_dir)
 
       expect do
         described_class.new(input_file, { output: output_file }).run

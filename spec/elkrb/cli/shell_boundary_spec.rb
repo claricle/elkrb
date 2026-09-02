@@ -773,6 +773,8 @@ RSpec.describe "input shape validation at the CLI boundary" do
       "an object-valued edge source" =>
         '{"id":"r","children":[],"edges":[{"id":"e",' \
         '"sources":{"bad":1},"targets":["a"]}]}',
+      "an object-valued edges collection" =>
+        '{"id":"r","children":[],"edges":{"bad":1}}',
       "an object-valued edge target" =>
         '{"id":"r","children":[],"edges":[{"id":"e",' \
         '"sources":["a"],"targets":{"bad":1}}]}',

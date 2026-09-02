@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "json"
+require "securerandom"
 require "yaml"
 require "fileutils"
 
@@ -133,9 +134,40 @@ module Elkrb
       # partway, sitting under the caller's own filename. `File.rename` is
       # atomic within a filesystem, so the image path either holds the
       # previous content or a complete render, never a fragment.
+      # A scratch path in the destination directory that did not exist a
+      # moment ago and that this process created. `File::EXCL` is what makes
+      # that true rather than merely likely.
+      def scratch_path(output_file, suffix)
+        dir = File.dirname(output_file)
+        base = File.basename(output_file)
+
+        loop do
+          candidate = File.join(
+            dir, ".#{base}.#{SecureRandom.hex(8)}.tmp.#{suffix}"
+          )
+          begin
+            File.open(candidate,
+                      File::CREAT | File::EXCL | File::WRONLY, &:close)
+            return candidate
+          rescue Errno::EEXIST
+            next
+          end
+        end
+      end
+
       def render_to_image(dot_content, output_file, format)
-        dot_file = "#{output_file}.tmp.dot"
-        image_file = "#{output_file}.tmp.#{format}"
+        # Scratch names are UNIQUE and created exclusively. A fixed name like
+        # `out.svg.tmp.svg` is guessable, and if something already sits there
+        # the renderer follows it: measured, a symlink at that name pointing
+        # back at `out.svg` sent a failed render's partial output straight
+        # onto the caller's file. Two concurrent renders of the same target
+        # collided the same way. `File::EXCL` refuses to open an existing path
+        # at all, so neither can happen.
+        #
+        # Both live in the DESTINATION directory, which keeps `File.rename` on
+        # one filesystem and therefore atomic.
+        dot_file = scratch_path(output_file, "dot")
+        image_file = scratch_path(output_file, format.to_s)
 
         begin
           write_output(dot_content, dot_file)
