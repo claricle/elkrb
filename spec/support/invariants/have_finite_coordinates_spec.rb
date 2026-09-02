@@ -20,4 +20,28 @@ RSpec.describe "have_finite_coordinates" do
 
     expect(graph).not_to have_finite_coordinates
   end
+  # Both of these passed the matcher and then crashed serialization with
+  # JSON::GeneratorError, which is the tell that the value was reachable and
+  # simply unchecked.
+  it "rejects a root carrying a non-finite position" do
+    graph = Elkrb::Graph::Graph.new
+    graph.children = []
+    graph.edges = []
+    graph.x = Float::NAN
+
+    expect(graph).not_to have_finite_coordinates
+  end
+
+  it "rejects a port carrying a non-finite offset" do
+    port = Elkrb::Graph::Port.new(id: "p", x: 0.0, y: 0.0)
+    port.offset = Float::INFINITY
+    node = Elkrb::Graph::Node.new(id: "a", x: 0.0, y: 0.0,
+                                  width: 1.0, height: 1.0)
+    node.ports = [port]
+    graph = Elkrb::Graph::Graph.new
+    graph.children = [node]
+    graph.edges = []
+
+    expect(graph).not_to have_finite_coordinates
+  end
 end

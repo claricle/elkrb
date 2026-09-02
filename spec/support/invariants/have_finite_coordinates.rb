@@ -6,7 +6,11 @@ require_relative "../invariants"
 RSpec::Matchers.define :have_finite_coordinates do
   match do |graph|
     @offenders = []
-    # root has no position of its own (see below), only a possible size
+    # Root position is OPTIONAL but not exempt. elkrb leaves it nil, and
+    # requiring it would fail every graph -- but skipping it entirely let a
+    # root carrying x=NaN pass this matcher and then crash serialization
+    # with JSON::GeneratorError. Measured on this branch.
+    check_position_if_present(graph, "root")
     check_dimensions(graph, "root")
     walk(graph, "root")
     @offenders.empty?
@@ -29,6 +33,16 @@ RSpec::Matchers.define :have_finite_coordinates do
     %i[x y].each do |attr|
       value = owner.public_send(attr)
       @offenders << "#{path}.#{attr}=#{value.inspect}" unless value&.finite?
+    end
+  end
+
+  # For a position that MAY legitimately be absent. Present means finite.
+  define_method(:check_position_if_present) do |owner, path|
+    %i[x y].each do |attr|
+      value = owner.public_send(attr)
+      next if value.nil?
+
+      @offenders << "#{path}.#{attr}=#{value.inspect}" unless value.finite?
     end
   end
 
@@ -55,6 +69,12 @@ RSpec::Matchers.define :have_finite_coordinates do
       port_path = "#{path}/ports/#{port.id}"
       check_position(port, port_path)
       check_dimensions(port, port_path)
+      # `offset` is a coordinate like any other and reaches the same
+      # serializer. Unchecked, a port with offset=NaN passed this matcher
+      # and then failed to serialize.
+      unless port.offset.nil? || port.offset.finite?
+        @offenders << "#{port_path}.offset=#{port.offset.inspect}"
+      end
       check_labels(port, port_path)
     end
   end
