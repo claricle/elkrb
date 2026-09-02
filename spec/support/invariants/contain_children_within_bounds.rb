@@ -28,12 +28,9 @@ RSpec::Matchers.define :contain_children_within_bounds do |padding = 0|
   # The `|| 0.0` on x/y is a robustness convenience, not a correctness
   # claim — `have_finite_coordinates` owns flagging a genuinely missing
   # position. On width/height it is the Decision 5 convention, as above.
-  define_method(:box) do |child|
-    [child.x || 0.0, child.y || 0.0, child.width || 0.0, child.height || 0.0]
-  end
 
   define_method(:escapes?) do |child, width, height, pad|
-    cx, cy, cw, ch = box(child)
+    cx, cy, cw, ch = InvariantGeometry.box(child)
     cx < pad || cy < pad || (cx + cw) > (width - pad) ||
       (cy + ch) > (height - pad)
   end
