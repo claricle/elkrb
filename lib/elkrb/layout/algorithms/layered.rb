@@ -94,7 +94,7 @@ module Elkrb
         end
 
         def endpoint_present?(endpoint)
-          endpoint && !endpoint.to_s.empty?
+          !endpoint.nil?
         end
 
         def raise_missing_endpoint!(edge)
