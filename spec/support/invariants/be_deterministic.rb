@@ -12,15 +12,40 @@ RSpec::Matchers.define :be_deterministic do
   # this matcher runs it twice and only compares the output.
   supports_block_expectations
 
+  # Compares the MODELS, and their serialized form, and requires both to
+  # agree. Comparing only `to_json` makes this matcher exactly as strong as
+  # the JSON mapping: an attribute the model carries but the mapping omits is
+  # invisible here, so a layout that varied in it would still be called
+  # deterministic. Measured on this branch, every scalar attribute of Graph,
+  # Node, Edge, Port, Label and EdgeSection does reach JSON today -- so this
+  # is closing the class, not a live instance, and it stays closed when
+  # someone adds an attribute and forgets the mapping.
+  #
+  # lutaml gives these classes VALUE equality, so `==` compares content rather
+  # than identity. That is what makes the model comparison meaningful here.
   match do |block|
-    first = block.call.to_json
-    second = block.call.to_json
-    @first = first
-    @second = second
-    first == second
+    first_model = block.call
+    second_model = block.call
+    @first = first_model.to_json
+    @second = second_model.to_json
+
+    @models_equal = first_model == second_model
+    @json_equal = @first == @second
+    @models_equal && @json_equal
   end
 
-  failure_message { "two runs differed:\n#{@first}\n---\n#{@second}" }
+  failure_message do
+    if @models_equal && !@json_equal
+      "the models compared equal but serialized differently:\n" \
+        "#{@first}\n---\n#{@second}"
+    elsif !@models_equal && @json_equal
+      # The dangerous direction: the difference exists but the JSON hides it.
+      "two runs differed in the MODEL while serializing identically, so the " \
+        "difference is in an attribute the JSON mapping omits:\n#{@first}"
+    else
+      "two runs differed:\n#{@first}\n---\n#{@second}"
+    end
+  end
 end
 
 INVARIANTS << :be_deterministic
