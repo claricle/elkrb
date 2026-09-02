@@ -4,39 +4,26 @@ module Elkrb
   module Layout
     module Algorithms
       module Layered
-        # Assigns nodes to layers in the graph
-        #
-        # This is the second phase of the Sugiyama framework.
-        # Uses longest path layering to create a balanced layout.
+        # Assigns nodes to layers using an iterative longest-path pass.
         class LayerAssigner
           attr_reader :layers
 
-          def initialize(graph, index)
+          def initialize(graph, index, reversed_edge_ids = Set.new)
             @graph = graph
             @index = index
+            @reversed_edge_ids = reversed_edge_ids
             @layers = []
             @node_layers = {}
-            @in_progress = Set.new
           end
 
           def assign_layers
             return [] unless @graph.children
 
-            # Calculate layer for each node
-            @graph.children.each do |node|
-              calculate_layer(node)
-            end
-
-            # Group nodes by layer
-            max_layer = @node_layers.values.max || 0
-            @layers = Array.new(max_layer + 1) { [] }
-
-            @node_layers.each do |node_id, layer|
-              node = @index.node(node_id)
-              @layers[layer] << node if node
-            end
-
-            @layers
+            nodes = @graph.children.to_h { |node| [node.id, node] }
+            successors, indegrees = build_topology(nodes)
+            @node_layers = nodes.keys.to_h { |id| [id, 0] }
+            assign_topological_layers(successors, indegrees)
+            build_layers(nodes)
           end
 
           def get_layer(node_id)
@@ -45,88 +32,74 @@ module Elkrb
 
           private
 
-          def calculate_layer(node)
-            return @node_layers[node.id] if @node_layers.key?(node.id)
+          def build_topology(nodes)
+            successors = Hash.new { |hash, id| hash[id] = [] }
+            indegrees = nodes.to_h { |id, _node| [id, 0] }
 
-            # A cycle CycleBreaker did not resolve (only a genuine
-            # hyperedge, > 1 target, can still reach this -- S8 will
-            # reject those outright before phase 1 runs; this diff
-            # does not). A node revisited while still being computed
-            # has no further predecessor to contribute, so treat it as
-            # one without them rather than recursing forever
-            # (SystemStackError). CycleBreaker walks every target of
-            # every edge, but reversing a hyperedge swaps its whole
-            # source and target lists at once, which can leave a cycle
-            # standing.
-            if @in_progress.include?(node.id)
-              warn "Layered: cycle through #{node.id} not fully broken " \
-                   "(hyperedge); treating as a root for this branch"
-              return 0
+            @index.edges.each do |edge|
+              source_id, target_id = oriented_endpoints(edge)
+              next unless usable_edge?(source_id, target_id, nodes)
+
+              successors[source_id] << target_id
+              indegrees[target_id] += 1
             end
 
-            @in_progress << node.id
+            [successors, indegrees]
+          end
 
-            # Find incoming edges
-            incoming = get_incoming_edges(node)
+          def assign_topological_layers(successors, indegrees)
+            queue = indegrees.select { |_id, degree| degree.zero? }.keys
+            queue_index = 0
 
-            if incoming.empty?
-              # Root node - assign to layer 0
-              @node_layers[node.id] = 0
+            while queue_index < queue.length
+              source_id = queue[queue_index]
+              queue_index += 1
+
+              successors[source_id].each do |target_id|
+                advance_layer(source_id, target_id)
+                indegrees[target_id] -= 1
+                queue << target_id if indegrees[target_id].zero?
+              end
+            end
+          end
+
+          def advance_layer(source_id, target_id)
+            @node_layers[target_id] = [
+              @node_layers[target_id], @node_layers[source_id] + 1
+            ].max
+          end
+
+          def build_layers(nodes)
+            max_layer = @node_layers.values.max || 0
+            @layers = Array.new(max_layer + 1) { [] }
+            @node_layers.each do |node_id, layer|
+              @layers[layer] << nodes[node_id]
+            end
+
+            @layers
+          end
+
+          def usable_edge?(source_id, target_id, nodes)
+            source_id && target_id && source_id != target_id &&
+              nodes.key?(source_id) && nodes.key?(target_id)
+          end
+
+          def oriented_endpoints(edge)
+            source_id = endpoint_owner_id(edge.sources)
+            target_id = endpoint_owner_id(edge.targets)
+            return [nil, nil] unless source_id && target_id
+
+            if @reversed_edge_ids.include?(edge.id)
+              [target_id, source_id]
             else
-              # Assign to one layer below the maximum of predecessors.
-              # first_other_source cannot return nil here: every edge
-              # in `incoming` already passed incoming_to?, which only
-              # admits edges with at least one resolved source
-              # different from `node` -- the same one this looks for.
-              max_pred_layer = incoming.map do |edge|
-                calculate_layer(first_other_source(edge, node))
-              end.max || 0
-
-              @node_layers[node.id] = max_pred_layer + 1
+              [source_id, target_id]
             end
-
-            @in_progress.delete(node.id)
-            @node_layers[node.id]
           end
 
-          def get_incoming_edges(node)
-            @index.edges.select { |edge| incoming_to?(edge, node) }
-          end
-
-          # True when `node` is a genuine target of `edge`: `node` is
-          # one of its resolved targets AND at least one resolved
-          # source is a DIFFERENT node. The second half excludes a
-          # self-loop ("p1" -> "p2" on one node) and the
-          # self-referencing leg of a mixed hyperedge
-          # (a -> [a's port, b]) from counting as incoming, while still
-          # counting a target's genuine incoming edges from elsewhere
-          # (e.g. [a, c] -> b). Comparing raw ids, or only the first
-          # source against the first target, both let a self-loop or a
-          # self-referencing hyperedge leg look like real incoming
-          # traffic, and calculate_layer recurses on the same node
-          # forever before it is memoized (SystemStackError). S8 will
-          # reject hyperedges before phase 1 runs; until then this
-          # keeps the check correct.
-          def incoming_to?(edge, node)
-            targets = @index.endpoint_owners(edge.targets)
-            return false unless targets.include?(node)
-
-            sources = @index.endpoint_owners(edge.sources)
-            sources.any? { |source| source != node }
-          end
-
-          # The first resolved source that is NOT `node` itself. Plain
-          # `edge.sources.first` breaks for a hyperedge whose first
-          # source happens to be the target itself (e.g. [a, b] -> a,
-          # already known to have incoming traffic from b via
-          # incoming_to? above): resolving straight back to `a` would
-          # recurse calculate_layer on the same node forever before it
-          # is memoized (SystemStackError, confirmed by direct
-          # reproduction).
-          def first_other_source(edge, node)
-            @index.endpoint_owners(edge.sources).find do |source|
-              source != node
-            end
+          def endpoint_owner_id(endpoints)
+            id = (endpoints || []).first
+            owner = @index.owner(id) if id
+            owner&.id
           end
         end
       end
