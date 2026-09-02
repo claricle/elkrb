@@ -26,4 +26,21 @@ RSpec.describe "be_deterministic" do
       graph
     end.not_to be_deterministic
   end
+  # The direction that matters: a difference the JSON mapping cannot show.
+  # Comparing serialized output alone would call this deterministic.
+  it "fails when two runs differ in a way the JSON hides" do
+    hidden = Class.new do
+      attr_reader :tag
+
+      def initialize(tag) = @tag = tag
+      def to_json(*) = '{"same":"always"}'
+      def ==(other) = tag == other.tag
+    end
+
+    tags = %w[first second].each
+    result = expect { hidden.new(tags.next) }.to be_deterministic
+    raise "expected the matcher to fail" if result
+  rescue RSpec::Expectations::ExpectationNotMetError => e
+    expect(e.message).to match(/attribute the JSON mapping omits/)
+  end
 end
