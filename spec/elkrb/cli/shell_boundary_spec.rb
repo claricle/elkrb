@@ -763,12 +763,32 @@ RSpec.describe "input shape validation at the CLI boundary" do
     # an Array, and an edge's `"sources": {...}` comes back as a String. The
     # check only looked at the root's own two collections, so `validate`
     # printed "is valid" for both of these and `convert` succeeded.
+    # One row per COLLECTION FIELD, because the field list is the property.
+    # Review measured that cutting the list to children/edges/sources left the
+    # whole suite green -- labels, ports, sections, targets and bend_points
+    # could have vanished unnoticed.
     {
       "a nested children mapping" =>
         '{"id":"r","children":[{"id":"a","children":{"bad":1}}],"edges":[]}',
       "an object-valued edge source" =>
         '{"id":"r","children":[],"edges":[{"id":"e",' \
         '"sources":{"bad":1},"targets":["a"]}]}',
+      "an object-valued edge target" =>
+        '{"id":"r","children":[],"edges":[{"id":"e",' \
+        '"sources":["a"],"targets":{"bad":1}}]}',
+      "object-valued node labels" =>
+        '{"id":"r","children":[{"id":"a","width":1,"height":1,' \
+        '"labels":{"bad":1}}],"edges":[]}',
+      "object-valued node ports" =>
+        '{"id":"r","children":[{"id":"a","width":1,"height":1,' \
+        '"ports":{"bad":1}}],"edges":[]}',
+      "object-valued edge sections" =>
+        '{"id":"r","children":[],"edges":[{"id":"e","sources":["a"],' \
+        '"targets":["b"],"sections":{"bad":1}}]}',
+      "object-valued section bend points" =>
+        '{"id":"r","children":[],"edges":[{"id":"e","sources":["a"],' \
+        '"targets":["b"],"sections":[{"id":"s",' \
+        '"bendPoints":{"bad":1}}]}]}',
     }.each do |name, json|
       it "rejects #{name}" do
         expect { Elkrb::FormatSniffer.read(json, ".json") }
