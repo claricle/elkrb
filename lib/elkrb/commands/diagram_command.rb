@@ -134,40 +134,32 @@ module Elkrb
       # partway, sitting under the caller's own filename. `File.rename` is
       # atomic within a filesystem, so the image path either holds the
       # previous content or a complete render, never a fragment.
-      # A scratch path in the destination directory that did not exist a
-      # moment ago and that this process created. `File::EXCL` is what makes
-      # that true rather than merely likely.
-      def scratch_path(output_file, suffix)
-        dir = File.dirname(output_file)
-        base = File.basename(output_file)
-
-        loop do
-          candidate = File.join(
-            dir, ".#{base}.#{SecureRandom.hex(8)}.tmp.#{suffix}"
-          )
-          begin
-            File.open(candidate,
-                      File::CREAT | File::EXCL | File::WRONLY, &:close)
-            return candidate
-          rescue Errno::EEXIST
-            next
-          end
-        end
-      end
 
       def render_to_image(dot_content, output_file, format)
-        # Scratch names are UNIQUE and created exclusively. A fixed name like
-        # `out.svg.tmp.svg` is guessable, and if something already sits there
-        # the renderer follows it: measured, a symlink at that name pointing
-        # back at `out.svg` sent a failed render's partial output straight
-        # onto the caller's file. Two concurrent renders of the same target
-        # collided the same way. `File::EXCL` refuses to open an existing path
-        # at all, so neither can happen.
+        # A scratch DIRECTORY, created exclusively, holding both scratch
+        # files under plain names.
         #
-        # Both live in the DESTINATION directory, which keeps `File.rename` on
-        # one filesystem and therefore atomic.
-        dot_file = scratch_path(output_file, "dot")
-        image_file = scratch_path(output_file, format.to_s)
+        # Scratch names must be unguessable: with a fixed name like
+        # `out.svg.tmp.svg`, a symlink sitting there and pointing back at
+        # `out.svg` sent a failed render's partial output onto the caller's
+        # file, and two concurrent renders of the same target collided the
+        # same way.
+        #
+        # A directory rather than pre-created FILES, because reserving each
+        # file by creating it first broke four other things: it defeated a
+        # renderer that exits 0 without writing (the untouched empty file got
+        # renamed over the caller's content), it left the file mode at the
+        # umask so a later write could not open it, and it added enough to
+        # the basename to hit ENAMETOOLONG on a long but legal filename.
+        # `Dir.mkdir` is atomic and refuses an existing path, so it reserves
+        # the name without any of that.
+        #
+        # The directory lives in the DESTINATION directory, which keeps
+        # `File.rename` on one filesystem and therefore atomic.
+        FileUtils.mkdir_p(File.dirname(output_file))
+        scratch = scratch_dir(output_file)
+        dot_file = File.join(scratch, "graph.dot")
+        image_file = File.join(scratch, "image.#{format}")
 
         begin
           write_output(dot_content, dot_file)
@@ -176,21 +168,45 @@ module Elkrb
           graphviz = Elkrb::GraphvizWrapper.new
 
           graphviz.render(dot_file, image_file, format, engine: "dot", dpi: 96)
-          File.rename(image_file, output_file)
 
-          FileUtils.rm_f(dot_file)
-        rescue StandardError
-          discard_unrendered(dot_file, image_file)
-          raise
+          # A renderer can exit 0 and write nothing. Renaming that over the
+          # requested name would destroy the caller's file and leave an
+          # invalid image wearing its name -- measured with a stub renderer
+          # that simply succeeds.
+          unless File.file?(image_file) && File.size(image_file).positive?
+            raise Elkrb::Error,
+                  "#{graphviz_name} reported success but produced no image"
+          end
+
+          File.rename(image_file, output_file)
+        ensure
+          FileUtils.remove_entry(scratch) if File.directory?(scratch)
         end
       end
 
-      # Only the scratch files. The image path is never touched on failure,
-      # because nothing was written there -- the render goes to a scratch
-      # name and is moved into place only on success.
-      def discard_unrendered(dot_file, image_file)
-        FileUtils.rm_f(image_file) if File.file?(image_file)
-        FileUtils.rm_f(dot_file) if File.file?(dot_file)
+      def graphviz_name
+        "graphviz"
+      end
+
+      # A directory in the destination that did not exist a moment ago and
+      # that this process created. `Dir.mkdir` raises EEXIST rather than
+      # opening what is already there, which is what makes that true.
+      def scratch_dir(output_file)
+        dir = File.dirname(output_file)
+
+        loop do
+          candidate = File.join(dir, ".elkrb-#{SecureRandom.hex(6)}")
+          begin
+            Dir.mkdir(candidate)
+            # `Dir.mkdir`'s mode is masked by the umask, so under `umask 0222`
+            # the directory arrives read-only and nothing can be written
+            # inside it. Set the mode after creating, not as an argument.
+            FileUtils.chmod(0o700, candidate)
+            return candidate
+          rescue Errno::EEXIST
+            next
+          end
+        end
       end
 
       def preview(file)

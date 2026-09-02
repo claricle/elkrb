@@ -268,13 +268,31 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
     end
     let(:output_file) { File.join(temp_dir, "out.svg") }
 
-    # Staging is forced to fail by making the DESTINATION unwritable. The
-    # older mechanism -- pre-creating `out.svg.tmp.dot` as a directory --
-    # stopped working once scratch names became random, which is the point:
-    # a caller can no longer predict or occupy them.
-    before { FileUtils.chmod(0o500, temp_dir) }
+    # Staging is forced to fail by making the DESTINATION unwritable, so the
+    # scratch directory cannot be created. The older mechanism -- occupying
+    # `out.svg.tmp.dot` -- stopped working once scratch names became
+    # unguessable, which is the point.
+    #
+    # The input file is written BEFORE the lock. Creating it lazily inside
+    # the example failed at that write instead of at staging, so the examples
+    # passed without the command running at all -- measured, replacing the
+    # constructor with an inert object still gave 2 examples, 0 failures.
+    before do
+      input_file
+      FileUtils.chmod(0o500, temp_dir)
+    end
 
     after { FileUtils.chmod(0o700, temp_dir) }
+
+    it "actually reaches the command" do
+      # Guards the guard. These examples once passed with the command never
+      # running at all: the input file was created lazily inside the example
+      # and its write failed first, under the locked directory. If that comes
+      # back, this example fails while the others still pass.
+      expect(File.exist?(input_file)).to be(true)
+      expect { described_class.new(input_file, { output: output_file }).run }
+        .to raise_error(StandardError, /Permission denied|Errno::EACCES/)
+    end
 
     it "leaves no image file behind" do
       expect do
@@ -282,6 +300,27 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
       end.to raise_error(StandardError)
 
       expect(File.exist?(output_file)).to be(false)
+    end
+
+    it "refuses a renderer that succeeds without producing an image" do
+      # Found by review: the scratch file used to be pre-created to reserve
+      # its name, so a renderer exiting 0 without writing left an untouched
+      # empty file -- which was then renamed over the caller's content. Data
+      # loss, and an invalid image wearing the requested name.
+      FileUtils.chmod(0o700, temp_dir)
+      File.write(output_file, "ORIGINAL")
+
+      previous = ENV.fetch("ELKRB_DOT", nil)
+      begin
+        ENV["ELKRB_DOT"] = "/usr/bin/true"
+        expect do
+          described_class.new(input_file, { output: output_file }).run
+        end.to raise_error(StandardError, /produced no image/)
+      ensure
+        previous.nil? ? ENV.delete("ELKRB_DOT") : ENV["ELKRB_DOT"] = previous
+      end
+
+      expect(File.read(output_file)).to eq("ORIGINAL")
     end
 
     it "does not follow a symlink planted at a scratch name" do
