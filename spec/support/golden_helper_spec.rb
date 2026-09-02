@@ -578,4 +578,37 @@ RSpec.describe "the committed golden fixture set" do
     # asserting the table covers the inputs asserts the examples do.
     expect(GoldenCases::ALL_NAMES.sort).to eq(inputs)
   end
+  describe "which rejection happened" do
+    let(:elkjs) do
+      "java.lang.IllegalArgumentException: Passed edge is not 'simple'."
+    end
+
+    # Deriving the condition from elkjs's wording asks only whether a term
+    # APPEARS. Both of these were measured against that version: the first
+    # passed though it says the opposite, the second failed though it is the
+    # settled correct message from card 12.
+    it "rejects a message that names the term but states the opposite" do
+      expect(
+        GoldenComparator.same_error_condition?(
+          elkjs, "simple edge accepted; endpoint lookup failed",
+          expected: /hyperedge/i
+        ),
+      ).to be(false)
+    end
+
+    it "accepts elkrb's own wording for the same condition" do
+      expect(
+        GoldenComparator.same_error_condition?(
+          elkjs, "layered does not support hyperedges (edge e1)",
+          expected: /hyperedge/i
+        ),
+      ).to be(true)
+    end
+
+    it "still falls back to the quoted term when a case states nothing" do
+      expect(
+        GoldenComparator.same_error_condition?(elkjs, "edge is not simple"),
+      ).to be(true)
+    end
+  end
 end
