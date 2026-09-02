@@ -76,6 +76,33 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::CycleBreaker do
       end
     end
 
+    context "with a cycle closing through a later target" do
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "r",
+          children: %w[a b c d x].map do |id|
+            Elkrb::Graph::Node.new(id: id, width: 10, height: 10)
+          end,
+          edges: [
+            Elkrb::Graph::Edge.new(id: "ab", sources: ["a"], targets: ["b"]),
+            Elkrb::Graph::Edge.new(id: "bc", sources: ["b"], targets: ["c"]),
+            Elkrb::Graph::Edge.new(id: "cx", sources: ["c"], targets: ["x"]),
+            Elkrb::Graph::Edge.new(
+              id: "back", sources: ["x"], targets: %w[d c],
+            ),
+          ],
+        )
+      end
+
+      it "returns the reversal id for the later target" do
+        reversed = described_class.new(
+          graph, Elkrb::Layout::NodeIndex.build(graph)
+        ).break_cycles
+
+        expect(reversed).to eq(Set["back"])
+      end
+    end
+
     context "with a self-loop" do
       let(:graph) do
         Elkrb::Graph::Graph.new(

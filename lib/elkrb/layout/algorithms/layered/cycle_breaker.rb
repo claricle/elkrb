@@ -72,11 +72,13 @@ module Elkrb
 
             @index.edges.each do |edge|
               source_id = endpoint_owner_id(edge.sources)
-              target_id = endpoint_owner_id(edge.targets)
-              next unless source_id && target_id
-              next if source_id == target_id
+              next unless source_id
 
-              adjacency[source_id] << [target_id, edge.id]
+              endpoint_owner_ids(edge.targets).each do |target_id|
+                next if source_id == target_id
+
+                adjacency[source_id] << [target_id, edge.id]
+              end
             end
 
             adjacency
@@ -86,6 +88,13 @@ module Elkrb
             id = (endpoints || []).first
             owner = @index.owner(id) if id
             owner&.id
+          end
+
+          def endpoint_owner_ids(endpoints)
+            (endpoints || []).filter_map do |id|
+              owner = @index.owner(id) if id
+              owner&.id
+            end.uniq
           end
         end
       end
