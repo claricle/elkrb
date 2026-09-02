@@ -24,17 +24,27 @@ module Elkrb
       # - Organization charts
       # - Any directed acyclic graph
       class LayeredAlgorithm < BaseAlgorithm
-        def layout_flat(graph, _options = {})
-          return graph if graph.children.nil? || graph.children.empty?
+        # BaseAlgorithm intentionally skips layout_flat when a deserialized
+        # graph omits `children`. Validate that public entry point here so an
+        # unsupported edge cannot silently pass through untouched.
+        def layout(graph)
+          validate_edges(NodeIndex.build(graph)) unless graph.children
+          super
+        end
 
+        def layout_flat(graph, _options = {})
           index = NodeIndex.build(graph)
+          validate_edges(index)
+          return graph if graph.children.nil? || graph.children.empty?
 
           # Phase 1: Break cycles
           cycle_breaker = Layered::CycleBreaker.new(graph, index)
-          cycle_breaker.break_cycles
+          reversed_edge_ids = cycle_breaker.break_cycles
 
           # Phase 2: Assign layers
-          layer_assigner = Layered::LayerAssigner.new(graph, index)
+          layer_assigner = Layered::LayerAssigner.new(
+            graph, index, reversed_edge_ids
+          )
           layers = layer_assigner.assign_layers
 
           # Phase 3: Place nodes
@@ -45,6 +55,36 @@ module Elkrb
           apply_padding(graph)
 
           graph
+        end
+
+        private
+
+        def validate_edges(index)
+          seen_ids = {}
+
+          index.edges.each do |edge|
+            validate_unique_edge_id!(seen_ids, edge)
+            validate_simple_edge!(edge)
+          end
+        end
+
+        def validate_unique_edge_id!(seen_ids, edge)
+          if seen_ids.key?(edge.id)
+            raise Elkrb::ValidationError, "duplicate edge id: #{edge.id}"
+          end
+
+          seen_ids[edge.id] = true
+        end
+
+        def validate_simple_edge!(edge)
+          return if (edge.sources || []).length == 1 &&
+            (edge.targets || []).length == 1
+
+          raise Elkrb::UnsupportedConfigurationException.new(
+            "layered does not support hyperedges (edge #{edge.id})",
+            option: "edge",
+            value: edge.id,
+          )
         end
       end
     end

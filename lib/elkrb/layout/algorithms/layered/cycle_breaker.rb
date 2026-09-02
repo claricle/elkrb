@@ -4,104 +4,82 @@ module Elkrb
   module Layout
     module Algorithms
       module Layered
-        # Breaks cycles in the graph to make it acyclic
-        #
-        # This is the first phase of the Sugiyama framework.
-        # Uses a greedy approach to reverse edges that create cycles.
+        # Finds back edges without changing the graph supplied by the caller.
+        # The returned ids are consumed by LayerAssigner to orient the edge
+        # only while calculating layers.
         class CycleBreaker
           def initialize(graph, index)
             @graph = graph
             @index = index
-            @visited = {}
-            @in_stack = {}
-            @edges_to_reverse = []
           end
 
           def break_cycles
-            return unless @graph.children
+            reversed = Set.new
+            return reversed unless @graph.children
 
-            # Find all edges that create cycles using DFS
+            adjacency = outgoing_edges
+            colors = {}
+
             @graph.children.each do |node|
-              dfs(node) unless @visited[node.id]
+              next if colors[node.id]
+
+              walk_from(node.id, adjacency, colors, reversed)
             end
 
-            # Reverse the problematic edges
-            reverse_edges
-
-            @edges_to_reverse
+            reversed
           end
 
           private
 
-          def dfs(node)
-            @visited[node.id] = true
-            @in_stack[node.id] = true
+          def walk_from(root_id, adjacency, colors, reversed)
+            colors[root_id] = :active
+            stack = [[root_id, 0]]
 
-            # Process outgoing edges
-            get_outgoing_edges(node).each do |edge|
-              other_targets(edge, node).each do |target|
-                if @in_stack[target.id]
-                  mark_for_reversal(edge)
-                elsif !@visited[target.id]
-                  dfs(target)
-                end
+            until stack.empty?
+              current_id, edge_index = stack[-1]
+              edges = adjacency[current_id]
+
+              if edge_index >= edges.length
+                colors[current_id] = :complete
+                stack.pop
+                next
               end
+
+              target_id, edge_id = edges[edge_index]
+              stack[-1][1] = edge_index + 1
+              visit_target(target_id, edge_id, stack, colors, reversed)
+            end
+          end
+
+          def visit_target(target_id, edge_id, stack, colors, reversed)
+            case colors[target_id]
+            when :active
+              reversed << edge_id
+            when nil
+              colors[target_id] = :active
+              stack << [target_id, 0]
+            end
+          end
+
+          def outgoing_edges
+            adjacency = Hash.new { |hash, id| hash[id] = [] }
+
+            @index.edges.each do |edge|
+              source_id = endpoint_owner_id(edge.sources)
+              target_id = endpoint_owner_id(edge.targets)
+              next unless source_id && target_id
+              next if source_id == target_id
+
+              adjacency[source_id] << [target_id, edge.id]
             end
 
-            @in_stack[node.id] = false
+            adjacency
           end
 
-          # An edge can appear in get_outgoing_edges via both
-          # node.edges and @graph.edges, and a hyperedge can be reached
-          # from more than one in-stack frame or through more than one
-          # of its own targets. Reversing it twice would swap it back
-          # to its original direction and leave the cycle unbroken.
-          #
-          # Identity, not value. lutaml-model gives Edge value equality,
-          # so two distinct edges with the same id, sources and targets
-          # compare equal -- `include?` collapsed them into one and the
-          # second cycle stayed live.
-          def mark_for_reversal(edge)
-            return if @edges_to_reverse.any? { |marked| marked.equal?(edge) }
-
-            @edges_to_reverse << edge
-          end
-
-          # Every resolved target that is NOT `node` itself. A
-          # hyperedge a -> [b, c] has to be walked through both b and
-          # c: stopping at the first one hides a cycle that only c
-          # closes. Dropping `node` matters when a target is one of the
-          # source's own ports (a -> [a's port, b]) -- resolving that
-          # back to `a` makes dfs read a's own in-progress frame as a
-          # cycle and reverse an edge that has none, corrupting it
-          # before LayerAssigner ever sees it (confirmed: recurses
-          # forever there, SystemStackError).
-          def other_targets(edge, node)
-            targets = @index.endpoint_owners(edge.targets)
-            targets.reject { |target| target == node }
-          end
-
-          def get_outgoing_edges(node)
-            edges = []
-            edges.concat(@index.edges_on(node))
-
-            # Get edges from the graph that have this node as source
-            @graph.edges&.each do |edge|
-              edges << edge if @index.endpoint_owners(edge.sources).include?(node)
-            end
-
-            edges
-          end
-
-          def reverse_edges
-            @edges_to_reverse.each do |edge|
-              # Swap sources and targets
-              edge.sources, edge.targets = edge.targets, edge.sources
-
-              # Mark as reversed for later processing
-              edge.properties ||= {}
-              edge.properties["reversed"] = true
-            end
+          def endpoint_owner_id(endpoints)
+            id = (endpoints || []).first
+            owner = @index.owner(id) if id
+            owner&.id
           end
         end
       end
