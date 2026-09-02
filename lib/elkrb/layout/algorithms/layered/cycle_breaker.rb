@@ -1,5 +1,11 @@
 # frozen_string_literal: true
 
+# This file is loadable on its own, so do not rely on another algorithm
+# having loaded Ruby's Set first.
+# rubocop:disable Lint/RedundantRequireStatement
+require "set"
+# rubocop:enable Lint/RedundantRequireStatement
+
 module Elkrb
   module Layout
     module Algorithms

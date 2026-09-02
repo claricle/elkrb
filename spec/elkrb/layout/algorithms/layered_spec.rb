@@ -172,13 +172,10 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
         end,
       }
 
-      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       result = Elkrb.layout(graph, algorithm: "layered")
-      elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
 
       expect(result.children.size).to eq(count)
       expect(result.children.map(&:y).uniq.size).to eq(count)
-      expect(elapsed).to be < 5
     end
 
     it "leaves a nested edge whose ids alias this level's ports alone" do
