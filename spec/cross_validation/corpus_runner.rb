@@ -86,6 +86,13 @@ class CorpusRunner
       corpus = cases
       claim_output_directory!(outdir)
       prune_stale_dumps(outdir, corpus)
+      # AFTER claiming and pruning, immediately before the dumps. Writing it
+      # inside the claim was wrong twice: the claim returns early for an
+      # already-marked directory, so the placeholder was never written on a
+      # second run, and pruning could delete an aliased summary right after
+      # it was. Both were reproduced -- a case named ſummary reached the write
+      # and the final summary overwrote its payload.
+      place_summary_marker(outdir)
 
       summary = new_summary
       corpus.each { |kase| dump_case(kase, summary, outdir, timeout) }
@@ -114,6 +121,14 @@ class CorpusRunner
     # named in it.
     OWNER_MARKER = ".elkrb-corpus-dump"
 
+    # A placeholder so `case_path` can ASK the filesystem whether an id
+    # aliases this name rather than trying to predict the answer. `run`
+    # overwrites it with the real summary at the end.
+    def place_summary_marker(outdir)
+      summary = File.join(outdir, "#{RESERVED_ID}.json")
+      File.write(summary, "{}") unless File.exist?(summary)
+    end
+
     def claim_output_directory!(outdir)
       if File.directory?(outdir)
         marker = File.join(outdir, OWNER_MARKER)
@@ -129,11 +144,6 @@ class CorpusRunner
       end
 
       FileUtils.mkdir_p(outdir)
-      # A placeholder so `case_path` can ASK the filesystem whether an id
-      # aliases this name rather than trying to predict the answer. `run`
-      # overwrites it with the real summary at the end.
-      summary = File.join(outdir, "#{RESERVED_ID}.json")
-      File.write(summary, "{}") unless File.exist?(summary)
       File.write(File.join(outdir, OWNER_MARKER), <<~TEXT)
         Written by spec/cross_validation/corpus_runner.rb.
         Its presence is what lets the runner delete stale dumps here.
@@ -252,18 +262,17 @@ class CorpusRunner
 
     # Every case is dumped to "#{id}.json", so a case called "summary"
     # would write the dump's own index and then be overwritten by it.
-    # A CHEAP early guard, ASCII case only. It catches the obvious
-    # "summary"/"SUMMARY" before any directory is touched, and gives a
-    # clearer error than a write-time failure would.
+    # A CHEAP early guard, ASCII case only, run before any directory is
+    # touched so the obvious "summary"/"SUMMARY" fails with a clear message.
     #
-    # It deliberately does NOT try to predict the filesystem's own folding.
-    # Attempting that produced a false positive: ISO-8859-1 bytes reinterpreted
-    # as UTF-8 looked like a collision and were refused, though both files
-    # coexist happily on disk. Whether an id TRULY aliases summary.json is
-    # settled by `refuse_summary_alias!`, which asks the filesystem instead.
+    # It does NOT decide the real question. Whether an id actually aliases
+    # summary.json depends on the volume and the locale, and is settled by
+    # `refuse_summary_alias!`, which asks the filesystem. Three review rounds
+    # found three ids that fold on a real disk and not in Ruby, and one that
+    # a UTF-8 reinterpretation wrongly CLAIMED was a collision -- which is why
+    # nothing here tries to fold beyond ASCII.
     #
-    # `String#b` keeps this to ASCII folding and never raises, whatever the
-    # id's encoding.
+    # `String#b` keeps it to ASCII and never raises, whatever the encoding.
     def reserved_id?(id)
       id.to_s.b.casecmp?(RESERVED_ID.b)
     end

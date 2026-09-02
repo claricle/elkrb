@@ -322,6 +322,18 @@ RSpec.describe "Elkrb layout corpus" do
       expect(CorpusRunner.cases.map(&:id)).to include(broken)
     end
 
+    it "accepts ISO-8859-1 bytes that only LOOK like the reserved name" do
+      # "\xC5\xBFummary" in ISO-8859-1 is not summary. An earlier fix
+      # reinterpreted such bytes as UTF-8, read them as "\u017Fummary", and
+      # refused the case -- though both files coexist happily on disk. This
+      # pins the rejection of that approach: restoring it turns this red.
+      latin1 = "\xC5\xBFummary".dup.force_encoding(Encoding::ISO_8859_1)
+      allow(CorpusRunner).to receive(:imported_cases)
+        .and_return([CorpusRunner::Case.new(id: latin1)])
+
+      expect(CorpusRunner.cases.map(&:id)).to include(latin1)
+    end
+
     it "still accepts an id that merely contains the reserved word" do
       fine = CorpusRunner::Case.new(id: "notsummary")
       allow(CorpusRunner).to receive(:imported_cases).and_return([fine])
@@ -377,11 +389,53 @@ RSpec.describe "Elkrb layout corpus" do
       "the same fold as binary bytes" =>
         "\u017Fummary".dup.force_encoding(Encoding::ASCII_8BIT),
     }.each do |label, id|
-      it "refuses #{label} that names summary.json on this disk" do
+      it "refuses #{label} when it names summary.json on this disk" do
         Dir.mktmpdir do |dir|
-          File.write(File.join(dir, "summary.json"), "{}")
+          summary = File.join(dir, "summary.json")
+          File.write(summary, "{}")
 
-          expect { CorpusRunner.send(:case_path, dir, id) }
+          # Whether these spellings alias is a property of the VOLUME, not of
+          # the id. On a case-sensitive filesystem they are genuinely
+          # different files and accepting them is the correct answer -- a
+          # run on /Volumes/CS3 failed all three of these before this guard.
+          # So the example asserts the rule the code follows, either way.
+          candidate = File.join(dir, "#{id}.json")
+          aliases = File.exist?(candidate) &&
+            File.identical?(candidate, summary)
+
+          if aliases
+            expect { CorpusRunner.send(:case_path, dir, id) }
+              .to raise_error(ArgumentError, /names the same file as summary/)
+          else
+            expect(CorpusRunner.send(:case_path, dir, id)).to eq(candidate)
+          end
+        end
+      end
+    end
+
+    it "refuses an aliasing id on the SECOND run too" do
+      # The placeholder used to be written inside the claim, and the claim
+      # returns early for a directory it already owns -- so on run 2 there was
+      # no placeholder to compare against and the aliasing case sailed through
+      # to the write, where the final summary overwrote its payload.
+      long_s = "\u017Fummary"
+      kase = CorpusRunner::Case.new(
+        id: long_s, algorithm: "layered",
+        graph: { "id" => "g", "children" => [], "edges" => [] }
+      )
+      allow(CorpusRunner).to receive(:cases).and_return([kase])
+
+      Dir.mktmpdir do |dir|
+        out = File.join(dir, "dump")
+        summary = File.join(out, "summary.json")
+        FileUtils.mkdir_p(out)
+        File.write(summary, "{}")
+        skip "needs a case-insensitive filesystem" unless
+          File.identical?(File.join(out, "#{long_s}.json"), summary)
+        FileUtils.rm_rf(out)
+
+        2.times do
+          expect { CorpusRunner.run(out) }
             .to raise_error(ArgumentError, /names the same file as summary/)
         end
       end
