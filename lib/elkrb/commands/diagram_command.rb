@@ -157,7 +157,7 @@ module Elkrb
         # The directory lives in the DESTINATION directory, which keeps
         # `File.rename` on one filesystem and therefore atomic.
         FileUtils.mkdir_p(File.dirname(output_file))
-        scratch = scratch_dir(output_file)
+        scratch, identity = scratch_dir(output_file)
         dot_file = File.join(scratch, "graph.dot")
         image_file = File.join(scratch, "image.#{format}")
 
@@ -180,7 +180,7 @@ module Elkrb
 
           File.rename(image_file, output_file)
         ensure
-          FileUtils.remove_entry(scratch) if File.directory?(scratch)
+          remove_scratch(scratch, identity)
         end
       end
 
@@ -191,6 +191,14 @@ module Elkrb
       # A directory in the destination that did not exist a moment ago and
       # that this process created. `Dir.mkdir` raises EEXIST rather than
       # opening what is already there, which is what makes that true.
+      # A directory in the destination that did not exist a moment ago and
+      # that this process created. `Dir.mkdir` raises EEXIST rather than
+      # opening what is already there, which is what makes that true.
+      #
+      # Returns the path AND the directory's identity -- device and inode --
+      # because a path is not a durable handle. Cleanup compares that identity
+      # before removing anything, so if the entry is swapped for a different
+      # real directory in between, that directory is left alone.
       def scratch_dir(output_file)
         dir = File.dirname(output_file)
 
@@ -198,15 +206,49 @@ module Elkrb
           candidate = File.join(dir, ".elkrb-#{SecureRandom.hex(6)}")
           begin
             Dir.mkdir(candidate)
-            # `Dir.mkdir`'s mode is masked by the umask, so under `umask 0222`
-            # the directory arrives read-only and nothing can be written
-            # inside it. Set the mode after creating, not as an argument.
-            FileUtils.chmod(0o700, candidate)
-            return candidate
           rescue Errno::EEXIST
             next
           end
+
+          return claim_scratch(candidate)
         end
+      end
+
+      # Everything from here has already created the directory, and the
+      # caller's `ensure` has not begun yet -- so this is the only place that
+      # can clean it up. A chmod that raised used to leak it.
+      def claim_scratch(candidate)
+        identity = nil
+        begin
+          identity = directory_identity(candidate)
+          # `Dir.mkdir`'s mode is masked by the umask, so under `umask 0222`
+          # the directory arrives read-only and nothing can be written inside
+          # it. Set the mode after creating, not as an argument.
+          FileUtils.chmod(0o700, candidate)
+          [candidate, identity]
+        rescue StandardError
+          remove_scratch(candidate, identity)
+          raise
+        end
+      end
+
+      def directory_identity(path)
+        stat = File.lstat(path)
+        [stat.dev, stat.ino]
+      end
+
+      # Removes the directory ONLY if the path still names the one whose
+      # identity was captured. Checking `File.directory?` alone deletes by
+      # PATH: if the entry is replaced with a different real directory in
+      # between, that one and everything inside it goes instead.
+      def remove_scratch(path, identity)
+        return if identity.nil?
+        return unless File.directory?(path)
+        return unless directory_identity(path) == identity
+
+        FileUtils.remove_entry(path)
+      rescue Errno::ENOENT
+        nil
       end
 
       def preview(file)

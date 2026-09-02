@@ -408,4 +408,42 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
       expect(Dir.children(temp_dir).grep(/tmp\./)).to be_empty
     end
   end
+  describe "cleaning up the temporary directory" do
+    let(:command) { described_class.allocate }
+    let(:target) { File.join(temp_dir, "out.svg") }
+
+    # Cleanup used to check only whether the path named A directory, not
+    # whether it named THE directory this run created. Review replaced the
+    # entry with a different real directory mid-render and watched the
+    # recursive delete take it and its contents.
+    it "leaves a different directory that took the same path" do
+      scratch, identity = command.send(:scratch_dir, target)
+      FileUtils.remove_entry(scratch)
+      FileUtils.mkdir_p(scratch)
+      keeper = File.join(scratch, "someone-elses.txt")
+      File.write(keeper, "keep me")
+
+      command.send(:remove_scratch, scratch, identity)
+
+      expect(File.read(keeper)).to eq("keep me")
+    end
+
+    it "removes the directory it did create" do
+      scratch, identity = command.send(:scratch_dir, target)
+
+      command.send(:remove_scratch, scratch, identity)
+
+      expect(File.exist?(scratch)).to be(false)
+    end
+
+    # The directory exists before scratch_dir returns, so the caller's ensure
+    # cannot cover a failure inside it. A chmod that raised used to leak it.
+    it "removes the directory when claiming it fails" do
+      allow(FileUtils).to receive(:chmod).and_raise(Errno::EACCES)
+
+      expect { command.send(:scratch_dir, target) }
+        .to raise_error(Errno::EACCES)
+      expect(Dir.children(temp_dir).grep(/\A\.elkrb-/)).to be_empty
+    end
+  end
 end
