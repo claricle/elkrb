@@ -420,6 +420,12 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
       scratch, identity = command.send(:scratch_dir, target)
       FileUtils.remove_entry(scratch)
       FileUtils.mkdir_p(scratch)
+      # The substitute must genuinely BE a different directory. Inode reuse
+      # is filesystem-dependent, and if the number were recycled the identity
+      # would match by accident and this example would fail against correct
+      # code. Asserting the premise turns that into a clear skip.
+      skip "inode was reused" if command.send(:directory_identity, scratch) ==
+        identity
       keeper = File.join(scratch, "someone-elses.txt")
       File.write(keeper, "keep me")
 
@@ -438,6 +444,18 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
 
     # The directory exists before scratch_dir returns, so the caller's ensure
     # cannot cover a failure inside it. A chmod that raised used to leak it.
+    # Both things that can fail after the directory exists, because only one
+    # of them was covered. When capturing the identity raised, `identity`
+    # stayed nil and the cleanup call no-opped -- so the directory leaked
+    # while the comment above it claimed the leak was closed.
+    it "removes the directory when capturing its identity fails" do
+      allow(command).to receive(:directory_identity).and_raise(Errno::EACCES)
+
+      expect { command.send(:scratch_dir, target) }
+        .to raise_error(Errno::EACCES)
+      expect(Dir.children(temp_dir).grep(/\A\.elkrb-/)).to be_empty
+    end
+
     it "removes the directory when claiming it fails" do
       allow(FileUtils).to receive(:chmod).and_raise(Errno::EACCES)
 

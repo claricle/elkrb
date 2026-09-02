@@ -191,9 +191,6 @@ module Elkrb
       # A directory in the destination that did not exist a moment ago and
       # that this process created. `Dir.mkdir` raises EEXIST rather than
       # opening what is already there, which is what makes that true.
-      # A directory in the destination that did not exist a moment ago and
-      # that this process created. `Dir.mkdir` raises EEXIST rather than
-      # opening what is already there, which is what makes that true.
       #
       # Returns the path AND the directory's identity -- device and inode --
       # because a path is not a durable handle. Cleanup compares that identity
@@ -218,18 +215,19 @@ module Elkrb
       # caller's `ensure` has not begun yet -- so this is the only place that
       # can clean it up. A chmod that raised used to leak it.
       def claim_scratch(candidate)
-        identity = nil
-        begin
-          identity = directory_identity(candidate)
-          # `Dir.mkdir`'s mode is masked by the umask, so under `umask 0222`
-          # the directory arrives read-only and nothing can be written inside
-          # it. Set the mode after creating, not as an argument.
-          FileUtils.chmod(0o700, candidate)
-          [candidate, identity]
-        rescue StandardError
-          remove_scratch(candidate, identity)
-          raise
-        end
+        identity = directory_identity(candidate)
+        # `Dir.mkdir`'s mode is masked by the umask, so under `umask 0222`
+        # the directory arrives read-only and nothing can be written inside
+        # it. Set the mode after creating, not as an argument.
+        FileUtils.chmod(0o700, candidate)
+        [candidate, identity]
+      rescue StandardError
+        # Removed by PATH here, deliberately, and only here. `Dir.mkdir` has
+        # just returned, so nothing else can be at this name yet -- and
+        # capturing the identity is itself one of the things that can fail,
+        # which left the directory behind when cleanup depended on it.
+        FileUtils.remove_entry(candidate) if File.directory?(candidate)
+        raise
       end
 
       def directory_identity(path)
