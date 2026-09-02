@@ -22,18 +22,33 @@ RSpec.describe "omit_size_for_unsized_input" do
   # exemption deleted. `q` has a real child, so layout computes it a
   # 44x44 size it never declared, and the exemption is then the only
   # reason no violation is reported. `p` stays to cover the empty case.
-  it "exempts a node with a children key present, even empty" do
+  # The exemption has to be LOAD-BEARING, so the actual node must gain a
+  # size. A real layout does not do that -- measured, a `"children": []` node
+  # comes back with width and height still nil, so the earlier version of
+  # this example passed whether the exemption existed or not. The result is
+  # built by hand instead.
+  it "exempts a declared compound that gained a computed size" do
     input_hash = { "id" => "root",
-                   "children" => [{ "id" => "p", "children" => [] },
-                                  { "id" => "q",
-                                    "children" => [{ "id" => "c",
-                                                     "width" => 20,
-                                                     "height" => 20 }] }],
+                   "children" => [{ "id" => "p", "children" => [] }],
                    "edges" => [] }
-    graph = Elkrb::Graph::Graph.from_hash(input_hash)
-    result = Elkrb.layout(graph, {})
+    compound = Elkrb::Graph::Node.new(id: "p", width: 40.0, height: 40.0)
+    compound.children = []
+    result = Elkrb::Graph::Graph.new(id: "root")
+    result.children = [compound]
+    result.edges = []
 
     expect(result).to omit_size_for_unsized_input(input_hash)
+  end
+
+  it "still flags a node with no children key that gained a size" do
+    input_hash = { "id" => "root", "children" => [{ "id" => "p" }],
+                   "edges" => [] }
+    leaf = Elkrb::Graph::Node.new(id: "p", width: 40.0, height: 40.0)
+    result = Elkrb::Graph::Graph.new(id: "root")
+    result.children = [leaf]
+    result.edges = []
+
+    expect(result).not_to omit_size_for_unsized_input(input_hash)
   end
 
   it "fails when an unsized leaf gained a size in the actual result" do
