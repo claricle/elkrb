@@ -899,9 +899,10 @@ module GoldenComparator
   # also layered unless it pins otherwise, which is true for every case
   # this slice authors — a future slice adding a non-layered nested pin
   # revisits this.
-  def diff_layer_membership(expected, actual, path = "root")
-    diffs = diff_layer_grouping(expected, actual, path)
-    diffs.concat(diff_layer_children(expected, actual, path))
+  def diff_layer_membership(expected, actual, path = "root", inherited = nil)
+    direction = expected.dig("layoutOptions", "elk.direction") || inherited
+    diffs = diff_layer_grouping(expected, actual, path, direction)
+    diffs.concat(diff_layer_children(expected, actual, path, direction))
   end
 
   # Same normalisation as `AlgorithmRegistry.normalize_name`
@@ -916,8 +917,14 @@ module GoldenComparator
     algorithm.nil? || algorithm == "layered"
   end
 
-  def layer_axes(level)
-    direction = level.dig("layoutOptions", "elk.direction") || "RIGHT"
+  # Direction is INHERITED. ELK applies a root's direction to every nested
+  # level that does not pin its own, and real elkjs output for a DOWN root
+  # omits a local direction on the child. Reading only the level's own
+  # options defaulted such a child to RIGHT, so it was grouped on x: two
+  # collapsed y-layers with a rerouted section still compared equal.
+  def layer_axes(level, inherited = nil)
+    direction = level.dig("layoutOptions", "elk.direction") || inherited ||
+      "RIGHT"
     axis = %w[UP DOWN].include?(direction) ? :y : :x
     [axis, axis == :y ? :x : :y]
   end
@@ -926,10 +933,10 @@ module GoldenComparator
   # recursion in `diff_layer_children` is not, and must not be folded in
   # here as an early return -- a non-layered root still has to reach a
   # mismatching compound child.
-  def diff_layer_grouping(expected, actual, path)
+  def diff_layer_grouping(expected, actual, path, inherited = nil)
     return [] unless layered?(expected)
 
-    axis, cross_axis = layer_axes(expected)
+    axis, cross_axis = layer_axes(expected, inherited)
     expected_layers = group_by_layer(expected["children"] || [], axis,
                                      cross_axis)
     actual_layers = group_by_layer(actual["children"] || [], axis, cross_axis)
@@ -939,13 +946,13 @@ module GoldenComparator
      "expected #{expected_layers.inspect}, got #{actual_layers.inspect}"]
   end
 
-  def diff_layer_children(expected, actual, path)
+  def diff_layer_children(expected, actual, path, inherited = nil)
     actual_children = index_by_id(actual["children"] || [])
     index_by_id(expected["children"] || []).flat_map do |id, child|
       match = actual_children[id]
       next [] unless match
 
-      diff_layer_membership(child, match, "#{path}/children/#{id}")
+      diff_layer_membership(child, match, "#{path}/children/#{id}", inherited)
     end
   end
 
