@@ -71,23 +71,19 @@ module Elkrb
             adjacency = Hash.new { |hash, id| hash[id] = [] }
 
             @index.edges.each do |edge|
-              source_id = endpoint_owner_id(edge.sources)
-              next unless source_id
+              source_ids = endpoint_owner_ids(edge.sources)
+              target_ids = endpoint_owner_ids(edge.targets)
 
-              endpoint_owner_ids(edge.targets).each do |target_id|
-                next if source_id == target_id
+              source_ids.each do |source_id|
+                target_ids.each do |target_id|
+                  next if source_id == target_id
 
-                adjacency[source_id] << [target_id, edge.id]
+                  adjacency[source_id] << [target_id, edge.id]
+                end
               end
             end
 
             adjacency
-          end
-
-          def endpoint_owner_id(endpoints)
-            id = (endpoints || []).first
-            owner = @index.owner(id) if id
-            owner&.id
           end
 
           def endpoint_owner_ids(endpoints)
