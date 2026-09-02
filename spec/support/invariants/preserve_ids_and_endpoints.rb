@@ -46,14 +46,31 @@ RSpec::Matchers.define :preserve_ids_and_endpoints do |input_hash|
                                                owner_id))
   end
 
+  # Compares the id SEQUENCE exactly, in both directions.
+  #
+  # Looking each input child up in the actual set is a one-way subset test:
+  # it cannot see a node the layout ADDED, and it cannot see a reordering.
+  # Measured -- appending a unique id, and reversing the sequence, both passed
+  # before this changed.
+  #
+  # Compared by ID, deliberately, not by model object. These classes have
+  # VALUE equality, so two distinct look-alike nodes are `==` and would
+  # collapse in a Set or an Array difference.
+  define_method(:check_id_sequence) do |expected, actual, kind|
+    return if expected == actual
+
+    @violations << "#{kind} ids #{actual.inspect} != #{expected.inspect}"
+  end
+
   define_method(:check_children) do |input_children, actual_children|
+    check_id_sequence(input_children.map { |c| c["id"] },
+                      actual_children.map(&:id), "node")
+
     actual_by_id = actual_children.to_h { |n| [n.id, n] }
     input_children.each do |input_child|
       actual_child = actual_by_id[input_child["id"]]
-      unless actual_child
-        @violations << "missing node #{input_child['id']}"
-        next
-      end
+      next unless actual_child
+
       check_level(input_child, actual_child)
     end
   end
