@@ -296,14 +296,11 @@ RSpec.describe "Elkrb layout corpus" do
     # the same bytes in ASCII-8BIT, which is what `Dir.glob` hands back under
     # LC_ALL=C: it is `valid_encoding?`, so a plain `casecmp?` accepted it as
     # a valid string and then folded nothing, and it walked past the guard.
-    [
-      "SUMMARY",
-      "Summary",
-      "sUmMaRy",
-      "\u017Fummary",
-      "\u017Fummary".dup.force_encoding(Encoding::ASCII_8BIT),
-    ].each do |cased|
-      it "refuses the id #{cased} on a case-insensitive disk" do
+    # The early guard is ASCII-only ON PURPOSE. Anything beyond ASCII casing
+    # is settled by the filesystem in the .case_path examples below, because
+    # predicting a volume's own folding from a String is not winnable.
+    %w[SUMMARY Summary sUmMaRy].each do |cased|
+      it "refuses the id #{cased} before any directory is touched" do
         reserved = CorpusRunner::Case.new(id: cased)
         allow(CorpusRunner).to receive(:imported_cases).and_return([reserved])
 
@@ -365,6 +362,28 @@ RSpec.describe "Elkrb layout corpus" do
       it "refuses an id that is #{name}" do
         expect { CorpusRunner.send(:case_path, outdir, id) }
           .to raise_error(ArgumentError, /does not name a file inside/)
+      end
+    end
+
+    # These are the ids the early ASCII guard cannot settle. Unicode folds
+    # long s to s and macOS resolves it to one file; the same bytes arrive as
+    # ASCII-8BIT from `Dir.glob` under LC_ALL=C, and as other encodings under
+    # other locales. Rather than predict any of that, the runner writes
+    # summary.json first and asks whether the case path is File.identical? to
+    # it -- which is the property, answered by the thing that decides it.
+    {
+      "an ASCII casing" => "SUMMARY",
+      "a Unicode fold" => "\u017Fummary",
+      "the same fold as binary bytes" =>
+        "\u017Fummary".dup.force_encoding(Encoding::ASCII_8BIT),
+    }.each do |label, id|
+      it "refuses #{label} that names summary.json on this disk" do
+        Dir.mktmpdir do |dir|
+          File.write(File.join(dir, "summary.json"), "{}")
+
+          expect { CorpusRunner.send(:case_path, dir, id) }
+            .to raise_error(ArgumentError, /names the same file as summary/)
+        end
       end
     end
 

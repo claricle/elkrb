@@ -129,6 +129,11 @@ class CorpusRunner
       end
 
       FileUtils.mkdir_p(outdir)
+      # A placeholder so `case_path` can ASK the filesystem whether an id
+      # aliases this name rather than trying to predict the answer. `run`
+      # overwrites it with the real summary at the end.
+      summary = File.join(outdir, "#{RESERVED_ID}.json")
+      File.write(summary, "{}") unless File.exist?(summary)
       File.write(File.join(outdir, OWNER_MARKER), <<~TEXT)
         Written by spec/cross_validation/corpus_runner.rb.
         Its presence is what lets the runner delete stale dumps here.
@@ -139,6 +144,31 @@ class CorpusRunner
     # A case id reaches the filesystem, and importers are a documented
     # extension point, so an id is not assumed to be a bare name. An id of
     # `../victim` used to resolve outside `outdir` and overwrite a sibling.
+    # Does this id name the summary file? ASK, do not predict.
+    #
+    # This was a string guard that folded case, and three review rounds found
+    # three ids that fold onto "summary" on a real disk and not in Ruby: an
+    # ASCII-8BIT name from `Dir.glob` under LC_ALL=C, valid GB18030 bytes
+    # under a Chinese locale, and ISO-8859-1 bytes that a UTF-8
+    # reinterpretation wrongly CLAIMED were a collision. Predicting a
+    # filesystem's name folding from a String is not winnable: it depends on
+    # the volume and the locale, not on the bytes alone.
+    #
+    # `summary.json` exists by the time any case is dumped, so a colliding id
+    # is one whose path is already `File.identical?` to it. That is the real
+    # property, answered by the thing that decides it.
+    def refuse_summary_alias!(outdir, path, id)
+      summary = File.join(outdir, "#{RESERVED_ID}.json")
+      return if path == summary
+      return unless File.exist?(path) && File.exist?(summary)
+      return unless File.identical?(path, summary)
+
+      raise ArgumentError,
+            "case id #{id.inspect} names the same file as " \
+            "#{RESERVED_ID}.json on this filesystem, which the runner " \
+            "writes itself. Rename the case."
+    end
+
     def case_path(outdir, id)
       text = id.to_s
       name = "#{text}.json"
@@ -151,6 +181,8 @@ class CorpusRunner
       # An EMPTY id passes both shape checks -- `".json"` has no separator and
       # its dirname is `outdir` -- and would quietly write `outdir/.json`, a
       # dotfile no listing shows. It is refused explicitly.
+      refuse_summary_alias!(outdir, path, id)
+
       usable = !text.strip.empty? &&
         File.basename(name) == name &&
         File.dirname(path) == outdir
@@ -220,45 +252,20 @@ class CorpusRunner
 
     # Every case is dumped to "#{id}.json", so a case called "summary"
     # would write the dump's own index and then be overwritten by it.
-    # Two hazards, and only one comparison handles each.
+    # A CHEAP early guard, ASCII case only. It catches the obvious
+    # "summary"/"SUMMARY" before any directory is touched, and gives a
+    # clearer error than a write-time failure would.
     #
-    # `casecmp?` folds case the way a filesystem does -- "\u017Fummary" (long s)
-    # folds to "summary", and macOS resolves `\u017Fummary.json` and
-    # `summary.json` to ONE file -- so it is what a valid id must be compared
-    # with. Downcasing bytes instead misses that entirely.
+    # It deliberately does NOT try to predict the filesystem's own folding.
+    # Attempting that produced a false positive: ISO-8859-1 bytes reinterpreted
+    # as UTF-8 looked like a collision and were refused, though both files
+    # coexist happily on disk. Whether an id TRULY aliases summary.json is
+    # settled by `refuse_summary_alias!`, which asks the filesystem instead.
     #
-    # But `casecmp?` RAISES "input string invalid" on a string whose encoding
-    # is broken, rather than answering, so such an id used to surface Ruby's
-    # own error from inside this guard. Those get the byte comparison, which
-    # always answers.
+    # `String#b` keeps this to ASCII folding and never raises, whatever the
+    # id's encoding.
     def reserved_id?(id)
-      text = id.to_s
-      folded = as_utf8(text)
-      return folded.casecmp?(RESERVED_ID) if folded
-
-      text.b.downcase == RESERVED_ID.b.downcase
-    end
-
-    # The id read as UTF-8, or nil when its bytes are not valid UTF-8.
-    #
-    # Checking `valid_encoding?` alone is not enough. An ASCII-8BIT string IS
-    # valid, but `casecmp?` will not Unicode-fold its bytes -- and under
-    # LC_ALL=C `Dir.glob` hands filenames back as ASCII-8BIT, so a fixture
-    # actually named `\u017Fummary` arrived binary, folded to nothing, and
-    # walked past the guard onto a path that aliases summary.json.
-    #
-    # Reinterpreting the same bytes as UTF-8 folds them the way the filesystem
-    # does. Bytes that are NOT valid UTF-8 -- a latin-1 name, say -- fall
-    # through to the byte comparison, which is right: those do not alias.
-    def as_utf8(text)
-      candidate =
-        if text.encoding == Encoding::UTF_8
-          text
-        else
-          text.dup.force_encoding(Encoding::UTF_8)
-        end
-
-      candidate if candidate.valid_encoding?
+      id.to_s.b.casecmp?(RESERVED_ID.b)
     end
 
     def refuse_reserved_id!(all_cases)
