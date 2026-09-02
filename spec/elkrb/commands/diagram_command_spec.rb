@@ -290,4 +290,43 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
       expect(File.read(output_file)).to eq("PRE-EXISTING USER CONTENT")
     end
   end
+
+  describe "when the render dies partway" do
+    let(:input_file) do
+      File.join(temp_dir, "graph.json").tap do |path|
+        File.write(path, graph_data.to_json)
+      end
+    end
+    let(:output_file) { File.join(temp_dir, "out.svg") }
+
+    it "leaves the caller's file alone when a render dies partway" do
+      # Found by review: guarding cleanup on "did this run create it?" still
+      # left a TRUNCATED image under the caller's own filename -- a 1024-byte
+      # `<?xml` fragment from a render that died. Rendering to a scratch name
+      # and moving it into place is what makes that impossible.
+      fake_dot = File.join(temp_dir, "dot")
+      File.write(fake_dot, <<~SH)
+        #!/bin/sh
+        out=""
+        while [ $# -gt 0 ]; do case "$1" in -o) shift; out="$1";; esac; shift; done
+        printf '<?xml truncated' > "$out"
+        exit 1
+      SH
+      FileUtils.chmod(0o755, fake_dot)
+      File.write(output_file, "ORIGINAL USER CONTENT")
+
+      previous = ENV.fetch("ELKRB_DOT", nil)
+      begin
+        ENV["ELKRB_DOT"] = fake_dot
+        expect do
+          described_class.new(input_file, { output: output_file }).run
+        end.to raise_error(StandardError)
+      ensure
+        previous.nil? ? ENV.delete("ELKRB_DOT") : ENV["ELKRB_DOT"] = previous
+      end
+
+      expect(File.read(output_file)).to eq("ORIGINAL USER CONTENT")
+      expect(Dir.children(temp_dir).grep(/tmp\./)).to be_empty
+    end
+  end
 end

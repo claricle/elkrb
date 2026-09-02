@@ -122,12 +122,20 @@ module Elkrb
         %i[png svg pdf ps eps].include?(format)
       end
 
+      # Renders to a SCRATCH path and moves it into place only once the
+      # render has succeeded. Nothing else makes the guarantee hold.
+      #
+      # Rendering straight to `output_file` and cleaning up afterwards does
+      # not work, and both attempts at it failed differently. Deleting
+      # unconditionally destroyed a file the caller already had there.
+      # Deleting only when we had created it left a TRUNCATED image behind --
+      # measured, a 1024-byte file beginning `<?xml` from a render that died
+      # partway, sitting under the caller's own filename. `File.rename` is
+      # atomic within a filesystem, so the image path either holds the
+      # previous content or a complete render, never a fragment.
       def render_to_image(dot_content, output_file, format)
         dot_file = "#{output_file}.tmp.dot"
-        # Whether the image path was OURS to remove. Cleanup used to delete it
-        # unconditionally, which took a file the caller already had there --
-        # one we never wrote to, since staging goes elsewhere now.
-        pre_existing = File.exist?(output_file)
+        image_file = "#{output_file}.tmp.#{format}"
 
         begin
           write_output(dot_content, dot_file)
@@ -135,23 +143,21 @@ module Elkrb
           require_relative "../graphviz_wrapper"
           graphviz = Elkrb::GraphvizWrapper.new
 
-          graphviz.render(dot_file, output_file, format, engine: "dot", dpi: 96)
+          graphviz.render(dot_file, image_file, format, engine: "dot", dpi: 96)
+          File.rename(image_file, output_file)
 
           FileUtils.rm_f(dot_file)
         rescue StandardError
-          discard_unrendered(dot_file, output_file, pre_existing)
+          discard_unrendered(dot_file, image_file)
           raise
         end
       end
 
-      # Nothing should exist at the image path unless a render put it there,
-      # so both the staging file and any partial image are cleared. The image
-      # goes FIRST: a staging path that cannot be deleted -- a directory of
-      # that name raises EPERM -- must not stop the image being cleaned up.
-      def discard_unrendered(dot_file, output_file, pre_existing)
-        # Only a file this run created is ours to take away. A half-written
-        # image from a failed render is; the caller's own file is not.
-        FileUtils.rm_f(output_file) unless pre_existing
+      # Only the scratch files. The image path is never touched on failure,
+      # because nothing was written there -- the render goes to a scratch
+      # name and is moved into place only on success.
+      def discard_unrendered(dot_file, image_file)
+        FileUtils.rm_f(image_file) if File.file?(image_file)
         FileUtils.rm_f(dot_file) if File.file?(dot_file)
       end
 
