@@ -98,7 +98,7 @@ class CorpusRunner
       corpus.each { |kase| dump_case(kase, summary, outdir, timeout) }
 
       summary["unexpected_failures"] = unexpected_failure?(summary)
-      write_json(File.join(outdir, "summary.json"), summary)
+      write_json(File.join(outdir, "#{RESERVED_ID}.json"), summary)
       summary
     end
 
@@ -375,7 +375,9 @@ class CorpusRunner
     # unreadable, not JSON, or not the shape `new_summary` writes prunes
     # nothing: deleting on a guess is the failure this set exists to avoid.
     def recorded_case_ids(outdir)
-      summary = JSON.parse(File.read(File.join(outdir, "summary.json")))
+      summary = JSON.parse(
+        File.read(File.join(outdir, "#{RESERVED_ID}.json")),
+      )
       entries = summary.is_a?(Hash) ? summary["cases"] : nil
       return [] unless entries.is_a?(Array)
 

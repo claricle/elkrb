@@ -383,8 +383,10 @@ RSpec.describe "Elkrb layout corpus" do
       # and prove nothing. A symlink aliases on EVERY filesystem, so this
       # covers the refusal path on every machine.
       #
-      # The exact name "summary" would not work here: the ASCII guard rejects
-      # it at `cases` time, so it never reaches `case_path` at all.
+      # The exact name "summary" would not work here. Through the CLI the
+      # ASCII guard rejects it at `cases` time; and called directly, as this
+      # example does, `case_path` returns early because the path IS the
+      # summary -- the runner must be able to write its own index.
       Dir.mktmpdir do |dir|
         summary = File.join(dir, "summary.json")
         File.write(summary, "{}")
