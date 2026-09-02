@@ -46,7 +46,15 @@ module GoldenComparator
   # without demanding identical wording, so "an error happened" isn't
   # treated as proof of "the RIGHT error happened". No quoted term in the
   # expected message falls back to requiring an exact match.
-  def same_error_condition?(expected_message, actual_message)
+  def same_error_condition?(expected_message, actual_message, expected: nil)
+    # An explicit per-case pattern when the case carries one. Deriving the
+    # condition from elkjs's own wording is a proxy, and a bad one: it asks
+    # only whether a term APPEARS, so "simple edge accepted" passes as proof
+    # that the edge was rejected for not being simple, and the settled elkrb
+    # message "layered does not support hyperedges (edge e1)" fails for not
+    # containing a word elkjs happened to use.
+    return actual_message.match?(expected) if expected
+
     quoted = expected_message[/'([^']+)'/, 1]
     return expected_message == actual_message unless quoted
 
@@ -1018,7 +1026,7 @@ RSpec::Matchers.define :match_elkjs_golden do |
     @diffs =
       if GoldenComparator.error_hash?(expected) ||
           GoldenComparator.error_hash?(comparable_actual)
-        error_diffs(expected, comparable_actual)
+        error_diffs(expected, comparable_actual, name)
       else
         case tier
         when :exact
@@ -1035,15 +1043,20 @@ RSpec::Matchers.define :match_elkjs_golden do |
     @diffs.empty?
   end
 
-  define_method(:error_diffs) do |expected, actual|
+  define_method(:error_diffs) do |expected, actual, case_name = nil|
     expected_error = GoldenComparator.error_hash?(expected)
     actual_error = GoldenComparator.error_hash?(actual)
 
     if expected_error && actual_error
       expected_message = GoldenComparator.error_message(expected)
       actual_message = GoldenComparator.error_message(actual)
-      return [] if GoldenComparator.same_error_condition?(expected_message,
-                                                          actual_message)
+      # The case's OWN statement of what elkrb must report, when it has one.
+      expected_pattern = GoldenCases.expected_error_for(case_name)
+      if GoldenComparator.same_error_condition?(expected_message,
+                                                actual_message,
+                                                expected: expected_pattern)
+        return []
+      end
 
       return ["expected an error naming the same condition as " \
               "#{expected_message.inspect}, got #{actual_message.inspect}"]

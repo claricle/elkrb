@@ -94,10 +94,27 @@ module GoldenCases
   # The sole error-case golden: elkjs raises rather than laying the graph
   # out, so its expected file is `{"error": ...}` and matching it compares
   # messages instead of geometry.
+  # `expect_error` states the condition ELKRB must report, as a pattern its
+  # own message has to match. It is deliberately not derived from elkjs's
+  # sentence: the two implementations word rejections differently, and a
+  # substring taken from elkjs proved to be a poor proxy. It accepted the
+  # OPPOSITE condition -- a message reading "simple edge accepted; endpoint
+  # lookup failed" contains "simple" -- while rejecting the settled correct
+  # message from card 12, "layered does not support hyperedges (edge e1)".
   ERROR_CASE = { name: "hyperedge", tier: :structural,
+                 expect_error: /hyperedge/i,
                  pending: rc7_hyperedge_misrouted }.freeze
 
   TIER_BY_CASE = COMPARISON_CASES.to_h { |c| [c[:name], c[:tier]] }.freeze
+
+  # nil for every case that does not state one, which is all of them but the
+  # error case.
+  def self.expected_error_for(case_name)
+    return nil unless case_name
+
+    (COMPARISON_CASES + [ERROR_CASE])
+      .find { |c| c[:name] == case_name }&.fetch(:expect_error, nil)
+  end
 
   ALL_NAMES =
     COMPARISON_CASES.map { |c| c[:name] }.push(ERROR_CASE[:name]).freeze
