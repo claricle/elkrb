@@ -148,6 +148,20 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
         )
     end
 
+    it "raises for nil target endpoint ids" do
+      graph = {
+        id: "r",
+        children: [{ id: "a", width: 10, height: 10 }],
+        edges: [{ id: "missing", sources: ["a"], targets: [nil] }],
+      }
+
+      expect { Elkrb.layout(graph, algorithm: "layered") }
+        .to raise_error(
+          Elkrb::UnsupportedConfigurationException,
+          "layered requires non-empty edge endpoints (edge missing)",
+        )
+    end
+
     it "validates edges when children are omitted" do
       graph = {
         id: "r",
