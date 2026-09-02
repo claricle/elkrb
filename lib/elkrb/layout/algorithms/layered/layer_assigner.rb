@@ -26,9 +26,8 @@ module Elkrb
             return [] unless @graph.children
 
             nodes = @graph.children.to_h { |node| [node.id, node] }
-            successors, indegrees = build_topology(nodes)
-            @node_layers = nodes.keys.to_h { |id| [id, 0] }
-            assign_topological_layers(successors, indegrees)
+            predecessors = build_predecessors(nodes)
+            assign_predecessor_layers(nodes, predecessors)
             build_layers(nodes)
           end
 
@@ -38,41 +37,88 @@ module Elkrb
 
           private
 
-          def build_topology(nodes)
-            successors = Hash.new { |hash, id| hash[id] = [] }
-            indegrees = nodes.to_h { |id, _node| [id, 0] }
+          # Keep the predecessor order used by the former recursive pass.
+          # That order is observable in NodePlacer's same-layer coordinates,
+          # so an acyclic graph must not be reordered as a side effect of the
+          # iterative implementation.
+          def build_predecessors(nodes)
+            predecessors = Hash.new { |hash, id| hash[id] = [] }
 
             @index.edges.each do |edge|
               source_id, target_id = oriented_endpoints(edge)
               next unless usable_edge?(source_id, target_id, nodes)
 
-              successors[source_id] << target_id
-              indegrees[target_id] += 1
+              predecessors[target_id] << source_id
             end
 
-            [successors, indegrees]
+            predecessors
           end
 
-          def assign_topological_layers(successors, indegrees)
-            queue = indegrees.select { |_id, degree| degree.zero? }.keys
-            queue_index = 0
+          # Iterative post-order traversal of each node's predecessors. This
+          # is the stack-safe equivalent of the original memoised recursive
+          # longest-path calculation and preserves its insertion order.
+          def assign_predecessor_layers(nodes, predecessors)
+            @node_layers = {}
+            colors = {}
 
-            while queue_index < queue.length
-              source_id = queue[queue_index]
-              queue_index += 1
+            nodes.each_key do |node_id|
+              next if @node_layers.key?(node_id)
 
-              successors[source_id].each do |target_id|
-                advance_layer(source_id, target_id)
-                indegrees[target_id] -= 1
-                queue << target_id if indegrees[target_id].zero?
+              walk_predecessors(node_id, predecessors, colors)
+            end
+          end
+
+          def walk_predecessors(root_id, predecessors, colors)
+            colors[root_id] = :active
+            stack = [[root_id, 0]]
+
+            until stack.empty?
+              step_predecessor_stack(stack, predecessors, colors)
+            end
+          end
+
+          def step_predecessor_stack(stack, predecessors, colors)
+            current_id, predecessor_index = stack[-1]
+            incoming = predecessors[current_id]
+
+            if predecessor_index >= incoming.length
+              finish_predecessor_frame(stack, current_id, incoming, colors)
+              return
+            end
+
+            predecessor_id = incoming[predecessor_index]
+            stack[-1][1] = predecessor_index + 1
+            return if predecessor_assigned?(predecessor_id, colors)
+
+            colors[predecessor_id] = :active
+            stack << [predecessor_id, 0]
+          end
+
+          def finish_predecessor_frame(stack, node_id, incoming, colors)
+            assign_layer(node_id, incoming)
+            colors[node_id] = :complete
+            stack.pop
+          end
+
+          # CycleBreaker orients every back edge away from the active DFS
+          # path. Keep this guard defensive for direct callers of
+          # LayerAssigner that provide an incomplete reversal set.
+          def predecessor_assigned?(predecessor_id, colors)
+            @node_layers.key?(predecessor_id) ||
+              colors[predecessor_id] == :active
+          end
+
+          def assign_layer(node_id, incoming)
+            max_predecessor_layer = incoming.filter_map do |predecessor_id|
+              @node_layers[predecessor_id]
+            end.max
+
+            @node_layers[node_id] =
+              if max_predecessor_layer
+                max_predecessor_layer + 1
+              else
+                0
               end
-            end
-          end
-
-          def advance_layer(source_id, target_id)
-            @node_layers[target_id] = [
-              @node_layers[target_id], @node_layers[source_id] + 1
-            ].max
           end
 
           def build_layers(nodes)
