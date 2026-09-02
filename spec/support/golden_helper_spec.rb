@@ -611,4 +611,23 @@ RSpec.describe "the committed golden fixture set" do
       ).to be(true)
     end
   end
+  describe "direction inheritance" do
+    let(:child) { { "id" => "g", "children" => [] } }
+
+    # ELK applies a root's direction to every nested level that does not pin
+    # its own, and real elkjs output for a DOWN root omits a local direction
+    # on the child. Reading only the level's own options defaulted such a
+    # child to RIGHT and grouped it on x, so two collapsed y-layers with a
+    # rerouted section compared equal.
+    it "groups a child on the parent's axis when it pins none of its own" do
+      expect(GoldenComparator.layer_axes(child).first).to eq(:x)
+      expect(GoldenComparator.layer_axes(child, "DOWN").first).to eq(:y)
+    end
+
+    it "lets a child override the inherited direction" do
+      pinned = child.merge("layoutOptions" => { "elk.direction" => "RIGHT" })
+
+      expect(GoldenComparator.layer_axes(pinned, "DOWN").first).to eq(:x)
+    end
+  end
 end
