@@ -444,13 +444,56 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
     # `Dir.rmdir` refuses. Replacing this with a recursive remove_entry
     # turns both of these red.
     it "leaves a substitute's contents alone even when identity matches" do
-      scratch, identity = command.send(:scratch_dir, target)
+      scratch, identity, token = command.send(:scratch_dir, target)
       keeper = File.join(scratch, "keeper.txt")
       File.write(keeper, "keep me")
 
-      command.send(:remove_scratch, scratch, identity)
+      command.send(:remove_scratch, scratch, identity,
+                   [File.join(scratch, "graph-#{token}.dot")])
 
       expect(File.read(keeper)).to eq("keep me")
+    end
+
+    # The names inside the scratch directory carry their own token, so a
+    # directory substituted at this path cannot hold one of them by guessing.
+    # An ordinary "graph.dot" is somebody else's file and stays.
+    # The two below pin the naming rule at its source. The examples that
+    # pass `entries` by hand cannot: they name the token themselves, so they
+    # stay green even with the production name reverted to a fixed one.
+    it "hands the renderer a dot file whose name carries the token" do
+      seen = nil
+      graphviz = instance_double(Elkrb::GraphvizWrapper)
+      allow(Elkrb::GraphvizWrapper).to receive(:new).and_return(graphviz)
+      allow(graphviz).to receive(:render) do |dot_file, image_file, *|
+        seen = [File.basename(dot_file), File.basename(image_file)]
+        File.write(image_file, "<svg/>")
+      end
+
+      command.send(:render_to_image, "digraph {}", target, "svg")
+
+      expect(seen).to all(match(/-[0-9a-f]{12}\./))
+    end
+
+    # A directory whose identity no longer matches is not ours to remove,
+    # however empty it is. The first comparison happened several syscalls
+    # earlier and does not speak for this one.
+    it "refuses to rmdir a directory whose identity no longer matches" do
+      scratch, = command.send(:scratch_dir, target)
+
+      command.send(:remove_empty_directory, scratch, [-1, -1])
+
+      expect(File).to exist(scratch)
+    end
+
+    it "leaves a substitute's own graph.dot alone" do
+      scratch, identity, token = command.send(:scratch_dir, target)
+      victim = File.join(scratch, "graph.dot")
+      File.write(victim, "user data")
+
+      command.send(:remove_scratch, scratch, identity,
+                   [File.join(scratch, "graph-#{token}.dot")])
+
+      expect(File.read(victim)).to eq("user data")
     end
 
     it "leaves a substitute alone on the unknown-identity path too" do
@@ -467,10 +510,12 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
     # missing root and returns with the directory still there. Only one of
     # the two names is ever written when rendering fails partway.
     it "still removes the directory when only one entry was written" do
-      scratch, identity = command.send(:scratch_dir, target)
-      File.write(File.join(scratch, "graph.dot"), "digraph {}")
+      scratch, identity, token = command.send(:scratch_dir, target)
+      dot = File.join(scratch, "graph-#{token}.dot")
+      image = File.join(scratch, "image-#{token}.svg")
+      File.write(dot, "digraph {}")
 
-      command.send(:remove_scratch, scratch, identity)
+      command.send(:remove_scratch, scratch, identity, [dot, image])
 
       expect(File).not_to exist(scratch)
     end

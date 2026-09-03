@@ -160,9 +160,9 @@ module Elkrb
         # The directory lives in the DESTINATION directory, which keeps
         # `File.rename` on one filesystem and therefore atomic.
         FileUtils.mkdir_p(File.dirname(output_file))
-        scratch, identity = scratch_dir(output_file)
-        dot_file = File.join(scratch, "graph.dot")
-        image_file = File.join(scratch, "image.#{format}")
+        scratch, identity, token = scratch_dir(output_file)
+        dot_file = File.join(scratch, "graph-#{token}.dot")
+        image_file = File.join(scratch, "image-#{token}.#{format}")
 
         begin
           write_output(dot_content, dot_file)
@@ -183,7 +183,7 @@ module Elkrb
 
           File.rename(image_file, output_file)
         ensure
-          remove_scratch(scratch, identity)
+          remove_scratch(scratch, identity, [dot_file, image_file])
         end
       end
 
@@ -203,6 +203,13 @@ module Elkrb
         dir = File.dirname(output_file)
 
         loop do
+          # A SECOND token, never used in a path anybody else can see. The
+          # directory name is visible in the parent listing; the names of the
+          # files inside it are not, because the directory is 0700 and ours.
+          # Cleanup unlinks only those two names, so a directory swapped in
+          # at this path would have to already contain a name derived from a
+          # token it cannot observe.
+          token = SecureRandom.hex(6)
           candidate = File.join(dir, ".elkrb-#{SecureRandom.hex(6)}")
           begin
             Dir.mkdir(candidate)
@@ -210,20 +217,20 @@ module Elkrb
             next
           end
 
-          return claim_scratch(candidate)
+          return claim_scratch(candidate, token)
         end
       end
 
       # Everything from here has already created the directory, and the
       # caller's `ensure` has not begun yet -- so this is the only place that
       # can clean it up. A chmod that raised used to leak it.
-      def claim_scratch(candidate)
+      def claim_scratch(candidate, token)
         identity = directory_identity(candidate)
         # `Dir.mkdir`'s mode is masked by the umask, so under `umask 0222`
         # the directory arrives read-only and nothing can be written inside
         # it. Set the mode after creating, not as an argument.
         FileUtils.chmod(0o700, candidate)
-        [candidate, identity]
+        [candidate, identity, token]
       rescue StandardError
         discard_claim(candidate, identity)
         raise
@@ -238,7 +245,7 @@ module Elkrb
       # by path here would take that replacement and everything in it --
       # measured, it did.
       def discard_claim(candidate, identity)
-        return remove_scratch(candidate, identity) if identity
+        return remove_scratch(candidate, identity, []) if identity
 
         begin
           Dir.rmdir(candidate)
@@ -253,33 +260,29 @@ module Elkrb
       end
 
       # Removes the directory ONLY if the path still names the one whose
-      # identity was captured. Checking `File.directory?` alone deletes by
-      # PATH: if the entry is replaced with a different real directory in
-      # between, that one and everything inside it goes instead.
-      def remove_scratch(path, identity)
+      # identity was captured, and removes nothing else at all.
+      #
+      # `entries` are the exact two paths `render_to_image` built, both
+      # carrying a token that never appears anywhere another process can
+      # read: the directory is 0700 and ours, so the names inside it are not
+      # observable from outside. A directory substituted at this path would
+      # have to already contain a file named for a token it cannot see, and
+      # `Dir.rmdir` refuses anything not empty -- so a substitute keeps both
+      # its contents and itself.
+      #
+      # There is no recursive delete here on purpose. Comparing the identity
+      # and then calling `FileUtils.remove_entry` were two separate
+      # operations, and a directory substituted between them was removed with
+      # everything in it. The identity check narrowed that window; only
+      # removing the recursion closes it.
+      def remove_scratch(path, identity, entries = [])
         return if identity.nil?
         return unless File.directory?(path)
         return unless directory_identity(path) == identity
 
-        # NEVER a recursive delete. Comparing the identity and then calling
-        # `FileUtils.remove_entry` are two separate operations, and a
-        # directory substituted between them was removed with its contents --
-        # so the identity check narrowed the window without closing it.
-        #
-        # Instead: unlink the two files this code put there, BY NAME, then
-        # `Dir.rmdir`. Against a substitute those names do not exist, so the
-        # unlinks are no-ops and rmdir refuses a directory that is not empty.
-        # There is no window in which anything unknown can be deleted.
-        SCRATCH_ENTRIES.each do |name|
-          unlink_quietly(File.join(path, name))
-        end
-        remove_empty_directory(path)
+        entries.each { |entry| unlink_quietly(entry) }
+        remove_empty_directory(path, identity)
       end
-
-      # The only names `render_to_image` creates inside the scratch directory.
-      SCRATCH_ENTRIES = ["graph.dot", *IMAGE_FORMATS.map { |f| "image.#{f}" }]
-        .freeze
-      private_constant :SCRATCH_ENTRIES
 
       def unlink_quietly(path)
         File.unlink(path)
@@ -289,7 +292,13 @@ module Elkrb
 
       # Scoped so a missing DESCENDANT cannot be mistaken for a missing root:
       # a method-wide ENOENT rescue swallowed that and left the directory.
-      def remove_empty_directory(path)
+      #
+      # The identity is compared AGAIN here, after the unlinks. The first
+      # comparison was several syscalls ago, and this is the call that
+      # removes a directory.
+      def remove_empty_directory(path, identity)
+        return unless directory_identity(path) == identity
+
         Dir.rmdir(path)
       rescue SystemCallError
         nil
