@@ -376,6 +376,80 @@ RSpec.describe GoldenComparator do
     diffs = described_class.diff_layer_membership(expected, collapsed)
     expect(diffs).not_to be_empty
   end
+  # The five below each pin one comparator rule that nothing exercised: every
+  # one was measured to return no differences at all with the whole suite
+  # still green, which is a comparator that has stopped comparing.
+
+  it "reports a port offset that drifted past the tolerance" do
+    expected = { "id" => "root",
+                 "children" => [{ "id" => "a",
+                                  "ports" => [{ "id" => "p",
+                                                "x" => 0.0, "y" => 0.0 }] }] }
+    actual = Marshal.load(Marshal.dump(expected))
+    actual["children"][0]["ports"][0]["x"] = 5.0
+
+    diffs = described_class.diff_own_numeric(
+      expected["children"][0]["ports"][0],
+      actual["children"][0]["ports"][0], "root/a/ports/p", %w[x y]
+    )
+
+    expect(diffs).to include(a_string_matching(/x: expected 0.0, got 5.0/))
+  end
+
+  # Ids are unique within a level, so two items sharing one at the same level
+  # means the sides cannot be matched up at all -- every id-based comparison
+  # below this point is comparing an arbitrary one of the two.
+  it "reports two items at one level sharing an id" do
+    items = [{ "id" => "n1" }, { "id" => "n1" }, { "id" => "n2" }]
+
+    diffs = described_class.duplicate_id_diffs(items, "root/children")
+
+    expect(diffs).to eq(['root/children has 2 items with id "n1"'])
+  end
+
+  # Positional matching is only sound at equal counts. Without this the
+  # shorter side is compared against the wrong items and the extras vanish.
+  it "reports a differing count of id-less items" do
+    diffs = described_class.diff_unnamed_items([{}, {}], [{}], "root/labels")
+
+    expect(diffs).to eq(["root/labels: expected 2 id-less item(s), got 1"])
+  end
+
+  it "reports a bend point that moved" do
+    expected = [{ "x" => 1.0, "y" => 1.0 }]
+    actual = [{ "x" => 1.0, "y" => 40.0 }]
+
+    diffs = described_class.diff_bend_points(expected, actual, "e1/bends")
+
+    expect(diffs).not_to be_empty
+  end
+
+  it "reports a differing number of bend points" do
+    diffs = described_class.diff_bend_points(
+      [{ "x" => 1.0, "y" => 1.0 }], [], "e1/bends"
+    )
+
+    expect(diffs).to eq(["e1/bends: expected 1 bend points, got 0"])
+  end
+
+  # A dimension is compared to the pixel, not to 1e-6 like a position: elkjs
+  # and elkrb round sizes differently, and a 1px band is the agreed
+  # tolerance. Anything past it is a real disagreement.
+  it "reports a size that differs by more than a pixel" do
+    diffs = described_class.diff_strict_dimension(
+      { "width" => 30.0 }, { "width" => 44.0 }, "root/a", "width"
+    )
+
+    expect(diffs).to eq(["root/a/width: expected 30.0, got 44.0 (>1px)"])
+  end
+
+  it "accepts a size that differs by less than a pixel" do
+    diffs = described_class.diff_strict_dimension(
+      { "width" => 30.0 }, { "width" => 30.5 }, "root/a", "width"
+    )
+
+    expect(diffs).to be_empty
+  end
 end
 
 RSpec.describe "every committed golden self-matches at its assigned tier" do
