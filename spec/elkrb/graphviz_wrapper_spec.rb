@@ -571,17 +571,19 @@ RSpec.describe Elkrb::GraphvizWrapper do
     end
 
     it "uses specified engine" do
-      expect(wrapper).to receive(:system)
-        .with(/neato/)
-        .and_return(true)
+      expect(wrapper).to receive(:system) do |*command|
+        expect(command).to include("-Kneato")
+        true
+      end
 
       wrapper.render("input.dot", "output.png", :png, engine: "neato")
     end
 
     it "uses specified DPI" do
-      expect(wrapper).to receive(:system)
-        .with(/dpi=150/)
-        .and_return(true)
+      expect(wrapper).to receive(:system) do |*command|
+        expect(command).to include("-Gdpi=150")
+        true
+      end
 
       wrapper.render("input.dot", "output.png", :png, dpi: 150)
     end
@@ -589,35 +591,62 @@ RSpec.describe Elkrb::GraphvizWrapper do
     # Every other example in this describe block stubs #system with no
     # argument matcher (or a matcher on one substring), so nothing ever
     # checks the FULL command build_command produces: which flags, in what
-    # order, joined how, or what happens when no dpi: option is given at
-    # all. Mutant found this -- default dpi=96, the -o flag, the join
-    # separator, and the input file argument all mutate freely with every
-    # spec here staying green. Pin the whole string once instead of one
-    # substring at a time.
+    # order, and what happens when no dpi: option is given at all. Mutant
+    # found this -- default dpi=96, the -o flag, and the input file argument
+    # all mutate freely with every spec here staying green. Pin the whole
+    # array once instead of one substring at a time. Command is an array
+    # (not a joined string) because #execute_command calls `system(*cmd)`
+    # without a shell -- see "does not execute a shell metacharacter..."
+    # below for why that matters.
     it "uses the default DPI and builds the exact command line" do
       wrapper.instance_variable_set(:@dot_path, "/usr/bin/dot")
       captured_cmd = nil
-      allow(wrapper).to receive(:system) do |cmd|
-        captured_cmd = cmd
+      allow(wrapper).to receive(:system) do |*command|
+        captured_cmd = command
         true
       end
 
       wrapper.render("input.dot", "output.png", :png)
 
-      expect(captured_cmd).to eq("/usr/bin/dot -Kdot -Tpng -Gdpi=96 -ooutput.png input.dot")
+      expect(captured_cmd).to eq(
+        ["/usr/bin/dot", "-Kdot", "-Tpng", "-Gdpi=96", "-ooutput.png", "input.dot"],
+      )
     end
 
     it "omits the -o flag when no output file is given" do
       wrapper.instance_variable_set(:@dot_path, "/usr/bin/dot")
       captured_cmd = nil
-      allow(wrapper).to receive(:system) do |cmd|
-        captured_cmd = cmd
+      allow(wrapper).to receive(:system) do |*command|
+        captured_cmd = command
         true
       end
 
       wrapper.render("input.dot", nil, :png)
 
-      expect(captured_cmd).to eq("/usr/bin/dot -Kdot -Tpng -Gdpi=96 input.dot")
+      expect(captured_cmd).to eq(
+        ["/usr/bin/dot", "-Kdot", "-Tpng", "-Gdpi=96", "input.dot"],
+      )
+    end
+
+    it "does not execute a shell metacharacter embedded in the output path" do
+      Dir.mktmpdir do |dir|
+        marker = File.join(dir, "PWNED")
+        dot_file = File.join(dir, "in.dot")
+        File.write(dot_file, "digraph{a->b}")
+        malicious_output = File.join(dir, "out.png; touch #{marker}")
+
+        # No system stub here: this runs the real execute_command against a
+        # real (harmless, always-succeeding) command, so a shell would
+        # actually have to be invoked for the metacharacter to fire. The
+        # available?/File.exist? stubs below override the file-level `before`
+        # block's blanket stubs so this test hits the real filesystem too.
+        wrapper.instance_variable_set(:@dot_path, "true")
+        allow(wrapper).to receive(:available?).and_call_original
+        allow(File).to receive(:exist?).and_call_original
+
+        expect(wrapper.render(dot_file, malicious_output, :png)).to be true
+        expect(File.file?(marker)).to be false
+      end
     end
 
     it "raises error when Graphviz is not available" do
