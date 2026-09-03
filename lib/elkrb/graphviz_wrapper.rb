@@ -81,14 +81,14 @@ module Elkrb
       cmd_parts << "-o#{output_file}" if output_file
       cmd_parts << input_file
 
-      cmd_parts.join(" ")
+      cmd_parts
     end
 
     def execute_command(cmd)
-      success = system(cmd)
+      success = system(*cmd)
       unless success
         raise GraphvizNotFoundError,
-              "Graphviz command failed: #{cmd}"
+              "Graphviz command failed: #{cmd.inspect}"
       end
 
       success
