@@ -485,6 +485,21 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
       expect(File).to exist(scratch)
     end
 
+    # A file whose identity was never recorded is never unlinked, so a step
+    # that raises after creating its file would leave the directory
+    # non-empty and leak it. Both records are taken in an `ensure` for that
+    # reason.
+    it "leaves nothing behind when the dot write raises partway" do
+      allow(command).to receive(:write_output) do |_content, path|
+        File.write(path, "partial")
+        raise Elkrb::Error, "died mid-write"
+      end
+
+      expect { command.send(:render_to_image, "digraph {}", target, "svg") }
+        .to raise_error(Elkrb::Error, "died mid-write")
+      expect(Dir.children(File.dirname(target))).to be_empty
+    end
+
     # Same name, different inode. The name is in the `dot` argv and shows up
     # in `ps auxww` -- measured -- so it is not a secret and cannot be the
     # thing that decides a delete.

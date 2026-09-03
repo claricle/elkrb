@@ -173,8 +173,15 @@ module Elkrb
         owned = []
 
         begin
-          write_output(dot_content, dot_file)
-          owned << [dot_file, file_identity(dot_file)]
+          # Both records are taken in an `ensure`. A step that raises PARTWAY
+          # has still created the file, and a file whose identity was never
+          # recorded is never unlinked -- which would leave the directory
+          # non-empty and leak it.
+          begin
+            write_output(dot_content, dot_file)
+          ensure
+            record_owned(owned, dot_file)
+          end
 
           require_relative "../graphviz_wrapper"
           graphviz = Elkrb::GraphvizWrapper.new
@@ -183,10 +190,7 @@ module Elkrb
             graphviz.render(dot_file, image_file, format, engine: "dot",
                                                           dpi: 96)
           ensure
-            # Recorded here rather than after the check below, so a render
-            # that raised partway still has its output owned and cleaned up.
-            ident = file_identity(image_file)
-            owned << [image_file, ident] if ident
+            record_owned(owned, image_file)
           end
 
           # A renderer can exit 0 and write nothing. Renaming that over the
@@ -308,6 +312,11 @@ module Elkrb
         File.unlink(path)
       rescue SystemCallError
         nil
+      end
+
+      def record_owned(owned, path)
+        identity = file_identity(path)
+        owned << [path, identity] if identity
       end
 
       def file_identity(path)
