@@ -75,7 +75,14 @@ RSpec::Matchers.define :preserve_ids_and_endpoints do |input_hash|
     end
   end
 
+  # Edges get the SAME sequence comparison as nodes. Closing only the node
+  # half left the identical hole open here: a one-way lookup sees neither an
+  # edge the layout ADDED nor a reordering. Both reviewers found it, and an
+  # added `phantom` edge passed.
   define_method(:check_edges) do |input_edges, actual_edges|
+    check_id_sequence(input_edges.map { |e| e["id"] },
+                      actual_edges.map(&:id), "edge")
+
     actual_by_id = actual_edges.to_h { |e| [e.id, e] }
     input_edges.each do |input_edge|
       actual_edge = actual_by_id[input_edge["id"]]

@@ -96,6 +96,24 @@ RSpec.describe "preserve_ids_and_endpoints duplicate detection" do
         .not_to preserve_ids_and_endpoints(input)
     end
 
+    # Edges, not just nodes. Both reviewers found this independently: the
+    # node half was closed and the edge half was left a one-way lookup, so an
+    # added edge passed.
+    it "rejects an edge the layout added" do
+      with_edge = { "id" => "root",
+                    "children" => [{ "id" => "a" }, { "id" => "b" }],
+                    "edges" => [{ "id" => "e", "sources" => ["a"],
+                                  "targets" => ["b"] }] }
+      graph = Elkrb::Graph::Graph.new
+      graph.children = %w[a b].map { |id| Elkrb::Graph::Node.new(id: id) }
+      graph.edges = [
+        Elkrb::Graph::Edge.new(id: "e", sources: ["a"], targets: ["b"]),
+        Elkrb::Graph::Edge.new(id: "phantom", sources: ["b"], targets: ["a"]),
+      ]
+
+      expect(graph).not_to preserve_ids_and_endpoints(with_edge)
+    end
+
     it "rejects a reordered sequence" do
       expect(graph_with(%w[b a])).not_to preserve_ids_and_endpoints(input)
     end
