@@ -87,9 +87,9 @@ module Elkrb
       # JSONL, YAMLS -- but NOT YAML, which declares its own block after it.
       # Precedence: a non-empty sources/targets wins, an explicit [] counts as
       # absent, and a NONBLANK sourcePort precedes source (in ELK JSON the port
-      # id IS the endpoint) by declaration order rather than key order. A blank
-      # sourcePort is dropped before its hook runs (transform.rb:251), so
-      # source wins there; targetPort and target behave the same way.
+      # id IS the endpoint) by declaration order rather than key order.
+      # Blank endpoint values are ignored by the hooks below, so a real source
+      # or target wins there; targetPort and target behave the same way.
       #
       # Do NOT "simplify" the pairs into a second `map "source", to: :sources`:
       # a plain rule fires even when its key is absent, clobbering sources with
@@ -144,12 +144,19 @@ module Elkrb
       #
       # @api private
       def merge_legacy_source(model, value)
-        model.sources = Array(value) if Array(model.sources).empty?
+        values = reject_blank_endpoints(value)
+        model.sources = values if Array(model.sources).empty?
       end
 
       # @api private
       def merge_legacy_target(model, value)
-        model.targets = Array(value) if Array(model.targets).empty?
+        values = reject_blank_endpoints(value)
+        model.targets = values if Array(model.targets).empty?
+      end
+
+      # @api private
+      def reject_blank_endpoints(value)
+        Array(value).reject { |endpoint| endpoint.to_s.empty? }
       end
     end
   end
