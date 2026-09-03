@@ -57,6 +57,7 @@ module Elkrb
         #   - :algorithm (String) - Algorithm name (layered, force, etc.)
         #   - Algorithm-specific options
         # @return [Elkrb::Graph::Graph] The input graph with computed positions
+        # @raise [ArgumentError] If graph is neither a Hash nor a Graph
         # @raise [Elkrb::Error] If the specified algorithm is not found
         #
         # @example With specific algorithm
@@ -73,6 +74,8 @@ module Elkrb
         #     hierarchical: true
         #   )
         def layout(graph, options = {})
+          validate_graph!(graph)
+
           # Convert hash to Graph if needed
           graph = convert_to_graph(graph) if graph.is_a?(Hash)
 
@@ -160,6 +163,13 @@ module Elkrb
         end
 
         private
+
+        def validate_graph!(graph)
+          return if graph.is_a?(Hash) || graph.is_a?(Graph::Graph)
+
+          raise ArgumentError,
+                "graph must be a Hash or Elkrb::Graph::Graph, got #{graph.class}"
+        end
 
         def convert_to_graph(hash)
           Graph::Graph.from_hash(hash)
