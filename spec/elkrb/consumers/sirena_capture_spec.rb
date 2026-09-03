@@ -76,6 +76,10 @@ RSpec.describe "sirena consumer capture fixtures" do
       end
       let(:output) { JSON.parse(result.to_json) }
 
+      # Synthetic fixtures intentionally keep their sirena algorithm value as
+      # metadata; LayoutEngine#layout dispatches only from
+      # options[:algorithm]/options["algorithm"] (default "layered"), not
+      # from this field or from graph.layoutOptions.
       it "lays out without raising" do
         expect { result }.not_to raise_error
       end
