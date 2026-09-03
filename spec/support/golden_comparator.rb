@@ -1,6 +1,8 @@
 # spec/support/golden_comparator.rb
 # frozen_string_literal: true
 
+require "json"
+
 module GoldenComparator
   module_function
 

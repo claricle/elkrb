@@ -102,7 +102,14 @@ module GoldenCases
   # lookup failed" contains "simple" -- while rejecting the settled correct
   # message from card 12, "layered does not support hyperedges (edge e1)".
   ERROR_CASE = { name: "hyperedge", tier: :structural,
-                 expect_error: /hyperedge/i,
+                 # Names the REJECTION, not just the subject. `/hyperedge/i`
+                 # alone was still satisfied by "hyperedge accepted; endpoint
+                 # lookup failed" -- the exact inversion this pattern exists
+                 # to catch. Matching the settled wording from card 12,
+                 # "layered does not support hyperedges (edge e1)", is
+                 # deliberately narrow: a reworded message SHOULD fail here
+                 # and be updated on purpose.
+                 expect_error: /does not support hyperedge/i,
                  pending: rc7_hyperedge_misrouted }.freeze
 
   TIER_BY_CASE = COMPARISON_CASES.to_h { |c| [c[:name], c[:tier]] }.freeze

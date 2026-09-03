@@ -587,11 +587,15 @@ RSpec.describe "the committed golden fixture set" do
     # APPEARS. Both of these were measured against that version: the first
     # passed though it says the opposite, the second failed though it is the
     # settled correct message from card 12.
-    it "rejects a message that names the term but states the opposite" do
+    # Drives the CASE TABLE's own pattern, not a literal written here. An
+    # earlier version of this example passed a hand-written /hyperedge/i and
+    # so proved nothing about what the harness actually uses -- and that
+    # pattern named only the SUBJECT, so "hyperedge accepted" satisfied it.
+    it "rejects a message that names the subject but states the opposite" do
       expect(
         GoldenComparator.same_error_condition?(
-          elkjs, "simple edge accepted; endpoint lookup failed",
-          expected: /hyperedge/i
+          elkjs, "hyperedge accepted; endpoint lookup failed",
+          expected: GoldenCases.expected_error_for("hyperedge")
         ),
       ).to be(false)
     end
@@ -600,7 +604,7 @@ RSpec.describe "the committed golden fixture set" do
       expect(
         GoldenComparator.same_error_condition?(
           elkjs, "layered does not support hyperedges (edge e1)",
-          expected: /hyperedge/i
+          expected: GoldenCases.expected_error_for("hyperedge")
         ),
       ).to be(true)
     end
