@@ -144,17 +144,20 @@ module Elkrb
       #
       # @api private
       def merge_legacy_source(model, value)
-        values = reject_blank_endpoints(value)
-        model.sources = values if Array(model.sources).empty?
+        return unless Array(model.sources).empty?
+
+        model.sources = reject_blank_endpoints(value)
       end
 
       # @api private
       def merge_legacy_target(model, value)
-        values = reject_blank_endpoints(value)
-        model.targets = values if Array(model.targets).empty?
+        return unless Array(model.targets).empty?
+
+        model.targets = reject_blank_endpoints(value)
       end
 
-      # @api private
+      private
+
       def reject_blank_endpoints(value)
         Array(value).reject { |endpoint| endpoint.to_s.empty? }
       end
