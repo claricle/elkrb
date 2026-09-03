@@ -438,6 +438,43 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
                                  "someone-elses.txt"))).to eq("keep me")
     end
 
+    # Pins the property directly, without needing the swap to happen at a
+    # particular instant: the cleanup only ever unlinks the two names this
+    # code writes, so anything else in the directory keeps it non-empty and
+    # `Dir.rmdir` refuses. Replacing this with a recursive remove_entry
+    # turns both of these red.
+    it "leaves a substitute's contents alone even when identity matches" do
+      scratch, identity = command.send(:scratch_dir, target)
+      keeper = File.join(scratch, "keeper.txt")
+      File.write(keeper, "keep me")
+
+      command.send(:remove_scratch, scratch, identity)
+
+      expect(File.read(keeper)).to eq("keep me")
+    end
+
+    it "leaves a substitute alone on the unknown-identity path too" do
+      scratch, = command.send(:scratch_dir, target)
+      keeper = File.join(scratch, "keeper.txt")
+      File.write(keeper, "keep me")
+
+      command.send(:discard_claim, scratch, nil)
+
+      expect(File.read(keeper)).to eq("keep me")
+    end
+
+    # A rescue covering the whole method treats a missing DESCENDANT as a
+    # missing root and returns with the directory still there. Only one of
+    # the two names is ever written when rendering fails partway.
+    it "still removes the directory when only one entry was written" do
+      scratch, identity = command.send(:scratch_dir, target)
+      File.write(File.join(scratch, "graph.dot"), "digraph {}")
+
+      command.send(:remove_scratch, scratch, identity)
+
+      expect(File).not_to exist(scratch)
+    end
+
     it "removes the directory it did create" do
       scratch, identity = command.send(:scratch_dir, target)
 

@@ -119,8 +119,11 @@ module Elkrb
         File.write(filename, content)
       end
 
+      IMAGE_FORMATS = %i[png svg pdf ps eps].freeze
+      private_constant :IMAGE_FORMATS
+
       def image_format?(format)
-        %i[png svg pdf ps eps].include?(format)
+        IMAGE_FORMATS.include?(format)
       end
 
       # Renders to a SCRATCH path and moves it into place only once the
@@ -258,8 +261,37 @@ module Elkrb
         return unless File.directory?(path)
         return unless directory_identity(path) == identity
 
-        FileUtils.remove_entry(path)
-      rescue Errno::ENOENT
+        # NEVER a recursive delete. Comparing the identity and then calling
+        # `FileUtils.remove_entry` are two separate operations, and a
+        # directory substituted between them was removed with its contents --
+        # so the identity check narrowed the window without closing it.
+        #
+        # Instead: unlink the two files this code put there, BY NAME, then
+        # `Dir.rmdir`. Against a substitute those names do not exist, so the
+        # unlinks are no-ops and rmdir refuses a directory that is not empty.
+        # There is no window in which anything unknown can be deleted.
+        SCRATCH_ENTRIES.each do |name|
+          unlink_quietly(File.join(path, name))
+        end
+        remove_empty_directory(path)
+      end
+
+      # The only names `render_to_image` creates inside the scratch directory.
+      SCRATCH_ENTRIES = ["graph.dot", *IMAGE_FORMATS.map { |f| "image.#{f}" }]
+        .freeze
+      private_constant :SCRATCH_ENTRIES
+
+      def unlink_quietly(path)
+        File.unlink(path)
+      rescue SystemCallError
+        nil
+      end
+
+      # Scoped so a missing DESCENDANT cannot be mistaken for a missing root:
+      # a method-wide ENOENT rescue swallowed that and left the directory.
+      def remove_empty_directory(path)
+        Dir.rmdir(path)
+      rescue SystemCallError
         nil
       end
 
