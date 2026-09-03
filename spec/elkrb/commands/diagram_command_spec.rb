@@ -449,7 +449,7 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
       File.write(keeper, "keep me")
 
       command.send(:remove_scratch, scratch, identity,
-                   [File.join(scratch, "graph-#{token}.dot")])
+                   [[File.join(scratch, "graph-#{token}.dot"), [0, 0]]])
 
       expect(File.read(keeper)).to eq("keep me")
     end
@@ -485,13 +485,29 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
       expect(File).to exist(scratch)
     end
 
+    # Same name, different inode. The name is in the `dot` argv and shows up
+    # in `ps auxww` -- measured -- so it is not a secret and cannot be the
+    # thing that decides a delete.
+    it "leaves a file that took our name but is not our file" do
+      scratch, identity, token = command.send(:scratch_dir, target)
+      dot = File.join(scratch, "graph-#{token}.dot")
+      File.write(dot, "ours")
+      owned = [[dot, command.send(:file_identity, dot)]]
+      File.unlink(dot)
+      File.write(dot, "theirs")
+
+      command.send(:remove_scratch, scratch, identity, owned)
+
+      expect(File.read(dot)).to eq("theirs")
+    end
+
     it "leaves a substitute's own graph.dot alone" do
       scratch, identity, token = command.send(:scratch_dir, target)
       victim = File.join(scratch, "graph.dot")
       File.write(victim, "user data")
 
       command.send(:remove_scratch, scratch, identity,
-                   [File.join(scratch, "graph-#{token}.dot")])
+                   [[File.join(scratch, "graph-#{token}.dot"), [0, 0]]])
 
       expect(File.read(victim)).to eq("user data")
     end
@@ -514,8 +530,10 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
       dot = File.join(scratch, "graph-#{token}.dot")
       image = File.join(scratch, "image-#{token}.svg")
       File.write(dot, "digraph {}")
+      owned = [[dot, command.send(:file_identity, dot)],
+               [image, command.send(:file_identity, image)]]
 
-      command.send(:remove_scratch, scratch, identity, [dot, image])
+      command.send(:remove_scratch, scratch, identity, owned)
 
       expect(File).not_to exist(scratch)
     end

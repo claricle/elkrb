@@ -164,13 +164,30 @@ module Elkrb
         dot_file = File.join(scratch, "graph-#{token}.dot")
         image_file = File.join(scratch, "image-#{token}.#{format}")
 
+        # Each scratch file is recorded with its identity the moment it comes
+        # into existence, and cleanup unlinks a path only while it still
+        # names that same inode. The token in the name is defence in depth,
+        # not the guarantee: the path is an argument to `dot`, so it shows up
+        # in `ps auxww` to anybody on the machine -- measured. Identity does
+        # not rely on the name staying secret.
+        owned = []
+
         begin
           write_output(dot_content, dot_file)
+          owned << [dot_file, file_identity(dot_file)]
 
           require_relative "../graphviz_wrapper"
           graphviz = Elkrb::GraphvizWrapper.new
 
-          graphviz.render(dot_file, image_file, format, engine: "dot", dpi: 96)
+          begin
+            graphviz.render(dot_file, image_file, format, engine: "dot",
+                                                          dpi: 96)
+          ensure
+            # Recorded here rather than after the check below, so a render
+            # that raised partway still has its output owned and cleaned up.
+            ident = file_identity(image_file)
+            owned << [image_file, ident] if ident
+          end
 
           # A renderer can exit 0 and write nothing. Renaming that over the
           # requested name would destroy the caller's file and leave an
@@ -183,7 +200,7 @@ module Elkrb
 
           File.rename(image_file, output_file)
         ensure
-          remove_scratch(scratch, identity, [dot_file, image_file])
+          remove_scratch(scratch, identity, owned)
         end
       end
 
@@ -262,13 +279,11 @@ module Elkrb
       # Removes the directory ONLY if the path still names the one whose
       # identity was captured, and removes nothing else at all.
       #
-      # `entries` are the exact two paths `render_to_image` built, both
-      # carrying a token that never appears anywhere another process can
-      # read: the directory is 0700 and ours, so the names inside it are not
-      # observable from outside. A directory substituted at this path would
-      # have to already contain a file named for a token it cannot see, and
-      # `Dir.rmdir` refuses anything not empty -- so a substitute keeps both
-      # its contents and itself.
+      # `entries` are `[path, identity]` pairs for the files this render
+      # actually created. Each is unlinked only while the path still names
+      # that inode, so a file that arrived from anywhere else survives, and
+      # `Dir.rmdir` then refuses the directory because it is not empty -- a
+      # substitute keeps both its contents and itself.
       #
       # There is no recursive delete here on purpose. Comparing the identity
       # and then calling `FileUtils.remove_entry` were two separate
@@ -280,12 +295,24 @@ module Elkrb
         return unless File.directory?(path)
         return unless directory_identity(path) == identity
 
-        entries.each { |entry| unlink_quietly(entry) }
+        entries.each { |entry, entry_identity| unlink_owned(entry, entry_identity) }
         remove_empty_directory(path, identity)
       end
 
-      def unlink_quietly(path)
+      # Identity, not name. A file that arrived at this path from anywhere
+      # else has a different inode and is left where it is.
+      def unlink_owned(path, identity)
+        return if identity.nil?
+        return unless file_identity(path) == identity
+
         File.unlink(path)
+      rescue SystemCallError
+        nil
+      end
+
+      def file_identity(path)
+        stat = File.lstat(path)
+        [stat.dev, stat.ino]
       rescue SystemCallError
         nil
       end
