@@ -106,4 +106,90 @@ RSpec.describe "omit_size_for_unsized_input" do
 
     expect(graph).not_to omit_size_for_unsized_input(input)
   end
+
+  # The four below pin rules the matcher had but nothing exercised: a
+  # port's labels, an edge's labels, and both halves of the id-less label
+  # path. Each was measured to survive deletion with the whole suite green.
+  #
+  # Layout does not assign a size to a label it was not given, so as with
+  # the compound exemption above, the actual result is built by hand. That
+  # is the only way to make the rule load-bearing.
+
+  def sized_label(id: nil)
+    Elkrb::Graph::Label.new(id: id, width: 40.0, height: 12.0)
+  end
+
+  it "flags an unsized label on a port that gained a size" do
+    input_hash = {
+      "id" => "root",
+      "children" => [{ "id" => "a", "width" => 10, "height" => 10,
+                       "ports" => [{ "id" => "p",
+                                     "labels" => [{ "id" => "pl" }] }] }],
+      "edges" => [],
+    }
+    port = Elkrb::Graph::Port.new(id: "p")
+    port.labels = [sized_label(id: "pl")]
+    node = Elkrb::Graph::Node.new(id: "a", width: 10.0, height: 10.0)
+    node.ports = [port]
+    result = Elkrb::Graph::Graph.new(id: "root")
+    result.children = [node]
+    result.edges = []
+
+    expect(result).not_to omit_size_for_unsized_input(input_hash)
+  end
+
+  it "flags an unsized label on an edge that gained a size" do
+    input_hash = {
+      "id" => "root",
+      "children" => [{ "id" => "a", "width" => 10, "height" => 10 }],
+      "edges" => [{ "id" => "e", "sources" => ["a"], "targets" => ["a"],
+                    "labels" => [{ "id" => "el" }] }],
+    }
+    edge = Elkrb::Graph::Edge.new(id: "e", sources: ["a"], targets: ["a"])
+    edge.labels = [sized_label(id: "el")]
+    result = Elkrb::Graph::Graph.new(id: "root")
+    result.children = [Elkrb::Graph::Node.new(id: "a", width: 10.0,
+                                              height: 10.0)]
+    result.edges = [edge]
+
+    expect(result).not_to omit_size_for_unsized_input(input_hash)
+  end
+
+  # An id-less label cannot be matched by id, so it is matched by position
+  # within the id-less subset. Nothing covered that subset at all.
+  it "flags an unsized id-less label that gained a size" do
+    input_hash = {
+      "id" => "root",
+      "children" => [{ "id" => "a", "width" => 10, "height" => 10,
+                       "labels" => [{ "text" => "hi" }] }],
+      "edges" => [],
+    }
+    node = Elkrb::Graph::Node.new(id: "a", width: 10.0, height: 10.0)
+    node.labels = [sized_label]
+    result = Elkrb::Graph::Graph.new(id: "root")
+    result.children = [node]
+    result.edges = []
+
+    expect(result).not_to omit_size_for_unsized_input(input_hash)
+  end
+
+  # Positional matching is only sound when both sides have the same number
+  # of id-less labels. With the count check gone, a result that dropped one
+  # gets compared against the wrong label and reports nothing.
+  it "flags a differing number of id-less labels" do
+    input_hash = {
+      "id" => "root",
+      "children" => [{ "id" => "a", "width" => 10, "height" => 10,
+                       "labels" => [{ "text" => "one" },
+                                    { "text" => "two" }] }],
+      "edges" => [],
+    }
+    node = Elkrb::Graph::Node.new(id: "a", width: 10.0, height: 10.0)
+    node.labels = [Elkrb::Graph::Label.new(text: "one")]
+    result = Elkrb::Graph::Graph.new(id: "root")
+    result.children = [node]
+    result.edges = []
+
+    expect(result).not_to omit_size_for_unsized_input(input_hash)
+  end
 end
