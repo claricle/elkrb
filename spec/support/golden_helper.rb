@@ -1,6 +1,7 @@
 # spec/support/golden_helper.rb
 # frozen_string_literal: true
 
+require "json"
 require_relative "golden_comparator"
 
 module GoldenHelper
