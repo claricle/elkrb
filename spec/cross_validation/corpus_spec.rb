@@ -309,17 +309,20 @@ RSpec.describe "Elkrb layout corpus" do
       end
     end
 
-    it "answers for an id whose encoding is invalid, instead of raising" do
+    it "decides a bad-encoding id is not a collision, rather than crashing" do
       # `casecmp?` RAISES on a string with invalid encoding rather than
-      # answering false, so such an id used to surface Ruby's own
-      # "input string invalid" from inside the guard. It is not a collision --
-      # "SUMMARY\xff.json" is a different filename -- so the guard must let it
-      # through, and the point is that it decides rather than blowing up.
+      # answering false, so this used to surface Ruby's own "input string
+      # invalid" from inside the reserved-id guard itself. "SUMMARY\xff" is
+      # not a collision -- it is a different filename from "summary" -- so
+      # the guard must decide that correctly rather than blow up. (A
+      # SEPARATE guard now refuses invalid encoding outright before this
+      # one runs, at CorpusRunner.cases-level -- see corpus_runner_spec.rb
+      # "refuses an id whose encoding is invalid" -- so this pins the
+      # narrower, still-load-bearing property directly against the
+      # reserved-id check, not the full .cases pipeline.)
       broken = "SUMMARY\xff".dup.force_encoding("UTF-8")
-      allow(CorpusRunner).to receive(:imported_cases)
-        .and_return([CorpusRunner::Case.new(id: broken)])
 
-      expect(CorpusRunner.cases.map(&:id)).to include(broken)
+      expect(CorpusRunner.send(:reserved_id?, broken)).to be false
     end
 
     it "accepts ISO-8859-1 bytes that only LOOK like the reserved name" do

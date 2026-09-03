@@ -69,6 +69,16 @@ RSpec.describe CorpusRunner, ".prune_stale_dumps" do
     end
   end
 
+  it "removes a recorded dot-prefixed dump the corpus no longer names" do
+    in_isolated_parent do |parent|
+      dir = previous_dump(parent, "dumps", %w[live .retired])
+
+      prune(dir, ["live"])
+
+      expect(names_in(dir)).to eq(%w[live.json summary.json])
+    end
+  end
+
   it "keeps a file the previous summary did not record" do
     in_isolated_parent do |parent|
       dir = previous_dump(parent, "dumps", %w[live stale],

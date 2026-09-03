@@ -3,51 +3,27 @@
 require "spec_helper"
 require "fileutils"
 require "json"
-require "stringio"
 require "tmpdir"
+require_relative "../support/importer_spec_helpers"
 require_relative "java_elk_test_importer"
 
 RSpec.describe JavaElkTestImporter do
+  include ImporterSpecHelpers
+
   def committed_fixture
     path = File.expand_path("fixtures/java_elk/imported_tests.json", __dir__)
     File.read(path)
   end
 
-  # import_all is a script entry point: it warns on stderr and calls exit
-  # rather than raising. Both streams are captured so the progress chatter
-  # does not reach the suite's own output.
-  def import(importer)
-    stdout = $stdout
-    stderr = $stderr
-    $stdout = StringIO.new
-    $stderr = StringIO.new
-    status = exit_status { importer.import_all }
-    [status, $stderr.string]
-  ensure
-    $stdout = stdout
-    $stderr = stderr
-  end
-
-  # nil when the importer ran to completion instead of exiting.
-  def exit_status
-    yield
-    nil
-  rescue SystemExit => e
-    e.status
-  end
-
   def models_repo(parent, name, files)
     dir = File.join(parent, name)
     FileUtils.mkdir_p(dir)
-    files.each { |rel| File.write(File.join(dir, rel), "") }
+    files.each do |rel|
+      path = File.join(dir, rel)
+      FileUtils.mkdir_p(File.dirname(path))
+      File.write(path, "")
+    end
     dir
-  end
-
-  def written_ids(cwd)
-    path = File.join(cwd, described_class::OUTPUT_PATH, "imported_tests.json")
-    return nil unless File.exist?(path)
-
-    JSON.parse(File.read(path)).map { |kase| kase["id"] }
   end
 
   # save_test_cases rewrites imported_tests.json wholesale, so anything
@@ -104,6 +80,41 @@ RSpec.describe JavaElkTestImporter do
 
       expect(status).to be_nil
       expect(written_ids(tmp)).to eq(["java_elk_mine"])
+    end
+  end
+
+  it "keeps equal basenames in different directories distinct" do
+    Dir.mktmpdir do |tmp|
+      stub_const(
+        "#{described_class}::TEST_MODELS_PATH",
+        models_repo(tmp, "models", %w[a/same.elkt b/same.elkt]),
+      )
+
+      status, = Dir.chdir(tmp) { import(described_class.new) }
+
+      expect(status).to be_nil
+      # contain_exactly, not eq: Dir.glob's enumeration order is not a
+      # language guarantee, and order is not the property under test here.
+      expect(written_ids(tmp))
+        .to contain_exactly("java_elk_a%2Fsame", "java_elk_b%2Fsame")
+    end
+  end
+
+  it "does not collide a slash with a literal percent escape" do
+    Dir.mktmpdir do |tmp|
+      stub_const(
+        "#{described_class}::TEST_MODELS_PATH",
+        models_repo(tmp, "models", %w[a/same.elkt a%2Fsame.elkt]),
+      )
+
+      status, = Dir.chdir(tmp) { import(described_class.new) }
+
+      expect(status).to be_nil
+      ids = written_ids(tmp)
+      expect(ids).to contain_exactly(
+        "java_elk_a%2Fsame",
+        "java_elk_a%252Fsame",
+      )
     end
   end
 end
