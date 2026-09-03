@@ -68,6 +68,8 @@ RSpec.describe Elkrb::GraphvizWrapper do
     end
 
     it "does not execute a shell metacharacter embedded in the output path" do
+      skip "no 'true' binary on PATH" unless system("which true > /dev/null 2>&1")
+
       Dir.mktmpdir do |dir|
         marker = File.join(dir, "PWNED")
         dot_file = File.join(dir, "in.dot")
