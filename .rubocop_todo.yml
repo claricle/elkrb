@@ -156,7 +156,6 @@ Metrics/AbcSize:
     - 'lib/elkrb/layout/label_placer.rb'
     - 'lib/elkrb/layout/port_constraint_processor.rb'
     - 'lib/elkrb/options/registry.rb'
-    - 'lib/elkrb/parsers/elkt_parser.rb'
     - 'lib/elkrb/serializers/dot_serializer.rb'
     - 'lib/elkrb/serializers/elkt_serializer.rb'
     - 'spec/cross_validation/generate_validation_report.rb'
@@ -207,7 +206,6 @@ Metrics/CyclomaticComplexity:
     - 'lib/elkrb/layout/port_constraint_processor.rb'
     - 'lib/elkrb/options/elk_padding.rb'
     - 'lib/elkrb/options/registry.rb'
-    - 'lib/elkrb/parsers/elkt_parser.rb'
     - 'lib/elkrb/serializers/dot_serializer.rb'
     - 'lib/elkrb/serializers/elkt_serializer.rb'
     - 'spec/cross_validation/generate_validation_report.rb'
@@ -262,7 +260,6 @@ Metrics/MethodLength:
     - 'lib/elkrb/layout/layout_engine.rb'
     - 'lib/elkrb/layout/port_constraint_processor.rb'
     - 'lib/elkrb/options/registry.rb'
-    - 'lib/elkrb/parsers/elkt_parser.rb'
     - 'lib/elkrb/serializers/dot_serializer.rb'
     - 'lib/elkrb/serializers/elkt_serializer.rb'
 
@@ -347,14 +344,6 @@ Performance/RedundantMerge:
 Style/ComparableClamp:
   Exclude:
     - 'lib/elkrb/geometry/bezier.rb'
-
-# Offense count: 1
-# This cop supports safe autocorrection (--autocorrect).
-# Configuration parameters: EnforcedStyle, AllowComments.
-# SupportedStyles: empty, nil, both
-Style/EmptyElse:
-  Exclude:
-    - 'lib/elkrb/parsers/elkt_parser.rb'
 
 # Offense count: 7
 # This cop supports safe autocorrection (--autocorrect).
