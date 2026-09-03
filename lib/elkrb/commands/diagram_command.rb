@@ -222,12 +222,26 @@ module Elkrb
         FileUtils.chmod(0o700, candidate)
         [candidate, identity]
       rescue StandardError
-        # Removed by PATH here, deliberately, and only here. `Dir.mkdir` has
-        # just returned, so nothing else can be at this name yet -- and
-        # capturing the identity is itself one of the things that can fail,
-        # which left the directory behind when cleanup depended on it.
-        FileUtils.remove_entry(candidate) if File.directory?(candidate)
+        discard_claim(candidate, identity)
         raise
+      end
+
+      # Cleanup for a directory created moments ago, where the failure may be
+      # the identity capture ITSELF -- so `identity` can be nil here.
+      #
+      # With an identity, compare it. Without one, remove NON-recursively: the
+      # directory we made is still empty, and `Dir.rmdir` refuses one that is
+      # not, so anything a replacement contains survives. A recursive delete
+      # by path here would take that replacement and everything in it --
+      # measured, it did.
+      def discard_claim(candidate, identity)
+        return remove_scratch(candidate, identity) if identity
+
+        begin
+          Dir.rmdir(candidate)
+        rescue SystemCallError
+          nil
+        end
       end
 
       def directory_identity(path)

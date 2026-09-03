@@ -418,20 +418,24 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
     # recursive delete take it and its contents.
     it "leaves a different directory that took the same path" do
       scratch, identity = command.send(:scratch_dir, target)
-      FileUtils.remove_entry(scratch)
-      FileUtils.mkdir_p(scratch)
-      # The substitute must genuinely BE a different directory. Inode reuse
-      # is filesystem-dependent, and if the number were recycled the identity
-      # would match by accident and this example would fail against correct
-      # code. Asserting the premise turns that into a clear skip.
-      skip "inode was reused" if command.send(:directory_identity, scratch) ==
-        identity
-      keeper = File.join(scratch, "someone-elses.txt")
+
+      # The substitute is built at ANOTHER path first and moved into place,
+      # so it is guaranteed to be a different live directory. Recreating at
+      # the same path and then asking `directory_identity` whether the inode
+      # was reused made the production method its own oracle -- review
+      # mutated that method to return [0, 0] and the example SKIPPED rather
+      # than failing, while the broken code would have deleted the keeper.
+      substitute = File.join(temp_dir, "substitute")
+      FileUtils.mkdir_p(substitute)
+      keeper = File.join(substitute, "someone-elses.txt")
       File.write(keeper, "keep me")
+      FileUtils.remove_entry(scratch)
+      File.rename(substitute, scratch)
 
       command.send(:remove_scratch, scratch, identity)
 
-      expect(File.read(keeper)).to eq("keep me")
+      expect(File.read(File.join(scratch,
+                                 "someone-elses.txt"))).to eq("keep me")
     end
 
     it "removes the directory it did create" do
