@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "tmpdir"
 require_relative "../../lib/elkrb/graphviz_wrapper"
 
 RSpec.describe Elkrb::GraphvizWrapper do
@@ -49,19 +50,42 @@ RSpec.describe Elkrb::GraphvizWrapper do
     end
 
     it "uses specified engine" do
-      expect(wrapper).to receive(:system)
-        .with(/neato/)
-        .and_return(true)
+      expect(wrapper).to receive(:system) do |*command|
+        expect(command).to include("-Kneato")
+        true
+      end
 
       wrapper.render("input.dot", "output.png", :png, engine: "neato")
     end
 
     it "uses specified DPI" do
-      expect(wrapper).to receive(:system)
-        .with(/dpi=150/)
-        .and_return(true)
+      expect(wrapper).to receive(:system) do |*command|
+        expect(command).to include("-Gdpi=150")
+        true
+      end
 
       wrapper.render("input.dot", "output.png", :png, dpi: 150)
+    end
+
+    it "does not execute a shell metacharacter embedded in the output path" do
+      Dir.mktmpdir do |dir|
+        marker = File.join(dir, "PWNED")
+        dot_file = File.join(dir, "in.dot")
+        File.write(dot_file, "digraph{a->b}")
+        malicious_output = File.join(dir, "out.png; touch #{marker}")
+
+        # No system stub here: this runs the real execute_command against a
+        # real (harmless, always-succeeding) command, so a shell would
+        # actually have to be invoked for the metacharacter to fire. The
+        # available?/File.exist? stubs below override the file-level `before`
+        # block's blanket stubs so this test hits the real filesystem too.
+        wrapper.instance_variable_set(:@dot_path, "true")
+        allow(wrapper).to receive(:available?).and_call_original
+        allow(File).to receive(:exist?).and_call_original
+
+        expect(wrapper.render(dot_file, malicious_output, :png)).to be true
+        expect(File.file?(marker)).to be false
+      end
     end
 
     it "raises error when Graphviz is not available" do
