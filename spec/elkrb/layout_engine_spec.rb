@@ -140,6 +140,15 @@ RSpec.describe Elkrb::Layout::LayoutEngine do
       end
     end
 
+    context "with invalid graph input" do
+      [nil, 42, "not a graph", [], :root, false, Object.new].each do |bad_input|
+        it "raises ArgumentError for a #{bad_input.class} before dispatching" do
+          expect { described_class.layout(bad_input) }
+            .to raise_error(ArgumentError, /graph must be a Hash or Elkrb::Graph::Graph/)
+        end
+      end
+    end
+
     context "with a node missing width and height" do
       it "treats missing size as 0 and does not raise" do
         graph = { id: "r", children: [{ id: "a" }] }
