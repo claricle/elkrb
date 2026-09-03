@@ -72,6 +72,14 @@ RSpec.describe Elkrb::Graph::Edge do
           expect(edge.public_send(ep[:reader])).to eq(["n1"])
         end
 
+        it "ignores a blank #{ep[:port]} when #{ep[:legacy]} is present" do
+          edge = described_class.from_json(
+            { "id" => "e", ep[:port] => "", ep[:legacy] => "n1" }.to_json,
+          )
+
+          expect(edge.public_send(ep[:reader])).to eq(["n1"])
+        end
+
         it "keeps an explicit empty #{ep[:canonical]} with no legacy key" do
           edge = described_class.from_json(
             { "id" => "e", ep[:canonical] => [] }.to_json,
