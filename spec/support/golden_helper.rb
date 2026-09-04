@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "json"
+require_relative "golden_cases"
 require_relative "golden_comparator"
 
 module GoldenHelper
