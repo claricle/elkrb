@@ -101,11 +101,19 @@ module Elkrb
           end
 
           # CycleBreaker orients every back edge away from the active DFS
-          # path. Keep this guard defensive for direct callers of
-          # LayerAssigner that provide an incomplete reversal set.
+          # path, so through the real pipeline `colors[predecessor_id] ==
+          # :active` never fires -- it stays defensive for a direct caller of
+          # LayerAssigner that supplies an incomplete reversal set. Warn on
+          # that branch specifically (not the plain-revisit one above it):
+          # silently proceeding here is what dropped a diagnostic this class
+          # used to print for exactly this misuse.
           def predecessor_assigned?(predecessor_id, colors)
-            @node_layers.key?(predecessor_id) ||
-              colors[predecessor_id] == :active
+            return true if @node_layers.key?(predecessor_id)
+            return false unless colors[predecessor_id] == :active
+
+            warn "LayerAssigner: cycle through #{predecessor_id} not " \
+                 "fully broken; treating as a root for this branch"
+            true
           end
 
           def assign_layer(node_id, incoming)
