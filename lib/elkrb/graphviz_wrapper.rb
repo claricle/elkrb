@@ -79,7 +79,7 @@ module Elkrb
       ]
 
       cmd_parts << "-o#{output_file}" if output_file
-      cmd_parts << input_file
+      cmd_parts << input_file.to_s
 
       cmd_parts
     end

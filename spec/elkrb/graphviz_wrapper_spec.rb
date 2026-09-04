@@ -2,6 +2,7 @@
 
 require "spec_helper"
 require "tmpdir"
+require "pathname"
 require_relative "../../lib/elkrb/graphviz_wrapper"
 
 RSpec.describe Elkrb::GraphvizWrapper do
@@ -117,6 +118,29 @@ RSpec.describe Elkrb::GraphvizWrapper do
       expect do
         wrapper.render("missing.dot", "output.png", :png)
       end.to raise_error(ArgumentError, /Input file not found/)
+    end
+
+    it "coerces a Pathname input file to a String" do
+      expect(wrapper).to receive(:system) do |*command|
+        expect(command.last).to eq("input.dot")
+        expect(command.last).to be_a(String)
+        true
+      end
+
+      wrapper.render(Pathname.new("input.dot"), "output.png", :png)
+    end
+
+    it "coerces any input file object to a String, not just Pathname" do
+      custom_path = Object.new
+      def custom_path.to_s = "input.dot"
+
+      expect(wrapper).to receive(:system) do |*command|
+        expect(command.last).to eq("input.dot")
+        expect(command.last).to be_a(String)
+        true
+      end
+
+      wrapper.render(custom_path, "output.png", :png)
     end
 
     it "raises error when command fails" do
