@@ -13,6 +13,16 @@ module Elkrb
         # Finds back edges without changing the graph supplied by the caller.
         # The returned ids are consumed by LayerAssigner to orient the edge
         # only while calculating layers.
+        #
+        # `outgoing_edges` still walks every source against every target,
+        # even though LayeredAlgorithm#validate_simple_edge! now rejects any
+        # edge that isn't exactly one source and one target before this class
+        # is ever constructed -- so today that cross product is always over
+        # arrays of length 0 or 1. Kept general on purpose, unlike
+        # LayerAssigner#endpoint_owner_id (singular, .first-based): this
+        # class is unit-tested directly with hyperedge-shaped input
+        # (cycle_breaker_spec.rb), and narrowing it to the current caller's
+        # guarantee would make it correct only through that one caller.
         class CycleBreaker
           def initialize(graph, index)
             @graph = graph
