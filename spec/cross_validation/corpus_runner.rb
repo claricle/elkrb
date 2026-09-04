@@ -4,6 +4,7 @@
 require "json"
 require "fileutils"
 require "timeout"
+require "tmpdir"
 require_relative "../../lib/elkrb"
 
 # Runs every corpus case through Elkrb.layout and records pass/error/timeout.
@@ -67,7 +68,8 @@ class CorpusRunner
         *corpus_fixture_cases,
         *imported_cases,
       ]
-      refuse_duplicate_ids!(all_cases)
+      refuse_invalid_encoding!(all_cases)
+      refuse_duplicate_case_files!(all_cases)
       refuse_reserved_id!(all_cases)
       all_cases
     end
@@ -85,14 +87,13 @@ class CorpusRunner
       # whenever case discovery raised -- the reserved-id guard, say.
       corpus = cases
       claim_output_directory!(outdir)
-      prune_stale_dumps(outdir, corpus)
-      # AFTER claiming and pruning, immediately before the dumps. Writing it
-      # inside the claim was wrong twice: the claim returns early for an
-      # already-marked directory, so the placeholder was never written on a
-      # second run, and pruning could delete an aliased summary right after
-      # it was. Both were reproduced -- a case named ſummary reached the write
-      # and the final summary overwrote its payload.
+      # Before pruning, make the summary path and all case paths safe. A
+      # stale filename can alias a current case on a folding filesystem; if
+      # pruning ran first, it could delete that current output before this
+      # guard had a chance to refuse the run.
       place_summary_marker(outdir)
+      refuse_case_file_aliases!(outdir, corpus)
+      prune_stale_dumps(outdir, corpus)
 
       summary = new_summary
       corpus.each { |kase| dump_case(kase, summary, outdir, timeout) }
@@ -180,29 +181,14 @@ class CorpusRunner
     end
 
     def case_path(outdir, id)
-      text = id.to_s
-      name = "#{text}.json"
+      name = case_filename(id)
       # `File.join`, not `expand_path`: expand_path performs ~ and ~user
       # expansion, so an id beginning with ~ either escaped before the guard
       # ran or raised Ruby's own "user doesn't exist" instead of the message
       # here. Joining keeps the check about what the id literally says.
       path = File.join(outdir, name)
 
-      # An EMPTY id passes both shape checks -- `".json"` has no separator and
-      # its dirname is `outdir` -- and would quietly write `outdir/.json`, a
-      # dotfile no listing shows. It is refused explicitly.
       refuse_summary_alias!(outdir, path, id)
-
-      usable = !text.strip.empty? &&
-        File.basename(name) == name &&
-        File.dirname(path) == outdir
-      unless usable
-        raise ArgumentError,
-              "case id #{id.inspect} does not name a file inside the output " \
-              "directory. Ids become filenames, so they may not be blank, " \
-              "contain a path separator, or traverse upwards."
-      end
-
       path
     end
 
@@ -228,6 +214,27 @@ class CorpusRunner
 
     private
 
+    def case_filename(id)
+      text = id.to_s
+      unless text.valid_encoding?
+        raise ArgumentError,
+              "corpus case id #{id.inspect} does not have a valid encoding"
+      end
+
+      name = "#{text}.json"
+      # An EMPTY id otherwise becomes `.json`, a dotfile no ordinary listing
+      # shows. File.basename asks this runtime what counts as a separator.
+      usable = !text.strip.empty? && File.basename(name) == name
+      unless usable
+        raise ArgumentError,
+              "case id #{id.inspect} does not name a file inside the output " \
+              "directory. Ids become filenames, so they may not be blank, " \
+              "contain a path separator, or traverse upwards."
+      end
+
+      name
+    end
+
     def refuse_source_directory!(outdir)
       return unless source_directory?(outdir)
 
@@ -252,12 +259,124 @@ class CorpusRunner
       end
     end
 
-    def refuse_duplicate_ids!(all_cases)
-      duplicates = all_cases.map(&:id).tally.select { |_, n| n > 1 }.keys
+    # Every id is written into summary.json, so an id with invalid encoding
+    # would fail there instead -- past directory claiming, harder to trace
+    # back to its cause. Refuse it here, at discovery, with a clear reason.
+    def refuse_invalid_encoding!(all_cases)
+      invalid = all_cases.find { |kase| !kase.id.to_s.valid_encoding? }
+      return unless invalid
+
+      raise ArgumentError,
+            "corpus case id #{invalid.id.inspect} does not have a valid " \
+            "encoding"
+    end
+
+    def refuse_duplicate_case_files!(all_cases)
+      duplicates = duplicate_case_files(all_cases)
       return if duplicates.empty?
 
       raise ArgumentError,
-            "duplicate corpus case ids: #{duplicates.join(', ')}"
+            "corpus case ids map to duplicate files: " \
+            "#{duplicate_case_file_details(duplicates).join(', ')}"
+    end
+
+    # Grouping only needs a comparable key, not a real filesystem name, so
+    # this does NOT reuse case_filename's encoding/basename validation --
+    # an id with invalid encoding still groups correctly by raw bytes, and
+    # must not raise here. `.cases`, the only caller, already refuses invalid
+    # encoding earlier via refuse_invalid_encoding!, so this branch is
+    # currently unreachable through it; it stays independently correct in
+    # case a future caller groups cases without that earlier guard.
+    def duplicate_case_files(all_cases)
+      all_cases.group_by { |kase| "#{kase.id}.json" }
+        .select { |_, cases| cases.size > 1 }
+    end
+
+    def duplicate_case_file_details(duplicates)
+      duplicates.map do |name, cases|
+        ids = cases.map { |kase| kase.id.inspect }.join(", ")
+        "#{name} (#{ids})"
+      end
+    end
+
+    # String equality cannot predict case-folding or normalization on the
+    # destination volume. Create the names with O_EXCL in a temporary sibling
+    # directory on that same volume, then also compare any existing paths by
+    # identity so aliases already present in a reused dump cannot be followed.
+    def refuse_case_file_aliases!(outdir, corpus)
+      paths = corpus.map { |kase| [kase.id, case_path(outdir, kase.id)] }
+      refuse_symlinked_case_files!(paths)
+      refuse_existing_case_file_aliases!(paths)
+      refuse_new_case_file_aliases!(outdir, paths)
+    end
+
+    # A symlink's target need not exist yet to be dangerous: this run may be
+    # the one that creates it. File.exist? follows symlinks and reports
+    # false for a DANGLING one, so refuse_existing_case_file_aliases! below
+    # cannot see it, and the O_EXCL probe in a separate temp directory never
+    # touches these real destination paths at all. Found by review: a
+    # dangling alias.json -> real.json planted before a run went unnoticed
+    # by both existing guards, then became live the moment real.json was
+    # written, so the case named "alias" silently overwrote "real"'s file.
+    def refuse_symlinked_case_files!(paths)
+      symlinked = paths.find { |_, path| File.symlink?(path) }
+      return unless symlinked
+
+      id, path = symlinked
+      raise ArgumentError,
+            "corpus case #{id.inspect} would write through a symlink at " \
+            "#{path.inspect} instead of a plain file"
+    end
+
+    def refuse_existing_case_file_aliases!(paths)
+      collision = paths.combination(2).find do |(_, left), (_, right)|
+        File.exist?(left) && File.exist?(right) && File.identical?(left, right)
+      end
+      return unless collision
+
+      (left_id,), (right_id,) = collision
+      raise_case_file_alias!(left_id, right_id)
+    end
+
+    # `created` was a mutable array threaded through a helper purely so the
+    # helper could append to it and read it back on the next collision --
+    # this owns the accumulation itself instead, keyed by the created path
+    # so a collision resolves straight to its prior id.
+    def refuse_new_case_file_aliases!(outdir, paths)
+      Dir.mktmpdir(".elkrb-case-names-", outdir) do |probe|
+        created_by_path = {}
+        paths.each do |id, path|
+          candidate = File.join(probe, File.basename(path))
+          begin
+            File.open(candidate, "wx") { |file| file.write("") }
+            created_by_path[candidate] = id
+          rescue Errno::EEXIST
+            raise_case_file_alias!(prior_id_for(created_by_path, candidate), id)
+          end
+        end
+      end
+    end
+
+    # EEXIST means the filesystem sees `candidate` as already existing, so
+    # something this same loop just created must be File.identical? to it --
+    # a miss here means that invariant broke, which is worth failing loudly
+    # on rather than papering over with a "nil" in the raised message.
+    def prior_id_for(created_by_path, candidate)
+      prior = created_by_path.find do |existing, _|
+        File.identical?(existing, candidate)
+      end
+      unless prior
+        raise "corpus alias probe: EEXIST on #{candidate.inspect} " \
+              "matches no prior candidate"
+      end
+
+      prior.last
+    end
+
+    def raise_case_file_alias!(left_id, right_id)
+      raise ArgumentError,
+            "corpus case ids #{left_id.inspect} and #{right_id.inspect} " \
+            "name the same output file on this filesystem"
     end
 
     # Every case is dumped to "#{id}.json", so a case called "summary"
@@ -362,7 +481,7 @@ class CorpusRunner
     def prune_stale_dumps(outdir, corpus)
       dropped = recorded_case_ids(outdir) - corpus.map(&:id)
       stale = dropped.map { |id| "#{id}.json" }
-      Dir.glob("*.json", base: outdir).each do |name|
+      Dir.glob("*.json", File::FNM_DOTMATCH, base: outdir).each do |name|
         next unless stale.include?(name)
 
         path = File.join(outdir, name)
