@@ -207,6 +207,33 @@ RSpec.describe GoldenComparator do
     expect(diffs).not_to be_empty
   end
 
+  it "threads an inherited direction into a nested compound's own check" do
+    # The nested child "p" pins no elk.direction of its own -- it must
+    # inherit DOWN from the root to group its own children by y. Each node
+    # keeps a UNIQUE x (so an x-based grouping puts each one alone in its
+    # own bucket, hiding any y-only difference instead of exposing it via
+    # cross-axis tie-breaking within a shared bucket): dropping the
+    # `inherited` argument on the recursive diff_layer_membership call
+    # falls back to the RIGHT default, groups by x, and this real y-layer
+    # reversal becomes invisible -- verified directly, see the commit this
+    # comment shipped in.
+    expected = { "id" => "root",
+                 "layoutOptions" => { "elk.direction" => "DOWN" },
+                 "children" => [
+                   { "id" => "p", "children" => [
+                     { "id" => "a", "x" => 0.0, "y" => 0.0 },
+                     { "id" => "b", "x" => 50.0, "y" => 50.0 },
+                     { "id" => "c", "x" => 100.0, "y" => 100.0 },
+                   ] },
+                 ] }
+    actual = Marshal.load(Marshal.dump(expected))
+    actual["children"][0]["children"][0]["y"] = 100.0
+    actual["children"][0]["children"][2]["y"] = 0.0
+
+    diffs = described_class.diff_layer_membership(expected, actual)
+    expect(diffs).not_to be_empty
+  end
+
   it "recurses layer-membership checks into a matched compound child" do
     expected = { "id" => "root", "children" => [
       { "id" => "p", "children" => [{ "id" => "x", "x" => 0.0 },
@@ -402,9 +429,9 @@ RSpec.describe GoldenComparator do
     diffs = described_class.diff_layer_membership(expected, collapsed)
     expect(diffs).not_to be_empty
   end
-  # The five below each pin one comparator rule that nothing exercised: every
-  # one was measured to return no differences at all with the whole suite
-  # still green, which is a comparator that has stopped comparing.
+  # The examples below each pin one comparator rule that nothing exercised:
+  # every one was measured to return no differences at all with the whole
+  # suite still green, which is a comparator that has stopped comparing.
 
   # The mislabeled example this replaced called diff_own_numeric on a port's
   # x/y (a shape production code never uses for ports -- position goes
