@@ -6,7 +6,7 @@ require "fileutils"
 
 # Importer for elkjs test cases
 class ElkjsTestImporter
-  ELKJS_PATH = File.expand_path("~/src/external/elkjs")
+  ELKJS_PATH = File.expand_path(ENV["ELKJS_DIR"] || "~/src/external/elkjs")
   TEST_PATH = "#{ELKJS_PATH}/test/mocha".freeze
   OUTPUT_PATH = "spec/cross_validation/fixtures/elkjs"
 
@@ -15,6 +15,13 @@ class ElkjsTestImporter
   end
 
   def import_all
+    unless Dir.exist?(ELKJS_PATH)
+      warn "elkjs checkout not found at #{ELKJS_PATH} (set ELKJS_DIR to " \
+           "override) - refusing to overwrite " \
+           "#{OUTPUT_PATH}/imported_tests.json"
+      exit 1
+    end
+
     puts "Importing elkjs test cases from #{TEST_PATH}"
 
     # Import test files
@@ -22,6 +29,12 @@ class ElkjsTestImporter
     import_bug_tests
     import_option_tests
     import_layout_tests
+
+    if @test_cases.empty?
+      warn "elkjs import found 0 test cases - refusing to overwrite " \
+           "#{OUTPUT_PATH}/imported_tests.json"
+      exit 1
+    end
 
     # Save test cases
     save_test_cases

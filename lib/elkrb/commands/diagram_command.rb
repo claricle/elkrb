@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "json"
+require "securerandom"
 require "yaml"
 require "fileutils"
 
@@ -28,12 +29,19 @@ module Elkrb
         # Export to format
         content = export_to_format(result, output_format)
 
-        # Write output
-        write_output(content, @options[:output])
-
-        # Render to image if needed
+        # An image format NEVER has DOT written under its own name. The DOT
+        # went to `out.svg` first and was read back for rendering, so any
+        # failure between those two points left the caller an `out.svg` that
+        # began `digraph G{`. Cleanup could not be relied on to undo it
+        # either: `FileUtils.rm_f` swallows an unlink failure, so in a
+        # non-writable directory the misleading file simply stayed.
+        #
+        # Staging under a separate name means the image path is only ever
+        # written by a render that succeeded.
         if image_format?(output_format)
-          render_to_image(@options[:output], output_format)
+          render_to_image(content, @options[:output], output_format)
+        else
+          write_output(content, @options[:output])
         end
 
         # Preview if requested
@@ -47,49 +55,8 @@ module Elkrb
       def load_graph(file)
         raise ArgumentError, "File not found: #{file}" unless File.exist?(file)
 
-        content = File.read(file)
-        ext = File.extname(file).downcase
-
-        case ext
-        when ".json"
-          require_relative "../graph/graph"
-          Elkrb::Graph::Graph.from_json(content)
-        when ".yml", ".yaml"
-          require_relative "../graph/graph"
-          Elkrb::Graph::Graph.from_yaml(content)
-        when ".elkt"
-          require_relative "../parsers/elkt_parser"
-          Elkrb::Parsers::ElktParser.parse(content)
-        else
-          detect_and_parse(content)
-        end
-      end
-
-      def detect_and_parse(content)
-        require_relative "../graph/graph"
-
-        # Try JSON first
-        begin
-          return Elkrb::Graph::Graph.from_json(content)
-        rescue JSON::ParserError
-          # Not JSON
-        end
-
-        # Try YAML
-        begin
-          return Elkrb::Graph::Graph.from_yaml(content)
-        rescue Psych::SyntaxError
-          # Not YAML
-        end
-
-        # Try ELKT
-        begin
-          require_relative "../parsers/elkt_parser"
-          Elkrb::Parsers::ElktParser.parse(content)
-        rescue StandardError
-          raise ArgumentError,
-                "Unable to parse input file. Supported formats: JSON, YAML, ELKT"
-        end
+        require_relative "../format_sniffer"
+        Elkrb::FormatSniffer.read(File.read(file), File.extname(file).downcase)
       end
 
       def build_layout_options
@@ -152,43 +119,232 @@ module Elkrb
         File.write(filename, content)
       end
 
+      IMAGE_FORMATS = %i[png svg pdf ps eps].freeze
+      private_constant :IMAGE_FORMATS
+
       def image_format?(format)
-        %i[png svg pdf ps eps].include?(format)
+        IMAGE_FORMATS.include?(format)
       end
 
-      def render_to_image(output_file, format)
-        # For image formats, we need to render DOT -> image
-        # First write DOT to temp file
-        dot_file = "#{output_file}.tmp.dot"
+      # Renders to a SCRATCH path and moves it into place only once the
+      # render has succeeded. Nothing else makes the guarantee hold.
+      #
+      # Rendering straight to `output_file` and cleaning up afterwards does
+      # not work, and both attempts at it failed differently. Deleting
+      # unconditionally destroyed a file the caller already had there.
+      # Deleting only when we had created it left a TRUNCATED image behind --
+      # measured, a 1024-byte file beginning `<?xml` from a render that died
+      # partway, sitting under the caller's own filename. `File.rename` is
+      # atomic within a filesystem, so the image path either holds the
+      # previous content or a complete render, never a fragment.
 
-        # Re-read the content we just wrote (which is DOT)
-        dot_content = File.read(output_file)
+      def render_to_image(dot_content, output_file, format)
+        # A scratch DIRECTORY, created exclusively, holding both scratch
+        # files under plain names.
+        #
+        # Scratch names must be unguessable: with a fixed name like
+        # `out.svg.tmp.svg`, a symlink sitting there and pointing back at
+        # `out.svg` sent a failed render's partial output onto the caller's
+        # file, and two concurrent renders of the same target collided the
+        # same way.
+        #
+        # A directory rather than pre-created FILES, because reserving each
+        # file by creating it first broke four other things: it defeated a
+        # renderer that exits 0 without writing (the untouched empty file got
+        # renamed over the caller's content), it left the file mode at the
+        # umask so a later write could not open it, and it added enough to
+        # the basename to hit ENAMETOOLONG on a long but legal filename.
+        # `Dir.mkdir` is atomic and refuses an existing path, so it reserves
+        # the name without any of that.
+        #
+        # The directory lives in the DESTINATION directory, which keeps
+        # `File.rename` on one filesystem and therefore atomic.
+        FileUtils.mkdir_p(File.dirname(output_file))
+        scratch, identity, token = scratch_dir(output_file)
+        dot_file = File.join(scratch, "graph-#{token}.dot")
+        image_file = File.join(scratch, "image-#{token}.#{format}")
 
-        # If output is not already DOT, we need to export it
-        if File.extname(output_file).downcase == ".dot"
-          dot_file = output_file
-        else
-          File.write(dot_file, dot_content)
-        end
+        # Each scratch file is recorded with its identity the moment it comes
+        # into existence, and cleanup unlinks a path only while it still
+        # names that same inode. The token in the name is defence in depth,
+        # not the guarantee: the path is an argument to `dot`, so it shows up
+        # in `ps auxww` to anybody on the machine -- measured. Identity does
+        # not rely on the name staying secret.
+        owned = []
 
-        # Render using Graphviz
         begin
+          # Both records are taken in an `ensure`. A step that raises PARTWAY
+          # has still created the file, and a file whose identity was never
+          # recorded is never unlinked -- which would leave the directory
+          # non-empty and leak it.
+          begin
+            write_output(dot_content, dot_file)
+          ensure
+            record_owned(owned, dot_file)
+          end
+
           require_relative "../graphviz_wrapper"
           graphviz = Elkrb::GraphvizWrapper.new
 
-          unless graphviz.available?
-            warn "⚠ Graphviz not found. Cannot render to #{format}."
-            warn "  Install Graphviz or export to DOT format instead."
-            return
+          begin
+            graphviz.render(dot_file, image_file, format, engine: "dot",
+                                                          dpi: 96)
+          ensure
+            record_owned(owned, image_file)
           end
 
-          graphviz.render(dot_file, output_file, format, engine: "dot", dpi: 96)
+          # A renderer can exit 0 and write nothing. Renaming that over the
+          # requested name would destroy the caller's file and leave an
+          # invalid image wearing its name -- measured with a stub renderer
+          # that simply succeeds.
+          unless File.file?(image_file) && File.size(image_file).positive?
+            raise Elkrb::Error,
+                  "#{graphviz_name} reported success but produced no image"
+          end
 
-          # Clean up temp DOT file if we created one
-          File.delete(dot_file) if dot_file != output_file && File.exist?(dot_file)
-        rescue Elkrb::GraphvizWrapper::GraphvizNotFoundError => e
-          warn "⚠ #{e.message}"
+          File.rename(image_file, output_file)
+        ensure
+          remove_scratch(scratch, identity, owned)
         end
+      end
+
+      def graphviz_name
+        "graphviz"
+      end
+
+      # A directory in the destination that did not exist a moment ago and
+      # that this process created. `Dir.mkdir` raises EEXIST rather than
+      # opening what is already there, which is what makes that true.
+      #
+      # Returns the path AND the directory's identity -- device and inode --
+      # because a path is not a durable handle. Cleanup compares that identity
+      # before removing anything, so if the entry is swapped for a different
+      # real directory in between, that directory is left alone.
+      def scratch_dir(output_file)
+        dir = File.dirname(output_file)
+
+        loop do
+          # A second token, for the names of the files INSIDE the directory.
+          # This is defence in depth and nothing rests on it: the dot file
+          # path is an argument to `dot`, so `ps auxww` shows it to anybody
+          # on the machine -- measured. What actually decides a delete is the
+          # recorded inode, not the name.
+          token = SecureRandom.hex(6)
+          candidate = File.join(dir, ".elkrb-#{SecureRandom.hex(6)}")
+          begin
+            Dir.mkdir(candidate)
+          rescue Errno::EEXIST
+            next
+          end
+
+          return claim_scratch(candidate, token)
+        end
+      end
+
+      # Everything from here has already created the directory, and the
+      # caller's `ensure` has not begun yet -- so this is the only place that
+      # can clean it up. A chmod that raised used to leak it.
+      def claim_scratch(candidate, token)
+        identity = directory_identity(candidate)
+        # `Dir.mkdir`'s mode is masked by the umask, so under `umask 0222`
+        # the directory arrives read-only and nothing can be written inside
+        # it. Set the mode after creating, not as an argument.
+        FileUtils.chmod(0o700, candidate)
+        [candidate, identity, token]
+      rescue StandardError
+        discard_claim(candidate, identity)
+        raise
+      end
+
+      # Cleanup for a directory created moments ago, where the failure may be
+      # the identity capture ITSELF -- so `identity` can be nil here.
+      #
+      # With an identity, compare it. Without one, remove NON-recursively: the
+      # directory we made is still empty, and `Dir.rmdir` refuses one that is
+      # not, so anything a replacement contains survives. A recursive delete
+      # by path here would take that replacement and everything in it --
+      # measured, it did.
+      def discard_claim(candidate, identity)
+        return remove_scratch(candidate, identity, []) if identity
+
+        begin
+          Dir.rmdir(candidate)
+        rescue SystemCallError
+          nil
+        end
+      end
+
+      def directory_identity(path)
+        stat = File.lstat(path)
+        [stat.dev, stat.ino]
+      end
+
+      # Removes the directory ONLY if the path still names the one whose
+      # identity was captured, and removes no FILE it did not create.
+      #
+      # `entries` are `[path, identity]` pairs for the files this render
+      # actually created. Each is unlinked only while the path still names
+      # that inode, so a file that arrived from anywhere else survives, and
+      # `Dir.rmdir` then refuses the directory because it is not empty -- a
+      # substitute keeps both its contents and itself.
+      #
+      # There is no recursive delete here on purpose. Comparing the identity
+      # and then calling `FileUtils.remove_entry` were two separate
+      # operations, and a directory substituted between them was removed with
+      # everything in it. The identity check narrowed that window; only
+      # removing the recursion closes it.
+      def remove_scratch(path, identity, entries = [])
+        return if identity.nil?
+        return unless File.directory?(path)
+        return unless directory_identity(path) == identity
+
+        entries.each { |entry, entry_identity| unlink_owned(entry, entry_identity) }
+        remove_empty_directory(path, identity)
+      end
+
+      # Identity, not name. A file that arrived at this path from anywhere
+      # else has a different inode and is left where it is.
+      def unlink_owned(path, identity)
+        return if identity.nil?
+        return unless file_identity(path) == identity
+
+        File.unlink(path)
+      rescue SystemCallError
+        nil
+      end
+
+      def record_owned(owned, path)
+        identity = file_identity(path)
+        owned << [path, identity] if identity
+      end
+
+      def file_identity(path)
+        stat = File.lstat(path)
+        [stat.dev, stat.ino]
+      rescue SystemCallError
+        nil
+      end
+
+      # Scoped so a missing DESCENDANT cannot be mistaken for a missing root:
+      # a method-wide ENOENT rescue swallowed that and left the directory.
+      #
+      # The identity is compared AGAIN here, after the unlinks. The first
+      # comparison was several syscalls ago, and this is the call that
+      # removes a directory.
+      #
+      # This narrows the window; it does not close it. A directory arriving
+      # between this comparison and `Dir.rmdir` is removed -- measured. It is
+      # irreducible in Ruby, which offers no rmdir relative to a directory
+      # descriptor (`Dir` has no rmdir/unlink instance method, and
+      # `File.unlink` refuses a file descriptor -- both measured). The bound
+      # on it is that `Dir.rmdir` refuses a directory that is not empty, so
+      # what can be lost this way is an EMPTY directory and never a file.
+      def remove_empty_directory(path, identity)
+        return unless directory_identity(path) == identity
+
+        Dir.rmdir(path)
+      rescue SystemCallError
+        nil
       end
 
       def preview(file)

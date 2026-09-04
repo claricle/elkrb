@@ -7,6 +7,9 @@ module Elkrb
     class ElktParser
       class ParseError < StandardError; end
 
+      BYTE_ORDER_MARK = "\xEF\xBB\xBF".b.freeze
+      private_constant :BYTE_ORDER_MARK
+
       def self.parse(input)
         new(input).parse
       end
@@ -33,6 +36,8 @@ module Elkrb
       private
 
       def preprocess(input)
+        input = strip_byte_order_mark(input)
+
         # Remove block comments
         input = input.gsub(%r{/\*.*?\*/}m, "")
 
@@ -43,6 +48,18 @@ module Elkrb
 
         # Remove empty lines
         lines.reject(&:empty?)
+      end
+
+      # A leading mark stays glued to the first declaration, which then
+      # matches no rule and is dropped without any error. It comes off by
+      # byte because String#delete_prefix compares CHARACTERS: a UTF-8 mark
+      # literal raises Encoding::CompatibilityError against content in
+      # another encoding holding any non-ASCII byte, and File.read tags
+      # content with whatever Encoding.default_external the locale set.
+      def strip_byte_order_mark(input)
+        return input unless input.byteslice(0, 3).b == BYTE_ORDER_MARK
+
+        input.byteslice(3..)
       end
 
       def parse_lines(lines)

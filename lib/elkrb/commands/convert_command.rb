@@ -35,52 +35,8 @@ module Elkrb
       def load_any_format(file)
         raise ArgumentError, "File not found: #{file}" unless File.exist?(file)
 
-        content = File.read(file)
-        ext = File.extname(file).downcase
-
-        case ext
-        when ".json"
-          require_relative "../graph/graph"
-          Elkrb::Graph::Graph.from_json(content)
-        when ".yml", ".yaml"
-          require_relative "../graph/graph"
-          Elkrb::Graph::Graph.from_yaml(content)
-        when ".elkt"
-          require_relative "../parsers/elkt_parser"
-          Elkrb::Parsers::ElktParser.parse(content)
-        when ".dot", ".gv"
-          raise ArgumentError,
-                "DOT format input not yet supported. Use JSON, YAML, or ELKT."
-        else
-          detect_and_parse(content)
-        end
-      end
-
-      def detect_and_parse(content)
-        require_relative "../graph/graph"
-
-        # Try JSON first
-        begin
-          return Elkrb::Graph::Graph.from_json(content)
-        rescue JSON::ParserError
-          # Not JSON
-        end
-
-        # Try YAML
-        begin
-          return Elkrb::Graph::Graph.from_yaml(content)
-        rescue Psych::SyntaxError
-          # Not YAML
-        end
-
-        # Try ELKT
-        begin
-          require_relative "../parsers/elkt_parser"
-          Elkrb::Parsers::ElktParser.parse(content)
-        rescue StandardError
-          raise ArgumentError,
-                "Unable to parse input file. Supported formats: JSON, YAML, ELKT"
-        end
+        require_relative "../format_sniffer"
+        Elkrb::FormatSniffer.read(File.read(file), File.extname(file).downcase)
       end
 
       def detect_format(filename)

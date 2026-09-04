@@ -62,3 +62,5 @@ Gemfile.lock
 *.swp
 *.tmp
 *.log
+
+/spec/cross_validation/validation_report.json

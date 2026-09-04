@@ -59,14 +59,19 @@ namespace :validate do
 
   desc "Run cross-validation tests"
   task :run do
-    ruby "spec/cross_validation/validation_runner.rb"
+    ruby "spec/cross_validation/corpus_runner.rb", "tmp/corpus"
   end
 
   desc "Import and run cross-validation (full pipeline)"
   task all: %i[import_all run]
+end
 
-  desc "Generate validation report (AsciiDoc)"
-  task :report do
-    ruby "spec/cross_validation/generate_validation_report.rb"
+namespace :corpus do
+  desc "Dump canonical layout JSON for every corpus case to DIR"
+  task :dump, [:dir] do |_t, args|
+    dir = args[:dir]
+    abort "usage: rake 'corpus:dump[dir]'" if dir.nil? || dir.empty?
+
+    ruby "spec/cross_validation/corpus_runner.rb", dir
   end
 end

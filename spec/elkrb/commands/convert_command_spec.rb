@@ -152,5 +152,44 @@ RSpec.describe Elkrb::Commands::ConvertCommand do
         command.run
       end.to raise_error(ArgumentError, /Cannot detect output format/)
     end
+
+    it "loads a YAML file with no recognized extension" do
+      input_file = File.join(temp_dir, "graph.noext")
+      output_file = File.join(temp_dir, "output.json")
+      File.write(input_file, graph_data.to_yaml)
+
+      command = described_class.new(input_file, { output: output_file })
+      command.run
+
+      result = JSON.parse(File.read(output_file))
+      expect(result["children"].map { |n| n["id"] }).to eq(%w[n1 n2])
+    end
+
+    it "raises for unparsable content with no recognized extension" do
+      input_file = File.join(temp_dir, "graph.noext")
+      output_file = File.join(temp_dir, "output.json")
+      File.write(input_file, "this is not a graph, just garbage!!! {{{ ]]] ###")
+
+      command = described_class.new(input_file, { output: output_file })
+
+      expect { command.run }.to raise_error(ArgumentError,
+                                            /Unable to parse input file/)
+    end
+
+    it "preserves options-only content from a file that declares ELKT" do
+      input_file = File.join(temp_dir, "options_only.elkt")
+      output_file = File.join(temp_dir, "output.json")
+      # The extension names the format, so a graph carrying only options is
+      # legitimate content. Proves the .elkt path doesn't just avoid
+      # raising -- the option itself survives the parse. The same bytes with
+      # no extension are rejected: nothing there declares them to be ELKT.
+      File.write(input_file, "algorithm: layered\n")
+
+      command = described_class.new(input_file, { output: output_file })
+      command.run
+
+      result = JSON.parse(File.read(output_file))
+      expect(result["layoutOptions"]).to eq({ "elk.algorithm" => "layered" })
+    end
   end
 end

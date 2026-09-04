@@ -31,6 +31,17 @@ RSpec.describe Elkrb::Parsers::ElktParser do
       expect(result[:children][2][:id]).to eq("n3")
     end
 
+    it "parses the first declaration of a BOM-prefixed file" do
+      # Without stripping the mark, the BOM stays glued to "node a", which
+      # then matches no rule and is dropped silently, leaving "edge a -> b"
+      # pointing at a node that never got created.
+      input = "\uFEFFnode a\nnode b\nedge a -> b\n"
+
+      result = described_class.parse(input)
+
+      expect(result[:children].map { |node| node[:id] }).to eq(%w[a b])
+    end
+
     it "parses simple edges" do
       input = <<~ELKT
         node n1
