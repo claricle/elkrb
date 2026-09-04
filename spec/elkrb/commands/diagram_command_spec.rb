@@ -4,6 +4,7 @@ require "spec_helper"
 require "tempfile"
 require "fileutils"
 require_relative "../../../lib/elkrb/commands/diagram_command"
+require_relative "../../../lib/elkrb/graphviz_wrapper"
 
 RSpec.describe Elkrb::Commands::DiagramCommand do
   let(:temp_dir) { Dir.mktmpdir }
