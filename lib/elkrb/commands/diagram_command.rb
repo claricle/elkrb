@@ -224,12 +224,11 @@ module Elkrb
         dir = File.dirname(output_file)
 
         loop do
-          # A SECOND token, never used in a path anybody else can see. The
-          # directory name is visible in the parent listing; the names of the
-          # files inside it are not, because the directory is 0700 and ours.
-          # Cleanup unlinks only those two names, so a directory swapped in
-          # at this path would have to already contain a name derived from a
-          # token it cannot observe.
+          # A second token, for the names of the files INSIDE the directory.
+          # This is defence in depth and nothing rests on it: the dot file
+          # path is an argument to `dot`, so `ps auxww` shows it to anybody
+          # on the machine -- measured. What actually decides a delete is the
+          # recorded inode, not the name.
           token = SecureRandom.hex(6)
           candidate = File.join(dir, ".elkrb-#{SecureRandom.hex(6)}")
           begin
@@ -281,7 +280,7 @@ module Elkrb
       end
 
       # Removes the directory ONLY if the path still names the one whose
-      # identity was captured, and removes nothing else at all.
+      # identity was captured, and removes no FILE it did not create.
       #
       # `entries` are `[path, identity]` pairs for the files this render
       # actually created. Each is unlinked only while the path still names
@@ -332,6 +331,14 @@ module Elkrb
       # The identity is compared AGAIN here, after the unlinks. The first
       # comparison was several syscalls ago, and this is the call that
       # removes a directory.
+      #
+      # This narrows the window; it does not close it. A directory arriving
+      # between this comparison and `Dir.rmdir` is removed -- measured. It is
+      # irreducible in Ruby, which offers no rmdir relative to a directory
+      # descriptor (`Dir` has no rmdir/unlink instance method, and
+      # `File.unlink` refuses a file descriptor -- both measured). The bound
+      # on it is that `Dir.rmdir` refuses a directory that is not empty, so
+      # what can be lost this way is an EMPTY directory and never a file.
       def remove_empty_directory(path, identity)
         return unless directory_identity(path) == identity
 

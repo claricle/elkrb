@@ -460,7 +460,10 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
     # The two below pin the naming rule at its source. The examples that
     # pass `entries` by hand cannot: they name the token themselves, so they
     # stay green even with the production name reverted to a fixed one.
-    it "hands the renderer a dot file whose name carries the token" do
+    # Matching a hex SHAPE is not enough -- a hardcoded
+    # `graph-000000000000.dot` satisfies that. Two properties are needed:
+    # both names in one render share a token, and two renders do not.
+    def render_capturing_names
       seen = nil
       graphviz = instance_double(Elkrb::GraphvizWrapper)
       allow(Elkrb::GraphvizWrapper).to receive(:new).and_return(graphviz)
@@ -468,10 +471,22 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
         seen = [File.basename(dot_file), File.basename(image_file)]
         File.write(image_file, "<svg/>")
       end
-
       command.send(:render_to_image, "digraph {}", target, "svg")
+      seen
+    end
 
-      expect(seen).to all(match(/-[0-9a-f]{12}\./))
+    it "names both scratch files for one token per render" do
+      dot, image = render_capturing_names
+
+      token = dot[/\Agraph-([0-9a-f]{12})\.dot\z/, 1]
+      expect(image).to eq("image-#{token}.svg")
+    end
+
+    it "picks a different token for the next render" do
+      first = render_capturing_names.first
+      second = render_capturing_names.first
+
+      expect(second).not_to eq(first)
     end
 
     # A directory whose identity no longer matches is not ours to remove,
