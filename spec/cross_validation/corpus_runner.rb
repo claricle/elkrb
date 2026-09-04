@@ -305,8 +305,27 @@ class CorpusRunner
     # identity so aliases already present in a reused dump cannot be followed.
     def refuse_case_file_aliases!(outdir, corpus)
       paths = corpus.map { |kase| [kase.id, case_path(outdir, kase.id)] }
+      refuse_symlinked_case_files!(paths)
       refuse_existing_case_file_aliases!(paths)
       refuse_new_case_file_aliases!(outdir, paths)
+    end
+
+    # A symlink's target need not exist yet to be dangerous: this run may be
+    # the one that creates it. File.exist? follows symlinks and reports
+    # false for a DANGLING one, so refuse_existing_case_file_aliases! below
+    # cannot see it, and the O_EXCL probe in a separate temp directory never
+    # touches these real destination paths at all. Found by review: a
+    # dangling alias.json -> real.json planted before a run went unnoticed
+    # by both existing guards, then became live the moment real.json was
+    # written, so the case named "alias" silently overwrote "real"'s file.
+    def refuse_symlinked_case_files!(paths)
+      symlinked = paths.find { |_, path| File.symlink?(path) }
+      return unless symlinked
+
+      id, path = symlinked
+      raise ArgumentError,
+            "corpus case #{id.inspect} would write through a symlink at " \
+            "#{path.inspect} instead of a plain file"
     end
 
     def refuse_existing_case_file_aliases!(paths)

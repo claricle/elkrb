@@ -52,6 +52,10 @@ RSpec.describe CorpusRunner do
     end
 
     it "refuses two current ids that alias the same existing file" do
+      # Both a live symlink (this test) and a dangling one (the test right
+      # below) are refused by refuse_symlinked_case_files!, unconditionally
+      # and before either would reach the identity-based checks -- so both
+      # raise the same symlink message now, not the aliasing one.
       Dir.mktmpdir do |dir|
         corpus_of("real")
         CorpusRunner.run(dir)
@@ -59,7 +63,28 @@ RSpec.describe CorpusRunner do
         corpus_of("real", "alias")
 
         expect { CorpusRunner.run(dir) }
-          .to raise_error(ArgumentError, /name the same output file/)
+          .to raise_error(ArgumentError, /would write through a symlink/)
+      end
+    end
+
+    it "refuses a symlink whose target does not exist yet, before this " \
+       "run can make it live" do
+      # File.exist? follows symlinks and reports false for a DANGLING one --
+      # so planting alias.json -> real.json BEFORE real.json exists slips
+      # past the existing-alias identity check above (both File.exist? calls
+      # are false at check time). The O_EXCL probe never touches this path
+      # either; it only tests fresh names in a separate temp directory.
+      # Confirmed by reverting this guard: the run completed with no error
+      # and alias.json ended up File.identical? to real.json, i.e. the case
+      # named "alias" silently overwrote "real"'s file.
+      Dir.mktmpdir do |dir|
+        corpus_of("other")
+        CorpusRunner.run(dir)
+        File.symlink("real.json", File.join(dir, "alias.json"))
+        corpus_of("other", "real", "alias")
+
+        expect { CorpusRunner.run(dir) }
+          .to raise_error(ArgumentError, /would write through a symlink/)
       end
     end
 
