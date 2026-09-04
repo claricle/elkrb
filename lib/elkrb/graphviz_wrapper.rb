@@ -180,7 +180,7 @@ module Elkrb
       success = system(*argv)
       return success if success
 
-      raise GraphvizNotFoundError, "Graphviz command failed: #{argv.join(' ')}"
+      raise GraphvizNotFoundError, "Graphviz command failed: #{argv.inspect}"
     end
 
     def validate_format!(format)
