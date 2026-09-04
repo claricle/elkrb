@@ -619,5 +619,27 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
         .to raise_error(Errno::EACCES)
       expect(Dir.children(temp_dir).grep(/\A\.elkrb-/)).to be_empty
     end
+
+    # An unguessable name still has a nonzero collision chance, and nothing
+    # else in this file ever forces Dir.mkdir to actually collide. A rescue
+    # that raised instead of retrying, or that returned the colliding name,
+    # would pass every other example here.
+    it "retries under a new name when the chosen one already exists" do
+      # forces temp_dir's own Dir.mktmpdir (uses Dir.mkdir) before stubbing
+      target
+      real_mkdir = Dir.method(:mkdir)
+      attempts = 0
+      allow(Dir).to receive(:mkdir) do |path|
+        attempts += 1
+        raise Errno::EEXIST, path if attempts == 1
+
+        real_mkdir.call(path)
+      end
+
+      scratch, = command.send(:scratch_dir, target)
+
+      expect(attempts).to eq(2)
+      expect(Dir.exist?(scratch)).to be(true)
+    end
   end
 end
