@@ -363,6 +363,32 @@ RSpec.describe GoldenComparator do
     expect(diffs).to be_empty
   end
 
+  it "flags a section point that lands off the port's border" do
+    # Same shapes as the border check above, but the start point sits at
+    # the port's CENTRE (30+3=33) instead of its border (30+6=36) -- the
+    # exact wrong-anchor mistake that check exists to catch.
+    node = { "id" => "a", "x" => 0.0, "y" => 0.0, "width" => 30.0,
+             "height" => 30.0,
+             "ports" => [{ "id" => "p1", "x" => 30.0, "y" => 12.0,
+                           "width" => 6.0, "height" => 6.0 }] }
+    other = { "id" => "b", "x" => 68.0, "y" => 0.0, "width" => 30.0,
+              "height" => 30.0 }
+    expected = { "id" => "root", "children" => [node, other],
+                 "edges" => [{ "id" => "e1", "sources" => ["p1"],
+                               "targets" => ["b"] }] }
+    actual = Marshal.load(Marshal.dump(expected))
+    actual["edges"][0]["sections"] = [{
+      "id" => "s0",
+      "startPoint" => { "x" => 33.0, "y" => 15.0 },
+      "endPoint" => { "x" => 68.0, "y" => 15.0 },
+      "incomingShape" => "p1",
+      "outgoingShape" => "b",
+    }]
+
+    diffs = described_class.diff_structural(expected, actual)
+    expect(diffs.join).to include("not on border of")
+  end
+
   it "does not miss a layered-graph check when elk.algorithm is the " \
      "fully-qualified id" do
     options = { "elk.algorithm" => "org.eclipse.elk.layered" }
@@ -449,6 +475,60 @@ RSpec.describe GoldenComparator do
     )
 
     expect(diffs).to be_empty
+  end
+
+  # duplicate_id_diffs itself is a pure function with its own unit spec, but
+  # every place structural comparison actually WIRES it in can be deleted
+  # with the whole golden suite staying green -- these pin each call site,
+  # not the helper.
+  it "flags a graph size that differs by more than a pixel, not just NaN" do
+    expected = { "id" => "root", "width" => 100.0, "height" => 100.0 }
+    actual = { "id" => "root", "width" => 130.0, "height" => 100.0 }
+
+    diffs = described_class.diff_structural(expected, actual)
+
+    expect(diffs.join).to include("graph/width")
+  end
+
+  it "flags two children sharing an id" do
+    expected = { "id" => "root",
+                 "children" => [{ "id" => "a", "x" => 0.0, "y" => 0.0 },
+                                { "id" => "a", "x" => 0.0, "y" => 0.0 }] }
+    actual = Marshal.load(Marshal.dump(expected))
+
+    diffs = described_class.diff_structural(expected, actual)
+
+    expect(diffs.join).to include("children: actual has 2 items with id")
+  end
+
+  it "flags two edges sharing an id" do
+    graph = { "id" => "root",
+              "children" => [{ "id" => "a", "x" => 0.0, "y" => 0.0 },
+                             { "id" => "b", "x" => 0.0, "y" => 50.0 }],
+              "edges" => [
+                { "id" => "e1", "sources" => ["a"], "targets" => ["b"] },
+                { "id" => "e1", "sources" => ["a"], "targets" => ["b"] },
+              ] }
+
+    diffs = described_class.diff_structural(graph, graph)
+
+    expect(diffs.join).to include("edges: actual has 2 items with id")
+  end
+
+  it "flags a port id colliding with a node id in the combined namespace" do
+    # The comparator merges node and port ids into one lookup because an
+    # edge endpoint can name either -- so a port sharing its id with a
+    # sibling node collapses the same way two nodes sharing an id would.
+    graph = { "id" => "root",
+              "children" => [
+                { "id" => "a", "x" => 0.0, "y" => 0.0,
+                  "ports" => [{ "id" => "b", "x" => 0.0, "y" => 0.0 }] },
+                { "id" => "b", "x" => 0.0, "y" => 50.0 },
+              ] }
+
+    diffs = described_class.diff_structural(graph, graph)
+
+    expect(diffs.join).to include("(nodes+ports): actual has 2 items with id")
   end
 end
 
