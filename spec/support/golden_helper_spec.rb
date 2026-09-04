@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "tmpdir"
+require "fileutils"
 require_relative "golden_cases"
 require_relative "golden_helper"
 
