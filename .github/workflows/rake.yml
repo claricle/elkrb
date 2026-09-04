@@ -5,11 +5,47 @@ permissions:
 
 on:
   push:
-    branches: [ master, main ]
+    # v2 is the integration branch, so it needs push coverage of its own;
+    # pull_request below is unfiltered and covers PRs into it.
+    branches: [ master, main, v2 ]
     tags: [ v* ]
   pull_request:
   workflow_dispatch:
 
 jobs:
   rake:
-    uses: metanorma/ci/.github/workflows/generic-rake.yml@main
+    name: rake (ruby ${{ matrix.ruby }})
+    runs-on: ubuntu-latest
+    # The reusable workflow this replaces (metanorma/ci/generic-rake.yml)
+    # cancelled a superseded in-flight run on the same ref; keep that so a
+    # rapid push sequence doesn't queue redundant matrix runs.
+    concurrency:
+      group: ${{ github.workflow }}-${{ matrix.ruby }}-${{ github.head_ref || github.ref_name }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        # The gemspec floor is 3.2.0.
+        ruby: [ "3.2", "3.3", "3.4" ]
+        experimental: [ false ]
+        include:
+          # The gemspec sets no upper bound, so 4.0 is admitted, but this gem
+          # has never been run on it. Non-blocking until a green run exists.
+          - ruby: "4.0"
+            experimental: true
+    continue-on-error: ${{ matrix.experimental }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          # No Gemfile.lock is committed. setup-ruby handles that: it runs
+          # `bundle lock` first, which re-resolves to the latest compatible
+          # gems and yields the cache key, then installs. The generated
+          # lockfile stays in the runner's working tree and is gitignored, so
+          # the gem's "resolve fresh every run" rule holds. This also does the
+          # install, hence no `bundle install` step.
+          bundler-cache: true
+      # The whole default task rather than its two commands separately, so CI
+      # and a local `bundle exec rake` cannot drift apart.
+      - run: bundle exec rake
