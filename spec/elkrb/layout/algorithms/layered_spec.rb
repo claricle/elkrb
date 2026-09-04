@@ -51,7 +51,6 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
       }
 
       result = Elkrb.layout(graph, algorithm: "layered")
-
       a = result.children.find { |n| n.id == "a" }
       b = result.children.find { |n| n.id == "b" }
 
@@ -59,117 +58,162 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
       expect(b.y).to be > a.y
     end
 
-    it "does not stack-overflow on a hyperedge mixing a self-referencing " \
-       "target and a real child" do
-      # Regression guard: CycleBreaker's dfs used `edge.targets.first`
-      # unconditionally; for this edge the first target ("ap") resolves
-      # back to the source node "a" itself, so dfs treated a's own
-      # in-progress DFS frame as a cycle and reversed the edge,
-      # corrupting it before LayerAssigner ever saw it ->
-      # SystemStackError there. Confirmed against that version, and
-      # confirmed this exact graph does NOT raise on origin/v2
-      # (port-id blindness there means the edge is invisible to
-      # cycle-breaking entirely, so no crash) -- a genuine regression
-      # this diff must not ship.
+    it "preserves cyclic edge directions and assigns three layers" do
       graph = {
         id: "r",
-        children: [
-          {
-            id: "a", width: 10, height: 10,
-            ports: [{ id: "ap" }]
-          },
-          { id: "b", width: 10, height: 10 },
-        ],
+        children: %w[a b c].map { |id| { id: id, width: 10, height: 10 } },
         edges: [
-          { id: "e", sources: ["a"], targets: %w[ap b] },
-        ],
-      }
-
-      expect { Elkrb.layout(graph, algorithm: "layered") }
-        .not_to raise_error
-    end
-
-    it "does not stack-overflow on a hyperedge whose first source is " \
-       "the target itself" do
-      # Regression guard: [a, b] -> a is genuine incoming traffic to
-      # "a" from "b" (incoming_to? correctly counts it), but
-      # calculate_layer picked edge.sources.first unconditionally --
-      # for this edge that is "a" itself, so it recursed on "a" again
-      # before memoizing it. first_other_source below picks the other
-      # one instead.
-      graph = {
-        id: "r",
-        children: [
-          { id: "a", width: 10, height: 10 },
-          { id: "b", width: 10, height: 10 },
-        ],
-        edges: [
-          { id: "e", sources: %w[a b], targets: ["a"] },
+          { id: "ab", sources: ["a"], targets: ["b"] },
+          { id: "bc", sources: ["b"], targets: ["c"] },
+          { id: "ca", sources: ["c"], targets: ["a"] },
         ],
       }
 
       result = Elkrb.layout(graph, algorithm: "layered")
 
+      expect(result.edges.map { |edge| [edge.sources, edge.targets] }).to eq(
+        [
+          [["a"], ["b"]],
+          [["b"], ["c"]],
+          [["c"], ["a"]],
+        ],
+      )
+      expect(result.edges).to all(
+        satisfy { |edge| !edge.properties&.key?("reversed") },
+      )
+      # Exact layer ORDER, not just a distinct count: a CycleBreaker that
+      # detects nothing still produces 3 distinct layers here, because
+      # LayerAssigner's own re-entrancy guard independently breaks the
+      # 3-node cycle during layer computation -- just into the wrong
+      # order (b, c, a instead of a, b, c). Only the order proves
+      # CycleBreaker, not the fallback, resolved it.
       a = result.children.find { |n| n.id == "a" }
       b = result.children.find { |n| n.id == "b" }
-
-      # Pins S7's interim behaviour; S8 replaces with hyperedge raise.
-      expect(a.y).to be > b.y
+      c = result.children.find { |n| n.id == "c" }
+      expect(a.y).to be < b.y
+      expect(b.y).to be < c.y
     end
 
-    it "does not stack-overflow on a cycle closing through a hyperedge's " \
-       "later target" do
-      # Regression guard: a's hyperedge fans out to three ports, and
-      # the real a -> c -> a cycle closes through the LAST of them (c's
-      # edge back to a's port). A dfs that stopped at the first
-      # non-self target never visited c during cycle-breaking, left the
-      # cycle unbroken, and calculate_layer then recursed between a and
-      # c forever. Confirmed against that version, and confirmed this
-      # exact graph does NOT raise on origin/v2 (port ids are invisible
-      # there, so the cycle is invisible too -- a genuine regression
-      # this diff must not ship). dfs now walks every resolved target,
-      # so CycleBreaker reverses the closing edge itself.
+    it "raises for a hyperedge with multiple sources" do
+      graph = {
+        id: "r",
+        children: %w[a b c].map { |id| { id: id, width: 10, height: 10 } },
+        edges: [{ id: "e", sources: %w[a b], targets: ["c"] }],
+      }
+
+      expect { Elkrb.layout(graph, algorithm: "layered") }
+        .to raise_error(
+          Elkrb::UnsupportedConfigurationException,
+          "layered does not support hyperedges (edge e)",
+        )
+    end
+
+    it "raises for a hyperedge with multiple targets" do
+      graph = {
+        id: "r",
+        children: %w[a b c].map { |id| { id: id, width: 10, height: 10 } },
+        edges: [{ id: "e", sources: ["a"], targets: %w[b c] }],
+      }
+
+      expect { Elkrb.layout(graph, algorithm: "layered") }
+        .to raise_error(Elkrb::UnsupportedConfigurationException)
+    end
+
+    it "raises for a duplicate edge id" do
+      graph = {
+        id: "r",
+        children: %w[a b c].map { |id| { id: id, width: 10, height: 10 } },
+        edges: [
+          { id: "e", sources: ["a"], targets: ["b"] },
+          { id: "e", sources: ["b"], targets: ["c"] },
+        ],
+      }
+
+      expect { Elkrb.layout(graph, algorithm: "layered") }
+        .to raise_error(Elkrb::ValidationError, /duplicate edge id: e/)
+    end
+
+    it "raises for missing or empty endpoints before the empty fast path" do
+      graph = {
+        id: "r",
+        children: [],
+        edges: [{ id: "missing", sources: [], targets: ["a"] }],
+      }
+
+      expect { Elkrb.layout(graph, algorithm: "layered") }
+        .to raise_error(Elkrb::UnsupportedConfigurationException)
+    end
+
+    it "raises for nil endpoint ids" do
+      graph = {
+        id: "r",
+        children: [{ id: "a", width: 10, height: 10 }],
+        edges: [{ id: "missing", sources: [nil], targets: ["a"] }],
+      }
+
+      expect { Elkrb.layout(graph, algorithm: "layered") }
+        .to raise_error(
+          Elkrb::UnsupportedConfigurationException,
+          "layered requires non-empty edge endpoints (edge missing)",
+        )
+    end
+
+    it "raises for nil target endpoint ids" do
+      graph = {
+        id: "r",
+        children: [{ id: "a", width: 10, height: 10 }],
+        edges: [{ id: "missing", sources: ["a"], targets: [nil] }],
+      }
+
+      expect { Elkrb.layout(graph, algorithm: "layered") }
+        .to raise_error(
+          Elkrb::UnsupportedConfigurationException,
+          "layered requires non-empty edge endpoints (edge missing)",
+        )
+    end
+
+    it "validates edges when children are omitted" do
+      graph = {
+        id: "r",
+        edges: [{ id: "e", sources: ["a"], targets: ["b", "c"] }],
+      }
+
+      expect { Elkrb.layout(graph, algorithm: "layered") }
+        .to raise_error(Elkrb::UnsupportedConfigurationException)
+    end
+
+    it "validates a leaf child's edges in the parent index" do
       graph = {
         id: "r",
         children: [
           {
-            id: "a", width: 10, height: 10,
-            ports: [{ id: "ap" }]
-          },
-          {
-            id: "b", width: 10, height: 10,
-            ports: [{ id: "bp" }]
-          },
-          {
-            id: "c", width: 10, height: 10,
-            ports: [{ id: "cp" }]
+            id: "leaf", width: 10, height: 10,
+            edges: [{ id: "nested", sources: ["a"], targets: ["b", "c"] }]
           },
         ],
-        edges: [
-          { id: "e1", sources: ["a"], targets: %w[ap bp cp] },
-          { id: "e2", sources: ["cp"], targets: ["ap"] },
-        ],
+        edges: [],
       }
 
       expect { Elkrb.layout(graph, algorithm: "layered") }
-        .not_to raise_error
+        .to raise_error(Elkrb::UnsupportedConfigurationException)
     end
 
-    it "breaks a cycle that closes through a hyperedge's later target" do
-      # Following only the first non-self target left this cycle for
-      # LayerAssigner's re-entrancy guard to absorb, which warns on
-      # stderr. Walking every target breaks it in phase 1 instead.
+    it "lays out a 5000-node chain without overflowing the stack" do
+      count = 5000
       graph = {
         id: "r",
-        children: %w[a b c].map { |i| { id: i, width: 10, height: 10 } },
-        edges: [
-          { id: "e1", sources: ["a"], targets: %w[b c] },
-          { id: "e2", sources: ["c"], targets: ["a"] },
-        ],
+        children: (0...count).map do |i|
+          { id: "n#{i}", width: 1, height: 1 }
+        end,
+        edges: (0...(count - 1)).map do |i|
+          { id: "e#{i}", sources: ["n#{i}"], targets: ["n#{i + 1}"] }
+        end,
       }
 
-      expect { Elkrb.layout(graph, algorithm: "layered") }
-        .not_to output.to_stderr
+      result = Elkrb.layout(graph, algorithm: "layered")
+
+      expect(result.children.size).to eq(count)
+      expect(result.children.map(&:y).uniq.size).to eq(count)
     end
 
     it "leaves a nested edge whose ids alias this level's ports alone" do
