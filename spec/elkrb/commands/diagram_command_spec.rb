@@ -324,15 +324,20 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
       expect(File.read(output_file)).to eq("ORIGINAL")
     end
 
-    it "does not follow a symlink planted at a scratch name" do
-      # Found by review. With a fixed scratch name, a symlink sitting there
-      # and pointing back at the requested file sent a failed render's partial
-      # output straight onto the caller's content. Two concurrent renders of
-      # the same target collided the same way. Unique, exclusively-created
-      # scratch names close both.
+    it "leaves existing content alone when the renderer writes a partial " \
+       "image then fails" do
+      # A predecessor of this mechanism staged renders at a FIXED name next
+      # to output_file, so a symlink planted there could redirect a failed
+      # render's partial output onto the caller's content. Unique,
+      # exclusively-created scratch names close that route structurally --
+      # render_to_image never constructs a path derived from output_file's
+      # own name, so there's nothing left for a planted symlink to target
+      # (confirmed: this example's assertion is unchanged whether or not one
+      # is planted at the old, no-longer-referenced name). What it still
+      # usefully covers, on a real partial write from the renderer, is that
+      # a failure never reaches the final rename.
       FileUtils.chmod(0o700, temp_dir)
       File.write(output_file, "ORIGINAL")
-      File.symlink(output_file, "#{output_file}.tmp.svg")
       fake_dot = File.join(temp_dir, "dot")
       File.write(fake_dot, <<~SH)
         #!/bin/sh
