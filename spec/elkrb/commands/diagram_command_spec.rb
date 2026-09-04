@@ -490,6 +490,22 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
       expect(second).not_to eq(first)
     end
 
+    # Every other example in this file exercises a failure or cleanup path.
+    # None asserts the actual point of render_to_image: a successful render
+    # ends up AT the requested path with the rendered content. Deleting the
+    # final File.rename(image_file, output_file) left all of them green.
+    it "moves the rendered image to the requested output path" do
+      graphviz = instance_double(Elkrb::GraphvizWrapper)
+      allow(Elkrb::GraphvizWrapper).to receive(:new).and_return(graphviz)
+      allow(graphviz).to receive(:render) do |_dot_file, image_file, *|
+        File.write(image_file, "<svg>rendered</svg>")
+      end
+
+      command.send(:render_to_image, "digraph {}", target, "svg")
+
+      expect(File.read(target)).to eq("<svg>rendered</svg>")
+    end
+
     # A directory whose identity no longer matches is not ours to remove,
     # however empty it is. The first comparison happened several syscalls
     # earlier and does not speak for this one.
