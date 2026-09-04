@@ -81,7 +81,17 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
       expect(result.edges).to all(
         satisfy { |edge| !edge.properties&.key?("reversed") },
       )
-      expect(result.children.map(&:y).uniq.size).to eq(3)
+      # Exact layer ORDER, not just a distinct count: a CycleBreaker that
+      # detects nothing still produces 3 distinct layers here, because
+      # LayerAssigner's own re-entrancy guard independently breaks the
+      # 3-node cycle during layer computation -- just into the wrong
+      # order (b, c, a instead of a, b, c). Only the order proves
+      # CycleBreaker, not the fallback, resolved it.
+      a = result.children.find { |n| n.id == "a" }
+      b = result.children.find { |n| n.id == "b" }
+      c = result.children.find { |n| n.id == "c" }
+      expect(a.y).to be < b.y
+      expect(b.y).to be < c.y
     end
 
     it "raises for a hyperedge with multiple sources" do
