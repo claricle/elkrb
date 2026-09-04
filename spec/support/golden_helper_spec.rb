@@ -452,7 +452,7 @@ RSpec.describe GoldenComparator do
       { "offset" => 0.0 }, { "offset" => 2.0e-6 }, "root/a/ports/p"
     )
 
-    expect(diffs).to include(a_string_matching(%r{root/a/ports/p/offset:}))
+    expect(diffs).to eq(["root/a/ports/p/offset: expected 0.0, got 2.0e-06"])
   end
 
   # Ids are unique within a level, so two items sharing one at the same level
@@ -514,13 +514,13 @@ RSpec.describe GoldenComparator do
   # every place structural comparison actually WIRES it in can be deleted
   # with the whole golden suite staying green -- these pin each call site,
   # not the helper.
-  it "flags a graph size that differs by more than a pixel, not just NaN" do
+  it "flags an ordinary graph size mismatch, not just a non-finite one" do
     expected = { "id" => "root", "width" => 100.0, "height" => 100.0 }
     actual = { "id" => "root", "width" => 130.0, "height" => 100.0 }
 
     diffs = described_class.diff_structural(expected, actual)
 
-    expect(diffs.join).to include("graph/width")
+    expect(diffs).to include("graph/width: expected 100.0, got 130.0 (>1px)")
   end
 
   it "flags two children sharing an id" do
