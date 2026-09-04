@@ -406,20 +406,26 @@ RSpec.describe GoldenComparator do
   # one was measured to return no differences at all with the whole suite
   # still green, which is a comparator that has stopped comparing.
 
-  it "reports a port offset that drifted past the tolerance" do
-    expected = { "id" => "root",
-                 "children" => [{ "id" => "a",
-                                  "ports" => [{ "id" => "p",
-                                                "x" => 0.0, "y" => 0.0 }] }] }
-    actual = Marshal.load(Marshal.dump(expected))
-    actual["children"][0]["ports"][0]["x"] = 5.0
-
-    diffs = described_class.diff_own_numeric(
-      expected["children"][0]["ports"][0],
-      actual["children"][0]["ports"][0], "root/a/ports/p", %w[x y]
+  # The mislabeled example this replaced called diff_own_numeric on a port's
+  # x/y (a shape production code never uses for ports -- position goes
+  # through diff_exact_position instead) and never touched diff_port_offset
+  # at all. "flags a shifted port offset" above only proves a drift far
+  # outside tolerance (0.0 -> 5.0) is rejected; neither example pinned the
+  # 1e-6 tolerance BOUNDARY itself, which is the actual rule this method has.
+  it "accepts a port offset drift within the 1e-6 tolerance" do
+    diffs = described_class.diff_port_offset(
+      { "offset" => 0.0 }, { "offset" => 5.0e-7 }, "root/a/ports/p"
     )
 
-    expect(diffs).to include(a_string_matching(/x: expected 0.0, got 5.0/))
+    expect(diffs).to be_empty
+  end
+
+  it "reports a port offset that drifted past the 1e-6 tolerance" do
+    diffs = described_class.diff_port_offset(
+      { "offset" => 0.0 }, { "offset" => 2.0e-6 }, "root/a/ports/p"
+    )
+
+    expect(diffs).to include(a_string_matching(%r{root/a/ports/p/offset:}))
   end
 
   # Ids are unique within a level, so two items sharing one at the same level
