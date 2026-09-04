@@ -1,0 +1,49 @@
+{
+  "id": "root",
+  "children": [
+    {
+      "id": "a",
+      "x": 12,
+      "y": 27,
+      "width": 0,
+      "height": 0
+    },
+    {
+      "id": "b",
+      "width": 30,
+      "height": 30,
+      "x": 32,
+      "y": 12
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "sources": [
+        "a"
+      ],
+      "targets": [
+        "b"
+      ],
+      "sections": [
+        {
+          "id": "e1_s0",
+          "startPoint": {
+            "x": 12,
+            "y": 27
+          },
+          "endPoint": {
+            "x": 32,
+            "y": 27
+          },
+          "incomingShape": "a",
+          "outgoingShape": "b"
+        }
+      ]
+    }
+  ],
+  "x": 0,
+  "y": 0,
+  "width": 74,
+  "height": 54
+}

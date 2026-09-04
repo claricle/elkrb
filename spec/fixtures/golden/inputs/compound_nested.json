@@ -1,0 +1,56 @@
+{
+  "options": {},
+  "graph": {
+    "id": "root",
+    "children": [
+      {
+        "id": "p",
+        "children": [
+          {
+            "id": "m",
+            "children": [
+              {
+                "id": "d1",
+                "width": 30,
+                "height": 30
+              },
+              {
+                "id": "d2",
+                "width": 30,
+                "height": 30
+              }
+            ],
+            "edges": [
+              {
+                "id": "ie1",
+                "sources": [
+                  "d1"
+                ],
+                "targets": [
+                  "d2"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "nn",
+            "width": 30,
+            "height": 30
+          }
+        ],
+        "edges": [
+          {
+            "id": "ie2",
+            "sources": [
+              "m"
+            ],
+            "targets": [
+              "nn"
+            ]
+          }
+        ]
+      }
+    ],
+    "edges": []
+  }
+}

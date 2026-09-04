@@ -1,0 +1,7 @@
+{
+  "name": "elkrb-golden-generator",
+  "private": true,
+  "dependencies": {
+    "elkjs": "0.11.0"
+  }
+}

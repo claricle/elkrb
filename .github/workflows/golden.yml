@@ -1,0 +1,40 @@
+name: golden
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [master, main, v2]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  golden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+          # No Gemfile.lock is committed in this gem (ground rule: resolves
+          # fresh every run) -- bundler-cache keys off a committed lockfile,
+          # so it would either no-op or cache a lockfile this repo doesn't
+          # want persisted across runs.
+          bundler-cache: false
+      - run: bundle install
+      # spec/cross_validation has no specs on this branch (S0b, which owns
+      # it, isn't merged yet) and every golden_spec.rb example is
+      # `pending` today -- neither can currently fail from a real
+      # comparator bug, so this job would prove nothing. spec/support is
+      # where the comparator's OWN specs live (golden_helper_spec.rb, the
+      # invariant specs) -- they are NOT pending and DO fail on a real
+      # regression, which is what makes this job worth running. Re-add
+      # spec/cross_validation once S0b merges and it has specs of its own.
+      #
+      # Node-free on purpose, so `rake golden:check` (which regenerates
+      # against a real elkjs) stays local. The half of that guard needing
+      # no Node runs here: spec/support's "the committed golden fixture
+      # set" fails if an input arrives without its expected file, its
+      # MANIFEST.json entry, or its golden_spec example.
+      - run: bundle exec rspec spec/elkrb/golden_spec.rb spec/support
