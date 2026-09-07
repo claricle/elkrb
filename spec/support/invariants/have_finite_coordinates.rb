@@ -56,9 +56,15 @@ RSpec::Matchers.define :have_finite_coordinates do
     end
   end
 
+  # A label's id is optional in ELK, so two id-less labels on the same
+  # owner both produced the path ".../labels/" and a failure naming two
+  # offenders could not say which was which. The index is always present
+  # and always unique per owner, so it leads; the id follows when there
+  # is one, because that is what a reader recognises.
   define_method(:check_labels) do |owner, path|
-    (owner.labels || []).each do |label|
-      label_path = "#{path}/labels/#{label.id}"
+    (owner.labels || []).each_with_index do |label, i|
+      label_path = "#{path}/labels[#{i}]"
+      label_path = "#{label_path}/#{label.id}" if label.id
       check_position(label, label_path)
       check_dimensions(label, label_path)
     end
