@@ -191,7 +191,9 @@ RSpec.describe Elkrb::GraphvizWrapper do
 
     # `system(*argv)` falls back to SHELL semantics when argv has exactly one
     # element, so the whole no-shell guarantee rests on this argv being long.
-    # Keep this: it is the only assertion on the command's overall shape.
+    # Keep this: it is the only assertion on the command's EXACT shape, and it
+    # becomes the only check on argument ORDER the moment the coercion
+    # examples below stop pinning positions.
     it "passes dot a multi-element argv, never a single command string" do
       expect(wrapper).to receive(:system) do |*command|
         expect(command).to eq(
@@ -260,9 +262,9 @@ RSpec.describe Elkrb::GraphvizWrapper do
         File.write(dot_file, "digraph{a->b}")
         malicious_output = File.join(dir, "out.png; touch #{marker}")
 
-        # The stand-in for `dot` is WRITTEN here rather than looked up, so this
-        # example can never silently skip: a skipped example is invisible in a
-        # green run, and this is the only one that proves the fix.
+        # The stand-in for `dot` is WRITTEN here rather than looked up. A
+        # lookup would skip on any host missing the binary it looked for, and
+        # a skipped example is invisible in a green run.
         no_op = File.join(dir, "no-op")
         File.write(no_op, "#!#{RbConfig.ruby}\nexit 0\n")
         File.chmod(0o755, no_op)
