@@ -149,7 +149,7 @@ module Elkrb
         value_set_for(:layout_options)
         attr = self.class.attributes(lutaml_register)[:layout_options]
         cast = attr.cast_value(DeepStringifyKeys.call(value), lutaml_register)
-        instance_variable_set(:@layout_options, LayoutOptions.wrap(cast))
+        instance_variable_set(:@layout_options, NormalizeOptionKeys.call(cast))
       end
 
       # Serialization hooks for the legacy endpoint keys above. Public because
