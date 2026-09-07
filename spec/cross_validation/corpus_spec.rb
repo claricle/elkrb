@@ -334,6 +334,29 @@ RSpec.describe "Elkrb layout corpus" do
       expect(CorpusRunner.cases.map(&:id)).to include(latin1)
     end
 
+    # The ids differ, the file names do not: 1 and "1" both dump to
+    # 1.json. One dump overwrote the other while summary.json still
+    # counted two cases, so a case vanished from the snapshot every later
+    # slice diffs against.
+    it "refuses two ids that become the same dump file name" do
+      pair = [CorpusRunner::Case.new(id: 1), CorpusRunner::Case.new(id: "1")]
+      allow(CorpusRunner).to receive(:imported_cases).and_return(pair)
+
+      expect { CorpusRunner.cases }
+        .to raise_error(ArgumentError, /become the same dump file name/)
+    end
+
+    # Refused on a case-sensitive filesystem too, where Foo.json and
+    # foo.json really are two files. A corpus that works on Linux and
+    # quietly loses a case on macOS is the worse outcome.
+    it "refuses two ids that differ only in ASCII case" do
+      pair = %w[Foo foo].map { |id| CorpusRunner::Case.new(id: id) }
+      allow(CorpusRunner).to receive(:imported_cases).and_return(pair)
+
+      expect { CorpusRunner.cases }
+        .to raise_error(ArgumentError, /become the same dump file name/)
+    end
+
     it "still accepts an id that merely contains the reserved word" do
       fine = CorpusRunner::Case.new(id: "notsummary")
       allow(CorpusRunner).to receive(:imported_cases).and_return([fine])
@@ -354,6 +377,41 @@ RSpec.describe "Elkrb layout corpus" do
 
         # Claiming creates the directory and writes the marker. Doing it
         # before discovery left one behind on every failed run.
+        expect(File.directory?(out)).to be(false)
+      end
+    end
+
+    # Pruning used to run BEFORE the case ids were checked, so a corpus
+    # with one bad id deleted the last good dump and then aborted.
+    it "deletes nothing when a case id is unusable" do
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, CorpusRunner::OWNER_MARKER), "mine")
+        File.write(File.join(dir, "summary.json"),
+                   JSON.generate("cases" => [{ "id" => "old" }]))
+        File.write(File.join(dir, "old.json"), "{}")
+        allow(CorpusRunner).to receive(:cases)
+          .and_return([CorpusRunner::Case.new(id: "../invalid")])
+
+        expect { CorpusRunner.run(dir) }
+          .to raise_error(ArgumentError, /does not name a file inside/)
+
+        expect(File.exist?(File.join(dir, "old.json"))).to be(true)
+      end
+    end
+
+    # `strip` RAISES on invalid bytes rather than answering, so this id
+    # used to surface Ruby's own Encoding::CompatibilityError from inside
+    # case_path, after the directory was already claimed.
+    it "refuses an id with invalid bytes before touching any directory" do
+      broken = "case\xff".dup.force_encoding("UTF-8")
+
+      Dir.mktmpdir do |dir|
+        out = File.join(dir, "dump")
+        allow(CorpusRunner).to receive(:cases)
+          .and_return([CorpusRunner::Case.new(id: broken)])
+
+        expect { CorpusRunner.run(out) }
+          .to raise_error(ArgumentError, /does not name a file inside/)
         expect(File.directory?(out)).to be(false)
       end
     end
@@ -597,7 +655,8 @@ RSpec.describe "Elkrb layout corpus" do
         FileUtils.mkdir_p(empty)
 
         CorpusRunner.run(empty)
-        expect(File.exist?(File.join(empty, ".elkrb-corpus-dump"))).to be(true)
+        expect(File.exist?(File.join(empty, CorpusRunner::OWNER_MARKER)))
+          .to be(true)
 
         # Make the second run's work observable. Delete the case dump and
         # require the second run to put it back -- otherwise a second run
@@ -609,7 +668,8 @@ RSpec.describe "Elkrb layout corpus" do
         # The marker has to SURVIVE the second run. Stale-dump pruning runs
         # over this directory, and a regression that swept the marker away
         # would make every later run refuse the directory it owns.
-        expect(File.exist?(File.join(empty, ".elkrb-corpus-dump"))).to be(true)
+        expect(File.exist?(File.join(empty, CorpusRunner::OWNER_MARKER)))
+          .to be(true)
       end
     end
 
@@ -667,52 +727,22 @@ RSpec.describe "Elkrb layout corpus" do
       end
     end
 
-    it "writes a canonical file per case, records errors and timeouts, " \
-       "and totals a summary" do
-      # width/height 10/3 forces layered's own arithmetic (centring,
-      # padding) to produce a Float with far more than 6 decimal digits
-      # before canonicalize rounds it -- a 1.0/1.0 node never exercises
-      # rounding at all, since layered never needs to divide it further.
-      ok_case = CorpusRunner::Case.new(
-        id: "ok",
-        algorithm: "layered",
-        graph: {
-          "id" => "root",
-          "children" => [
-            { "id" => "a", "width" => 10.0 / 3, "height" => 10.0 / 3 },
-            { "id" => "b", "width" => 10.0 / 3, "height" => 10.0 / 3 },
-          ],
-          "edges" => [{ "id" => "e1", "sources" => ["a"], "targets" => ["b"] }],
-        },
-      )
-      error_case = CorpusRunner::Case.new(
-        id: "boom",
-        algorithm: "layered",
-        graph: nil,
-      )
-
-      # force calls Kernel#rand; only a case that actually consumes
-      # randomness can prove the per-case srand reseed makes two runs
-      # agree -- a layered-only corpus would pass "stable across two
-      # runs" even with the reseed deleted, since layered never calls
-      # rand at all.
-      force_case = CorpusRunner::Case.new(
-        id: "force",
-        algorithm: "force",
-        graph: {
-          "id" => "root",
-          "children" => [
-            { "id" => "a", "width" => 10.0, "height" => 10.0 },
-            { "id" => "b", "width" => 10.0, "height" => 10.0 },
-          ],
-          "edges" => [{ "id" => "e1", "sources" => ["a"], "targets" => ["b"] }],
-        },
-      )
-
-      # Far longer than the 0.02s timeout below, so a loaded CI box cannot
-      # let this case finish before the timeout it is here to trigger.
-      # Nothing waits it out: Timeout interrupts the sleep, so the margin
-      # is free.
+    # The four outcomes the dump has to handle, shared by the examples
+    # below. Each case is here for a reason:
+    #
+    # - ok: width/height 10/3 forces layered's own arithmetic (centring,
+    #   padding) to produce a Float with far more than 6 decimal digits
+    #   before canonicalize rounds it. A 1.0/1.0 node never exercises
+    #   rounding, since layered never needs to divide it further.
+    # - boom: a nil graph, so the case errors.
+    # - force: force calls Kernel#rand. Only a case that actually consumes
+    #   randomness can prove the per-case srand reseed makes two runs
+    #   agree -- a layered-only corpus passes "stable across two runs"
+    #   even with the reseed deleted.
+    # - slow: sleeps far longer than the 0.02s timeout below, so a loaded
+    #   CI box cannot let it finish before the timeout it is here to
+    #   trigger. Nothing waits it out: Timeout interrupts the sleep.
+    def mixed_corpus
       slow_algorithm = Class.new(Elkrb::Layout::Algorithms::BaseAlgorithm) do
         def layout_flat(_graph, _options = {})
           sleep 5
@@ -720,58 +750,155 @@ RSpec.describe "Elkrb layout corpus" do
       end
       Elkrb::Layout::AlgorithmRegistry
         .register("corpus_runner_spec_slow", slow_algorithm)
-      timeout_case = CorpusRunner::Case.new(
-        id: "slow", algorithm: "corpus_runner_spec_slow",
-        graph: { "id" => "root", "children" => [], "edges" => [] }
-      )
 
-      corpus = [ok_case, error_case, force_case, timeout_case]
+      corpus = [
+        sized_case("ok", "layered", 10.0 / 3),
+        CorpusRunner::Case.new(id: "boom", algorithm: "layered", graph: nil),
+        sized_case("force", "force", 10.0),
+        CorpusRunner::Case.new(
+          id: "slow", algorithm: "corpus_runner_spec_slow",
+          graph: { "id" => "root", "children" => [], "edges" => [] }
+        ),
+      ]
       allow(CorpusRunner).to receive(:cases).and_return(corpus)
+      corpus
+    end
 
+    def sized_case(id, algorithm, side)
+      CorpusRunner::Case.new(
+        id: id, algorithm: algorithm,
+        graph: {
+          "id" => "root",
+          "children" => [
+            { "id" => "a", "width" => side, "height" => side },
+            { "id" => "b", "width" => side, "height" => side },
+          ],
+          "edges" => [{ "id" => "e1", "sources" => ["a"], "targets" => ["b"] }],
+        }
+      )
+    end
+
+    def run_mixed_corpus(dir)
+      mixed_corpus
+      CorpusRunner.run(dir, timeout: 0.02)
+    end
+
+    it "counts every case and writes the same summary it returns" do
       Dir.mktmpdir do |dir|
-        summary = CorpusRunner.run(dir, timeout: 0.02)
+        summary = run_mixed_corpus(dir)
 
         expect(summary["total"]).to eq(4)
         expect(summary["ok"]).to eq(2)
         expect(summary["error"]).to eq(1)
         expect(summary["timeout"]).to eq(1)
-        # error_case and timeout_case both carry expect: nil, so neither
-        # matches its own outcome -- this corpus must be flagged, and
-        # the CLI entrypoint must exit non-zero for it.
+        expect(JSON.parse(File.read(File.join(dir, "summary.json"))))
+          .to eq(summary)
+      end
+    end
+
+    # boom and slow both carry expect: nil, so neither matches its own
+    # outcome: this corpus must be flagged and the CLI must exit non-zero.
+    it "flags a corpus whose failures were not declared" do
+      Dir.mktmpdir do |dir|
+        summary = run_mixed_corpus(dir)
+
         expect(summary["unexpected_failures"]).to be(true)
         expect(CorpusRunner.exit_code(summary)).to eq(1)
+      end
+    end
 
-        ok_payload = JSON.parse(File.read(File.join(dir, "ok.json")))
-        expect(ok_payload).to include("id" => "root")
+    it "writes a dump for every case, whatever its outcome" do
+      Dir.mktmpdir do |dir|
+        run_mixed_corpus(dir)
 
-        # Any exception class is acceptable here: the contract under test is
-        # "graph: nil errors out with a class+message payload", not which
-        # specific class Elkrb.layout happens to raise for nil today.
-        error_payload = JSON.parse(File.read(File.join(dir, "boom.json")))
-        expect(error_payload["error"]).to match(/\A\w+(::\w+)*: /)
+        expect(JSON.parse(File.read(File.join(dir, "ok.json"))))
+          .to include("id" => "root")
+        # Any exception class is acceptable here: the contract is "a nil
+        # graph errors out with a class+message payload", not which class
+        # Elkrb.layout happens to raise for nil today.
+        expect(JSON.parse(File.read(File.join(dir, "boom.json")))["error"])
+          .to match(/\A\w+(::\w+)*: /)
+        expect(JSON.parse(File.read(File.join(dir, "slow.json"))))
+          .to eq("error" => "Timeout")
+      end
+    end
 
-        timeout_payload = JSON.parse(File.read(File.join(dir, "slow.json")))
-        expect(timeout_payload).to eq("error" => "Timeout")
+    # Canonical means deep-sorted keys and floats rounded to 6 places, not
+    # just "some JSON got written". The raw text is parsed (not a fresh
+    # Hash literal) so the file's actual on-disk key order is preserved.
+    it "writes canonical JSON: sorted keys, floats rounded to 6 places" do
+      Dir.mktmpdir do |dir|
+        run_mixed_corpus(dir)
 
-        summary_path = File.join(dir, "summary.json")
-        expect(JSON.parse(File.read(summary_path))).to eq(summary)
+        ok = JSON.parse(File.read(File.join(dir, "ok.json")))
+        assert_deep_sorted_keys(ok)
+        assert_rounded_floats(ok)
+        force = JSON.parse(File.read(File.join(dir, "force.json")))
+        assert_rounded_floats(force)
+      end
+    end
 
-        # Canonical means deep-sorted keys, floats rounded to 6 places,
-        # and stable across repeated runs -- not just "some JSON got
-        # written". Parsing the raw text (not a fresh Hash literal)
-        # preserves the file's actual on-disk key order.
-        ok_text = File.read(File.join(dir, "ok.json"))
-        force_text = File.read(File.join(dir, "force.json"))
-        assert_deep_sorted_keys(JSON.parse(ok_text))
-        assert_rounded_floats(JSON.parse(ok_text))
-        assert_rounded_floats(JSON.parse(force_text))
+    it "writes the same bytes when the same corpus is dumped again" do
+      Dir.mktmpdir do |first|
+        run_mixed_corpus(first)
 
-        Dir.mktmpdir do |second_dir|
-          CorpusRunner.run(second_dir, timeout: 0.02)
-          expect(File.read(File.join(second_dir, "ok.json"))).to eq(ok_text)
-          expect(File.read(File.join(second_dir, "force.json")))
-            .to eq(force_text)
+        Dir.mktmpdir do |second|
+          run_mixed_corpus(second)
+
+          %w[ok.json force.json].each do |name|
+            expect(File.read(File.join(second, name)))
+              .to eq(File.read(File.join(first, name)))
+          end
         end
+      end
+    end
+
+    # `File.write` FOLLOWS a symlink, so a link planted in a directory the
+    # runner owns sent a dump straight out of it -- measured, a case wrote
+    # over a file in the parent directory. Writing through a temp file and
+    # renaming replaces the link itself.
+    it "replaces a symlink in the dump instead of writing through it" do
+      corpus_of("kept")
+
+      Dir.mktmpdir do |tmp|
+        victim = File.join(tmp, "victim.txt")
+        File.write(victim, "not mine")
+        dir = File.join(tmp, "dump")
+        FileUtils.mkdir_p(dir)
+        File.write(File.join(dir, CorpusRunner::OWNER_MARKER), "mine")
+        File.symlink(victim, File.join(dir, "kept.json"))
+
+        CorpusRunner.run(dir)
+
+        expect(File.read(victim)).to eq("not mine")
+        expect(File.symlink?(File.join(dir, "kept.json"))).to be(false)
+      end
+    end
+
+    # Two runs pointed at one directory used to interleave, leaving files
+    # that neither summary.json described. flock on a second descriptor is
+    # refused even inside one process, so this asserts the real lock.
+    it "holds an exclusive lock on the dump directory while it works" do
+      Dir.mktmpdir do |dir|
+        marker = File.join(dir, CorpusRunner::OWNER_MARKER)
+        File.write(marker, "mine")
+
+        inside = nil
+        CorpusRunner.send(:with_directory_lock, dir) do
+          inside = lockable?(marker)
+        end
+
+        expect(inside).to be(false)
+        expect(lockable?(marker)).to be(true)
+      end
+    end
+
+    def lockable?(path)
+      File.open(path, File::RDONLY) do |file|
+        next false unless file.flock(File::LOCK_EX | File::LOCK_NB)
+
+        file.flock(File::LOCK_UN)
+        true
       end
     end
   end

@@ -512,3 +512,123 @@ What they found, for the record:
 - The `render` example's security assertion is still `pending("RC10")`. The
   shell-injection site in `lib/elkrb/graphviz_wrapper.rb` is pre-existing and
   `lib/` is untouched by this branch, so it is not fixed here.
+
+## Why the corpus runner's guards look the way they do
+
+Moved out of `spec/cross_validation/corpus_runner.rb`, which was carrying
+199 lines of review history in comments. The file keeps the short "why"
+line at each guard; the measurements and the rejected attempts live here.
+
+### Ownership: the marker, not the summary
+
+`summary.json` is not provenance. A run once adopted an unrelated one and
+deleted a file named in it. Worse, `run` is what writes `summary.json`, so
+run 1 manufactured run 2's licence: pointing the runner twice at a
+directory of someone else's JSON swept it. Ownership is now the explicit
+`.elkrb-corpus-dump` marker the runner writes, and a directory that holds
+files without it is refused on every run.
+
+### The delete set
+
+Choosing it as "every `*.json` that is not a current case" is what let run
+1 authorise run 2. It is now the ids the PREVIOUS `summary.json` recorded
+minus the ids this run is about to write, resolved only against names the
+directory actually holds. A summary that is absent, unreadable, not JSON,
+or the wrong shape prunes nothing.
+
+### Order inside `run`
+
+Three orderings were wrong before this one:
+
+1. Claiming before discovery left a claimed, empty directory behind
+   whenever `cases` raised.
+2. Pruning before the case ids were checked deleted the last good dump and
+   then aborted the run. Every id's shape is now checked before the claim.
+3. Writing the `summary.json` placeholder inside the claim skipped it on a
+   second run, because the claim returns early for a directory it already
+   owns; and pruning could delete an aliased summary right after it was
+   placed. It is written after pruning, immediately before the dumps.
+
+### Case ids that fold onto `summary`
+
+Predicting a filesystem's name folding from a String is not winnable: it
+depends on the volume and the locale, not on the bytes. Three review
+rounds found three ids that fold on a real disk and not in Ruby — an
+ASCII-8BIT name from `Dir.glob` under `LC_ALL=C`, valid GB18030 bytes
+under a Chinese locale, and ISO-8859-1 bytes that a UTF-8 reinterpretation
+wrongly CLAIMED were a collision. So there are two guards, on purpose:
+
+- `refuse_reserved_id!` — cheap, ASCII casing only, before any directory
+  is touched, so plain `summary`/`SUMMARY` fails with a clear message.
+  Measured: both names came back `File.identical?` on macOS and the file
+  on disk held the summary, not the case. It refuses `SUMMARY` on a
+  case-sensitive filesystem too; a corpus that works on Linux and quietly
+  corrupts a case on macOS is the worse outcome.
+- `refuse_summary_alias!` — asks the filesystem, at dump time, whether the
+  case path is already `File.identical?` to `summary.json`.
+
+### Two case ids, one file name
+
+`1` and `"1"` both dump to `1.json`; `Foo` and `foo` do on macOS and
+Windows. One dump overwrote the other while `summary.json` still counted
+two cases, so a case vanished from the snapshot every later slice diffs
+against. Same split as above: `refuse_colliding_file_names!` folds ASCII
+before anything is touched, and `refuse_alias_of_written_case!` asks the
+filesystem during the run.
+
+### Writing
+
+`File.write` FOLLOWS a symlink. A link sitting inside a directory the
+runner owns sent a dump straight out of it — measured, a case wrote over
+`/tmp/probe_symlink/victim.txt`. Every write now goes to a temp file in
+the same directory and is renamed over the target, and `rename` replaces
+the link itself.
+
+Two runs pointed at one directory used to interleave: one pruned and wrote
+while the other was still dumping, leaving files that neither summary
+described. The owner marker doubles as an exclusive `flock`, taken around
+pruning and every write, and the previous summary is read inside it.
+
+### Ids with invalid bytes
+
+`strip` and `casecmp?` RAISE on such a string rather than answering, so
+the id used to surface Ruby's own `Encoding::CompatibilityError` from deep
+inside a guard, after the directory was already claimed. `case_file_path`
+now refuses it up front with the same message as the other unusable ids.
+It is NOT treated as a summary collision: `"SUMMARY\xff.json"` is a
+different filename, and the ISO-8859-1 example above is why nothing here
+reinterprets bytes.
+
+### Paths
+
+`File.join`, never `expand_path`: `expand_path` performs `~` and `~user`
+expansion, so an id beginning with `~` either escaped before the guard ran
+or raised Ruby's own "user doesn't exist" instead of the runner's message.
+
+`base:` on every `Dir.glob`, never the path joined into the pattern. Every
+source directory is built from ROOT — the checkout path, wherever the repo
+sits — so a glob metacharacter in it was interpreted rather than matched: a
+`*` or `?` matched its own directory and quietly added a sibling's files,
+while a `[...]`, `{...}` or unclosed `[` made the listing foreign or empty.
+That list is what `run` prunes against, so a mislisting became a delete.
+
+### The random seed
+
+`Kernel.srand` is process-wide and the suite seeds it deliberately, so the
+seed is put back on the way out. Putting the SEED back is not the same as
+putting the STREAM back, and the comment used to claim it was:
+`srand(previous_seed)` restarts that seed's sequence from its first value
+instead of resuming. Measured, the next value repeated 0.929616... instead
+of continuing to 0.316375.... Ruby exposes no way to snapshot the global
+generator's position, so what is guaranteed is only that a later
+`srand`-based reproduction sees the seed it expects.
+
+Carried forward: making this airtight means running the corpus in a
+subprocess, or passing a `Random` into `Elkrb.layout`. Both change `lib/`
+or the process model and are not this card's job.
+
+### `rake validate:report` is gone
+
+It printed a pass/fail table from a stub comparison, and nothing in the
+repo, the README, the docs or CI read it. The dump directory is the
+artifact now: later slices compare two of them with `diff -r`.

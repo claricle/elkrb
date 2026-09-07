@@ -13,27 +13,22 @@ RSpec.describe JavaElkTestImporter do
     File.read(path)
   end
 
-  # import_all is a script entry point: it warns on stderr and calls exit
-  # rather than raising. Both streams are captured so the progress chatter
-  # does not reach the suite's own output.
+  # Returns the ImportError import_all raised, or nil when it ran to the
+  # end. import_all used to call `exit` itself, which killed any Ruby
+  # caller instead of handing back an error; only the script entry point
+  # turns the error into an exit status now. Progress chatter is captured
+  # so it does not reach the suite's own output.
   def import(importer)
     stdout = $stdout
-    stderr = $stderr
     $stdout = StringIO.new
-    $stderr = StringIO.new
-    status = exit_status { importer.import_all }
-    [status, $stderr.string]
+    begin
+      importer.import_all
+      nil
+    rescue described_class::ImportError => e
+      e
+    end
   ensure
     $stdout = stdout
-    $stderr = stderr
-  end
-
-  # nil when the importer ran to completion instead of exiting.
-  def exit_status
-    yield
-    nil
-  rescue SystemExit => e
-    e.status
   end
 
   def models_repo(parent, name, files)
@@ -83,10 +78,9 @@ RSpec.describe JavaElkTestImporter do
       stub_const("#{described_class}::TEST_MODELS_PATH",
                  models_repo(tmp, "elk-models", []))
 
-      status, stderr = Dir.chdir(tmp) { import(described_class.new) }
+      error = Dir.chdir(tmp) { import(described_class.new) }
 
-      expect(status).to eq(1)
-      expect(stderr).to include("refusing to overwrite")
+      expect(error.message).to include("refusing to overwrite")
       expect(written_ids(tmp)).to be_nil
     end
   end
@@ -100,9 +94,9 @@ RSpec.describe JavaElkTestImporter do
                  models_repo(tmp, "models*", %w[mine.elkt]))
       models_repo(tmp, "models2", %w[foreign.elkt])
 
-      status, = Dir.chdir(tmp) { import(described_class.new) }
+      error = Dir.chdir(tmp) { import(described_class.new) }
 
-      expect(status).to be_nil
+      expect(error).to be_nil
       expect(written_ids(tmp)).to eq(["java_elk_mine"])
     end
   end

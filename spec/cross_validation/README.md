@@ -49,10 +49,11 @@ rake validate:import_all
 ```
 
 Both importers rewrite their `imported_tests.json` wholesale. Neither will
-write an empty one: if an import collects nothing, it warns and exits 1
-instead of overwriting the committed fixture. `rake validate:all` stops
-there, so a broken checkout aborts the pipeline rather than emptying the
-corpus.
+write an empty one: if an import collects nothing, it raises `ImportError`
+instead of overwriting the committed fixture. Run as a script, that error
+becomes a warning and exit 1, so `rake validate:all` stops there and a
+broken checkout aborts the pipeline rather than emptying the corpus.
+Required from Ruby, `import_all` raises and the caller decides what to do.
 
 The elkjs importer reads `~/src/external/elkjs` by default. Point it
 somewhere else with `ELKJS_DIR`:
@@ -61,12 +62,16 @@ somewhere else with `ELKJS_DIR`:
 ELKJS_DIR=/path/to/elkjs rake validate:import_elkjs
 ```
 
-### Run Validation
+### Dump the corpus
 
-Run cross-validation cases:
+Lay out every corpus case and write the canonical dump:
 ```bash
 rake validate:run
 ```
+
+There is no `rake validate:report` any more. It printed a pass/fail table
+from a stub comparison that nothing read. The dump below is the artifact
+later slices compare, with `diff -r` between two dump directories.
 
 This will:
 - Load imported test cases

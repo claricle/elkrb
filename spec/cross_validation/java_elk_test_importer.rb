@@ -6,6 +6,12 @@ require "fileutils"
 
 # Importer for Java ELK test cases
 class JavaElkTestImporter
+  # Raised instead of calling `exit`. `import_all` is a plain Ruby method,
+  # so a caller that requires this file gets an error it can rescue rather
+  # than having its whole process killed. Only the script entry point at
+  # the bottom of this file turns it into an exit status.
+  class ImportError < StandardError; end
+
   ELK_PATH = File.expand_path("~/src/external/elk")
   TEST_MODELS_PATH = "#{ELK_PATH}/../elk-models".freeze
   OUTPUT_PATH = "spec/cross_validation/fixtures/java_elk"
@@ -40,9 +46,9 @@ class JavaElkTestImporter
     end
 
     if @test_cases.empty?
-      warn "Java ELK import found 0 test cases - refusing to overwrite " \
-           "#{OUTPUT_PATH}/imported_tests.json"
-      exit 1
+      raise ImportError,
+            "Java ELK import found 0 test cases - refusing to overwrite " \
+            "#{OUTPUT_PATH}/imported_tests.json"
     end
 
     save_test_cases
@@ -289,5 +295,14 @@ class JavaElkTestImporter
   end
 end
 
-# Run if executed directly
-JavaElkTestImporter.new.import_all if __FILE__ == $PROGRAM_NAME
+# Run if executed directly. This is the ONLY place that decides an exit
+# status: the importer raises, so `rake validate:import_java_elk` still
+# fails loudly while a Ruby caller keeps control of its own process.
+if __FILE__ == $PROGRAM_NAME
+  begin
+    JavaElkTestImporter.new.import_all
+  rescue JavaElkTestImporter::ImportError => e
+    warn e.message
+    exit 1
+  end
+end

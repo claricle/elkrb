@@ -10,22 +10,22 @@ require_relative "../../lib/elkrb"
 #
 # The corpus is every spec/fixtures/*.json (bare graph, default algorithm
 # "layered"), every spec/fixtures/corpus/*.json (wrapper {"algorithm":,
-# "graph":}; the non-JSON fixtures in that directory, bom.elkt and
-# garbage.txt, are deliberately excluded here -- they belong to
-# spec/elkrb/cli_spec.rb's "input format detection" examples, which read
-# them through the CLI, not through layout), and every entry of each
-# spec/cross_validation/fixtures/*/imported_tests.json file. This is the
-# single enumeration every later slice's execution-diff gate diffs
-# against, so `.cases` is the one place that logic lives.
+# "graph":}), and every entry of each spec/cross_validation/fixtures/*/
+# imported_tests.json file. The non-JSON fixtures bom.elkt and garbage.txt
+# belong to spec/elkrb/cli_spec.rb, which reads them through the CLI, so
+# they are not cases here. `.cases` is the single enumeration every later
+# slice's execution-diff gate diffs against.
 #
-# Every case's file is always written, regardless of outcome -- `run`'s
-# own exit status (via the CLI entrypoint below) is informational only,
-# never something a caller chains on; XD compares dump directories, not
-# exit codes. A case's wrapper may carry "expect": "error" to mark a
-# deliberate, permanent crasher (tracked by its own RC/decision id
-# elsewhere, e.g. corpus_spec.rb's KNOWN_FAILURES) rather than a fresh
-# regression -- the CLI entrypoint's exit code reflects only failures
-# that were NOT declared expected.
+# Every case's file is always written, whatever the outcome. `run`'s exit
+# status (via the CLI entrypoint below) is informational only; XD compares
+# dump directories, not exit codes. A wrapper may carry "expect": "error"
+# to mark a deliberate, permanent crasher, so the exit code reflects only
+# failures that were NOT declared expected.
+#
+# The history behind each guard here -- what broke, what was measured, and
+# the attempts that were rejected -- is in
+# TODO.remediation/02-corpus-cli-harness.md, section "Why the corpus
+# runner's guards look the way they do".
 class CorpusRunner
   ROOT = File.expand_path("../..", __dir__)
   TIMEOUT_SECONDS = 30
@@ -34,14 +34,22 @@ class CorpusRunner
   # dump directory cannot hold.
   RESERVED_ID = "summary"
 
+  # The runner DELETES files it believes are stale, so it may only write
+  # into a directory that is its own. This marker is what says so, and it
+  # is also the lock file two concurrent runs take turns on.
+  OWNER_MARKER = ".elkrb-corpus-dump"
+
+  OWNER_MARKER_TEXT = <<~TEXT
+    Written by spec/cross_validation/corpus_runner.rb.
+    Its presence is what lets the runner delete stale dumps here.
+    Delete this file and the directory stops being the runner's.
+  TEXT
+
   # A fixed seed reseeded before every case. force/random call unseeded
-  # Kernel#rand, so without this, two dumps of identical, unchanged code
-  # would disagree on those cases, breaking every later slice's
-  # execution-diff comparison. Reseeding right before each case (not once
-  # per run) keeps one case's random-number consumption from shifting a
-  # later case's output. elk.randomSeed support is S14's job; this only
-  # makes this runner's own dumps reproducible in the meantime. The value
-  # itself is arbitrary -- any fixed integer works equally well.
+  # Kernel#rand, so without this two dumps of identical code would disagree
+  # on those cases. Reseeding per case (not once per run) keeps one case's
+  # random consumption from shifting a later case's output. The value is
+  # arbitrary; any fixed integer works.
   DETERMINISTIC_SEED = 20_260_819
 
   # Case ids are fixture basenames, so dumping into one of the corpus's own
@@ -54,10 +62,8 @@ class CorpusRunner
 
   # `expect` is nil for every ordinary case; a corpus wrapper (or an
   # imported_tests.json entry) may set "expect": "error" to mark a
-  # deliberate, permanent crasher (duplicate_ids: RC4/S7; the two SPOrE
-  # cases, which resolve to their algorithms and then crash on nil
-  # arithmetic inside them) so a healthy dump's exit status
-  # reflects unexpected regressions, not known, already-tracked bugs.
+  # deliberate, permanent crasher, so a healthy dump's exit status reflects
+  # unexpected regressions, not known, already-tracked bugs.
   Case = Struct.new(:id, :algorithm, :graph, :expect, keyword_init: true)
 
   class << self
@@ -69,66 +75,84 @@ class CorpusRunner
       ]
       refuse_duplicate_ids!(all_cases)
       refuse_reserved_id!(all_cases)
+      refuse_colliding_file_names!(all_cases)
       all_cases
     end
 
     # `outdir` is expanded once, here, so the guard and every write that
-    # follows are talking about the same directory: source_directory?
-    # compares expanded paths, and comparing one path while writing to
-    # another is how a guard ends up passing for a directory nobody wrote
-    # to.
+    # follows are talking about the same directory.
     def run(outdir, timeout: TIMEOUT_SECONDS)
       outdir = File.expand_path(outdir)
       refuse_source_directory!(outdir)
-      # `cases` before the claim. Claiming creates the directory and writes
-      # the marker, so doing it first left a claimed, empty directory behind
-      # whenever case discovery raised -- the reserved-id guard, say.
+      # Discovery and every id's SHAPE are checked before the claim. Both
+      # can raise, and claiming creates the directory and prunes stale
+      # dumps -- so doing it first deleted the last good dump and left a
+      # claimed, empty directory behind for a corpus the runner then
+      # refused.
       corpus = cases
+      corpus.each { |kase| case_file_path(outdir, kase.id) }
+
       claim_output_directory!(outdir)
+      with_directory_lock(outdir) { dump_corpus(outdir, corpus, timeout) }
+    end
+
+    # 1 when `summary` records an unexpected failure, 0 otherwise. What
+    # counts as one is `unexpected_failure?`'s decision.
+    #
+    # Extracted so the CLI entrypoint's exit decision is directly testable:
+    # calling `exit` inside an example would end the whole test run.
+    def exit_code(summary)
+      summary["unexpected_failures"] ? 1 : 0
+    end
+
+    # True when `outdir` is, or sits under, one of SOURCE_DIRS.
+    #
+    # Compared by device+inode, not by path string: on a case-insensitive
+    # filesystem spec/Fixtures IS spec/fixtures, and a symlink aliases
+    # either one under any name. Ancestors are walked because an outdir
+    # that does not exist yet still sits under an existing -- possibly
+    # aliased -- parent.
+    #
+    # Public so its own specs can assert the rule without calling `run`.
+    def source_directory?(outdir)
+      ancestor_paths(File.expand_path(outdir))
+        .any? { |dir| SOURCE_DIRS.any? { |src| File.identical?(dir, src) } }
+    end
+
+    private
+
+    # Pruning, the dumps and the final summary, all under the directory
+    # lock, so a second run cannot interleave its writes with this one's
+    # prune and leave files that summary.json does not describe.
+    def dump_corpus(outdir, corpus, timeout)
       prune_stale_dumps(outdir, corpus)
-      # AFTER claiming and pruning, immediately before the dumps. Writing it
-      # inside the claim was wrong twice: the claim returns early for an
-      # already-marked directory, so the placeholder was never written on a
-      # second run, and pruning could delete an aliased summary right after
-      # it was. Both were reproduced -- a case named ſummary reached the write
-      # and the final summary overwrote its payload.
+      # AFTER pruning, immediately before the dumps. Written inside the
+      # claim it was skipped on a second run (the claim returns early for a
+      # directory it already owns), and pruning could delete an aliased
+      # summary right after it was placed.
       place_summary_marker(outdir)
 
       summary = new_summary
-      corpus.each { |kase| dump_case(kase, summary, outdir, timeout) }
+      written = {}
+      corpus.each { |kase| dump_case(kase, summary, outdir, timeout, written) }
 
       summary["unexpected_failures"] = unexpected_failure?(summary)
       write_json(File.join(outdir, "#{RESERVED_ID}.json"), summary)
       summary
     end
 
-    # 1 when `summary` records an unexpected failure, 0 otherwise. What
-    # counts as one is `unexpected_failure?`'s decision, not this method's.
-    #
-    # Extracted so the CLI entrypoint's exit decision is directly testable --
-    # calling `exit` from inside an example would end the test run, not just
-    # the example.
-    def exit_code(summary)
-      summary["unexpected_failures"] ? 1 : 0
+    def refuse_source_directory!(outdir)
+      return unless source_directory?(outdir)
+
+      raise ArgumentError,
+            "refusing to dump into a corpus source directory: #{outdir}"
     end
 
-    # The runner DELETES files it believes are stale, so it may only write
-    # into a directory that is its own. An empty or absent directory becomes
-    # its own and gets the marker; a directory already carrying the marker is
-    # its own already. Anything else is somebody's working directory and is
-    # refused, because a `summary.json` that merely looks right is not
-    # provenance -- a run once adopted an unrelated one and deleted a file
-    # named in it.
-    OWNER_MARKER = ".elkrb-corpus-dump"
-
-    # A placeholder so `case_path` can ASK the filesystem whether an id
-    # aliases this name rather than trying to predict the answer. `run`
-    # overwrites it with the real summary at the end.
-    def place_summary_marker(outdir)
-      summary = File.join(outdir, "#{RESERVED_ID}.json")
-      File.write(summary, "{}") unless File.exist?(summary)
-    end
-
+    # An empty or absent directory becomes the runner's and gets the
+    # marker; a directory already carrying the marker is its own already.
+    # Anything else is somebody's working directory and is refused: a
+    # `summary.json` that merely looks right is not provenance -- a run
+    # once adopted an unrelated one and deleted a file named in it.
     def claim_output_directory!(outdir)
       if File.directory?(outdir)
         marker = File.join(outdir, OWNER_MARKER)
@@ -144,29 +168,42 @@ class CorpusRunner
       end
 
       FileUtils.mkdir_p(outdir)
-      File.write(File.join(outdir, OWNER_MARKER), <<~TEXT)
-        Written by spec/cross_validation/corpus_runner.rb.
-        Its presence is what lets the runner delete stale dumps here.
-        Delete this file and the directory stops being the runner's.
-      TEXT
+      write_file(File.join(outdir, OWNER_MARKER), OWNER_MARKER_TEXT)
     end
 
-    # A case id reaches the filesystem, and importers are a documented
-    # extension point, so an id is not assumed to be a bare name. An id of
-    # `../victim` used to resolve outside `outdir` and overwrite a sibling.
+    # Two runs pointed at one directory used to interleave: one pruned and
+    # wrote while the other was still dumping, so the directory held files
+    # that neither summary.json described. The owner marker doubles as the
+    # lock, so the second run waits instead. The previous summary is read
+    # inside the lock, after it is taken, so pruning sees a settled
+    # directory.
+    def with_directory_lock(outdir)
+      File.open(File.join(outdir, OWNER_MARKER), File::RDONLY) do |lock|
+        lock.flock(File::LOCK_EX)
+        begin
+          yield
+        ensure
+          lock.flock(File::LOCK_UN)
+        end
+      end
+    end
+
+    # A placeholder so `refuse_summary_alias!` can ASK the filesystem
+    # whether an id aliases this name rather than trying to predict the
+    # answer. `run` overwrites it with the real summary at the end.
+    def place_summary_marker(outdir)
+      summary = File.join(outdir, "#{RESERVED_ID}.json")
+      write_file(summary, "{}") unless File.exist?(summary)
+    end
+
     # Does this id name the summary file? ASK, do not predict.
     #
-    # This was a string guard that folded case, and three review rounds found
-    # three ids that fold onto "summary" on a real disk and not in Ruby: an
-    # ASCII-8BIT name from `Dir.glob` under LC_ALL=C, valid GB18030 bytes
-    # under a Chinese locale, and ISO-8859-1 bytes that a UTF-8
-    # reinterpretation wrongly CLAIMED were a collision. Predicting a
-    # filesystem's name folding from a String is not winnable: it depends on
-    # the volume and the locale, not on the bytes alone.
-    #
-    # `summary.json` exists by the time any case is dumped, so a colliding id
-    # is one whose path is already `File.identical?` to it. That is the real
-    # property, answered by the thing that decides it.
+    # A string guard cannot settle it: whether two spellings fold onto one
+    # name depends on the volume and the locale, not on the bytes. Three
+    # review rounds found three ids that fold on a real disk and not in
+    # Ruby, and one that a UTF-8 reinterpretation wrongly claimed was a
+    # collision. `summary.json` exists by the time any case is dumped, so a
+    # colliding id is one whose path is already `File.identical?` to it.
     def refuse_summary_alias!(outdir, path, id)
       summary = File.join(outdir, "#{RESERVED_ID}.json")
       return if path == summary
@@ -179,60 +216,63 @@ class CorpusRunner
             "writes itself. Rename the case."
     end
 
+    # Two ids whose paths turn out to be one file on this volume. The
+    # cheap ASCII check in `refuse_colliding_file_names!` cannot see a
+    # non-ASCII fold, and the second dump would silently overwrite the
+    # first while summary.json still counted both cases.
+    def refuse_alias_of_written_case!(path, id, written)
+      twin = written.find { |other, _| File.identical?(other, path) }
+      return unless twin
+
+      raise ArgumentError,
+            "case ids #{twin.last.inspect} and #{id.inspect} name the same " \
+            "file on this filesystem, so one dump would overwrite the " \
+            "other. Rename one of the cases."
+    end
+
+    # Where this case is dumped: the id's shape, plus the filesystem's own
+    # answer to "does this id name summary.json here?".
     def case_path(outdir, id)
+      path = case_file_path(outdir, id)
+      refuse_summary_alias!(outdir, path, id)
+      path
+    end
+
+    # The id's shape only. Raises for anything that would not land inside
+    # `outdir` as its own file. Touches no directory, so `run` can check
+    # every id before it claims or prunes anything.
+    def case_file_path(outdir, id)
       text = id.to_s
+      # `strip`, `casecmp?` and friends RAISE on invalid bytes rather than
+      # answering, so such an id used to surface Ruby's own "invalid byte
+      # sequence" from deep inside a guard, after the directory was already
+      # claimed. Refuse it here, with the same message as the other
+      # unusable ids.
+      refuse_unusable_id!(id) unless text.valid_encoding?
+
       name = "#{text}.json"
       # `File.join`, not `expand_path`: expand_path performs ~ and ~user
-      # expansion, so an id beginning with ~ either escaped before the guard
-      # ran or raised Ruby's own "user doesn't exist" instead of the message
-      # here. Joining keeps the check about what the id literally says.
+      # expansion, so an id beginning with ~ either escaped before the
+      # guard ran or raised Ruby's own "user doesn't exist".
       path = File.join(outdir, name)
 
-      # An EMPTY id passes both shape checks -- `".json"` has no separator and
-      # its dirname is `outdir` -- and would quietly write `outdir/.json`, a
-      # dotfile no listing shows. It is refused explicitly.
-      refuse_summary_alias!(outdir, path, id)
-
+      # An EMPTY id passes both shape checks -- `".json"` has no separator
+      # and its dirname is `outdir` -- and would quietly write
+      # `outdir/.json`, a dotfile no listing shows.
       usable = !text.strip.empty? &&
         File.basename(name) == name &&
         File.dirname(path) == outdir
-      unless usable
-        raise ArgumentError,
-              "case id #{id.inspect} does not name a file inside the output " \
-              "directory. Ids become filenames, so they may not be blank, " \
-              "contain a path separator, or traverse upwards."
-      end
+      refuse_unusable_id!(id) unless usable
 
       path
     end
 
-    # True when `outdir` is, or sits under, one of SOURCE_DIRS.
-    #
-    # Comparing path strings is not enough. On a case-insensitive
-    # filesystem spec/Fixtures IS spec/fixtures, and a symlink aliases
-    # either one under any name at all; both slip past a lexical prefix
-    # check and would let a dump overwrite the tracked inputs. Compare by
-    # device+inode instead, which is what "the same directory" actually
-    # means, and walk the destination's ancestors, because an outdir that
-    # does not exist yet still sits under an existing -- possibly aliased
-    # -- parent.
-    #
-    # Public so its own specs can assert the rule without calling `run`.
-    # Pointing `run` at spec/fixtures is exactly the accident this guard
-    # exists to stop, and a test that does it for real deletes the
-    # fixtures the moment the guard regresses.
-    def source_directory?(outdir)
-      ancestor_paths(File.expand_path(outdir))
-        .any? { |dir| SOURCE_DIRS.any? { |src| File.identical?(dir, src) } }
-    end
-
-    private
-
-    def refuse_source_directory!(outdir)
-      return unless source_directory?(outdir)
-
+    def refuse_unusable_id!(id)
       raise ArgumentError,
-            "refusing to dump into a corpus source directory: #{outdir}"
+            "case id #{id.inspect} does not name a file inside the output " \
+            "directory. Ids become filenames, so they may not be blank, " \
+            "contain a path separator, traverse upwards, or carry bytes " \
+            "that are invalid in their own encoding."
     end
 
     def new_summary
@@ -241,9 +281,9 @@ class CorpusRunner
 
     # A failure whose wrapper did not declare it. Derived from the recorded
     # entries so summary.json and the exit code cannot disagree.
-    # An EMPTY run is a failure, not a pass. A corpus that silently stopped
+    # An EMPTY run is a failure, not a pass: a corpus that silently stopped
     # being found wrote `total: 0` and exited 0, so a caller could not tell
-    # "everything passed" from "nothing ran" -- and CI reads the exit code.
+    # "everything passed" from "nothing ran".
     def unexpected_failure?(summary)
       return true if summary["total"].to_i.zero?
 
@@ -260,19 +300,39 @@ class CorpusRunner
             "duplicate corpus case ids: #{duplicates.join(', ')}"
     end
 
+    # The ids are DIFFERENT and their file names are the same: the integer
+    # 1 and the string "1" both dump to 1.json, and on macOS or Windows so
+    # do "Foo" and "foo". One dump then overwrote the other while
+    # summary.json still counted two cases, so a case vanished from the
+    # snapshot every later slice diffs against.
+    #
+    # ASCII-only folding, like `reserved_id?`. This refuses "Foo"/"foo" on
+    # a case-sensitive filesystem too, where they really are two files. A
+    # corpus that works on Linux and quietly loses a case on macOS is the
+    # worse outcome. Folds beyond ASCII are the filesystem's answer to
+    # give, and `refuse_alias_of_written_case!` asks it at dump time.
+    def refuse_colliding_file_names!(all_cases)
+      groups = all_cases.group_by { |kase| kase.id.to_s.b.downcase }
+      clashing = groups.values.find { |group| group.size > 1 }
+      return unless clashing
+
+      refuse_colliding_ids!(clashing.map(&:id))
+    end
+
+    def refuse_colliding_ids!(ids)
+      raise ArgumentError,
+            "corpus case ids #{ids.map(&:inspect).join(', ')} become the " \
+            "same dump file name, so one case would overwrite the other. " \
+            "Rename one of them."
+    end
+
     # Every case is dumped to "#{id}.json", so a case called "summary"
     # would write the dump's own index and then be overwritten by it.
     # A CHEAP early guard, ASCII case only, run before any directory is
-    # touched so the obvious "summary"/"SUMMARY" fails with a clear message.
-    #
-    # It does NOT decide the real question. Whether an id actually aliases
-    # summary.json depends on the volume and the locale, and is settled by
-    # `refuse_summary_alias!`, which asks the filesystem. Three review rounds
-    # found three ids that fold on a real disk and not in Ruby, and one that
-    # a UTF-8 reinterpretation wrongly CLAIMED was a collision -- which is why
-    # nothing here tries to fold beyond ASCII.
-    #
-    # `String#b` keeps it to ASCII and never raises, whatever the encoding.
+    # touched, so the obvious "summary"/"SUMMARY" fails with a clear
+    # message. It does NOT decide the real question; that is
+    # `refuse_summary_alias!`'s job. `String#b` keeps it to ASCII and never
+    # raises, whatever the encoding.
     def reserved_id?(id)
       id.to_s.b.casecmp?(RESERVED_ID.b)
     end
@@ -281,29 +341,29 @@ class CorpusRunner
       clashing = all_cases.find { |kase| reserved_id?(kase.id) }
       return unless clashing
 
-      # Compared case-INSENSITIVELY on purpose. macOS and Windows resolve
-      # `SUMMARY.json` and `summary.json` to one file, so an id of "SUMMARY"
-      # slipped this guard and then had its payload overwritten by the dump's
-      # own index. Measured: both names came back File.identical? and the file
-      # on disk held the summary, not the case.
-      #
-      # This refuses "SUMMARY" on a case-sensitive filesystem too, where the
-      # two names really are different files. A corpus that works on Linux and
-      # quietly corrupts a case on macOS is the worse outcome.
+      # Case-INSENSITIVE on purpose. macOS and Windows resolve
+      # `SUMMARY.json` and `summary.json` to one file, so an id of
+      # "SUMMARY" slipped this guard and had its payload overwritten by the
+      # dump's own index. Refusing it on a case-sensitive filesystem too is
+      # the lesser evil.
       raise ArgumentError,
             "corpus case id #{clashing.id.inspect} collides with " \
             "#{RESERVED_ID}.json, which the runner writes itself"
     end
 
     # Counts the case, records its summary entry, and writes its dump. The
-    # dump is written whatever the outcome; see the class comment on why the
-    # exit status is informational only.
-    def dump_case(kase, summary, outdir, timeout)
+    # dump is written whatever the outcome; see the class comment on why
+    # the exit status is informational only.
+    def dump_case(kase, summary, outdir, timeout, written)
+      path = case_path(outdir, kase.id)
+      refuse_alias_of_written_case!(path, kase.id, written)
+
       status, payload = run_case(kase, timeout)
       summary["total"] += 1
       summary[status] += 1
       summary["cases"] << case_entry(kase, status)
-      write_json(case_path(outdir, kase.id), payload)
+      write_json(path, payload)
+      written[path] = kase.id
     end
 
     # "expected" is recorded only for a failure the wrapper declared, so a
@@ -322,7 +382,23 @@ class CorpusRunner
     # Both dump sites go through here: a case file and summary.json have to
     # agree on the canonical format, which is what every later slice diffs.
     def write_json(path, value)
-      File.write(path, JSON.pretty_generate(value))
+      write_file(path, JSON.pretty_generate(value))
+    end
+
+    # Writes through a temp file in the same directory and renames it over
+    # the target. `File.write` FOLLOWS a symlink, so a link sitting in a
+    # directory the runner owns sent a dump straight out of it -- measured,
+    # a case wrote over /tmp/probe_symlink/victim.txt. `rename` replaces
+    # the link itself, so nothing outside the directory is touched.
+    def write_file(path, text)
+      dir = File.dirname(path)
+      tmp = File.join(dir, ".#{File.basename(path)}.#{Process.pid}.tmp")
+      File.open(tmp, File::WRONLY | File::CREAT | File::TRUNC) do |file|
+        file.write(text)
+      end
+      File.rename(tmp, path)
+    ensure
+      FileUtils.rm_f(tmp) if tmp
     end
 
     def ancestor_paths(path)
@@ -342,23 +418,15 @@ class CorpusRunner
     # case that was renamed or dropped keeps its old file there and every
     # later comparison reports a difference that no longer exists.
     #
-    # Deleting is aimed at whatever path a caller passed on the command
-    # line, so the delete set is the ids the PREVIOUS summary.json recorded
-    # minus the ids this run is about to write. A file this runner never
-    # wrote is then not a candidate at all.
+    # The delete set is the ids the PREVIOUS summary.json recorded minus
+    # the ids this run is about to write, so a file this runner never wrote
+    # is not a candidate at all. Choosing it the other way round -- every
+    # *.json that is not a current case -- made run 1 authorise run 2 and
+    # sweep a directory of someone else's JSON.
     #
-    # Choosing the set the other way round -- every *.json that is not a
-    # current case -- made the first run authorise the second. `run` is
-    # what writes summary.json, so pointing it twice at a directory of
-    # someone else's JSON swept it: run 1 left the summary that run 2 read
-    # as proof the directory was ours.
-    #
-    # The loop walks what the directory actually holds, so a recorded id is
-    # only ever resolved against a name in it; nothing outside can be named
-    # by a summary this runner did not write. `base:` scopes the glob to
-    # the directory itself, which is taken literally -- joining the path
-    # into the pattern instead let a metacharacter in a caller-supplied
-    # `outdir` reach a sibling.
+    # `base:` scopes the glob to the directory itself, which is taken
+    # literally: joining the path into the pattern let a metacharacter in a
+    # caller-supplied `outdir` reach a sibling.
     def prune_stale_dumps(outdir, corpus)
       dropped = recorded_case_ids(outdir) - corpus.map(&:id)
       stale = dropped.map { |id| "#{id}.json" }
@@ -389,13 +457,12 @@ class CorpusRunner
     # Kernel's generator is process-wide and the spec suite seeds it
     # deliberately, so the seed is put back on the way out.
     #
-    # Putting the SEED back is not the same as putting the STREAM back, and
-    # this comment used to claim it was. `srand(previous_seed)` restarts that
-    # seed's sequence from its first value rather than resuming where the
-    # caller had reached -- measured, the next value repeated 0.929616...
-    # instead of continuing to 0.316375... Ruby exposes no way to snapshot the
-    # global generator's position, so what is guaranteed here is only that a
-    # later `srand`-based reproduction sees the seed it expects.
+    # Putting the SEED back is not the same as putting the STREAM back.
+    # `srand(previous_seed)` restarts that seed's sequence from its first
+    # value rather than resuming where the caller had reached, and Ruby
+    # exposes no way to snapshot the global generator's position. What is
+    # guaranteed is only that a later `srand`-based reproduction sees the
+    # seed it expects.
     def run_case(kase, timeout)
       previous_seed = Kernel.srand(DETERMINISTIC_SEED)
       result = Timeout.timeout(timeout) do
@@ -423,15 +490,12 @@ class CorpusRunner
       end
     end
 
-    # `base:` scopes the glob to `dir` itself, which is taken literally. Every
-    # corpus source directory is built from ROOT -- the checkout path, wherever
-    # the repo happens to sit -- so joining it into the pattern instead let a
-    # glob metacharacter in it be interpreted rather than matched: the glob and
-    # the later `File.read` disagreed about which directory was meant. A `*` or
-    # `?` still matched its own directory and quietly added a sibling's files;
-    # a `[...]`, `{...}` or unclosed `[` did not match it, so the listing was
-    # entirely foreign or empty. This list is what `run` prunes against, so a
-    # mislisting here becomes a delete in `prune_stale_dumps`.
+    # `base:` scopes the glob to `dir`, which is taken literally. Every
+    # corpus source directory is built from ROOT -- the checkout path -- so
+    # joining it into the pattern let a glob metacharacter in it be
+    # interpreted rather than matched, and the glob and the later
+    # `File.read` disagreed about which directory was meant. This list is
+    # what `run` prunes against, so a mislisting here becomes a delete.
     def fixture_paths(dir, pattern)
       Dir.glob(pattern, base: dir).map { |name| File.join(dir, name) }
     end
@@ -460,10 +524,11 @@ class CorpusRunner
     end
 
     # Sorted by whole path. The wildcard here is a directory component, and
-    # for that shape glob's own order is component-wise, so the two disagree:
-    # given elkjs/, elkjs-2/ and java_elk/, glob returns elkjs before elkjs-2
-    # while sort returns the reverse. The case list is the fixed enumeration
-    # every later slice diffs against, so it is ordered explicitly.
+    # for that shape glob's own order is component-wise, so the two
+    # disagree: given elkjs/, elkjs-2/ and java_elk/, glob returns elkjs
+    # before elkjs-2 while sort returns the reverse. The case list is the
+    # fixed enumeration every later slice diffs against, so it is ordered
+    # explicitly.
     def imported_cases
       dir = File.join(ROOT, "spec/cross_validation/fixtures")
       fixture_paths(dir, "*/imported_tests.json").sort.flat_map do |path|
@@ -485,10 +550,9 @@ if __FILE__ == $PROGRAM_NAME
   summary = CorpusRunner.run(outdir)
   puts "corpus: #{summary['ok']} ok, #{summary['error']} error, " \
        "#{summary['timeout']} timeout (#{summary['total']} total)"
-  # Every case's dump is always written first, regardless of outcome --
-  # the exit status is a convenience signal, not something XD (or any
-  # caller) should chain on: it distinguishes a genuine regression from
-  # the corpus's permanent, individually-tracked known crashers (each
-  # marked "expect": "error" in its own wrapper).
+  # Every case's dump is always written first, whatever the outcome -- the
+  # exit status is a convenience signal, not something XD (or any caller)
+  # should chain on. It tells a genuine regression from the corpus's
+  # permanent, individually-tracked known crashers.
   exit CorpusRunner.exit_code(summary)
 end
