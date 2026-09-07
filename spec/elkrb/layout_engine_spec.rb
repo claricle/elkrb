@@ -148,7 +148,8 @@ RSpec.describe Elkrb::Layout::LayoutEngine do
       # duck-typed guard -- swap it for an Edge or a Label and that goes.
       # The plain rejected types -- nil, String, Array, Integer -- are already
       # covered in spec/elkrb_spec.rb through this same entry point, and a
-      # namespace check rejects those just as a class check does.
+      # namespace check rejects those just as a class check does, so they are
+      # not repeated here. The nil below is there for the ordering, not the type.
       it "raises ArgumentError for a Graph::Node" do
         expect { described_class.layout(Elkrb::Graph::Node.new) }
           .to raise_error(
@@ -159,9 +160,11 @@ RSpec.describe Elkrb::Layout::LayoutEngine do
       end
 
       # Ordering is asserted by removing the capability, not by watching for
-      # its use -- and the removal is DERIVED from the class rather than naming
-      # a route. Stubbing only :get leaves an implementation that resolves
-      # through algorithm_info green while the guard runs second.
+      # its use -- and the removal is DERIVED from the registry's public surface
+      # rather than naming a route. Stubbing only :get leaves an implementation
+      # that resolves through algorithm_info green while the guard runs second.
+      # singleton_methods returns the public routes; the registry's private
+      # helpers are unreachable from layout without an explicit send.
       #
       # Keep NotImplementedError. It buys nothing today, because layout carries
       # no rescue and a StandardError sentinel behaves identically. It becomes
