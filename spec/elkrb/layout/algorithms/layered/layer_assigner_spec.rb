@@ -6,7 +6,8 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::LayerAssigner do
   describe "#assign_layers" do
     # Through the real pipeline, CycleBreaker always resolves a cycle before
     # LayerAssigner ever sees it. This class is still directly instantiable
-    # with no reversal set, though (default `reversed_edge_ids: Set.new`),
+    # with no reversal set, though (its default is an empty
+    # `Set.new.compare_by_identity`),
     # which is exactly the "incomplete reversal set" the class's own comment
     # names -- previously warned about, now checked here directly since
     # nothing else in the suite ever constructs this class by itself.

@@ -138,27 +138,6 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
         .to raise_error(Elkrb::ValidationError, /duplicate edge id: e/)
     end
 
-    # An edge id is optional in ELK, so an error message could name the
-    # edge as the empty string. The endpoints are the fallback handle, and
-    # "(no endpoints)" is what the fallback itself falls back to -- which
-    # is the whole reason the comment above `edge_label` no longer claims
-    # an edge always has endpoints. Both halves are pinned here, in the one
-    # message that can show them together.
-    it "names an id-less edge by its endpoints in an endpoint error" do
-      graph = {
-        id: "r",
-        children: %w[a b].map { |id| { id: id, width: 10, height: 10 } },
-        edges: [{ sources: [], targets: ["b"] }],
-      }
-
-      expect { Elkrb.layout(graph, algorithm: "layered") }
-        .to raise_error(
-          Elkrb::UnsupportedConfigurationException,
-          "layered requires non-empty edge endpoints " \
-          '(edge (none), (no endpoints) -> "b")',
-        )
-    end
-
     # nil and "" are one name to the reader, so they are one thing to the
     # validator too: NEITHER is an id. An anonymous edge carries no handle,
     # so it has nothing to be a duplicate of, and a graph may hold as many
@@ -245,6 +224,11 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
       expect(y["b"]).to be < y["c"]
     end
 
+    # An edge id is optional in ELK, so an error message could name the
+    # edge as the empty string. The endpoints are the fallback handle, and
+    # "(no endpoints)" is what the fallback itself falls back to -- which
+    # is why the comment above `edge_label` no longer claims an edge always
+    # has endpoints. Both halves show in this one message.
     it "names an id-less edge by its endpoints in a missing-endpoint error" do
       graph = {
         id: "r",
