@@ -79,7 +79,12 @@ module Elkrb
       ]
 
       cmd_parts << "-o#{output_file}" if output_file
-      cmd_parts << input_file.to_s
+      # `File.path` is exactly the conversion `validate_file_exists!` already
+      # accepts -- a String, or anything with `#to_path` -- and it is the one
+      # `system(*argv)` will not do for us (argv converts via `#to_str`, which
+      # Pathname does not define). `#to_s` is NOT interchangeable here: on a
+      # `#to_path` object that is not a Pathname it yields "#<Object:0x...>".
+      cmd_parts << File.path(input_file)
 
       cmd_parts
     end
