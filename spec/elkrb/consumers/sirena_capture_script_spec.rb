@@ -175,6 +175,81 @@ RSpec.describe "spec/fixtures/consumers/sirena/capture.rb" do
       expect(written).to eq(["a.json", "b.json"])
     end
 
+    it "refuses a staging path that already exists as a symlink" do
+      Dir.mkdir(@out_dir)
+      victim = File.join(@tmp, "victim.txt")
+      File.write(victim, "PRECIOUS")
+      # The staging name is predictable, so a link can be waiting there.
+      # `CREAT|TRUNC` wrote the capture straight through it and then
+      # installed the link as a.json.
+      out, status = run_ruby(<<~RUBY)
+        require #{script.inspect}
+        link = File.join(#{@out_dir.inspect}, ".a.json.\#{Process.pid}.tmp")
+        File.symlink(#{victim.inspect}, link)
+        SirenaCapture.publish([["a", { "v" => "attacker" }]],
+                              #{@out_dir.inspect})
+      RUBY
+
+      expect(status).not_to eq(0)
+      expect(out).to include("File exists")
+      expect(File.read(victim)).to eq("PRECIOUS")
+      expect(File.exist?(File.join(@out_dir, "a.json"))).to be(false)
+    end
+
+    it "rolls back when the publish is INTERRUPTED, not only on an errno" do
+      Dir.mkdir(@out_dir)
+      %w[a b].each do |n|
+        File.write(File.join(@out_dir, "#{n}.json"), "OLD-#{n}")
+      end
+
+      out, status = run_ruby(<<~RUBY)
+        require #{script.inspect}
+        # Interrupt is what Ctrl-C raises, and it is NOT a SystemCallError.
+        File.singleton_class.prepend(Module.new do
+          define_method(:rename) do |from, to|
+            raise Interrupt if to.end_with?("/b.json") && from.end_with?(".tmp")
+
+            super(from, to)
+          end
+        end)
+        SirenaCapture.publish([["a", { "v" => "new" }], ["b", { "v" => "new" }]],
+                              #{@out_dir.inspect})
+      RUBY
+
+      expect(status).not_to eq(0)
+      expect(out).to include("Interrupt")
+      expect(File.read(File.join(@out_dir, "a.json"))).to eq("OLD-a")
+      expect(File.read(File.join(@out_dir, "b.json"))).to eq("OLD-b")
+      expect(written).to eq(["a.json", "b.json"])
+    end
+
+    it "restores a DANGLING symlink target rather than deleting it" do
+      Dir.mkdir(@out_dir)
+      # `File.exist?` follows a link, so a dangling one read as "nothing
+      # here" and rollback removed it instead of putting it back.
+      File.symlink(File.join(@tmp, "gone"), File.join(@out_dir, "a.json"))
+      File.write(File.join(@out_dir, "b.json"), "OLD-b")
+
+      _out, status = run_ruby(<<~RUBY)
+        require #{script.inspect}
+        File.singleton_class.prepend(Module.new do
+          define_method(:rename) do |from, to|
+            publishing_b = to.end_with?("/b.json") && from.end_with?(".tmp")
+            raise Errno::EXDEV, to if publishing_b
+
+            super(from, to)
+          end
+        end)
+        SirenaCapture.publish([["a", { "v" => "new" }], ["b", { "v" => "new" }]],
+                              #{@out_dir.inspect})
+      RUBY
+
+      expect(status).not_to eq(0)
+      expect(File.symlink?(File.join(@out_dir, "a.json"))).to be(true)
+      expect(File.read(File.join(@out_dir, "b.json"))).to eq("OLD-b")
+      expect(written).to eq(["a.json", "b.json"])
+    end
+
     it "restores every target it had already replaced when a rename fails" do
       Dir.mkdir(@out_dir)
       %w[a b].each do |n|
@@ -209,12 +284,37 @@ end
 RSpec.describe SirenaProvenance do
   fixture_dir = File.expand_path("../../fixtures/consumers/sirena", __dir__)
   readme = File.join(fixture_dir, "README.md")
-  recorded = "c3820364551b3f107b6177bba8d1e2c0c6d3940b"
+  # Read, never hardcoded: the README's table is the one place the
+  # expected commit is written down, and a copy here would have to be
+  # edited in lockstep with it on every legitimate re-capture.
+  recorded = SirenaProvenance.expected_sha(readme)
   other = "deadbeef" * 5
 
   describe ".expected_sha" do
-    it "reads the sha out of the README's provenance table" do
-      expect(described_class.expected_sha(readme)).to eq(recorded)
+    it "reads the sha out of a provenance table" do
+      # A synthetic table, so this asserts the PARSE rather than agreeing
+      # with itself about which sha the real README happens to hold.
+      Dir.mktmpdir("readme") do |dir|
+        path = File.join(dir, "README.md")
+        File.write(path, <<~MD)
+          | | |
+          |---|---|
+          | sirena commit | `#{other}` |
+          | sirena branch | `plan/architecture-update` |
+        MD
+
+        expect(described_class.expected_sha(path)).to eq(other)
+      end
+    end
+
+    it "refuses a README with no provenance row" do
+      Dir.mktmpdir("readme") do |dir|
+        path = File.join(dir, "README.md")
+        File.write(path, "no table here\n")
+
+        expect { described_class.expected_sha(path) }
+          .to raise_error(SirenaProvenance::Mismatch, /no `sirena commit` row/)
+      end
     end
   end
 

@@ -95,8 +95,15 @@ module SirenaCapture
      File.join(out_dir, "#{name}.json")]
   end
 
+  # EXCL, not TRUNC. The staging path is predictable, and `CREAT|TRUNC`
+  # FOLLOWS a symlink sitting there: a link pre-created at
+  # `.a.json.<pid>.tmp` had the capture written straight through it to
+  # the link's referent, and the link was then installed as a.json --
+  # measured, a file outside the directory was overwritten. `CREAT|EXCL`
+  # refuses any existing path, symlink included, before a byte is
+  # written; NOFOLLOW would be redundant beside it.
   def write_json(tmp, graph)
-    File.open(tmp, File::WRONLY | File::CREAT | File::TRUNC) do |file|
+    File.open(tmp, File::WRONLY | File::CREAT | File::EXCL) do |file|
       file.write("#{JSON.pretty_generate(graph)}\n")
     end
   end
@@ -108,13 +115,28 @@ module SirenaCapture
   # already replaced -- measured. `refuse_unpublishable!` rejects that
   # case before anything moves; the undo log covers the rest.
   def commit(staged)
-    refuse_unpublishable!(staged)
     undone = []
+    published = false
+    refuse_unpublishable!(staged)
     staged.each { |tmp, target| replace(tmp, target, undone) }
-    undone.each { |entry| FileUtils.rm_f(entry.last) if entry.last }
-  rescue SystemCallError
-    undone.each { |target, stashed| roll_back(target, stashed) }
-    raise
+    published = true
+  ensure
+    finish(undone, published)
+  end
+
+  # `ensure`, not `rescue SystemCallError`. Ctrl-C raises Interrupt,
+  # which that rescue did not catch: an interrupted publish left a.json
+  # updated, b.json missing and both backups on disk -- measured. An
+  # ensure runs for EVERY exit, so the undo does not depend on
+  # enumerating which exceptions an interruption can arrive as.
+  def finish(undone, published)
+    undone.each do |target, stashed|
+      if published
+        FileUtils.rm_f(stashed) if stashed
+      else
+        roll_back(target, stashed)
+      end
+    end
   end
 
   # The undo entry is recorded BEFORE the rename, so the file whose
@@ -137,8 +159,16 @@ module SirenaCapture
                  "is not a regular file"
   end
 
+  # `File.exist?` FOLLOWS a symlink, so a dangling link at the target read
+  # as "nothing here" and rollback deleted it instead of putting it back
+  # -- measured. What has to be restored is whatever DIRECTORY ENTRY was
+  # there, link or file, which is what `symlink?` adds.
+  def present?(path)
+    File.exist?(path) || File.symlink?(path)
+  end
+
   def stash(target)
-    return nil unless File.exist?(target)
+    return nil unless present?(target)
 
     stashed = "#{target}.#{Process.pid}.bak"
     File.rename(target, stashed)
@@ -146,7 +176,7 @@ module SirenaCapture
   end
 
   def roll_back(target, stashed)
-    FileUtils.rm_f(target)
+    FileUtils.rm_f(target) if present?(target)
     File.rename(stashed, target) if stashed
   end
 end

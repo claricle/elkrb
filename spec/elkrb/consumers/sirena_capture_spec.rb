@@ -2,6 +2,7 @@
 
 require "spec_helper"
 require "json"
+require "support/sirena_provenance"
 
 RSpec.describe "sirena consumer capture fixtures" do
   dir = "spec/fixtures/consumers/sirena"
@@ -9,7 +10,6 @@ RSpec.describe "sirena consumer capture fixtures" do
     c4_nested class_flat er flowchart_lr flowchart_td sequence
     state user_journey
   ]
-  sirena_sha = "c3820364551b3f107b6177bba8d1e2c0c6d3940b"
   spacings = {
     "elk.spacing.nodeNode" => 75.0,
     "elk.spacing.edgeNode" => 30,
@@ -97,11 +97,15 @@ RSpec.describe "sirena consumer capture fixtures" do
     expect(File).to exist(File.join(dir, "README.md"))
   end
 
+  # Asserts the row is THERE and well-formed, not that it holds one
+  # particular sha. A copy of the sha here would have to be edited in
+  # lockstep with the README on every legitimate re-capture, which is
+  # the duplication `rake fixtures:sirena` exists to avoid.
   it "records its provenance in the README" do
-    readme = File.read(File.join(dir, "README.md"))
+    readme_path = File.join(dir, "README.md")
 
-    expect(readme).to include(sirena_sha)
-    expect(readme).to include("2026-08-28")
+    expect(SirenaProvenance.expected_sha(readme_path)).to match(/\A\h{40}\z/)
+    expect(File.read(readme_path)).to include("2026-08-28")
   end
 
   captured.each do |name|

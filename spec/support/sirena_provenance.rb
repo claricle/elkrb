@@ -14,8 +14,10 @@ module SirenaProvenance
   class Mismatch < StandardError; end
 
   # The `| sirena commit | `<sha>` |` row of the README's provenance
-  # table. The README is the single place the expected commit is written
-  # down, so the guard reads it rather than carrying a second copy.
+  # table. That row is the ONLY place the expected commit is written
+  # down -- no spec hardcodes it either, so following the instruction in
+  # the mismatch message below (update the table) is genuinely all that
+  # a deliberate move to a newer sirena takes.
   README_SHA = /^\|\s*sirena commit\s*\|\s*`([0-9a-f]{40})`\s*\|/
 
   module_function
