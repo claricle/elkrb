@@ -311,12 +311,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Disco do
         expect { algorithm.layout(graph) }.not_to raise_error
       end
     end
-    # A node with no width/height is ordinary ELK input -- the format leaves
-    # both optional. Every arrangement added a dimension to a coordinate
-    # directly (`node.x + node.width` in row and grid, `node.y + node.height`
-    # in column and grid), so all three raised TypeError on such a node.
-    # `calculate_bounding_box` already handled the nils; Disco simply did not
-    # go through it.
+    # ELK allows a node with no width or height.
     context "with a node that declares no size" do
       %w[row column grid].each do |arrangement|
         it "places it instead of raising, for the #{arrangement} arrangement" do
@@ -328,9 +323,6 @@ RSpec.describe Elkrb::Layout::Algorithms::Disco do
 
           algorithm.layout(graph)
 
-          # Name the values, not the absence of an exception: a bare
-          # `not_to raise_error` stays green if the guard is deleted and
-          # something else swallows the failure.
           expect(graph.children.map(&:x)).to all(be_a(Numeric).and(be_finite))
           expect(graph.children.map(&:y)).to all(be_a(Numeric).and(be_finite))
         end
