@@ -49,7 +49,7 @@ module Elkrb
         @children ||= []
         @edges ||= []
         @properties ||= {}
-        @layout_options ||= LayoutOptions.new
+        @layout_options ||= {}
       end
 
       # Normalizes a Symbol key however the options arrive — a constructor,
@@ -60,7 +60,7 @@ module Elkrb
         value_set_for(:layout_options)
         attr = self.class.attributes(lutaml_register)[:layout_options]
         cast = attr.cast_value(DeepStringifyKeys.call(value), lutaml_register)
-        instance_variable_set(:@layout_options, LayoutOptions.wrap(cast))
+        instance_variable_set(:@layout_options, NormalizeOptionKeys.call(cast))
       end
 
       def find_node(node_id)

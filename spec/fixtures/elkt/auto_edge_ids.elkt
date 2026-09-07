@@ -1,0 +1,9 @@
+graph e0
+node e1 {
+  port e2
+  label e3: "L"
+}
+edge e5: a -> b {
+  layout [ section e4 [ start: 0, 0 ] ]
+}
+edge a -> c
