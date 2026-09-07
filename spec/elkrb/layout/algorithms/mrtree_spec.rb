@@ -770,11 +770,14 @@ RSpec.describe "MRTree with a node reachable by two paths of different depth" do
 end
 
 RSpec.describe "MRTree on a densely cyclic graph" do
-  # Every node reachable from every other. Enumerating simple paths here is
-  # factorial: a complete 8-node cycle took 2.5s and each further node cost
-  # roughly ten times more. The bound is deliberately loose — it is guarding
-  # against a return to factorial growth, not measuring throughput.
-  def complete_cycle(size)
+  # A COMPLETE DIGRAPH on the s-nodes -- every s-node points at every other
+  # s-node -- plus a `root` that seeds it. Not a cycle, and not "every node
+  # reachable from every other": nothing points AT root, which is the whole
+  # point of having it. Enumerating simple paths across that digraph is
+  # factorial: 8 s-nodes took 2.5s and each further node cost roughly ten
+  # times more. The bound is deliberately loose — it guards against a return
+  # to factorial growth, not throughput.
+  def complete_digraph(size)
     ids = (1..size).map { |i| "s#{i}" }
     edges = [{ "id" => "seed", "sources" => ["root"],
                "targets" => [ids.first] }]
@@ -795,25 +798,25 @@ RSpec.describe "MRTree on a densely cyclic graph" do
     }
   end
 
-  it "lays out a complete 20-node cycle inside five seconds" do
+  it "lays out a 20-node complete digraph inside five seconds" do
     # The bound has to interrupt the call, not be read after it returns. A
     # regression to unbounded growth never reaches the assertion, so the old
     # form stalled the whole suite instead of failing this one example.
     expect do
       Timeout.timeout(5.0) do
-        Elkrb.layout(complete_cycle(20), algorithm: "mrtree")
+        Elkrb.layout(complete_digraph(20), algorithm: "mrtree")
       end
     end.not_to raise_error
   end
 
-  it "keeps the seed root above every node of the cycle" do
-    result = Elkrb.layout(complete_cycle(12), algorithm: "mrtree")
+  it "keeps the seed root above every node of the digraph" do
+    result = Elkrb.layout(complete_digraph(12), algorithm: "mrtree")
 
     ids = result.children.map(&:id)
     expect(ids.uniq.size).to eq(ids.size)
     expect(result.children.map(&:y)).to all(be_a(Float))
 
-    # "root" is the one node outside the cycle and the only one with no
+    # "root" is the one node outside the digraph and the only one with no
     # incoming edge, so it is the sole real root. Every s-node has to be
     # levelled from it and land below it.
     by_id = result.children.to_h { |node| [node.id, node] }
@@ -1074,9 +1077,9 @@ RSpec.describe "MRTree on many disjoint cyclic components" do
   end
 
   it "places every component without hanging" do
-    # Same reason as the 20-node cycle above: the bound has to INTERRUPT
-    # the call, not be read after it returns. Measuring elapsed time only
-    # reports a regression that finishes; one that does not finish stalls
+    # Same reason as the 20-node complete digraph above: the bound has to
+    # INTERRUPT the call, not be read after it returns. Measuring elapsed
+    # time only reports a regression that finishes; one that does not stalls
     # the whole suite. That is not hypothetical here -- reverting this
     # branch's mrtree.rb and running its examples together ran for over
     # thirteen minutes without a verdict.
@@ -1091,9 +1094,10 @@ RSpec.describe "MRTree on many disjoint cyclic components" do
   end
 end
 
-RSpec.describe "MRTree levelling a cycle it cannot find a path through" do
-  # root is the only real root; c1..c5 are wired to each other in every
-  # direction. Relaxation has no longest path to settle on here, so each
+RSpec.describe "MRTree levelling a digraph it cannot find a path through" do
+  # Another complete digraph, not a cycle: root is the only real root and
+  # c1..c5 point at each other in every direction. Relaxation has no
+  # longest path to settle on here, so each
   # sweep keeps offering a deeper candidate and the levels climb until the
   # bound stops them. Drop that bound and the depth grows with the SQUARE
   # of the node count instead of with the node count.
@@ -1117,7 +1121,7 @@ RSpec.describe "MRTree levelling a cycle it cannot find a path through" do
     }
   end
 
-  it "keeps the cycle's depth proportional to the node count" do
+  it "keeps the digraph's depth proportional to the node count" do
     result = Elkrb.layout(graph, algorithm: "mrtree")
 
     # Rows are 80 apart. Relaxation cannot push a level past the node
@@ -1127,7 +1131,7 @@ RSpec.describe "MRTree levelling a cycle it cannot find a path through" do
     expect(result.height).to be < (2 * result.children.size * 80.0)
   end
 
-  it "still puts the seed root above every node of the cycle" do
+  it "still puts the seed root above every node of the digraph" do
     by_id = Elkrb.layout(graph, algorithm: "mrtree")
       .children.to_h { |node| [node.id, node] }
     root = by_id.delete("root")
