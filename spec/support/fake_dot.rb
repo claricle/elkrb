@@ -7,11 +7,13 @@ require "fileutils"
 #
 # The fake script logs its argv (NUL-separated, one invocation per line) to
 # a log file and touches whatever file the real Graphviz `-o` flag would
-# have written, in both forms elkrb has used for it: a separate `-o path`
-# token pair, and the `-opath` suffix form. Given `-V`, it prints a canned
-# version line, matching what `dot -V` actually prints. Specs read the log
-# to assert what argv the CLI actually built, without stubbing the method
-# under test.
+# have written, in both forms real Graphviz accepts: a separate `-o path`
+# token pair, and the `-opath` suffix form. elkrb emits only the pair now,
+# and no example depends on the suffix branch -- it is kept so the fake
+# stays a faithful `dot`, not because it discriminates anything. Given
+# `-V`, it prints a canned version line, matching what `dot -V` actually
+# prints. Specs read the log to assert what argv the CLI actually built,
+# without stubbing the method under test.
 module FakeDot
   FAKE_DOT_SCRIPT = <<~'RUBY'
     #!/usr/bin/env ruby
@@ -51,9 +53,9 @@ module FakeDot
 
   # Writes the script into `dir`, puts `dir` first on PATH, and clears any
   # ELKRB_DOT override so the fake is found by a PATH search rather than
-  # bypassed. `original_path` is passed in because PATH has not been
-  # restored yet at this point -- with_fake_dot only restores it after the
-  # block.
+  # bypassed. `original_path` is passed in rather than read from ENV
+  # because with_fake_dot already captured it into `saved`, and that copy
+  # is the one it will restore.
   #
   # @return [String] the log path the caller reads argv back from
   def install_fake_dot(dir, original_path)

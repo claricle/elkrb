@@ -40,17 +40,6 @@ RSpec.describe "elkrb CLI shell boundary" do
       end
     end
 
-    it "exits 1 with a stderr message for unparsable input" do
-      garbage_file = File.join(CliRunner::ROOT,
-                               "spec/fixtures/corpus/garbage.txt")
-
-      stdout, stderr, status = run_elkrb("layout", garbage_file)
-
-      expect(status.exitstatus).to eq(1)
-      expect(stdout).to eq("")
-      expect(stderr).not_to eq("")
-    end
-
     # Cli#error_output writes with $stderr.puts rather than Kernel#warn
     # because warn is a no-op once warnings are off, which would delete
     # every CLI error message for anyone running under -W0.

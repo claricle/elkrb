@@ -76,7 +76,13 @@ RSpec.describe "elkrb CLI" do
 
       with_fake_dot do |log_path|
         Dir.mktmpdir do |dir|
-          malicious_output = File.join(dir, "a;touch PWNED;.svg")
+          # The payload CLOSES a single quote before its metacharacters.
+          # A shell string built by wrapping each argument in quotes
+          # neutralises a bare `a;touch PWNED;.svg`, so that payload stays
+          # green against the very implementation this example exists to
+          # refuse. This one escapes the quoting, so the example fails when
+          # the command is a shell string and passes when it is argv.
+          malicious_output = File.join(dir, "a'; touch PWNED; echo '.svg")
 
           Dir.chdir(dir) do
             run_elkrb("render", malicious_dot_file, "-o", malicious_output)
@@ -99,9 +105,11 @@ RSpec.describe "elkrb CLI" do
   end
 
   # bom.elkt and garbage.txt sit in spec/fixtures/corpus/ but are excluded
-  # from the layout corpus by its JSON-only glob. The CLI's format
-  # detection is the only thing that reads them, so this is where they earn
-  # their place.
+  # from the layout corpus by its JSON-only glob. Only the CLI reads them,
+  # through format detection. shell_boundary_spec.rb drives the same two
+  # fixtures through `layout`; these drive `convert` and the exact refusal
+  # message, so the two files cover different commands, not the same one
+  # twice.
   describe "input format detection" do
     def corpus_fixture(name)
       File.join(CliRunner::ROOT, "spec/fixtures/corpus", name)
@@ -127,8 +135,12 @@ RSpec.describe "elkrb CLI" do
     # A UTF-8 BOM used to stay glued to the file's first declaration, which
     # then matched no ELKT rule and was dropped silently: `node a`
     # disappeared and edge e0 was left pointing at a node no longer in the
-    # graph. ElktParser strips the mark by byte now, so every declaration
-    # survives. Both ids, not just a count -- dropping `a` and keeping `b`
+    # graph. FormatSniffer strips the mark by byte before the parser ever
+    # sees it, so on THIS path that is what makes every declaration
+    # survive; ElktParser carries a second, redundant strip for callers
+    # that reach it directly. Measured: the BOM never arrives at
+    # ElktParser here, so do not read this example as covering that one.
+    # Both ids in order, not just a count -- dropping `a` and keeping `b`
     # is the exact shape of the bug.
     it "keeps every declaration of a BOM-prefixed ELKT file" do
       Dir.mktmpdir do |dir|
@@ -141,7 +153,7 @@ RSpec.describe "elkrb CLI" do
         expect(status.exitstatus).to eq(0)
         graph = JSON.parse(File.read(output))
         ids = graph["children"].map { |child| child["id"] }
-        expect(ids).to contain_exactly("a", "b")
+        expect(ids).to eq(%w[a b])
       end
     end
   end

@@ -234,7 +234,9 @@ RSpec.describe Elkrb::GraphvizWrapper do
       with_fake_dot do |log_path|
         Dir.mktmpdir do |dir|
           input = write_fake_input(dir)
-          malicious_output = File.join(dir, "a;touch PWNED;.png")
+          # Escapes naive per-argument quoting. A bare `a;touch PWNED;`
+          # does not, and stays green against a shell-string build.
+          malicious_output = File.join(dir, "a'; touch PWNED; echo '.png")
 
           # Confines any accidental shell execution to `dir`, which
           # Dir.mktmpdir cleans up regardless — under the vulnerable
