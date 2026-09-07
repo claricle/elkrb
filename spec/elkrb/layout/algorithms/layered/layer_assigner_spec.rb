@@ -22,12 +22,18 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::LayerAssigner do
         ],
       )
 
+      # Anchored on "LayerAssigner:", not just "cycle through". The message
+      # this replaced was "Layered: cycle through ... not fully broken
+      # (hyperedge)", which a looser pattern also matches -- so the example
+      # stayed green against the pre-change code and pinned nothing.
       layers = nil
       expect do
         layers = described_class.new(
           graph, Elkrb::Layout::NodeIndex.build(graph)
         ).assign_layers
-      end.to output(/cycle through .* not fully broken/).to_stderr
+      end.to output(
+        /LayerAssigner: cycle through \w+ not fully broken/,
+      ).to_stderr
 
       expect(layers.flatten.map(&:id)).to contain_exactly("a", "b", "c")
     end
