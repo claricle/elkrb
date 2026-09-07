@@ -70,19 +70,33 @@ jobs:
   # Blocking on purpose. An advisory job guarding a promise made to consumers
   # of the gem is not a guard.
   ruby-floor:
-    name: rake (ruby 3.2, gemspec floor)
+    name: rake (ruby 3.2.0, gemspec floor)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # generic-rake.yml cancels a superseded in-flight run on the same ref for
     # its own matrix legs; keep that behaviour for this one.
+    #
+    # Keyed on github.ref, NOT on upstream's `github.head_ref || github.ref_name`.
+    # Neither of those is unique: head_ref is the SOURCE BRANCH NAME only, so two
+    # fork PRs both opened from `patch-1` share a group and cancel each other,
+    # and ref_name drops refs/heads vs refs/tags, so the tag `v2` and the branch
+    # `v2` collapse -- and this workflow triggers on both (`branches: [... v2]`,
+    # `tags: [v*]`). github.ref keeps them apart: measured on run 34126787619,
+    # the pull_request checkout was `refs/pull/26/merge`, which carries the PR
+    # number, while head_ref was just `fix/ci-self-contained-rake`.
     concurrency:
-      group: ${{ github.workflow }}-ruby-floor-${{ github.head_ref || github.ref_name }}
+      group: ${{ github.workflow }}-ruby-floor-${{ github.ref }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v6
       - uses: ruby/setup-ruby@v1
         with:
-          ruby-version: "3.2"
+          # "3.2.0", not "3.2". setup-ruby resolves a two-part version to the
+          # LATEST patch release, which is not the floor: run 34126787619
+          # printed `ruby 3.2.11` for this job. The gemspec promises 3.2.0, so a
+          # regression that needs 3.2.1+ would ship green under "3.2". This is
+          # the only job that tests the version elkrb actually advertises.
+          ruby-version: "3.2.0"
           # No Gemfile.lock is committed. setup-ruby runs `bundle lock` first,
           # which re-resolves to the latest compatible gems and yields the
           # cache key, then installs -- so no separate `bundle install` step.
