@@ -141,19 +141,31 @@ RSpec.describe Elkrb::Layout::LayoutEngine do
     end
 
     context "with invalid graph input" do
-      [nil, 42, "not a graph", [], :root, false, Object.new,
-       Elkrb::Graph::Node.new].each do |bad_input|
-        it "raises ArgumentError for #{bad_input.class}" do
-          expect { described_class.layout(bad_input) }
-            .to raise_error(
-              ArgumentError,
-              "graph must be a Hash or Elkrb::Graph::Graph, got #{bad_input.class}",
-            )
-        end
+      # A Node sits in the Elkrb::Graph:: namespace and is not a Graph, so it
+      # is the one input that tells a class check apart from a namespace check.
+      # Every other rejected type is already covered in spec/elkrb_spec.rb,
+      # through this same entry point.
+      it "raises ArgumentError for a Graph::Node" do
+        expect { described_class.layout(Elkrb::Graph::Node.new) }
+          .to raise_error(
+            ArgumentError,
+            "graph must be a Hash or Elkrb::Graph::Graph, " \
+            "got Elkrb::Graph::Node",
+          )
       end
 
+      # Ordering is asserted by removing the capability, not by watching for
+      # its use: resolution cannot succeed here, so any implementation that
+      # reaches it raises instead of returning. Keep NotImplementedError --
+      # it is outside StandardError, which is what makes reaching resolution
+      # observable. Lint/InheritException rewrites Class.new(Exception) to
+      # StandardError, and this example would then pass while asserting
+      # nothing.
       it "rejects the graph before the algorithm is resolved" do
-        expect { described_class.layout(nil, algorithm: "nonexistent") }
+        allow(Elkrb::Layout::AlgorithmRegistry).to receive(:get)
+          .and_raise(NotImplementedError, "algorithm resolution must not run")
+
+        expect { described_class.layout(nil, algorithm: "layered") }
           .to raise_error(
             ArgumentError,
             "graph must be a Hash or Elkrb::Graph::Graph, got NilClass",
