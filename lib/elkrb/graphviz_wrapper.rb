@@ -35,7 +35,7 @@ module Elkrb
     def version
       return nil unless available?
 
-      output = `#{@dot_path} -V 2>&1`
+      output = IO.popen([@dot_path, "-V"], err: %i[child out], &:read)
       output.match(/version\s+([\d.]+)/i)&.captures&.first
     end
 
@@ -59,15 +59,22 @@ module Elkrb
         "/opt/local/bin/dot",
       ]
 
-      candidates.each do |path|
-        if File.executable?(path)
-          return path
-        elsif system("which #{path} > /dev/null 2>&1")
-          return path
-        end
-      end
+      candidates.find { |path| executable_candidate?(path) }
+    end
 
-      nil
+    # A shell-free replacement for `which`. An absolute candidate is asked of
+    # the filesystem directly; a bare name is resolved against PATH the way
+    # execvp would. Nothing here interpolates into a command string, which is
+    # what the old `system("which #{path} ...")` did.
+    def executable_candidate?(path)
+      return true if File.executable?(path)
+      return false if path.include?(File::SEPARATOR)
+
+      dirs = ENV.fetch("PATH", "").split(File::PATH_SEPARATOR)
+      dirs.reject(&:empty?).any? do |dir|
+        entry = File.join(dir, path)
+        File.file?(entry) && File.executable?(entry)
+      end
     end
 
     def build_command(engine, format, input_file, output_file, dpi)
