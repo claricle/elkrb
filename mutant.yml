@@ -1,0 +1,10 @@
+---
+# elkrb is a public repository under BSD-2-Clause (declared in elkrb.gemspec),
+# which is what mutant's `opensource` usage type requires. Without this key mutant
+# refuses to run at all with "Unknown mutant usage type".
+usage: opensource
+integration: rspec
+includes:
+  - lib
+requires:
+  - elkrb
