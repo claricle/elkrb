@@ -692,8 +692,10 @@ RSpec.describe "MRTree fallback trees must stay disjoint" do
 
     expect(by_id["c"].y).to be > by_id["v"].y
     # v owns c and is its only parent in the forest, so they share a
-    # column. Let a's fallback tree place c a second time and c slides
-    # right, while y stays exactly where it was.
+    # column. Let a's fallback tree place c a second time and c moves to
+    # (72.0, 572.0) from (12.0, 412.0) -- measured by giving each seed its
+    # own visited set. Both assertions catch that; the x one is the sharper
+    # of the two, because c stays below v either way.
     expect(by_id["c"].x).to eq(by_id["v"].x)
   end
 
@@ -707,8 +709,10 @@ end
 RSpec.describe "MRTree claims every sibling before expanding any of them" do
   # a's children are b and c, and c is reachable from b as well. The child
   # list is settled before any of it is recursed into, so c has to be
-  # claimed as a's child straight away -- otherwise b's subtree reaches c,
-  # places it and d a second time, and the later placement wins.
+  # claimed as a's child straight away -- otherwise b's subtree reaches c
+  # and places it a second time, and the later placement wins. Only c is
+  # placed twice: measured with the pre-claim removed, c takes three
+  # coordinate writes and b, c's own child d, and a take two each.
   let(:graph) do
     {
       "id" => "root",
@@ -1195,7 +1199,10 @@ RSpec.describe "MRTree levelling a digraph it cannot find a path through" do
     # Rows are 80 apart. Relaxation cannot push a level past the node
     # count, and the tree floor can add at most one row per node on top of
     # that, so twice the node count is the honest ceiling -- six nodes here
-    # occupy seven rows. Unbounded, the same graph spreads over thirty-two.
+    # occupy seven rows (594.0 tall). Remove `max_level` and this graph does
+    # not lay out at all: the cycle re-queues each node forever and a
+    # five-second bound expires -- measured, and the reason that ceiling is
+    # described as load-bearing in mrtree.rb.
     expect(result.height).to be < (2 * result.children.size * 80.0)
   end
 

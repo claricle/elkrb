@@ -252,7 +252,8 @@ module Elkrb
 
         # On a DAG this settles on the LONGEST path to each node, which is what
         # puts a node reachable by two routes below its deepest parent. Walking
-        # every simple path to find that is factorial — a complete 8-node cycle
+        # every simple path to find that is factorial — a complete 8-node
+        # DIGRAPH (every node pointing at every other, not a simple cycle)
         # took 2.5s and each extra node multiplied it by roughly ten. Relax
         # instead: a longest path visits each node at most once, so a node
         # re-queued whenever its own level moves settles every level a DAG
@@ -260,7 +261,11 @@ module Elkrb
         #
         # A cyclic component has no longest path, so what its nodes get here is
         # a bounded fallback number rather than a depth — `max_level` stops it
-        # climbing, it does not make it mean anything. Ordering inside such a
+        # climbing, it does not make it mean anything. It is also the ONLY
+        # thing that stops it: the sweep form had a pass count to fall out
+        # of as well, and the worklist does not. Measured with `max_level`
+        # removed, a six-node complete digraph does not finish in five
+        # seconds; with it, it lays out in seven rows. Ordering inside such a
         # component is restored afterwards by #build_subtree's floor.
         #
         # `nodes` is ONE component, so the level ceiling is that component's
