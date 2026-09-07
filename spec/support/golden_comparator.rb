@@ -211,6 +211,7 @@ module GoldenComparator
     if fields.include?(:graph)
       diffs.concat(diff_own_numeric(expected, actual, path,
                                     RECT_FIELDS))
+      diffs.concat(diff_root_id(expected, actual))
     end
     diffs.concat(diff_owner_fields(expected, actual, fields, path))
     diffs.concat(diff_children_tree(expected, actual, fields, path))
@@ -476,11 +477,23 @@ module GoldenComparator
   # equal (grouped by rounded x for RIGHT/LEFT direction, y for UP/DOWN).
   def diff_structural(expected, actual)
     diffs = []
+    diffs.concat(diff_root_id(expected, actual))
     diffs.concat(diff_graph_size(expected, actual))
     diffs.concat(diff_node_geometry(expected, actual, ""))
     diffs.concat(diff_section_borders(expected, actual))
     diffs.concat(diff_layer_membership(expected, actual))
     diffs
+  end
+
+  # The root's own id. Every other id in the harness is matched inside a
+  # `children`/`edges` collection, and the root sits in neither -- so
+  # renaming "root" to anything else produced no exact, structural or
+  # smoke difference at all, and it is a reachable rename.
+  def diff_root_id(expected, actual)
+    return [] if expected["id"] == actual["id"]
+
+    ["graph/id: expected #{expected['id'].inspect}, " \
+     "got #{actual['id'].inspect}"]
   end
 
   def diff_graph_size(expected, actual)

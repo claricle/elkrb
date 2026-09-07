@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 require "bundler/gem_tasks"
+require "fileutils"
+require "json"
+require "tmpdir"
 require "rspec/core/rake_task"
 require "rubocop/rake_task"
 
@@ -85,13 +88,15 @@ module GoldenFixtures
   ELKJS_NODE_MODULES = "#{ELKJS_DIR}/node_modules/elkjs".freeze
   GOLDEN_DIR = "spec/fixtures/golden"
 
-  # Every failure below RAISES this. These are public module methods, and
-  # they used to `abort`: any Ruby process that loaded this Rakefile and
-  # called `generate_into` was terminated with SystemExit 1 instead of
-  # getting an exception it could handle. Only a rake task -- the CLI
-  # entry point -- decides an exit status, which the tasks below do by
-  # rescuing this and calling `abort` themselves.
-  class GenerationFailed < StandardError; end
+  # Every failure in this module and in the golden tasks RAISES this.
+  # Nothing on this path calls `abort`. These are public module methods,
+  # and the tasks themselves are reachable as
+  # `Rake::Task["golden:generate"].invoke`, so an `abort` anywhere in the
+  # path took the CALLING process down with SystemExit 1 -- measured, a
+  # probe's own "CALLER SURVIVED" line was never reached. Rake turns this
+  # exception into exit status 1 on its own, which is the CLI's job and
+  # nobody else's.
+  class Failed < StandardError; end
 
   module_function
 
@@ -104,18 +109,17 @@ module GoldenFixtures
   # exactly the point: `dir`'s path is printed below so a failure's
   # partial tree is there to inspect. What never happens is GOLDEN_DIR
   # (the real committed destination) being touched — the caller only
-  # copies out of `dir` after `generate_into` returns successfully.
+  # publishes out of `dir` after `generate_into` returns successfully.
   def generate_into(dir)
     run_generator(dir)
   rescue Errno::ENOENT
-    raise GenerationFailed, "node not found on PATH (#{left_at(dir)})"
+    raise Failed, "node not found on PATH (#{left_at(dir)})"
   rescue RuntimeError => e
     # `exception: true` raises plain RuntimeError on a non-zero exit --
     # generate.js already printed its own specific reason to stderr above
     # this, so the message just adds where to look, not a duplicate reason.
-    raise GenerationFailed,
-          "generate.js failed (#{e.message}); see its output above " \
-          "(#{left_at(dir)})"
+    raise Failed, "generate.js failed (#{e.message}); see its output " \
+                  "above (#{left_at(dir)})"
   end
 
   def left_at(dir)
@@ -125,93 +129,130 @@ module GoldenFixtures
   def run_generator(dir)
     puts "Generating into #{dir}"
     unless Dir.exist?(ELKJS_NODE_MODULES)
-      raise GenerationFailed,
-            "elkjs not installed — run: npm ci --prefix #{ELKJS_DIR}"
+      raise Failed, "elkjs not installed — run: npm ci --prefix #{ELKJS_DIR}"
     end
 
     system("node", "#{ELKJS_DIR}/generate.js", dir, exception: true)
   end
+
+  # Replaces the committed expected tree and MANIFEST with freshly
+  # generated ones. The whole replacement is copied into a staging
+  # directory beside the destination FIRST, and the live paths are
+  # swapped only once that copy is complete.
+  #
+  # `rm_rf` then `cp_r` deleted the committed tree before it had a
+  # replacement: a `cp_r` forced to raise ENOSPC left `expected/` gone
+  # and the previous MANIFEST.json sitting beside nothing -- measured.
+  # Uncommitted fixtures were destroyed by a full disk.
+  def publish_into(source, golden_dir)
+    staged = File.join(golden_dir, ".expected.#{Process.pid}.staged")
+    staged_manifest = File.join(golden_dir, ".MANIFEST.#{Process.pid}.staged")
+    FileUtils.cp_r(source, staged)
+    FileUtils.mv(File.join(staged, "MANIFEST.json"), staged_manifest)
+    swap_into_place(golden_dir, staged, staged_manifest)
+  ensure
+    FileUtils.rm_rf([staged, staged_manifest].compact)
+  end
+
+  # The two renames, with an undo. One rename cannot half-happen; two of
+  # them can, so the first is put back if the second fails and the
+  # directory never holds a new tree beside an old manifest.
+  def swap_into_place(golden_dir, staged, staged_manifest)
+    live = [File.join(golden_dir, "expected"),
+            File.join(golden_dir, "MANIFEST.json")]
+    kept = live.map { |path| keep_aside(path) }
+    rename_pair([staged, staged_manifest], live, kept)
+    FileUtils.rm_rf(kept.compact)
+  end
+
+  def rename_pair(sources, live, kept)
+    sources.zip(live).each { |from, to| File.rename(from, to) }
+  rescue SystemCallError
+    kept.zip(live).each { |aside, path| restore(aside, path) }
+    raise
+  end
+
+  def keep_aside(path)
+    return nil unless File.exist?(path)
+
+    aside = "#{path}.#{Process.pid}.previous"
+    File.rename(path, aside)
+    aside
+  end
+
+  def restore(aside, path)
+    return if aside.nil?
+
+    FileUtils.rm_rf(path)
+    File.rename(aside, path)
+  end
+
+  # Compares a freshly generated tree against the committed one and
+  # raises on any drift. `source` is deliberately left where it is so a
+  # failure can be inspected, which is what every message promises.
+  def check_against(source, golden_dir)
+    manifest = File.join(golden_dir, "MANIFEST.json")
+    unless File.exist?(manifest)
+      raise Failed, "#{manifest} missing — run 'rake golden:generate' " \
+                    "first (generated tree left at #{source})"
+    end
+
+    check_manifest_drift(source, manifest)
+    check_tree_drift(source, File.join(golden_dir, "expected"))
+  end
+
+  def check_manifest_drift(source, committed_path)
+    fresh = JSON.parse(File.read(File.join(source, "MANIFEST.json")))
+    committed = JSON.parse(File.read(committed_path))
+    # "generated" is a timestamp and "node" is machine-specific — only the
+    # pinned elkjs version and the case list are required to match.
+    drifted = %w[elkjs cases].reject { |key| fresh[key] == committed[key] }
+    return if drifted.empty?
+
+    raise Failed, "MANIFEST.json drift in #{drifted.join(', ')} " \
+                  "(generated tree left at #{source})"
+  end
+
+  # spec/fixtures/golden/expected holds only case files (no MANIFEST --
+  # `publish_into` moves it up to GOLDEN_DIR), so it compares directly
+  # against `source` with no extra copy step. `-x` (rather than deleting
+  # MANIFEST.json from `source` first) keeps `source` genuinely intact
+  # for inspection, matching what the messages below claim — a real
+  # BSD/GNU `diff` flag, confirmed working on both during planning.
+  def check_tree_drift(source, expected)
+    ok = system("diff", "-r", "-x", "MANIFEST.json", expected, source)
+    return if ok
+
+    if ok.nil?
+      raise Failed, "'diff' not found on PATH (generated tree left at " \
+                    "#{source} for inspection)"
+    end
+
+    raise Failed, "golden drift detected (see diff above; generated tree " \
+                  "left at #{source} for inspection)"
+  end
 end
 
-# rubocop:disable Metrics/BlockLength
 namespace :golden do
   desc "Regenerate the committed elkjs golden expected files"
   task :generate do
-    require "tmpdir"
-    require "fileutils"
-
     golden_dir = GoldenFixtures::GOLDEN_DIR
-
     # Non-block Dir.mktmpdir (not `do |tmp| ... end`): the block form
-    # removes the directory on ANY exit, including a raised `abort`, which
-    # would leave nothing to inspect after a failed generation. Removed
-    # explicitly below, only once generation has actually succeeded.
+    # removes the directory on ANY exit, including a raised failure,
+    # which would leave nothing to inspect. Removed explicitly below,
+    # only once the whole regeneration has actually succeeded.
     tmp = Dir.mktmpdir
-    # The task, not the module, turns a failure into an exit status.
-    begin
-      GoldenFixtures.generate_into(tmp)
-    rescue GoldenFixtures::GenerationFailed => e
-      abort e.message
-    end
-
-    FileUtils.rm_rf("#{golden_dir}/expected")
-    FileUtils.cp_r(tmp, "#{golden_dir}/expected")
-    FileUtils.mv("#{golden_dir}/expected/MANIFEST.json",
-                 "#{golden_dir}/MANIFEST.json")
+    GoldenFixtures.generate_into(tmp)
+    GoldenFixtures.publish_into(tmp, golden_dir)
     FileUtils.remove_entry(tmp)
     puts "Golden expected files regenerated in #{golden_dir}/expected"
   end
 
   desc "Diff freshly generated goldens against the committed ones (no writes)"
   task :check do
-    require "tmpdir"
-    require "fileutils"
-    require "json"
-
-    golden_dir = GoldenFixtures::GOLDEN_DIR
-
     tmp = Dir.mktmpdir
-    begin
-      GoldenFixtures.generate_into(tmp)
-    rescue GoldenFixtures::GenerationFailed => e
-      abort e.message
-    end
-
-    unless File.exist?("#{golden_dir}/MANIFEST.json")
-      abort "#{golden_dir}/MANIFEST.json missing — run " \
-            "'rake golden:generate' first (generated tree left at #{tmp})"
-    end
-
-    fresh_manifest = JSON.parse(File.read(File.join(tmp, "MANIFEST.json")))
-    committed_manifest = JSON.parse(File.read("#{golden_dir}/MANIFEST.json"))
-    # "generated" is a timestamp and "node" is machine-specific — only the
-    # pinned elkjs version and the case list are required to match.
-    drifted_keys = %w[elkjs cases].reject do |key|
-      fresh_manifest[key] == committed_manifest[key]
-    end
-    unless drifted_keys.empty?
-      abort "MANIFEST.json drift in #{drifted_keys.join(', ')} " \
-            "(generated tree left at #{tmp})"
-    end
-
-    # spec/fixtures/golden/expected already holds only case files (no
-    # MANIFEST — golden:generate moves it up to GOLDEN_DIR), so it
-    # compares directly against `tmp` with no extra copy step. `-x` (not
-    # deleting MANIFEST.json from `tmp` first) keeps `tmp` genuinely
-    # intact for inspection on failure, matching what the abort message
-    # below claims — a real BSD/GNU `diff` flag, confirmed working on
-    # both during planning.
-    ok = system("diff", "-r", "-x", "MANIFEST.json", "#{golden_dir}/expected",
-                tmp)
-    if ok
-      FileUtils.remove_entry(tmp)
-    elsif ok.nil?
-      abort "'diff' not found on PATH (generated tree left at #{tmp} " \
-            "for inspection)"
-    else
-      abort "golden drift detected (see diff above; generated tree left " \
-            "at #{tmp} for inspection)"
-    end
+    GoldenFixtures.generate_into(tmp)
+    GoldenFixtures.check_against(tmp, GoldenFixtures::GOLDEN_DIR)
+    FileUtils.remove_entry(tmp)
   end
 end
-# rubocop:enable Metrics/BlockLength
