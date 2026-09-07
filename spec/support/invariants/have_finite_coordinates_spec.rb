@@ -97,6 +97,36 @@ RSpec.describe "have_finite_coordinates" do
     expect(graph_with(node)).not_to have_finite_coordinates
   end
 
+  # A label id is optional in ELK. Two id-less labels on one owner both
+  # reported the path ".../labels/", so a failure naming two offenders
+  # could not say which label was which. Asserting on the MESSAGE, not
+  # just on the refusal: the refusal was already there and was not the
+  # defect.
+  it "names id-less sibling labels apart in the failure message" do
+    node = bad_node
+    node.labels = [
+      Elkrb::Graph::Label.new(text: "one", x: Float::NAN, y: 0.0),
+      Elkrb::Graph::Label.new(text: "two", x: Float::INFINITY, y: 0.0),
+    ]
+
+    expect { expect(graph_with(node)).to have_finite_coordinates }
+      .to raise_error(
+        RSpec::Expectations::ExpectationNotMetError,
+        /labels\[0\]\.x=NaN.*labels\[1\]\.x=Infinity/,
+      )
+  end
+
+  it "keeps a label id in the path when the label has one" do
+    node = bad_node
+    node.labels = [Elkrb::Graph::Label.new(id: "l", x: Float::NAN, y: 0.0)]
+
+    expect { expect(graph_with(node)).to have_finite_coordinates }
+      .to raise_error(
+        RSpec::Expectations::ExpectationNotMetError,
+        %r{labels\[0\]/l\.x=NaN},
+      )
+  end
+
   it "rejects a port carrying a non-finite position" do
     node = bad_node
     node.ports = [Elkrb::Graph::Port.new(id: "p", x: Float::NAN, y: 0.0)]
