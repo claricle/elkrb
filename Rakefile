@@ -70,3 +70,32 @@ namespace :validate do
     ruby "spec/cross_validation/generate_validation_report.rb"
   end
 end
+
+desc "Re-capture the sirena consumer fixtures " \
+     "(SIRENA_DIR=<sirena checkout>, OUT_DIR=<where to write>)"
+task "fixtures:sirena" do
+  sirena_dir = ENV.fetch("SIRENA_DIR", nil).to_s
+  if sirena_dir.empty?
+    abort "Set SIRENA_DIR to a sirena checkout, for example: " \
+          "rake fixtures:sirena SIRENA_DIR=~/claricle/sirena"
+  end
+
+  sirena_dir = File.expand_path(sirena_dir)
+  abort "No such directory: #{sirena_dir}" unless Dir.exist?(sirena_dir)
+
+  fixture_dir = File.expand_path("spec/fixtures/consumers/sirena", __dir__)
+  out_dir = File.expand_path(ENV.fetch("OUT_DIR", fixture_dir))
+
+  sh "git", "-C", sirena_dir, "log", "-1", "--format=sirena is at %H"
+  sh "git", "-C", sirena_dir, "status", "--porcelain"
+  puts "Check that sha, and an empty status above, against the " \
+       "provenance table in spec/fixtures/consumers/sirena/README.md."
+
+  # sirena is a separate gem, so the capture runs in sirena's own bundle.
+  Bundler.with_unbundled_env do
+    Dir.chdir(sirena_dir) do
+      sh "bundle", "exec", "ruby",
+         File.join(fixture_dir, "capture.rb"), fixture_dir, out_dir
+    end
+  end
+end

@@ -9,26 +9,29 @@ RSpec.describe "sirena consumer capture fixtures" do
     c4_nested class_flat er flowchart_lr flowchart_td sequence
     state user_journey
   ]
-  synthetic = %w[
-    synthetic_force synthetic_mrtree synthetic_sporeOverlap
-    synthetic_stress
-  ]
   sirena_sha = "c3820364551b3f107b6177bba8d1e2c0c6d3940b"
   spacings = {
     "elk.spacing.nodeNode" => 75.0,
     "elk.spacing.edgeNode" => 30,
     "elk.spacing.edgeEdge" => 30,
   }
-  option_maps_for = {
-    "synthetic_mrtree" => { "algorithm" => "mrtree",
-                            "elk.direction" => "DOWN" },
-    "synthetic_sporeOverlap" => { "algorithm" => "sporeOverlap",
-                                  "elk.direction" => "DOWN" },
-    "synthetic_stress" => { "algorithm" => "stress",
-                            "elk.direction" => "DOWN" }.merge(spacings),
-    "synthetic_force" => { "algorithm" => "force",
-                           "elk.direction" => "DOWN" }.merge(spacings),
+  # Option maps sirena's own build_elk_options produces for algorithms it
+  # does not emit yet. They are applied to flowchart_td.json here instead
+  # of being committed as four near-identical copies of that file.
+  synthetic_options = {
+    "mrtree" => { "algorithm" => "mrtree",
+                  "elk.direction" => "DOWN" },
+    "sporeOverlap" => { "algorithm" => "sporeOverlap",
+                        "elk.direction" => "DOWN" },
+    "stress" => { "algorithm" => "stress",
+                  "elk.direction" => "DOWN" }.merge(spacings),
+    "force" => { "algorithm" => "force",
+                 "elk.direction" => "DOWN" }.merge(spacings),
   }
+
+  def fixture(dir, name)
+    JSON.parse(File.read(File.join(dir, "#{name}.json")))
+  end
 
   def option_maps(node, acc = [])
     acc << [node["id"], node["layoutOptions"]] if
@@ -47,6 +50,30 @@ RSpec.describe "sirena consumer capture fixtures" do
     end
   end
 
+  shared_examples "a graph elkrb echoes back" do
+    let(:result) do
+      Elkrb.layout(JSON.parse(JSON.generate(input), symbolize_names: true))
+    end
+    let(:output) { JSON.parse(result.to_json) }
+
+    it "lays out without raising" do
+      expect { result }.not_to raise_error
+    end
+
+    it "echoes every layoutOptions map it was given" do
+      given = option_maps(input)
+
+      expect(given).not_to be_empty
+      expect(given.map(&:first)).to include(input["id"])
+      expect(option_maps(output)).to eq(given)
+    end
+
+    it "drops the unknown metadata key" do
+      expect(key_anywhere?(input, "metadata")).to be(true)
+      expect(key_anywhere?(output, "metadata")).to be(false)
+    end
+  end
+
   it "specs every committed fixture" do
     json = Dir[File.join(dir, "*.json")].map do |f|
       File.basename(f, ".json")
@@ -55,7 +82,7 @@ RSpec.describe "sirena consumer capture fixtures" do
       File.basename(f, ".mmd")
     end
 
-    expect(json.sort).to eq((captured + synthetic).sort)
+    expect(json.sort).to eq(captured.sort)
     expect(mmd.sort).to eq(captured.sort)
     expect(File).to exist(File.join(dir, "README.md"))
   end
@@ -67,129 +94,66 @@ RSpec.describe "sirena consumer capture fixtures" do
     expect(readme).to include("2026-08-28")
   end
 
-  (captured + synthetic).each do |name|
+  captured.each do |name|
     describe "#{name}.json" do
-      let(:path) { File.join(dir, "#{name}.json") }
-      let(:input) { JSON.parse(File.read(path)) }
-      let(:result) do
-        Elkrb.layout(JSON.parse(File.read(path), symbolize_names: true))
-      end
-      let(:output) { JSON.parse(result.to_json) }
+      let(:input) { fixture(dir, name) }
 
-      it "lays out without raising" do
-        expect { result }.not_to raise_error
-      end
-
-      it "echoes every layoutOptions map it was given" do
-        given = option_maps(input)
-
-        expect(given).not_to be_empty
-        expect(given.map(&:first)).to include(input["id"])
-        expect(JSON.generate(option_maps(output)))
-          .to eq(JSON.generate(given))
-      end
-
-      it "drops the unknown metadata key" do
-        expect(key_anywhere?(input, "metadata")).to be(true)
-        expect(key_anywhere?(output, "metadata")).to be(false)
-      end
+      it_behaves_like "a graph elkrb echoes back"
     end
   end
 
-  synthetic.each do |name|
-    describe "#{name}.json construction" do
-      let(:document) do
-        JSON.parse(File.read(File.join(dir, "#{name}.json")))
-      end
-      let(:base) do
-        JSON.parse(File.read(File.join(dir, "flowchart_td.json")))
+  synthetic_options.each do |algorithm, options|
+    describe "flowchart_td.json with the #{algorithm} option map" do
+      let(:input) do
+        fixture(dir, "flowchart_td").merge("layoutOptions" => options)
       end
 
-      it "differs from flowchart_td.json only in layoutOptions" do
-        body = document.except("layoutOptions")
-        want = base.except("layoutOptions")
-
-        expect(JSON.generate(body)).to eq(JSON.generate(want))
-      end
-
-      it "carries the exact sirena-generated option map" do
-        expect(JSON.generate(document["layoutOptions"]))
-          .to eq(JSON.generate(option_maps_for.fetch(name)))
-      end
+      it_behaves_like "a graph elkrb echoes back"
     end
   end
 
   describe "c4_nested.json structure" do
-    let(:graph) do
-      JSON.parse(File.read(File.join(dir, "c4_nested.json")))
+    let(:graph) { fixture(dir, "c4_nested") }
+    let(:acme) { graph["children"].find { |c| c["id"] == "acme" } }
+    let(:shop) { acme["children"].find { |c| c["id"] == "shop" } }
+    let(:billing) { acme["children"].find { |c| c["id"] == "billing" } }
+
+    it "nests acme under the root and shop and billing under acme" do
+      expect(graph["children"].map { |c| c["id"] }).to eq(%w[acme customer])
+      expect(acme["children"].map { |c| c["id"] }).to eq(%w[shop billing])
+      expect(shop["children"].map { |c| c["id"] }).to eq(%w[webapp api])
+      expect(billing["children"].map { |c| c["id"] }).to eq(%w[ledger billdb])
     end
 
-    def boundary_depth_of(node)
-      nested = (node["children"] || []).select do |child|
-        child.key?("layoutOptions")
-      end
-      return 0 if nested.empty?
-
-      1 + nested.map { |child| boundary_depth_of(child) }.max
-    end
-
-    def boundaries(node, acc = [])
-      (node["children"] || []).each do |child|
-        acc << child if child.key?("layoutOptions")
-        boundaries(child, acc)
-      end
-      acc
-    end
-
-    def owners(node, current, acc = {})
-      (node["children"] || []).each do |child|
-        acc[child["id"]] = current
-        inner = child.key?("layoutOptions") ? child["id"] : current
-        owners(child, inner, acc)
-      end
-      acc
-    end
-
-    it "nests boundaries two levels deep" do
-      expect(boundary_depth_of(graph)).to eq(2)
+    it "marks only acme, shop and billing as boundaries" do
+      expect([acme, shop, billing]
+        .map { |n| n["metadata"]["boundary_type"] })
+        .to eq(%w[Enterprise_Boundary System_Boundary System_Boundary])
+      expect((shop["children"] + billing["children"])
+        .map { |n| n["metadata"]["boundary_type"] })
+        .to all(be_nil)
     end
 
     it "carries elk.algorithm box on all three boundaries" do
-      found = boundaries(graph)
-
-      expect(found.map { |b| b["id"] }.sort).to eq(%w[acme billing shop])
-      expect(found.map { |b| b["layoutOptions"]["elk.algorithm"] })
+      expect([acme, shop, billing]
+        .map { |n| n["layoutOptions"]["elk.algorithm"] })
         .to all(eq("box"))
     end
 
-    it "routes an edge between members of two sibling boundaries" do
-      owner = owners(graph, nil)
-      crossing = graph["edges"].select do |edge|
-        from = owner[edge["sources"].first]
-        to = owner[edge["targets"].first]
-        from && to && from != to
+    it "routes rel_1 from api in shop to ledger in billing" do
+      edges = graph["edges"].to_h do |edge|
+        [edge["id"], edge["sources"] + edge["targets"]]
       end
 
-      expect(crossing.map { |e| e["id"] }).to eq(["rel_1"])
-      edge = crossing.first
-      expect(edge["sources"] + edge["targets"]).to eq(%w[api ledger])
-      expect(boundaries(graph).map { |b| b["id"] })
-        .not_to include("api", "ledger")
-      expect([owner["api"], owner["ledger"]]).to eq(%w[shop billing])
-      expect(owner.values_at("shop", "billing").uniq).to eq(["acme"])
+      expect(edges).to eq(
+        "rel_0" => %w[customer webapp],
+        "rel_1" => %w[api ledger],
+        "rel_2" => %w[ledger billdb],
+      )
     end
 
     it "carries a layoutOptions map on the root and every boundary" do
-      expect(option_maps(graph).map(&:first).sort)
-        .to eq(%w[acme billing c4 shop])
-    end
-
-    it "nests shop and billing inside acme" do
-      acme = graph["children"].find { |c| c["id"] == "acme" }
-
-      expect(acme).not_to be_nil
-      expect(acme["children"].map { |c| c["id"] })
-        .to include("shop", "billing")
+      expect(option_maps(graph).map(&:first)).to eq(%w[c4 acme shop billing])
     end
   end
 end
