@@ -27,6 +27,20 @@ module Elkrb
     def initialize: (String algorithm_name) -> void
   end
 
+  module Parsers
+    class ElktParser
+      ParseError: singleton(::Elkrb::ParseError)
+
+      def self.parse: (String input) -> Hash[Symbol, untyped]
+
+      attr_reader input: String
+
+      def initialize: (String input) -> void
+
+      def parse: () -> Hash[Symbol, untyped]
+    end
+  end
+
   def self.layout: (Graph::Graph | Hash[Symbol, untyped] graph, ?Hash[Symbol, untyped] options) -> Graph::Graph
 
   def self.register_algorithm: (String name, Class algorithm_class, ?Hash[Symbol, untyped] metadata) -> void

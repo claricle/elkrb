@@ -181,7 +181,7 @@ RSpec.describe Elkrb::Serializers::ElktSerializer do
 
       result = serializer.serialize(graph)
 
-      expect(result).to include("layout [ position: 50, 100 ]")
+      expect(result).to include("layout [ position: 50, 100  size: 100, 60 ]")
     end
 
     it "serializes ports" do
@@ -574,6 +574,26 @@ RSpec.describe Elkrb::Serializers::ElktSerializer do
       expect(parsed[:layoutOptions]["elk.algorithm"]).to eq("layered")
       expect(parsed[:children].length).to eq(2)
       expect(parsed[:edges].length).to eq(1)
+    end
+
+    it "can parse back a node that has both a position and a size" do
+      require_relative "../../../lib/elkrb/parsers/elkt_parser"
+
+      graph = {
+        id: "root",
+        layoutOptions: {},
+        children: [
+          { id: "n1", width: 30, height: 40, x: 5, y: 6 },
+        ],
+        edges: [],
+      }
+
+      elkt = serializer.serialize(graph)
+      parsed = Elkrb::Parsers::ElktParser.parse(elkt)
+
+      expect(elkt).to include("layout [ position: 5, 6  size: 30, 40 ]")
+      expect(parsed[:children].first)
+        .to include(x: 5, y: 6, width: 30, height: 40)
     end
   end
 end

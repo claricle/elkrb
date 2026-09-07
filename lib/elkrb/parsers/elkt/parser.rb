@@ -22,8 +22,6 @@ module Elkrb
           graph node port label edge layout section position size
           start end bends incoming outgoing true false null
         ].freeze
-        MEMBERS = { "node" => :parse_node, "port" => :parse_port,
-                    "label" => :parse_label, "edge" => :parse_edge }.freeze
         GEOMETRY = %w[incoming outgoing start end].freeze
         LITERALS = { "true" => true, "false" => false,
                      "null" => nil }.freeze
@@ -67,7 +65,12 @@ module Elkrb
             name = allowed.find { |key| peek.keyword?(key) }
             raise_at(peek, "expected #{allowed.join(', ')}") unless name
 
-            send(MEMBERS.fetch(name), container)
+            case name
+            when "node" then parse_node(container)
+            when "port" then parse_port(container)
+            when "label" then parse_label(container)
+            when "edge" then parse_edge(container)
+            end
           end
         end
 
@@ -279,7 +282,7 @@ module Elkrb
 
         def literal?(token)
           token.single_segment? && LITERALS.key?(token.value) &&
-            !token.segments.first[1]
+            !token.segments.first.escaped
         end
 
         def parse_endpoints
@@ -359,11 +362,12 @@ module Elkrb
         end
 
         def validate_segments(token)
-          token.segments.each do |name, escaped|
-            next if escaped || !KEYWORDS.include?(name)
+          token.segments.each do |segment|
+            next if segment.escaped || !KEYWORDS.include?(segment.name)
 
             raise_at(token,
-                     "`#{name}` is a reserved keyword; write `^#{name}`")
+                     "`#{segment.name}` is a reserved keyword; " \
+                     "write `^#{segment.name}`")
           end
         end
 

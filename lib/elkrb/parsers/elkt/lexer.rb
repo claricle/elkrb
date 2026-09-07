@@ -27,13 +27,14 @@ module Elkrb
           "{" => :lbrace, "}" => :rbrace, "[" => :lbracket,
           "]" => :rbracket, ":" => :colon, "," => :comma, "." => :dot
         }.freeze
-        SCANNERS = %i[
-          whitespace string line_comment block_comment arrow number
-          identifier pipe punctuation
-        ].freeze
 
         def initialize(source)
-          @src = normalize(source.to_s)
+          unless source.is_a?(String)
+            raise TypeError,
+                  "ELKT source must be a String, got #{source.class}"
+          end
+
+          @src = normalize(source)
           @pos = 0
           @line = 1
           @col = 1
@@ -63,13 +64,46 @@ module Elkrb
           end
           return text if text.valid_encoding?
 
+          line, col = first_invalid_location(text)
           raise Elkrb::ParseError.new(
-            "Input is not valid UTF-8 at line 1, column 1", line: 1, column: 1
+            "Input is not valid UTF-8 at line #{line}, column #{col}",
+            line: line, column: col,
           )
         end
 
+        # Walks up to the first broken character and counts the lines before
+        # it. Reporting line 1, column 1 for every file pointed the user at
+        # the top even when the bad bytes were far down.
+        def first_invalid_location(text)
+          line = 1
+          col = 1
+          previous = nil
+          text.each_char do |char|
+            return [line, col] unless char.valid_encoding?
+
+            if newline_start?(char, previous)
+              line += 1
+              col = 1
+            elsif char != "\n"
+              col += 1
+            end
+            previous = char
+          end
+          [line, col]
+        end
+
+        # CRLF is one line break, so the LF after a CR must not count again.
+        def newline_start?(char, previous)
+          char == "\r" || (char == "\n" && previous != "\r")
+        end
+
+        # The order of this chain is the scan order described above. Keep the
+        # string scanner before the two comment scanners.
         def scan_one
-          SCANNERS.each { |name| return if send(:"take_#{name}") }
+          return if take_whitespace || take_string || take_line_comment ||
+            take_block_comment || take_arrow || take_number ||
+            take_identifier || take_pipe || take_punctuation
+
           raise_at(@line, @col,
                    "Unexpected character #{@src[@pos].inspect}")
         end
@@ -121,7 +155,7 @@ module Elkrb
           text = match(IDENT) or return nil
 
           segments = build_segments(text)
-          emit(:identifier, text, segments.map(&:first).join("."), segments)
+          emit(:identifier, text, segments.map(&:name).join("."), segments)
         end
 
         def take_pipe
@@ -195,9 +229,9 @@ module Elkrb
         def build_segments(text)
           text.split(".").map do |segment|
             if segment.start_with?("^")
-              [segment[1..], true]
+              Segment.new(name: segment[1..], escaped: true)
             else
-              [segment, false]
+              Segment.new(name: segment, escaped: false)
             end
           end
         end
