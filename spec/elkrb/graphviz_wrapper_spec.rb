@@ -14,6 +14,15 @@ RSpec.describe Elkrb::GraphvizWrapper do
                           "Windows will not execute from PATH"
   end
 
+  # Pure-Ruby PATH search. `system("which true ...")` would itself invoke a
+  # shell -- the very thing this file exists to prove we no longer do -- and
+  # would skip the test on any environment that has `true` but not `which`.
+  let(:true_binary) do
+    ENV.fetch("PATH", "").split(File::PATH_SEPARATOR).reject(&:empty?)
+      .map { |dir| File.join(dir, "true") }
+      .find { |candidate| File.file?(candidate) && File.executable?(candidate) }
+  end
+
   # `available?` must agree with the command `render` actually runs. Ruby execs
   # the string `build_command` builds and searches PATH for it, while
   # `File.executable?("dot")` answers about the working directory, so the two
@@ -630,7 +639,7 @@ RSpec.describe Elkrb::GraphvizWrapper do
     end
 
     it "does not execute a shell metacharacter embedded in the output path" do
-      skip "no 'true' binary on PATH" unless system("which true > /dev/null 2>&1")
+      skip "no 'true' binary on PATH" unless true_binary
 
       Dir.mktmpdir do |dir|
         marker = File.join(dir, "PWNED")
@@ -643,7 +652,7 @@ RSpec.describe Elkrb::GraphvizWrapper do
         # actually have to be invoked for the metacharacter to fire. The
         # available?/File.exist? stubs below override the file-level `before`
         # block's blanket stubs so this test hits the real filesystem too.
-        wrapper.instance_variable_set(:@dot_path, "true")
+        wrapper.instance_variable_set(:@dot_path, true_binary)
         allow(wrapper).to receive(:available?).and_call_original
         allow(File).to receive(:exist?).and_call_original
 
