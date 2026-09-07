@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "json"
+require "digest"
 require "fileutils"
 require "pathname"
 require "uri"
@@ -27,6 +28,20 @@ class JavaElkTestImporter
   # the corpus dump starts exiting non-zero for it. It comes out when the
   # two algorithms stop crashing, not when the registry changes.
   EXPECTED_ERROR_ALGORITHMS = %w[sporeOverlap sporeCompaction].freeze
+
+  # An id becomes a filename, so it is BOUNDED, not merely escaped.
+  # Percent-encoding EXPANDS: "界" is 3 bytes and encodes to 9, so a
+  # 242-byte source name that used to dump as a 251-byte "<id>.json" reached
+  # 725 bytes and the write raised Errno::ENAMETOOLONG -- after the corpus
+  # runner had already claimed the output directory. 241 is what is left of
+  # the 255-byte per-component limit once "java_elk_" (9) and ".json" (5)
+  # are taken out.
+  MAX_ID_BYTES = 241
+  # Long enough that two different names colliding is not a real risk, short
+  # enough to leave the readable prefix most of the budget. A collision would
+  # not lose data in any case: CorpusRunner#refuse_duplicate_ids! raises on
+  # two equal ids before anything is written.
+  DIGEST_CHARS = 16
 
   SAMPLE_ALGORITHMS = %w[layered force stress box random fixed mrtree radial
                          rectpacking disco sporeOverlap sporeCompaction].freeze
@@ -98,12 +113,38 @@ class JavaElkTestImporter
       # and escapes `%` itself, so `a/same` cannot collide with a literal
       # `a%2Fsame` name. Not the www-form encoder: that maps a space to "+",
       # a URL-query semantic this is not.
-      id: "java_elk_#{URI.encode_uri_component(test_name)}",
+      id: "java_elk_#{bounded_id(test_name)}",
       source: "java_elk",
       category: "elkt_import",
       algorithm: "layered",
       graph: parse_elkt_content(content),
     }
+  end
+
+  # The encoded name when it fits, and a readable prefix plus a digest of the
+  # WHOLE name when it does not -- so two long names sharing a prefix stay
+  # distinct. The `-1` is the separator between the two.
+  def bounded_id(test_name)
+    encoded = URI.encode_uri_component(test_name)
+    return encoded if encoded.bytesize <= MAX_ID_BYTES
+
+    digest = Digest::SHA256.hexdigest(test_name)[0, DIGEST_CHARS]
+    prefix = encoded_prefix(test_name, MAX_ID_BYTES - digest.bytesize - 1)
+    "#{prefix}-#{digest}"
+  end
+
+  # Encodes one CHARACTER at a time and stops before the budget is exceeded,
+  # rather than truncating the already-encoded string: cutting "%E7%95%8C" at
+  # a byte boundary yields "%E7%95", a different and invalid escape sequence.
+  def encoded_prefix(test_name, budget)
+    prefix = +""
+    test_name.each_char do |char|
+      piece = URI.encode_uri_component(char)
+      break if prefix.bytesize + piece.bytesize > budget
+
+      prefix << piece
+    end
+    prefix
   end
 
   def parse_elkt_content(_content)

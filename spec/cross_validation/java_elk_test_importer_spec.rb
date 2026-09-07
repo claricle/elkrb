@@ -167,4 +167,54 @@ RSpec.describe JavaElkTestImporter do
       expect(written_ids(tmp)).to eq(["java_elk_a%20b"])
     end
   end
+
+  # Percent-encoding EXPANDS, so escaping a name that was already near the
+  # filesystem's per-component limit pushes the dump file past it. "界" is
+  # 3 bytes and encodes to 9: a 242-byte source name imported and dumped fine
+  # as a 251-byte "<id>.json" before this branch, and reached 725 bytes after
+  # -- Errno::ENAMETOOLONG, raised by the corpus runner after it had already
+  # claimed the output directory.
+  #
+  # The assertion is on the DUMP FILENAME's byte size, not on the id's, since
+  # the limit applies to the name the runner actually writes.
+  it "bounds the dump filename for a long name that encoding expands" do
+    Dir.mktmpdir do |tmp|
+      name = "界" * 79
+      stub_const(
+        "#{described_class}::TEST_MODELS_PATH",
+        models_repo(tmp, "models", ["#{name}.elkt"]),
+      )
+
+      error = Dir.chdir(tmp) { import(described_class.new) }
+      id = written_ids(tmp).first
+
+      expect(error).to be_nil
+      expect("#{id}.json".bytesize).to be <= 255
+      # Readable head, so the dump is still identifiable, and every escape in
+      # it is whole -- truncating the ENCODED text instead of the source would
+      # leave a half escape like "%E7%95".
+      expect(id).to start_with("java_elk_%E7%95%8C")
+      expect(id.scan(/%.{0,2}/)).to all(match(/\A%[0-9A-F]{2}\z/))
+    end
+  end
+
+  # The bound must not collapse two names into one dump file. Both of these
+  # exceed the budget and share every byte of the readable prefix, so the
+  # prefix alone cannot tell them apart -- only a digest over the WHOLE name
+  # can. A truncating fix with no digest passes every other example here.
+  it "keeps two over-long names that share a prefix distinct" do
+    Dir.mktmpdir do |tmp|
+      head = "界" * 79
+      stub_const(
+        "#{described_class}::TEST_MODELS_PATH",
+        models_repo(tmp, "models", ["#{head}A.elkt", "#{head}B.elkt"]),
+      )
+
+      error = Dir.chdir(tmp) { import(described_class.new) }
+      ids = written_ids(tmp)
+
+      expect(error).to be_nil
+      expect(ids.uniq.size).to eq(2)
+    end
+  end
 end
