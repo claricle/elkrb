@@ -866,6 +866,8 @@ RSpec.describe Elkrb::GraphvizWrapper do
     # calls `match` on an IO, and without `err:` the version line -- which dot
     # writes to stderr -- never arrives.
     it "reads the version from the binary's own stderr" do
+      skip "a chmod +x shebang script is not executable" if Gem.win_platform?
+
       Dir.mktmpdir do |dir|
         stand_in = File.join(dir, "dot")
         File.write(stand_in,
