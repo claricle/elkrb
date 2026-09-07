@@ -14,26 +14,54 @@ on:
 
 jobs:
   rake:
-    name: rake (ruby ${{ matrix.ruby }})
-    runs-on: ubuntu-latest
+    name: rake (ruby ${{ matrix.ruby }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     # The reusable workflow this replaces (metanorma/ci/generic-rake.yml)
     # cancelled a superseded in-flight run on the same ref; keep that so a
     # rapid push sequence doesn't queue redundant matrix runs.
+    #
+    # matrix.os is added to the group by this commit and must not be removed.
+    # The group is evaluated per matrix combination and cancel-in-progress
+    # cancels the older run in a group, so without it ruby 3.2 on ubuntu,
+    # macos and windows would all share `rake-3.2-<ref>` and cancel each
+    # other -- two of the three legs would report `cancelled` and only one
+    # would actually run. It was absent before this commit only because the
+    # matrix was single-OS, where ruby alone made the group unique.
     concurrency:
-      group: ${{ github.workflow }}-${{ matrix.ruby }}-${{ github.head_ref || github.ref_name }}
+      group: ${{ github.workflow }}-${{ matrix.ruby }}-${{ matrix.os }}-${{ github.head_ref || github.ref_name }}
       cancel-in-progress: true
     strategy:
       fail-fast: false
       matrix:
-        # The gemspec floor is 3.2.0.
-        ruby: [ "3.2", "3.3", "3.4" ]
-        experimental: [ false ]
-        include:
-          # The gemspec sets no upper bound, so 4.0 is admitted, but this gem
-          # has never been run on it. Non-blocking until a green run exists.
-          - ruby: "4.0"
-            experimental: true
-    continue-on-error: ${{ matrix.experimental }}
+        # 3.2 is the gemspec floor; the gemspec sets no upper bound, so 4.0
+        # is admitted too.
+        ruby: [ "3.2", "3.3", "3.4", "4.0" ]
+        os: [ "ubuntu-latest", "macos-latest", "windows-latest" ]
+    # An ALLOWLIST: blocking only for combinations with a green CI run behind
+    # them. Everything else is advisory. Adding a ruby or an OS above therefore
+    # lands non-blocking until someone deliberately adds it to the list below,
+    # which is the safe direction for a matrix nobody has run yet.
+    #
+    # The three blocking legs are the ones measured green on this workflow's own
+    # run at f0d994b (PR #26):
+    #   gh api repos/claricle/elkrb/actions/runs/33870486536/jobs \
+    #     --jq '.jobs[]|{name, conclusion}'
+    #
+    # macOS and Windows are advisory because this repo has NEVER run either.
+    # That is the whole reason -- not a claim about how those platforms behave.
+    # A local `bundle exec rake` on a developer Mac is not evidence for a
+    # macos-latest runner: different toolchain, different installed binaries.
+    #
+    # HOW TO PROMOTE ONE. A continue-on-error job reports conclusion `success`
+    # whatever happened, so the job conclusion cannot tell you. Read the STEP:
+    #   gh api repos/claricle/elkrb/actions/runs/<id>/jobs --jq \
+    #     '.jobs[]|{name, step: (.steps[]|select(.name|test("rake"))|.conclusion)}'
+    # When the `Run bundle exec rake` step is `success` on a leg across a few
+    # runs, add that combination to the allowlist below.
+    timeout-minutes: 30
+    continue-on-error: >-
+      ${{ !(matrix.os == 'ubuntu-latest'
+            && contains(fromJSON('["3.2","3.3","3.4"]'), matrix.ruby)) }}
     steps:
       - uses: actions/checkout@v4
       - uses: ruby/setup-ruby@v1
