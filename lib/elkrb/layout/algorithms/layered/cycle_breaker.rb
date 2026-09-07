@@ -19,8 +19,11 @@ module Elkrb
         # id-less edge in the graph the same handle: reverse one of them and
         # LayerAssigner reversed all of them. Identity is the only handle
         # every edge has. A PLAIN Set is not enough either -- lutaml-model
-        # gives these classes VALUE equality, so two distinct edges with the
-        # same endpoints are `==`, hash alike, and collapse into one entry.
+        # gives these classes VALUE equality, so two distinct edges whose
+        # attributes ALL match, id and endpoints alike, are `==`, hash
+        # alike, and collapse into one entry. Differing ids are enough to
+        # keep them apart in a plain Set; two anonymous parallel edges are
+        # not.
         #
         # `outgoing_edges` still walks every source against every target,
         # even though LayeredAlgorithm#validate_simple_edge! now rejects any

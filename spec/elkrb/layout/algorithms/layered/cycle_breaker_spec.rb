@@ -136,11 +136,12 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::CycleBreaker do
       end
     end
 
-    # Across the whole suite the reversal set never held more than one
-    # member, so nothing distinguished "collects every back edge" from
-    # "collects the first one and stops". A CycleBreaker mutated to
-    # `reversed << edge if reversed.empty?` left every other example in
-    # the suite green while laying d out above c.
+    # Nothing outside this context distinguishes "collects every back edge"
+    # from "collects the first one and stops": measured 2026-09-07, a
+    # CycleBreaker mutated to `reversed << edge if reversed.empty?` reds
+    # three of these 32 examples and nothing anywhere else -- these two,
+    # plus the identical-back-edges one at the top of the file, which now
+    # expects both copies.
     context "with two independent cycles" do
       let(:graph) do
         Elkrb::Graph::Graph.new(
