@@ -70,7 +70,14 @@ RSpec.configure do |config|
     # floor, so only files_to_run needs sorting.
     all = Dir.glob(File.expand_path("**/*_spec.rb", __dir__))
     ran = config.files_to_run.map { |file| File.expand_path(file) }.sort
-    filters = config.filter_manager.inclusions.rules.size
+
+    # BOTH sides of the filter manager. RSpec keeps them in separate rule sets,
+    # so counting only inclusions accepts `--tag ~slow`, which drops examples
+    # while inclusions stays at 0. Measured on rspec-core 3.13.6: with no
+    # filters both read []; `--tag bar` gives inclusions [:bar]; `--tag ~foo`
+    # gives exclusions [:foo].
+    manager = config.filter_manager
+    filters = manager.inclusions.rules.size + manager.exclusions.rules.size
 
     # RAISE rather than quietly skip the floor. A narrowed `rake` that reported
     # green would be a gate CI could opt out of, which is the one thing the
@@ -78,7 +85,7 @@ RSpec.configure do |config|
     unless ran == all && filters.zero?
       raise "COVERAGE_ENFORCE=1 but this is not a full-suite run " \
             "(#{ran.size} of #{all.size} spec files, #{filters} filters). " \
-            "Run `rake` with no SPEC or example filter, or rspec directly."
+            "Run `rake` with no SPEC, tag or example filter."
     end
 
     SimpleCov.minimum_coverage(line: 85, branch: 68)

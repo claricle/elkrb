@@ -64,19 +64,21 @@ QUALITY_PATHS = ["lib", "exe/elkrb"].freeze
 # is rubocop's and reek's. Gemfile.lock is gitignored, so all four are pinned or
 # a fresh `bundle install` alone could move a baseline.
 #
-# TO RE-BASELINE, whenever lib/ changes under this branch. Both numbers come
-# from the tasks' own APIs, so measure them the way the tasks do rather than by
-# reading a failure message, and take each reading TWICE -- a number that moves
-# between two runs is not a baseline:
+# TO RE-BASELINE, whenever anything in QUALITY_PATHS changes under this branch
+# -- that is lib/ OR exe/elkrb, not lib/ alone. Both numbers come from the
+# tasks' own APIs, so measure them the way the tasks do rather than by reading
+# a failure message, and pass the SAME paths the tasks pass or the reading is
+# of a different corpus than the gate. Take each reading TWICE -- a number that
+# moves between two runs is not a baseline:
 #
 #   bundle exec ruby -e 'require "flog_cli"; require "sexp_processor"
 #     f = FlogCLI.new(methods: true)
-#     f.flog(*SexpProcessor.expand_dirs_to_files("lib"))
+#     f.flog(*SexpProcessor.expand_dirs_to_files("lib", "exe/elkrb"))
 #     n, s = f.max_method; puts "#{n} #{s}"'
 #
 #   bundle exec ruby -e 'require "flay"; require "sexp_processor"
 #     f = Flay.new(Flay.default_options)
-#     f.process(*SexpProcessor.expand_dirs_to_files("lib"))
+#     f.process(*SexpProcessor.expand_dirs_to_files("lib", "exe/elkrb"))
 #     f.report(File.open(File::NULL, "w")); puts f.total'
 #
 # Note the report call in the flay one: Flay#total reads 0 until #report has
