@@ -41,13 +41,25 @@ task :audit do
   sh "bundle exec bundle-audit check --update"
 end
 
-# exe/elkrb has no .rb extension, so expand_dirs_to_files skips it, and lib is
-# the whole of what any of these three tools can see here.
-QUALITY_PATHS = ["lib"].freeze
+# exe/elkrb is named EXPLICITLY, not reached through "exe". expand_dirs_to_files
+# only globs *.rb when it expands a DIRECTORY, so `expand_dirs_to_files("exe")`
+# returns [] while `expand_dirs_to_files("exe/elkrb")` returns ["exe/elkrb"] --
+# leaving the production entry point out of all three tools if it is not listed.
+# Measured 2026-09-07: adding it moves nothing (reek 0 warnings, flog max still
+# 106.52, flay total still 5006), so it costs no baseline headroom.
+QUALITY_PATHS = ["lib", "exe/elkrb"].freeze
 
 # Flog and flay both exit 0 whatever they find, so on their own they are
 # reporters, not gates. These tasks read the score off their Ruby APIs and add
-# the comparison. Both scores move when the parser underneath them moves, and
+# the comparison.
+#
+# Every failure below RAISES rather than calling `abort`. This file is loadable
+# by any Ruby process -- `load "Rakefile"`, or Rake::Application#load_rakefile
+# from an embedding tool -- so `abort` here raises SystemExit in the CALLER and
+# terminates it. Only a script entry point may decide a process exit status; the
+# rake CLI turns a raised error into exit 1 by itself. spec/rakefile_spec.rb
+# pins this for the whole file, not just the tasks that have a failure path
+# today. Both scores move when the parser underneath them moves, and
 # for these two that is prism and sexp_processor -- not the `parser` gem, which
 # is rubocop's and reek's. Gemfile.lock is gitignored, so all four are pinned or
 # a fresh `bundle install` alone could move a baseline.
@@ -112,7 +124,7 @@ task :flog do
   # Two decimals, not one: the comparison is exact, so a score of 107.04 would
   # round to "107.0, over the 107.0 ceiling" and read like a bug in the task.
   if score > FLOG_MAX_METHOD
-    abort "flog: #{name} scores #{format('%.2f', score)}, " \
+    raise "flog: #{name} scores #{format('%.2f', score)}, " \
           "over the #{FLOG_MAX_METHOD} ceiling"
   end
 end
@@ -132,7 +144,7 @@ task :flay do
   flay.report($stdout)
 
   if flay.total > FLAY_MAX_TOTAL
-    abort "flay: duplication total #{flay.total}, " \
+    raise "flay: duplication total #{flay.total}, " \
           "over the #{FLAY_MAX_TOTAL} baseline"
   end
 end
@@ -149,7 +161,7 @@ task :mutant do
   # The Gemfile only installs mutant on 3.3+, so say why rather than letting
   # bundler report a missing binary the Gemfile deliberately never asked for.
   if Gem::Version.new(RUBY_VERSION) < Gem::Version.new("3.3")
-    abort "mutant needs Ruby >= 3.3; this is #{RUBY_VERSION}. The gemspec " \
+    raise "mutant needs Ruby >= 3.3; this is #{RUBY_VERSION}. The gemspec " \
           "floor is 3.2.0, so the Gemfile skips it here. Re-run on 3.3+."
   end
 
@@ -220,7 +232,7 @@ namespace :corpus do
   desc "Dump canonical layout JSON for every corpus case to DIR"
   task :dump, [:dir] do |_t, args|
     dir = args[:dir]
-    abort "usage: rake 'corpus:dump[dir]'" if dir.nil? || dir.empty?
+    raise "usage: rake 'corpus:dump[dir]'" if dir.nil? || dir.empty?
 
     ruby "spec/cross_validation/corpus_runner.rb", dir
   end
