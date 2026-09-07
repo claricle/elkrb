@@ -141,12 +141,14 @@ RSpec.describe Elkrb::Layout::LayoutEngine do
     end
 
     context "with invalid graph input" do
-      # A Node sits in the Elkrb::Graph:: namespace and is not a Graph, so it
-      # is the one input that tells a class check apart from a namespace check.
+      # A Node is in the Elkrb::Graph:: namespace and is not a Graph, so it
+      # separates a class check from a namespace check. Six siblings do that
+      # too. Node is the pick because it is the only one of them answering
+      # both `children` and `edges`, so it is also the only input that kills a
+      # duck-typed guard -- swap it for an Edge or a Label and that goes.
       # The plain rejected types -- nil, String, Array, Integer -- are already
       # covered in spec/elkrb_spec.rb through this same entry point, and a
-      # namespace check rejects those just as a class check does, so repeating
-      # them here would add examples without adding coverage.
+      # namespace check rejects those just as a class check does.
       it "raises ArgumentError for a Graph::Node" do
         expect { described_class.layout(Elkrb::Graph::Node.new) }
           .to raise_error(
@@ -157,15 +159,21 @@ RSpec.describe Elkrb::Layout::LayoutEngine do
       end
 
       # Ordering is asserted by removing the capability, not by watching for
-      # its use: resolution cannot succeed here, so any implementation that
-      # reaches it raises instead of returning. Keep NotImplementedError --
-      # it is outside StandardError, which is what makes reaching resolution
-      # observable. Lint/InheritException rewrites Class.new(Exception) to
-      # StandardError, and this example would then pass while asserting
-      # nothing.
+      # its use -- and the removal is DERIVED from the class rather than naming
+      # a route. Stubbing only :get leaves an implementation that resolves
+      # through algorithm_info green while the guard runs second.
+      #
+      # Keep NotImplementedError. It buys nothing today, because layout carries
+      # no rescue and a StandardError sentinel behaves identically. It becomes
+      # the only thing holding this example up the moment layout gains a
+      # `rescue StandardError`, which would swallow a StandardError sentinel
+      # and leave this passing while asserting nothing.
       it "rejects the graph before the algorithm is resolved" do
-        allow(Elkrb::Layout::AlgorithmRegistry).to receive(:get)
-          .and_raise(NotImplementedError, "algorithm resolution must not run")
+        registry = Elkrb::Layout::AlgorithmRegistry
+        (registry.singleton_methods - Object.singleton_methods).each do |route|
+          allow(registry).to receive(route)
+            .and_raise(NotImplementedError, "algorithm resolution must not run")
+        end
 
         expect { described_class.layout(nil, algorithm: "layered") }
           .to raise_error(
