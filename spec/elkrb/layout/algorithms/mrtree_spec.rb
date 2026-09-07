@@ -1060,6 +1060,19 @@ RSpec.describe "MRTree on many disjoint cyclic components" do
     }
   end
 
+  # `layout_flat` is public and every other algorithm guards nil children.
+  # Reached directly, not through `Elkrb.layout` -- `BaseAlgorithm#layout`
+  # guards its own dispatch, so the public path never exposed this and a
+  # spec written against `Elkrb.layout` would pass with the guard removed.
+  it "no-ops on a graph whose children key is nil, called directly" do
+    graph = Elkrb::Graph::Graph.new(id: "r")
+    graph.children = nil
+
+    algorithm = Elkrb::Layout::Algorithms::MRTree.new({})
+
+    expect(algorithm.layout_flat(graph)).to be(graph)
+  end
+
   it "places every component without hanging" do
     # Same reason as the 20-node cycle above: the bound has to INTERRUPT
     # the call, not be read after it returns. Measuring elapsed time only

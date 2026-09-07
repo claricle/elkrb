@@ -21,7 +21,13 @@ module Elkrb
         private_constant :LEVEL_HEIGHT
 
         def layout_flat(graph, _options = {})
-          return graph if graph.children.empty?
+          # `layout_flat` is public and `children` really can be nil -- a
+          # deserialized graph that omits the key keeps it nil, and
+          # `BaseAlgorithm#layout` only guards its OWN dispatch with
+          # `if graph.children`. Every sibling algorithm defends itself the
+          # same way (box, fixed, force, layered, libavoid, random); mrtree
+          # was the one that did not.
+          return graph if graph.children.nil? || graph.children.empty?
 
           index = NodeIndex.build(graph)
 
