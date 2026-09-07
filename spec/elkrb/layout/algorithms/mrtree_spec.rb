@@ -536,21 +536,20 @@ RSpec.describe Elkrb::Layout::Algorithms::MRTree do
       # de-duplicating the raw ids instead of the resolved nodes leaves b in
       # a's child list twice.
       #
-      # WHAT THIS PINS, corrected 2026-09-07 after measuring it: the shape
-      # is right and the assertion is a placement pin, but it does NOT
-      # guard `map.each_value { |children| children.uniq!(&:id) }`. Deleting
-      # that line leaves z.x=42.0 and graph.width=64.0 unchanged, and the
-      # whole 31-example set green. Making b wider does not help either --
-      # b.width 10 gives 42.0/64.0 and b.width 50 gives 82.0/104.0 with and
-      # without the line, identically. `build_subtree` carries a `visited`
-      # Set, so the second copy of b is skipped before it can be placed,
-      # and no coordinate can see it.
-      # So: an observable for the duplicate has to come from somewhere
-      # other than coordinates, or the `uniq!` line is redundant with the
-      # visited Set and should go. That is an author decision, not a
-      # wording one. Do not delete this comment on the grounds that the
-      # numbers look specific -- they are, and they still prove nothing
-      # about the line above.
+      # `anchor` is what makes the duplicate VISIBLE, and the example is
+      # worthless without it. Measured 2026-09-07 on the three-node version
+      # of this fixture: deleting `map.each_value { |c| c.uniq!(&:id) }`
+      # left z.x=42.0 and graph.width=64.0 completely unchanged. b really
+      # was laid out twice -- once at the left of a's tree and again 30.0
+      # further right -- but the abandoned first placement sat at the
+      # LEFTMOST edge, and `apply_padding` normalises the whole graph to its
+      # leftmost node, so the wasted column was folded away before any
+      # coordinate could see it.
+      #
+      # `anchor` is a root of its own with no edges, so it is laid out FIRST
+      # and owns the left edge. The duplicate's wasted column now sits
+      # between anchor and z instead of at the boundary, and both z.x and
+      # the graph width move by exactly the 30.0 a second b column costs.
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
@@ -570,9 +569,10 @@ RSpec.describe Elkrb::Layout::Algorithms::MRTree do
           ],
         )
 
+        anchor = Elkrb::Graph::Node.new(id: "anchor", width: 10, height: 10)
         z = Elkrb::Graph::Node.new(id: "z", width: 10, height: 10)
 
-        graph.children = [b, a, z]
+        graph.children = [b, anchor, a, z]
         graph.edges = [
           Elkrb::Graph::Edge.new(id: "e1", sources: ["a"], targets: ["bp1"]),
           Elkrb::Graph::Edge.new(id: "e2", sources: ["a"], targets: ["bp2"]),
@@ -584,12 +584,12 @@ RSpec.describe Elkrb::Layout::Algorithms::MRTree do
 
         z = graph.children.find { |n| n.id == "z" }
 
-        # a's tree is one 10-wide column, so z lands 30.0 past it: the
-        # column plus 20.0 of node spacing, inside 12.0 of padding. A
-        # duplicated b gives a's tree a second column and drops z to 22.0
-        # with the graph 44.0 wide.
-        expect(z.x).to eq(42.0)
-        expect(graph.width).to eq(64.0)
+        # Three trees in a row, each one 10-wide column with 20.0 of node
+        # spacing after it, inside 12.0 of padding: anchor at 12.0, a's
+        # tree at 42.0, z at 72.0. A duplicated b gives a's tree a SECOND
+        # column, which pushes z to 102.0 and the graph to 124.0.
+        expect(z.x).to eq(72.0)
+        expect(graph.width).to eq(94.0)
       end
     end
 
@@ -758,14 +758,29 @@ RSpec.describe "MRTree with a node reachable by two paths of different depth" do
   end
 
   it "places every node exactly once" do
-    result = Elkrb.layout(graph, algorithm: "mrtree")
+    # COUNT the placements. Distinct final coordinates do not prove this
+    # and never did: a node built into two trees is simply positioned
+    # twice and the second write wins, so the finished positions stay
+    # distinct. Measured 2026-09-07 by giving each seed its own visited
+    # set instead of sharing `placed` -- c was positioned twice, all five
+    # positions came out distinct, and a uniqueness assertion stayed
+    # green while c had moved from x=12.0 to x=42.0.
+    #
+    # Two writes per node IS the whole layout: one when the forest walk
+    # positions the node, one when `apply_padding` normalises the graph to
+    # its leftmost and topmost node. That mutation reads c as three.
+    model = Elkrb::Graph::Graph.from_hash(graph)
+    placements = Hash.new(0)
+    model.children.each do |node|
+      allow(node).to receive(:y=).and_wrap_original do |original, value|
+        placements[node.id] += 1
+        original.call(value)
+      end
+    end
 
-    expect(result.children.map(&:id)).to match_array(%w[r a b d c])
-    # The id list alone stays green even if every node landed on the same
-    # spot -- layout never adds or drops a child. Distinct positions are
-    # what says they were each laid out.
-    positions = result.children.map { |node| [node.x, node.y] }
-    expect(positions.uniq.size).to eq(positions.size)
+    Elkrb::Layout::Algorithms::MRTree.new.layout(model)
+
+    expect(placements).to eq(%w[r a b d c].to_h { |id| [id, 2] })
   end
 end
 
@@ -1091,6 +1106,58 @@ RSpec.describe "MRTree on many disjoint cyclic components" do
     # nil coordinates, and apply_padding dies subtracting from them.
     expect(result.children.map(&:x)).to all(be_a(Float))
     expect(result.children.map(&:y)).to all(be_a(Float))
+  end
+end
+
+RSpec.describe "MRTree on rootless cycles that share ONE component" do
+  # The disjoint-cycle examples above put every cycle in a component of its
+  # own, so scoping relaxation to a component was enough to bound them. This
+  # shape defeats that: an isolated `root` plus a pile of two-cycles that all
+  # point at ONE shared `sink`, which joins every cycle into a single
+  # weakly connected component the size of the graph. Each cycle still costs
+  # its own fallback seed, and each seed used to re-sweep the WHOLE component
+  # -- so component scoping bought nothing and the cost stayed cubic.
+  #
+  # Measured on this shape with sweeps, at the tip this example was added to
+  # guard: 0.22s at 80 nodes, 1.09s at 160, 4.14s at 240 and 12.20s at 320.
+  # With the worklist: 0.01s, 0.13s, 0.07s, 0.09s.
+  def shared_sink_cycles(size)
+    pairs = (size - 2) / 2
+    ids = %w[root sink] + (0...pairs).flat_map { |i| ["a#{i}", "b#{i}"] }
+    edges = (0...pairs).flat_map do |i|
+      [{ "id" => "f#{i}", "sources" => ["a#{i}"], "targets" => ["b#{i}"] },
+       { "id" => "r#{i}", "sources" => ["b#{i}"], "targets" => ["a#{i}"] },
+       { "id" => "j#{i}", "sources" => ["a#{i}"], "targets" => ["sink"] }]
+    end
+    {
+      "id" => "g",
+      "children" => ids.map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => edges,
+    }
+  end
+
+  it "lays out 320 nodes of one shared-sink component inside five seconds" do
+    # The timeout INTERRUPTS the call rather than being read after it
+    # returns, for the same reason as the disjoint-cycle examples: a
+    # regression that never finishes would otherwise stall the whole suite
+    # instead of failing. 320 is the smallest size in the measurement above
+    # that the sweep implementation could not finish inside this bound.
+    #
+    # Asserting the placement in the same example keeps the bound honest: a
+    # layout that returned early having placed nothing would beat any time.
+    result = nil
+
+    expect do
+      result = Timeout.timeout(5.0) do
+        Elkrb.layout(shared_sink_cycles(320), algorithm: "mrtree")
+      end
+    end.not_to raise_error
+
+    expect(result.children.size).to eq(320)
+    expect(result.children.map(&:x)).to all(be_a(Numeric).and(be_finite))
+    expect(result.children.map(&:y)).to all(be_a(Numeric).and(be_finite))
   end
 end
 
