@@ -73,8 +73,6 @@ Layout/LineLength:
     - 'lib/elkrb/options/registry.rb'
     - 'lib/elkrb/serializers/dot_serializer.rb'
     - 'lib/elkrb/serializers/elkt_serializer.rb'
-    - 'spec/cross_validation/generate_validation_report.rb'
-    - 'spec/cross_validation/validation_runner.rb'
     - 'spec/elkrb/graph/layout_options_spec.rb'
     - 'spec/elkrb/graph/port_spec.rb'
     - 'spec/elkrb/graphviz_wrapper_spec.rb'
@@ -159,8 +157,6 @@ Metrics/AbcSize:
     - 'lib/elkrb/parsers/elkt_parser.rb'
     - 'lib/elkrb/serializers/dot_serializer.rb'
     - 'lib/elkrb/serializers/elkt_serializer.rb'
-    - 'spec/cross_validation/generate_validation_report.rb'
-    - 'spec/cross_validation/validation_runner.rb'
 
 # Offense count: 5
 # Configuration parameters: CountComments, Max, CountAsOne, AllowedMethods, AllowedPatterns.
@@ -210,8 +206,6 @@ Metrics/CyclomaticComplexity:
     - 'lib/elkrb/parsers/elkt_parser.rb'
     - 'lib/elkrb/serializers/dot_serializer.rb'
     - 'lib/elkrb/serializers/elkt_serializer.rb'
-    - 'spec/cross_validation/generate_validation_report.rb'
-    - 'spec/cross_validation/validation_runner.rb'
 
 # Offense count: 163
 # Configuration parameters: CountComments, Max, CountAsOne, AllowedMethods, AllowedPatterns.
@@ -303,8 +297,6 @@ Metrics/PerceivedComplexity:
     - 'lib/elkrb/options/registry.rb'
     - 'lib/elkrb/serializers/dot_serializer.rb'
     - 'lib/elkrb/serializers/elkt_serializer.rb'
-    - 'spec/cross_validation/generate_validation_report.rb'
-    - 'spec/cross_validation/validation_runner.rb'
 
 # Offense count: 29
 # Configuration parameters: MinNameLength, AllowNamesEndingInNumbers, AllowedNames, ForbiddenNames.
