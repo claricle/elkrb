@@ -40,6 +40,14 @@ RSpec.describe "sirena consumer capture fixtures" do
     acc
   end
 
+  # Every node in the graph, root included, that carries a boundary_type.
+  def boundary_types(node, acc = {})
+    type = node.dig("metadata", "boundary_type")
+    acc[node["id"]] = type unless type.nil?
+    (node["children"] || []).each { |child| boundary_types(child, acc) }
+    acc
+  end
+
   def key_anywhere?(value, key)
     case value
     when Hash
@@ -131,9 +139,14 @@ RSpec.describe "sirena consumer capture fixtures" do
       expect([acme, shop, billing]
         .map { |n| n["metadata"]["boundary_type"] })
         .to eq(%w[Enterprise_Boundary System_Boundary System_Boundary])
-      expect((shop["children"] + billing["children"])
-        .map { |n| n["metadata"]["boundary_type"] })
-        .to all(be_nil)
+      # Walk the WHOLE graph, root included. Naming only the boundaries
+      # and their children left `customer` -- the root's other child --
+      # unexamined, so a boundary_type appearing there kept this example
+      # green. "only" is a claim about every node, so every node is read.
+      expect(boundary_types(graph))
+        .to eq("acme" => "Enterprise_Boundary",
+               "shop" => "System_Boundary",
+               "billing" => "System_Boundary")
     end
 
     it "carries elk.algorithm box on all three boundaries" do

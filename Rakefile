@@ -3,6 +3,7 @@
 require "bundler/gem_tasks"
 require "rspec/core/rake_task"
 require "rubocop/rake_task"
+require_relative "spec/support/sirena_provenance"
 
 RSpec::Core::RakeTask.new(:spec)
 RuboCop::RakeTask.new do |task|
@@ -83,11 +84,9 @@ end
 desc "Re-capture the sirena consumer fixtures " \
      "(SIRENA_DIR=<sirena checkout>, OUT_DIR=<where to write>)"
 task "fixtures:sirena" do
+  usage = "Set SIRENA_DIR to a sirena checkout, e.g. ~/claricle/sirena"
   sirena_dir = ENV.fetch("SIRENA_DIR", nil).to_s
-  if sirena_dir.empty?
-    abort "Set SIRENA_DIR to a sirena checkout, for example: " \
-          "rake fixtures:sirena SIRENA_DIR=~/claricle/sirena"
-  end
+  abort usage if sirena_dir.empty?
 
   sirena_dir = File.expand_path(sirena_dir)
   abort "No such directory: #{sirena_dir}" unless Dir.exist?(sirena_dir)
@@ -95,10 +94,16 @@ task "fixtures:sirena" do
   fixture_dir = File.expand_path("spec/fixtures/consumers/sirena", __dir__)
   out_dir = File.expand_path(ENV.fetch("OUT_DIR", fixture_dir))
 
-  sh "git", "-C", sirena_dir, "log", "-1", "--format=sirena is at %H"
-  sh "git", "-C", sirena_dir, "status", "--porcelain"
-  puts "Check that sha, and an empty status above, against the " \
-       "provenance table in spec/fixtures/consumers/sirena/README.md."
+  # The provenance check REFUSES. It used to print the sha and ask a
+  # human to compare it, and a wrong sha on a dirty tree got all the way
+  # to the capture command, which overwrites the fixtures in place.
+  sha = begin
+    SirenaProvenance.assert!(sirena_dir: sirena_dir, fixture_dir: fixture_dir,
+                             expected: ENV.fetch("SIRENA_SHA", nil))
+  rescue SirenaProvenance::Mismatch => e
+    abort e.message
+  end
+  puts "sirena is at #{sha}, clean, and matches the provenance table."
 
   # sirena is a separate gem, so the capture runs in sirena's own bundle.
   Bundler.with_unbundled_env do
