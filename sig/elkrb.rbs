@@ -14,10 +14,31 @@ module Elkrb
   class ValidationError < Error
   end
 
+  class ParseError < Error
+    attr_reader line: Integer?
+    attr_reader column: Integer?
+
+    def initialize: (String message, ?line: Integer?, ?column: Integer?) -> void
+  end
+
   class AlgorithmNotFoundError < Error
     attr_reader algorithm_name: String
 
     def initialize: (String algorithm_name) -> void
+  end
+
+  module Parsers
+    class ElktParser
+      ParseError: singleton(::Elkrb::ParseError)
+
+      def self.parse: (String input) -> Hash[Symbol, untyped]
+
+      attr_reader input: String
+
+      def initialize: (String input) -> void
+
+      def parse: () -> Hash[Symbol, untyped]
+    end
   end
 
   def self.layout: (Graph::Graph | Hash[Symbol, untyped] graph, ?Hash[Symbol, untyped] options) -> Graph::Graph
