@@ -29,8 +29,9 @@ RSpec.describe "elkrb CLI" do
 
   describe "layout" do
     it "exits 0 and prints JSON to stdout" do
-      stdout, _stderr, status = run_elkrb("layout",
-                                          "spec/fixtures/simple_graph.json")
+      stdout, _stderr, status = run_elkrb(
+        "layout", File.join(CliRunner::ROOT, "spec/fixtures/simple_graph.json")
+      )
 
       expect(status.exitstatus).to eq(0)
       expect { JSON.parse(stdout) }.not_to raise_error
@@ -38,7 +39,8 @@ RSpec.describe "elkrb CLI" do
 
     it "prints only JSON to stdout with --verbose" do
       stdout, _stderr, status = run_elkrb(
-        "layout", "spec/fixtures/simple_graph.json", "--verbose"
+        "layout", File.join(CliRunner::ROOT, "spec/fixtures/simple_graph.json"),
+        "--verbose"
       )
 
       expect(status.exitstatus).to eq(0)
@@ -52,7 +54,9 @@ RSpec.describe "elkrb CLI" do
     end
 
     it "reports a missing file on stderr, not stdout" do
-      stdout, stderr, status = run_elkrb("layout", "missing.json")
+      stdout, stderr, status = run_elkrb(
+        "layout", File.join(CliRunner::ROOT, "missing.json")
+      )
 
       expect(stdout).to eq("")
       expect(stderr).not_to eq("")
@@ -61,13 +65,14 @@ RSpec.describe "elkrb CLI" do
   end
 
   describe "render" do
-    posix_only = "fake_dot.rb's script needs a POSIX shell; " \
-                 "not portable to Windows"
+    posix_only = "fake_dot.rb installs a shebang script, which Windows " \
+                 "will not execute from PATH"
     windows_skip_reason = posix_only if Gem.win_platform?
 
     it "never shells out to a string built from the output path",
        skip: windows_skip_reason do
-      malicious_dot_file = File.join(CliRunner::ROOT, "spec/fixtures/x.dot")
+      malicious_dot_file = File.join(CliRunner::ROOT,
+                                     "spec/fixtures/render_input.dot")
 
       with_fake_dot do |log_path|
         Dir.mktmpdir do |dir|
@@ -82,12 +87,65 @@ RSpec.describe "elkrb CLI" do
           end
           expect(log_entries).not_to be_empty
 
+          # The path survives as ONE argv element. `-o` and the path are a
+          # separate token pair now, so the exact string is asserted rather
+          # than an `-o<path>` alternative: an assertion that accepts both
+          # shapes cannot tell a fix from the shape it replaced.
           expect(log_entries).to include(malicious_output)
           expect(File.exist?(File.join(dir, "PWNED"))).to be(false)
         end
       end
     end
   end
+
+  # bom.elkt and garbage.txt sit in spec/fixtures/corpus/ but are excluded
+  # from the layout corpus by its JSON-only glob. The CLI's format
+  # detection is the only thing that reads them, so this is where they earn
+  # their place.
+  describe "input format detection" do
+    def corpus_fixture(name)
+      File.join(CliRunner::ROOT, "spec/fixtures/corpus", name)
+    end
+
+    it "exits 1 and says why on stderr when no format can parse the file" do
+      stdout, stderr, status = run_elkrb(
+        "layout", corpus_fixture("garbage.txt")
+      )
+
+      expect(status.exitstatus).to eq(1)
+      # The message names the supported formats. Pinning that exact text,
+      # not merely "something was printed", is what separates a parse
+      # refusal from a leaked internal error: before FormatSniffer this
+      # said "input format is invalid, try to pass correct `json` format"
+      # -- a lutaml message about the LAST format tried, from a CLI that
+      # tries three.
+      expect(stderr)
+        .to include("Unable to parse input file. Supported formats:")
+      expect(stdout).to eq("")
+    end
+
+    # A UTF-8 BOM used to stay glued to the file's first declaration, which
+    # then matched no ELKT rule and was dropped silently: `node a`
+    # disappeared and edge e0 was left pointing at a node no longer in the
+    # graph. ElktParser strips the mark by byte now, so every declaration
+    # survives. Both ids, not just a count -- dropping `a` and keeping `b`
+    # is the exact shape of the bug.
+    it "keeps every declaration of a BOM-prefixed ELKT file" do
+      Dir.mktmpdir do |dir|
+        output = File.join(dir, "bom.json")
+
+        _stdout, _stderr, status = run_elkrb(
+          "convert", corpus_fixture("bom.elkt"), "-o", output
+        )
+
+        expect(status.exitstatus).to eq(0)
+        graph = JSON.parse(File.read(output))
+        ids = graph["children"].map { |child| child["id"] }
+        expect(ids).to contain_exactly("a", "b")
+      end
+    end
+  end
+
   describe "with a diagnostic stream the consumer has closed" do
     let(:fixture) do
       File.join(CliRunner::ROOT, "spec/fixtures/simple_graph.json")
@@ -103,8 +161,7 @@ RSpec.describe "elkrb CLI" do
         out = File.join(dir, "out.json")
 
         status = run_elkrb_with_stream_closed(
-          :err, "layout", "--verbose", "-o", out,
-          File.join(CliRunner::ROOT, "spec/fixtures/simple_graph.json")
+          :err, "layout", "--verbose", "-o", out, fixture
         )
 
         # Name the file, not just the status: exiting 0 was exactly the bug.

@@ -1,5 +1,6 @@
 {
   "algorithm": "layered",
+  "expect": "error",
   "graph": {
     "id": "root",
     "children": [

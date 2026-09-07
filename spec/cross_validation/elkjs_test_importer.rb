@@ -6,6 +6,12 @@ require "fileutils"
 
 # Importer for elkjs test cases
 class ElkjsTestImporter
+  # Raised instead of calling `exit`. `import_all` is a plain Ruby method,
+  # so a caller that requires this file gets an error it can rescue rather
+  # than having its whole process killed. Only the script entry point at
+  # the bottom of this file turns it into an exit status.
+  class ImportError < StandardError; end
+
   ELKJS_PATH = File.expand_path(ENV["ELKJS_DIR"] || "~/src/external/elkjs")
   TEST_PATH = "#{ELKJS_PATH}/test/mocha".freeze
   OUTPUT_PATH = "spec/cross_validation/fixtures/elkjs"
@@ -16,10 +22,10 @@ class ElkjsTestImporter
 
   def import_all
     unless Dir.exist?(ELKJS_PATH)
-      warn "elkjs checkout not found at #{ELKJS_PATH} (set ELKJS_DIR to " \
-           "override) - refusing to overwrite " \
-           "#{OUTPUT_PATH}/imported_tests.json"
-      exit 1
+      raise ImportError,
+            "elkjs checkout not found at #{ELKJS_PATH} (set ELKJS_DIR to " \
+            "override) - refusing to overwrite " \
+            "#{OUTPUT_PATH}/imported_tests.json"
     end
 
     puts "Importing elkjs test cases from #{TEST_PATH}"
@@ -31,9 +37,9 @@ class ElkjsTestImporter
     import_layout_tests
 
     if @test_cases.empty?
-      warn "elkjs import found 0 test cases - refusing to overwrite " \
-           "#{OUTPUT_PATH}/imported_tests.json"
-      exit 1
+      raise ImportError,
+            "elkjs import found 0 test cases - refusing to overwrite " \
+            "#{OUTPUT_PATH}/imported_tests.json"
     end
 
     # Save test cases
@@ -56,9 +62,14 @@ class ElkjsTestImporter
     extract_graphs_from_content(content, "basic")
   end
 
+  # `base:` scopes the glob to TEST_PATH, which is taken literally. That
+  # path comes from ELKJS_DIR, so joining it into the pattern let a glob
+  # metacharacter in a caller's checkout path be interpreted rather than
+  # matched: a `*` matched its own directory AND a sibling checkout, and
+  # the sibling's bug cases were written into the committed fixture.
   def import_bug_tests
-    # Import bug regression tests
-    bug_files = Dir.glob("#{TEST_PATH}/test-bug-*.js")
+    names = Dir.glob("test-bug-*.js", base: TEST_PATH)
+    bug_files = names.map { |name| File.join(TEST_PATH, name) }
 
     bug_files.each do |file|
       content = File.read(file)
@@ -213,5 +224,14 @@ class ElkjsTestImporter
   end
 end
 
-# Run if executed directly
-ElkjsTestImporter.new.import_all if __FILE__ == $PROGRAM_NAME
+# Run if executed directly. This is the ONLY place that decides an exit
+# status: the importer raises, so `rake validate:import_elkjs` still fails
+# loudly while a Ruby caller keeps control of its own process.
+if __FILE__ == $PROGRAM_NAME
+  begin
+    ElkjsTestImporter.new.import_all
+  rescue ElkjsTestImporter::ImportError => e
+    warn e.message
+    exit 1
+  end
+end

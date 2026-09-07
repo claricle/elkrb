@@ -31,6 +31,10 @@ module FakeDot
     end
   RUBY
 
+  # Every variable install_fake_dot writes. Saved with ENV.fetch(key, nil)
+  # and restored by plain assignment, so a key that was UNSET going in is
+  # unset again coming out: `ENV[k] = nil` deletes the key rather than
+  # storing an empty string.
   OVERRIDDEN_ENV = %w[PATH FAKE_DOT_LOG ELKRB_DOT].freeze
 
   def with_fake_dot
@@ -43,6 +47,14 @@ module FakeDot
     end
   end
 
+  private
+
+  # Writes the script into `dir`, puts `dir` first on PATH, and clears any
+  # ELKRB_DOT override so the fake is found by a PATH search rather than
+  # bypassed. `original_path` is passed in because PATH has not been
+  # restored yet at this point -- with_fake_dot only restores it after the
+  # block.
+  #
   # @return [String] the log path the caller reads argv back from
   def install_fake_dot(dir, original_path)
     log_path = File.join(dir, "dot.log")

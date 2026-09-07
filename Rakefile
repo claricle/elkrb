@@ -57,12 +57,16 @@ namespace :validate do
   desc "Import all test cases from elkjs and Java ELK"
   task import_all: %i[import_elkjs import_java_elk]
 
-  desc "Run cross-validation tests"
+  # There is no `validate:report` task any more. It printed a pass/fail
+  # table from a stub comparison, which nothing in this repo read. The
+  # dump this task writes is the real artifact: later slices diff two dump
+  # directories against each other.
+  desc "Dump canonical layout JSON for every corpus case to tmp/corpus"
   task :run do
     ruby "spec/cross_validation/corpus_runner.rb", "tmp/corpus"
   end
 
-  desc "Import and run cross-validation (full pipeline)"
+  desc "Import all test cases and dump the corpus (full pipeline)"
   task all: %i[import_all run]
 end
 
