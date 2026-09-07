@@ -13,8 +13,11 @@ module Elkrb
       #
       # The flagship algorithm for hierarchical graph layout.
       # Implements the Sugiyama framework in phases:
-      # 1. Cycle breaking - make the graph acyclic
-      # 2. Layer assignment - assign nodes to horizontal layers
+      # 1. Cycle breaking - find the back edges, WITHOUT making the graph
+      #    acyclic. The caller's edges are handed back exactly as written;
+      #    the reversal is a private orientation the next phase borrows.
+      # 2. Layer assignment - assign nodes to horizontal layers, reading
+      #    each back edge in its reversed direction
       # 3. Node placement - position nodes within layers
       #
       # Ideal for:
@@ -37,13 +40,13 @@ module Elkrb
           validate_edges(index)
           return graph if graph.children.nil? || graph.children.empty?
 
-          # Phase 1: Break cycles
+          # Phase 1: Find the back edges
           cycle_breaker = Layered::CycleBreaker.new(graph, index)
-          reversed_edge_ids = cycle_breaker.break_cycles
+          reversed_edges = cycle_breaker.break_cycles
 
           # Phase 2: Assign layers
           layer_assigner = Layered::LayerAssigner.new(
-            graph, index, reversed_edge_ids
+            graph, index, reversed_edges
           )
           layers = layer_assigner.assign_layers
 
@@ -69,23 +72,35 @@ module Elkrb
         end
 
         def validate_unique_edge_id!(seen_ids, edge)
-          key = edge_id_key(edge)
+          return if anonymous?(edge)
 
-          if seen_ids.key?(key)
+          if seen_ids.key?(edge.id)
             raise Elkrb::ValidationError,
                   "duplicate edge id: #{edge_label(edge)}"
           end
 
-          seen_ids[key] = true
+          seen_ids[edge.id] = true
         end
 
-        # The validator has to key on the SAME normalisation `edge_label`
-        # names by, or nil and "" are two ids to the validator and one name
-        # to the reader: a graph carrying both was accepted silently while
-        # every message called both of them "(none)". Normalising here is
-        # what makes the message honest, so the two must move together.
-        def edge_id_key(edge)
-          edge.id.to_s.empty? ? nil : edge.id
+        # An id is optional on an edge. An edge without one is ANONYMOUS: it
+        # carries no handle, so there is nothing for it to be a duplicate of
+        # and uniqueness cannot apply to it. Only edges that actually carry
+        # an id are checked.
+        #
+        # `""` counts as no id, and this is the ONE place that decides it --
+        # `edge_label` asks the same predicate, so the validator and the
+        # message can never disagree about which edges have a name. They did
+        # disagree once, in the other direction: nil and "" were two separate
+        # keys to the validator and one name, "(none)", to the reader.
+        #
+        # Anonymous edges are free to repeat because nothing downstream keys
+        # on an edge id any more. CycleBreaker hands LayerAssigner the edge
+        # OBJECTS it reversed, compared by identity. While it handed over
+        # ids, every anonymous edge shared one handle, and this validator
+        # refused the second anonymous edge to cover that -- which rejected
+        # `a -> b, b -> c` written without ids, a graph v2 lays out.
+        def anonymous?(edge)
+          edge.id.to_s.empty?
         end
 
         def validate_simple_edge!(edge)
@@ -110,17 +125,18 @@ module Elkrb
         end
 
         # An edge id is optional in ELK, so every message below could read
-        # "(edge )" with nothing after it -- and the duplicate-id one is
-        # raised precisely when TWO edges share that empty name, which is
-        # the worst moment to say nothing. An edge always has endpoints,
-        # so they are the fallback handle. Keep the three messages using
-        # one helper: fixing only some of them makes the rest look
-        # deliberate.
+        # "(edge )" with nothing after it. The endpoints are the fallback
+        # handle -- not because an edge always has them (the very next
+        # method is raised when it does not, and `endpoint_list` answers
+        # "(no endpoints)" for that case), but because they are the only
+        # other thing a reader can use to find the edge in their input.
+        # Keep the three messages using one helper: fixing only some of
+        # them makes the rest look deliberate.
         def edge_label(edge)
           # `""` is truthy in Ruby, so a plain `if edge.id` here puts the
-          # empty message straight back. An id-less edge and an
-          # empty-string-id edge are the same thing to a reader.
-          return edge.id unless edge.id.to_s.empty?
+          # empty message straight back. `anonymous?` is the single
+          # definition of "no id"; the uniqueness validator asks it too.
+          return edge.id unless anonymous?(edge)
 
           "(none), #{endpoint_list(edge.sources)} -> " \
             "#{endpoint_list(edge.targets)}"

@@ -20,14 +20,22 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::CycleBreaker do
         )
       end
 
-      it "returns one reversal id without mutating either edge" do
+      it "flags both identical back edges without mutating either" do
         reversed = described_class.new(
           graph, Elkrb::Layout::NodeIndex.build(graph)
         ).break_cycles
 
-        expect(reversed).to eq(Set["back"])
-
         back_edges = graph.edges.select { |edge| edge.id == "back" }
+
+        # These two are `==` to each other: lutaml-model gives the graph
+        # classes VALUE equality, so a plain Set would hold ONE of them and
+        # answer `include?` true for any look-alike. The reversal set
+        # compares by identity, so it keeps both apart and holds both.
+        expect(back_edges.first).to eq(back_edges.last)
+        expect(reversed.to_a).to contain_exactly(
+          be(back_edges.first), be(back_edges.last)
+        )
+
         expect(back_edges.map(&:sources)).to all(eq(["b"]))
         expect(back_edges.map(&:targets)).to all(eq(["a"]))
       end
@@ -64,13 +72,13 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::CycleBreaker do
         )
       end
 
-      it "returns one reversal id without changing the hyperedge" do
+      it "returns one reversal without changing the hyperedge" do
         reversed = described_class.new(
           graph, Elkrb::Layout::NodeIndex.build(graph)
         ).break_cycles
         back = graph.edges.find { |edge| edge.id == "back" }
 
-        expect(reversed).to eq(Set["back"])
+        expect(reversed.to_a).to contain_exactly(be(back))
         expect(back.sources).to eq(["x"])
         expect(back.targets).to eq(%w[b c])
       end
@@ -94,12 +102,12 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::CycleBreaker do
         )
       end
 
-      it "returns the reversal id for the later target" do
+      it "returns the reversal for the later target" do
         reversed = described_class.new(
           graph, Elkrb::Layout::NodeIndex.build(graph)
         ).break_cycles
 
-        expect(reversed).to eq(Set["back"])
+        expect(reversed.map(&:id)).to contain_exactly("back")
       end
     end
 
@@ -119,19 +127,19 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::CycleBreaker do
         )
       end
 
-      it "returns the reversal id for the later source" do
+      it "returns the reversal for the later source" do
         reversed = described_class.new(
           graph, Elkrb::Layout::NodeIndex.build(graph)
         ).break_cycles
 
-        expect(reversed).to eq(Set["back"])
+        expect(reversed.map(&:id)).to contain_exactly("back")
       end
     end
 
     # Across the whole suite the reversal set never held more than one
     # member, so nothing distinguished "collects every back edge" from
     # "collects the first one and stops". A CycleBreaker mutated to
-    # `reversed << edge_id if reversed.empty?` left every other example in
+    # `reversed << edge if reversed.empty?` left every other example in
     # the suite green while laying d out above c.
     context "with two independent cycles" do
       let(:graph) do
@@ -154,7 +162,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::CycleBreaker do
           graph, Elkrb::Layout::NodeIndex.build(graph)
         ).break_cycles
 
-        expect(reversed).to eq(Set["ba", "dc"])
+        expect(reversed.map(&:id)).to contain_exactly("ba", "dc")
       end
 
       it "lays both cycles out in edge order without warning" do

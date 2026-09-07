@@ -11,8 +11,16 @@ module Elkrb
     module Algorithms
       module Layered
         # Finds back edges without changing the graph supplied by the caller.
-        # The returned ids are consumed by LayerAssigner to orient the edge
+        # The returned EDGES are consumed by LayerAssigner to orient each one
         # only while calculating layers.
+        #
+        # The set holds the edge OBJECTS and compares by identity, not their
+        # ids. An id is optional on an edge, so keying by id gave every
+        # id-less edge in the graph the same handle: reverse one of them and
+        # LayerAssigner reversed all of them. Identity is the only handle
+        # every edge has. A PLAIN Set is not enough either -- lutaml-model
+        # gives these classes VALUE equality, so two distinct edges with the
+        # same endpoints are `==`, hash alike, and collapse into one entry.
         #
         # `outgoing_edges` still walks every source against every target,
         # even though LayeredAlgorithm#validate_simple_edge! now rejects any
@@ -30,7 +38,7 @@ module Elkrb
           end
 
           def break_cycles
-            reversed = Set.new
+            reversed = Set.new.compare_by_identity
             return reversed unless @graph.children
 
             adjacency = outgoing_edges
@@ -61,16 +69,16 @@ module Elkrb
                 next
               end
 
-              target_id, edge_id = edges[edge_index]
+              target_id, edge = edges[edge_index]
               stack[-1][1] = edge_index + 1
-              visit_target(target_id, edge_id, stack, colors, reversed)
+              visit_target(target_id, edge, stack, colors, reversed)
             end
           end
 
-          def visit_target(target_id, edge_id, stack, colors, reversed)
+          def visit_target(target_id, edge, stack, colors, reversed)
             case colors[target_id]
             when :active
-              reversed << edge_id
+              reversed << edge
             when nil
               colors[target_id] = :active
               stack << [target_id, 0]
@@ -88,7 +96,7 @@ module Elkrb
                 target_ids.each do |target_id|
                   next if source_id == target_id
 
-                  adjacency[source_id] << [target_id, edge.id]
+                  adjacency[source_id] << [target_id, edge]
                 end
               end
             end
