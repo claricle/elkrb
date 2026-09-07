@@ -291,11 +291,6 @@ module Elkrb
   #     "elk.spacing.nodeNode" => 50
   #   )
   def self.layout(graph, options = {})
-    unless graph.is_a?(::Hash) || graph.is_a?(Graph::Graph)
-      raise ArgumentError,
-            "graph must be a Hash or Elkrb::Graph::Graph, got #{graph.class}"
-    end
-
     Layout::LayoutEngine.layout(graph, options)
   end
 

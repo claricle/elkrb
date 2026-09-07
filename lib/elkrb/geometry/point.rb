@@ -22,7 +22,11 @@ module Elkrb
       # would not be rendered, making a bare Point serialize to {} instead of
       # {"x":0.0,"y":0.0}.
       def initialize(**attributes)
-        attributes.empty? ? super(x: 0.0, y: 0.0) : super
+        if attributes.empty?
+          super(x: 0.0, y: 0.0)
+        else
+          super
+        end
       end
 
       def +(other)

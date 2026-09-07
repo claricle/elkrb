@@ -25,10 +25,9 @@ RSpec.describe Elkrb::Geometry::Point do
   end
 
   # The three serialization invariants the initialize shape rests on. Deleting
-  # `initialize` outright breaks the first. The second is the point of Do 4's
-  # second half: the branch that was removed WAS reachable -- an unknown
-  # keyword hit it and produced a fictitious (0,0) -- so restoring it turns
-  # that example red.
+  # `initialize` outright breaks the first. The second covers the branch that
+  # was removed: it WAS reachable -- an unknown keyword hit it and produced a
+  # fictitious (0,0) -- so restoring it turns that example red.
   describe "serialization of a bare instance" do
     it "renders explicit zeros when built with no arguments" do
       expect(JSON.parse(described_class.new.to_json))

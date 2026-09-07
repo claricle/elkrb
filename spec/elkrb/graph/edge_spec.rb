@@ -72,14 +72,6 @@ RSpec.describe Elkrb::Graph::Edge do
           expect(edge.public_send(ep[:reader])).to eq(["n1"])
         end
 
-        it "ignores a blank #{ep[:port]} when #{ep[:legacy]} is present" do
-          edge = described_class.from_json(
-            { "id" => "e", ep[:port] => "", ep[:legacy] => "n1" }.to_json,
-          )
-
-          expect(edge.public_send(ep[:reader])).to eq(["n1"])
-        end
-
         it "keeps an explicit empty #{ep[:canonical]} with no legacy key" do
           edge = described_class.from_json(
             { "id" => "e", ep[:canonical] => [] }.to_json,
@@ -94,6 +86,36 @@ RSpec.describe Elkrb::Graph::Edge do
           )
 
           expect(edge.public_send(ep[:reader])).to eq(%w[a b])
+        end
+
+        it "ignores a blank #{ep[:port]} so #{ep[:legacy]} still wins" do
+          edge = described_class.from_json(
+            { "id" => "e", ep[:legacy] => "n1", ep[:port] => "" }.to_json,
+          )
+
+          expect(edge.public_send(ep[:reader])).to eq(["n1"])
+        end
+
+        it "gives no endpoint for a blank #{ep[:legacy]}" do
+          edge = described_class.from_json(
+            { "id" => "e", ep[:legacy] => "  " }.to_json,
+          )
+
+          expect(Array(edge.public_send(ep[:reader]))).to be_empty
+        end
+
+        it "reads the legacy #{ep[:legacy]} key from YAML" do
+          edge = described_class.from_yaml("id: e\n#{ep[:legacy]}: n1\n")
+
+          expect(edge.public_send(ep[:reader])).to eq(["n1"])
+        end
+
+        it "reads #{ep[:port]} from YAML and emits neither key" do
+          edge = described_class.from_yaml("id: e\n#{ep[:port]}: p1\n")
+          keys = YAML.safe_load(edge.to_yaml).keys
+
+          expect(edge.public_send(ep[:reader])).to eq(["p1"])
+          expect(keys).not_to include(ep[:legacy], ep[:port])
         end
 
         it "emits neither #{ep[:legacy]} nor #{ep[:port]} on write" do
