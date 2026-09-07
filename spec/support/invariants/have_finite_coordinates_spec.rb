@@ -195,6 +195,23 @@ RSpec.describe "have_finite_coordinates" do
       .not_to have_finite_coordinates
   end
 
+  # junction_points is the third coordinate collection on an Edge and it
+  # went unchecked: this graph satisfied the matcher and then raised
+  # JSON::GeneratorError from `to_json`, which is the failure the matcher
+  # exists to catch first.
+  it "rejects an edge carrying a non-finite junction point" do
+    edge = Elkrb::Graph::Edge.new(id: "e", sources: ["a"], targets: ["a"])
+    edge.sections = []
+    edge.labels = []
+    edge.junction_points = [Elkrb::Geometry::Point.new(x: Float::NAN, y: 0.0)]
+    graph = Elkrb::Graph::Graph.new
+    graph.children = [bad_node]
+    graph.edges = [edge]
+
+    expect(graph).not_to have_finite_coordinates
+    expect { graph.to_json }.to raise_error(JSON::GeneratorError)
+  end
+
   it "rejects an edge label carrying a non-finite position" do
     edge = Elkrb::Graph::Edge.new(id: "e", sources: ["a"], targets: ["a"])
     edge.sections = []

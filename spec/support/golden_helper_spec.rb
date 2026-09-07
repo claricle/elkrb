@@ -738,6 +738,19 @@ RSpec.describe GoldenComparator, "rejecting a corrupted actual result" do
     expect(diffs.join).to include('expected shapes ["a", "b"], got ["a"]')
   end
 
+  # Every other id in the harness is matched inside a children/edges
+  # collection, and the root sits in neither -- renaming it produced no
+  # difference in any of the three paths below.
+  it "rejects a renamed root graph id in every tier" do
+    expected = golden_expected("force_tri")
+    renamed = Marshal.load(Marshal.dump(expected))
+    renamed["id"] = "not-root"
+
+    expect(shape_diffs(expected, renamed).join).to include("graph/id")
+    expect(described_class.diff_structural(expected, renamed).join)
+      .to include("graph/id")
+  end
+
   it "rejects a label that lost its coordinates entirely (exact tier)" do
     # labeled_node's label really does sit at (0,0) in the golden, so
     # coercing a missing coordinate to 0.0 made deleting it a no-op.

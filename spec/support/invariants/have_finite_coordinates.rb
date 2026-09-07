@@ -108,12 +108,25 @@ RSpec::Matchers.define :have_finite_coordinates do
     end
   end
 
+  # junction_points is the third coordinate collection an Edge carries
+  # (lib/elkrb/graph/edge.rb:82), beside its sections and its labels, and
+  # it is serialized as `junctionPoints`. It was unchecked: a graph with
+  # a NaN junction point satisfied this matcher and then raised
+  # JSON::GeneratorError from `to_json` -- measured -- which is exactly
+  # the failure the matcher exists to catch one step earlier.
+  define_method(:check_edge_points) do |edge, edge_path|
+    (edge.sections || []).each do |section|
+      check_section_points(section, edge_path)
+    end
+    (edge.junction_points || []).each_with_index do |point, i|
+      check_point(point, "#{edge_path}/junction_points[#{i}]")
+    end
+  end
+
   define_method(:check_sections) do |owner, path|
     (owner.edges || []).each do |edge|
       edge_path = "#{path}/edges/#{edge.id}"
-      (edge.sections || []).each do |section|
-        check_section_points(section, edge_path)
-      end
+      check_edge_points(edge, edge_path)
       check_labels(edge, edge_path)
     end
   end

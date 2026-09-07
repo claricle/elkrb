@@ -22,6 +22,28 @@ RSpec.describe "preserve_ids_and_endpoints" do
     expect(result).to preserve_ids_and_endpoints(input_hash)
   end
 
+  # The root's own id is the one id in the graph that sits in no
+  # children/edges collection, so nothing was matching it: renaming
+  # "root" left this matcher returning true.
+  it "fails when the root graph's own id changed" do
+    graph = Elkrb::Graph::Graph.from_hash(input_hash)
+    result = Elkrb.layout(graph, {})
+    result.id = "renamed"
+
+    expect(result).not_to preserve_ids_and_endpoints(input_hash)
+  end
+
+  it "fails when a compound node's own id changed" do
+    nested = { "id" => "root",
+               "children" => [{ "id" => "p", "children" => [{ "id" => "c" }] }],
+               "edges" => [] }
+    graph = Elkrb::Graph::Graph.from_hash(nested)
+    result = Elkrb.layout(graph, {})
+    result.children.first.id = "renamed"
+
+    expect(result).not_to preserve_ids_and_endpoints(nested)
+  end
+
   it "fails when an edge's endpoints changed" do
     graph = Elkrb::Graph::Graph.from_hash(input_hash)
     result = Elkrb.layout(graph, {})
