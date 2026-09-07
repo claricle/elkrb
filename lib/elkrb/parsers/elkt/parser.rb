@@ -65,12 +65,16 @@ module Elkrb
             name = allowed.find { |key| peek.keyword?(key) }
             raise_at(peek, "expected #{allowed.join(', ')}") unless name
 
-            case name
-            when "node" then parse_node(container)
-            when "port" then parse_port(container)
-            when "label" then parse_label(container)
-            when "edge" then parse_edge(container)
-            end
+            parse_member(name, container)
+          end
+        end
+
+        def parse_member(name, container)
+          case name
+          when "node" then parse_node(container)
+          when "port" then parse_port(container)
+          when "label" then parse_label(container)
+          when "edge" then parse_edge(container)
           end
         end
 

@@ -39,6 +39,7 @@ module Elkrb
           @line = 1
           @col = 1
           @tokens = []
+          @scanners = build_scanners
         end
 
         def tokenize
@@ -49,6 +50,18 @@ module Elkrb
         end
 
         private
+
+        # The scan order described above, written out. Keep the string
+        # scanner before the two comment scanners.
+        def build_scanners
+          [
+            method(:take_whitespace), method(:take_string),
+            method(:take_line_comment), method(:take_block_comment),
+            method(:take_arrow), method(:take_number),
+            method(:take_identifier), method(:take_pipe),
+            method(:take_punctuation)
+          ].freeze
+        end
 
         # Skipped by moving @pos alone: a byte-order mark is a zero-width
         # marker, so the first real character is still at column 1. Routing it
@@ -81,28 +94,23 @@ module Elkrb
           text.each_char do |char|
             return [line, col] unless char.valid_encoding?
 
-            if newline_start?(char, previous)
-              line += 1
-              col = 1
-            elsif char != "\n"
-              col += 1
-            end
+            line, col = step_location(char, previous, line, col)
             previous = char
           end
           [line, col]
         end
 
         # CRLF is one line break, so the LF after a CR must not count again.
-        def newline_start?(char, previous)
-          char == "\r" || (char == "\n" && previous != "\r")
+        def step_location(char, previous, line, col)
+          return [line + 1, 1] if char == "\r" ||
+            (char == "\n" && previous != "\r")
+          return [line, col] if char == "\n"
+
+          [line, col + 1]
         end
 
-        # The order of this chain is the scan order described above. Keep the
-        # string scanner before the two comment scanners.
         def scan_one
-          return if take_whitespace || take_string || take_line_comment ||
-            take_block_comment || take_arrow || take_number ||
-            take_identifier || take_pipe || take_punctuation
+          return if @scanners.any?(&:call)
 
           raise_at(@line, @col,
                    "Unexpected character #{@src[@pos].inspect}")
