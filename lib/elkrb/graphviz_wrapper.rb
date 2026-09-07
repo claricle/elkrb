@@ -62,10 +62,16 @@ module Elkrb
       candidates.find { |path| executable_candidate?(path) }
     end
 
-    # A shell-free replacement for `which`. An absolute candidate is asked of
-    # the filesystem directly; a bare name is resolved against PATH the way
-    # execvp would. Nothing here interpolates into a command string, which is
-    # what the old `system("which #{path} ...")` did.
+    # A shell-free replacement for `which`. Nothing here interpolates into a
+    # command string, which is what the old `system("which #{path} ...")` did.
+    #
+    # The first line also covers the working directory, since `File.executable?`
+    # resolves a bare name against it -- so an empty PATH entry, which execvp
+    # reads as the working directory, needs no second look. It must be dropped
+    # rather than walked: `File.join("", "dot")` is "/dot", so keeping it would
+    # probe the ROOT directory, which is neither what execvp does nor useful.
+    # A candidate that already contains a separator is not PATH-searched at all,
+    # matching execvp and avoiding `File.join("/opt/bin", "/usr/bin/dot")`.
     def executable_candidate?(path)
       return true if File.executable?(path)
       return false if path.include?(File::SEPARATOR)
