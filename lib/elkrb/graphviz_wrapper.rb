@@ -85,10 +85,12 @@ module Elkrb
     # `File.join("/opt/bin", "/usr/bin/dot")` -> "/opt/bin/usr/bin/dot".
     # `File::SEPARATOR` is "/" on every platform Ruby runs on, Windows
     # included -- `File::ALT_SEPARATOR` is the "\\" one, and Ruby's own
-    # stdlib normalises INTO SEPARATOR (`pathname.rb:124` and
-    # `rubygems/installer.rb:693` both do
-    # `tr(File::ALT_SEPARATOR, File::SEPARATOR)`). Every candidate above is
-    # written with "/", so one test covers them all.
+    # stdlib normalises INTO SEPARATOR, never the other way. Reproduce with
+    # `grep -rn 'ALT_SEPARATOR, File::SEPARATOR' "$(ruby -e 'print
+    # RbConfig::CONFIG[%q(rubylibdir)]')"`: pathname.rb uses `tr!` and
+    # rubygems/installer.rb uses `tr`, both in that direction. Line numbers
+    # move between Ruby versions, so they are deliberately not quoted here.
+    # Every candidate above is written with "/", so one test covers them all.
     def executable_candidate?(path)
       return true if executable_file?(path)
       return false if path.include?(File::SEPARATOR)
