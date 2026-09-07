@@ -85,6 +85,14 @@ module GoldenFixtures
   ELKJS_NODE_MODULES = "#{ELKJS_DIR}/node_modules/elkjs".freeze
   GOLDEN_DIR = "spec/fixtures/golden"
 
+  # Every failure below RAISES this. These are public module methods, and
+  # they used to `abort`: any Ruby process that loaded this Rakefile and
+  # called `generate_into` was terminated with SystemExit 1 instead of
+  # getting an exception it could handle. Only a rake task -- the CLI
+  # entry point -- decides an exit status, which the tasks below do by
+  # rescuing this and calling `abort` themselves.
+  class GenerationFailed < StandardError; end
+
   module_function
 
   # Runs generate.js into `dir` (all case files + MANIFEST.json, flat).
@@ -100,19 +108,25 @@ module GoldenFixtures
   def generate_into(dir)
     run_generator(dir)
   rescue Errno::ENOENT
-    abort "node not found on PATH (generated tree, if any, left at #{dir})"
+    raise GenerationFailed, "node not found on PATH (#{left_at(dir)})"
   rescue RuntimeError => e
     # `exception: true` raises plain RuntimeError on a non-zero exit --
     # generate.js already printed its own specific reason to stderr above
-    # this, so the abort just adds where to look, not a duplicate reason.
-    abort "generate.js failed (#{e.message}); see its output above " \
-          "(generated tree, if any, left at #{dir})"
+    # this, so the message just adds where to look, not a duplicate reason.
+    raise GenerationFailed,
+          "generate.js failed (#{e.message}); see its output above " \
+          "(#{left_at(dir)})"
+  end
+
+  def left_at(dir)
+    "generated tree, if any, left at #{dir}"
   end
 
   def run_generator(dir)
     puts "Generating into #{dir}"
     unless Dir.exist?(ELKJS_NODE_MODULES)
-      abort "elkjs not installed — run: npm ci --prefix #{ELKJS_DIR}"
+      raise GenerationFailed,
+            "elkjs not installed — run: npm ci --prefix #{ELKJS_DIR}"
     end
 
     system("node", "#{ELKJS_DIR}/generate.js", dir, exception: true)
@@ -133,7 +147,12 @@ namespace :golden do
     # would leave nothing to inspect after a failed generation. Removed
     # explicitly below, only once generation has actually succeeded.
     tmp = Dir.mktmpdir
-    GoldenFixtures.generate_into(tmp)
+    # The task, not the module, turns a failure into an exit status.
+    begin
+      GoldenFixtures.generate_into(tmp)
+    rescue GoldenFixtures::GenerationFailed => e
+      abort e.message
+    end
 
     FileUtils.rm_rf("#{golden_dir}/expected")
     FileUtils.cp_r(tmp, "#{golden_dir}/expected")
@@ -152,7 +171,11 @@ namespace :golden do
     golden_dir = GoldenFixtures::GOLDEN_DIR
 
     tmp = Dir.mktmpdir
-    GoldenFixtures.generate_into(tmp)
+    begin
+      GoldenFixtures.generate_into(tmp)
+    rescue GoldenFixtures::GenerationFailed => e
+      abort e.message
+    end
 
     unless File.exist?("#{golden_dir}/MANIFEST.json")
       abort "#{golden_dir}/MANIFEST.json missing — run " \

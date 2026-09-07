@@ -30,7 +30,23 @@ RSpec::Matchers.define :have_no_overlapping_siblings do
   # alongside this matcher in the same spec — this one stays robust rather
   # than raising on it.
 
+  # A zero-AREA node cannot strictly overlap anything, and the four
+  # comparisons alone do not say that: a point at (5,5) with no size, sat
+  # inside a 10x10 sibling, satisfied all four and was reported as an
+  # overlap. That contradicts the convention directly above -- an unsized
+  # leaf is a zero-size rectangle, and a rectangle with no interior
+  # intersects nothing in a positive area. It also contradicted
+  # `omit_size_for_unsized_input`, which exists to keep unsized nodes
+  # unsized: the two invariants run over the same golden cases, so
+  # `sizeless` satisfying one had to mean failing the other. The area
+  # test comes first, so `strictly_` is what the predicate now means.
+  define_method(:both_have_area?) do |a, b|
+    InvariantGeometry.area?(a) && InvariantGeometry.area?(b)
+  end
+
   define_method(:strictly_overlap?) do |a, b|
+    return false unless both_have_area?(a, b)
+
     ax, ay, aw, ah = InvariantGeometry.box(a)
     bx, by, bw, bh = InvariantGeometry.box(b)
     ax < bx + bw && bx < ax + aw && ay < by + bh && by < ay + ah

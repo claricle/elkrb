@@ -16,17 +16,16 @@ RSpec.describe "omit_size_for_unsized_input" do
     expect(result).to omit_size_for_unsized_input(input_hash)
   end
 
-  # `q` is what gives this example teeth. An EMPTY compound like `p` comes
-  # back from layout with width and height still nil, so it reaches
-  # `check_dimensions` with nothing to flag and would pass with the
-  # exemption deleted. `q` has a real child, so layout computes it a
-  # 44x44 size it never declared, and the exemption is then the only
-  # reason no violation is reported. `p` stays to cover the empty case.
-  # The exemption has to be LOAD-BEARING, so the actual node must gain a
-  # size. A real layout does not do that -- measured, a `"children": []` node
-  # comes back with width and height still nil, so the earlier version of
-  # this example passed whether the exemption existed or not. The result is
-  # built by hand instead.
+  # The exemption has to be LOAD-BEARING, which means the actual node has
+  # to GAIN a size. A real layout does not give it one -- measured, a
+  # `"children": []` node comes back with width and height still nil, so
+  # an earlier version of this example passed whether the exemption
+  # existed or not. So the result is built by hand: `p` declares
+  # `"children": []` in the input and comes back 40x40, and the exemption
+  # is the only reason that is not reported as a violation. Verified by
+  # deleting `omit_size_for_unsized_input.rb`'s `return if
+  # input_owner.key?("children")` -- this example, and only this one,
+  # goes red.
   it "exempts a declared compound that gained a computed size" do
     input_hash = { "id" => "root",
                    "children" => [{ "id" => "p", "children" => [] }],
