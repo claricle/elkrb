@@ -144,7 +144,10 @@ RSpec.describe Elkrb::Layout::LayoutEngine do
       [nil, 42, "not a graph", [], :root, false, Object.new].each do |bad_input|
         it "raises ArgumentError for a #{bad_input.class} before dispatching" do
           expect { described_class.layout(bad_input) }
-            .to raise_error(ArgumentError, /graph must be a Hash or Elkrb::Graph::Graph/)
+            .to raise_error(
+              ArgumentError,
+              "graph must be a Hash or Elkrb::Graph::Graph, got #{bad_input.class}",
+            )
         end
       end
     end
