@@ -70,7 +70,8 @@ module Elkrb
 
         def validate_unique_edge_id!(seen_ids, edge)
           if seen_ids.key?(edge.id)
-            raise Elkrb::ValidationError, "duplicate edge id: #{edge.id}"
+            raise Elkrb::ValidationError,
+                  "duplicate edge id: #{edge_label(edge)}"
           end
 
           seen_ids[edge.id] = true
@@ -97,9 +98,31 @@ module Elkrb
           !endpoint.nil?
         end
 
+        # An edge id is optional in ELK, so every message below could read
+        # "(edge )" with nothing after it -- and the duplicate-id one is
+        # raised precisely when TWO edges share that empty name, which is
+        # the worst moment to say nothing. An edge always has endpoints,
+        # so they are the fallback handle. Keep the three messages using
+        # one helper: fixing only some of them makes the rest look
+        # deliberate.
+        def edge_label(edge)
+          return edge.id if edge.id
+
+          "(none), #{endpoint_list(edge.sources)} -> " \
+            "#{endpoint_list(edge.targets)}"
+        end
+
+        def endpoint_list(endpoints)
+          named = (endpoints || []).compact
+          return "(no endpoints)" if named.empty?
+
+          named.map(&:inspect).join(", ")
+        end
+
         def raise_missing_endpoint!(edge)
           raise Elkrb::UnsupportedConfigurationException.new(
-            "layered requires non-empty edge endpoints (edge #{edge.id})",
+            "layered requires non-empty edge endpoints " \
+            "(edge #{edge_label(edge)})",
             option: "edge",
             value: edge.id,
           )
@@ -107,7 +130,8 @@ module Elkrb
 
         def raise_hyperedge!(edge)
           raise Elkrb::UnsupportedConfigurationException.new(
-            "layered does not support hyperedges (edge #{edge.id})",
+            "layered does not support hyperedges " \
+            "(edge #{edge_label(edge)})",
             option: "edge",
             value: edge.id,
           )

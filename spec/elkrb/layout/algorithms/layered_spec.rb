@@ -133,6 +133,59 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
         .to raise_error(Elkrb::ValidationError, /duplicate edge id: e/)
     end
 
+    # An edge id is optional in ELK, so every one of these three messages
+    # could name the edge as the empty string. The duplicate-id one is the
+    # sharpest case: it fires precisely when TWO edges share that empty
+    # name. These pin the MESSAGE, not the refusal -- the refusal was
+    # already there and was never the defect. All three are asserted
+    # together on purpose: fixing only some of them makes the rest look
+    # deliberate.
+    it "names an id-less edge by its endpoints in a duplicate-id error" do
+      graph = {
+        id: "r",
+        children: %w[a b c].map { |id| { id: id, width: 10, height: 10 } },
+        edges: [
+          { sources: ["a"], targets: ["b"] },
+          { sources: ["b"], targets: ["c"] },
+        ],
+      }
+
+      expect { Elkrb.layout(graph, algorithm: "layered") }
+        .to raise_error(
+          Elkrb::ValidationError,
+          'duplicate edge id: (none), "b" -> "c"',
+        )
+    end
+
+    it "names an id-less edge by its endpoints in a missing-endpoint error" do
+      graph = {
+        id: "r",
+        children: %w[a b].map { |id| { id: id, width: 10, height: 10 } },
+        edges: [{ sources: [], targets: ["b"] }],
+      }
+
+      expect { Elkrb.layout(graph, algorithm: "layered") }
+        .to raise_error(
+          Elkrb::UnsupportedConfigurationException,
+          "layered requires non-empty edge endpoints " \
+          '(edge (none), (no endpoints) -> "b")',
+        )
+    end
+
+    it "names an id-less edge by its endpoints in a hyperedge error" do
+      graph = {
+        id: "r",
+        children: %w[a b c].map { |id| { id: id, width: 10, height: 10 } },
+        edges: [{ sources: ["a"], targets: %w[b c] }],
+      }
+
+      expect { Elkrb.layout(graph, algorithm: "layered") }
+        .to raise_error(
+          Elkrb::UnsupportedConfigurationException,
+          'layered does not support hyperedges (edge (none), "a" -> "b", "c")',
+        )
+    end
+
     it "raises for missing or empty endpoints before the empty fast path" do
       graph = {
         id: "r",
