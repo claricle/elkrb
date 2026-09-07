@@ -410,15 +410,22 @@ RSpec.describe Elkrb::GraphvizWrapper do
     # validate_output_file!: three spaces is a legal POSIX filename, so it
     # must still render. Keep this -- it is what fails if anyone widens
     # the empty check to a blank one.
+    #
+    # The path must be RELATIVE and wholly whitespace for that to hold. An
+    # absolute File.join(dir, "   ") does not strip to empty, so it sails
+    # through a `.strip.empty?` guard and this example would pass against
+    # the wrong fix it exists to refuse. Verified: with `.strip.empty?` in
+    # place, the absolute form stayed green and this form goes red.
     it "still renders to a path that is only whitespace" do
       with_fake_dot do
         Dir.mktmpdir do |dir|
           input = write_fake_input(dir)
-          blank = File.join(dir, "   ")
 
-          wrapper.render(input, blank, :png)
+          Dir.chdir(dir) do
+            wrapper.render(input, "   ", :png)
 
-          expect(File.exist?(blank)).to be(true)
+            expect(File.exist?("   ")).to be(true)
+          end
         end
       end
     end
