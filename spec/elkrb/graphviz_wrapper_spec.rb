@@ -139,9 +139,14 @@ RSpec.describe Elkrb::GraphvizWrapper do
       wrapper.render(Pathname.new("input.dot"), "output.png", :png)
     end
 
-    it "coerces any input file object to a String, not just Pathname" do
+    # The reachable input set for this coercion is exactly what
+    # `validate_file_exists!` lets through -- a String, or an object with
+    # `#to_path`. A `#to_s`-only object cannot get here at all: `File.exist?`
+    # raises TypeError on it first. So `#to_path` is the case that generalises
+    # past Pathname, and it is the one `#to_s` would silently get wrong.
+    it "coerces a non-Pathname to_path object to its real path" do
       custom_path = Object.new
-      def custom_path.to_s = "input.dot"
+      def custom_path.to_path = "input.dot"
 
       expect(wrapper).to receive(:system) do |*command|
         expect(command.last).to eq("input.dot")
