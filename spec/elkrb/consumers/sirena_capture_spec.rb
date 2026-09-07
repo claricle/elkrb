@@ -56,16 +56,18 @@ RSpec.describe "sirena consumer capture fixtures" do
     end
     let(:output) { JSON.parse(result.to_json) }
 
-    it "lays out without raising" do
-      expect { result }.not_to raise_error
-    end
-
     it "echoes every layoutOptions map it was given" do
       given = option_maps(input)
 
       expect(given).not_to be_empty
       expect(given.map(&:first)).to include(input["id"])
-      expect(option_maps(output)).to eq(given)
+      # Compare the generated JSON, not the parsed values. Ruby's `==`
+      # says 75.0 == 75, so an `eq` on the parsed maps cannot see a
+      # Float turning into an Integer -- and elk.spacing.nodeNode is a
+      # Float 75.0 beside two Integer 30s precisely so this pins the
+      # numeric type. Keep the string form; `eq` here is silently weaker.
+      expect(JSON.generate(option_maps(output)))
+        .to eq(JSON.generate(given))
     end
 
     it "drops the unknown metadata key" do
