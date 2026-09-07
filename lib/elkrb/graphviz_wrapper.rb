@@ -207,8 +207,15 @@ module Elkrb
       raise ArgumentError, "Input file not found: #{file}"
     end
 
+    # Empty counts as missing; BLANK does not. Measured: `render(input,
+    # "   ", :png)` writes a real file named "   ", because three spaces
+    # is a legal POSIX filename -- so do not reach for `strip` here. An
+    # empty path, by contrast, reaches `dot` as a bare `-o` with nothing
+    # after it, which prints its whole usage banner to stderr and then
+    # fails as GraphvizNotFoundError, blaming a Graphviz that is installed
+    # and working.
     def validate_output_file!(output_file)
-      return if output_file
+      return unless output_file.to_s.empty?
 
       raise ArgumentError, "Output file path is required"
     end

@@ -391,6 +391,38 @@ RSpec.describe Elkrb::GraphvizWrapper do
       end
     end
 
+    # An empty path reaches `dot` as a bare `-o`, which makes it dump its
+    # usage banner and fail as GraphvizNotFoundError -- naming a Graphviz
+    # that is installed and working. Refused up front instead.
+    it "refuses an empty output path with the same error as a nil one" do
+      with_fake_dot do
+        Dir.mktmpdir do |dir|
+          input = write_fake_input(dir)
+
+          expect do
+            wrapper.render(input, "", :png)
+          end.to raise_error(ArgumentError, /Output file path is required/)
+        end
+      end
+    end
+
+    # The other side of that boundary, and the reason `strip` is wrong in
+    # validate_output_file!: three spaces is a legal POSIX filename, so it
+    # must still render. Keep this -- it is what fails if anyone widens
+    # the empty check to a blank one.
+    it "still renders to a path that is only whitespace" do
+      with_fake_dot do
+        Dir.mktmpdir do |dir|
+          input = write_fake_input(dir)
+          blank = File.join(dir, "   ")
+
+          wrapper.render(input, blank, :png)
+
+          expect(File.exist?(blank)).to be(true)
+        end
+      end
+    end
+
     it "raises error when the render command itself fails, with no system stub" do
       Dir.mktmpdir do |dir|
         failing_dot = File.join(dir, "dot")
