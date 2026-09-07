@@ -150,6 +150,14 @@ RSpec.describe Elkrb::Layout::LayoutEngine do
             )
         end
       end
+
+      it "rejects the graph before the algorithm is resolved" do
+        expect { described_class.layout(nil, algorithm: "nonexistent") }
+          .to raise_error(
+            ArgumentError,
+            "graph must be a Hash or Elkrb::Graph::Graph, got NilClass",
+          )
+      end
     end
 
     context "with a node missing width and height" do

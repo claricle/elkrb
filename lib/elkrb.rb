@@ -268,6 +268,7 @@ module Elkrb
   #   - :algorithm (String) - Algorithm name (default: "layered")
   #   - Algorithm-specific options (e.g., "elk.spacing.nodeNode")
   # @return [Graph::Graph] The input graph with computed positions
+  # @raise [ArgumentError] If graph is neither a Hash nor a Graph
   #
   # @example With hash input
   #   result = Elkrb.layout({
