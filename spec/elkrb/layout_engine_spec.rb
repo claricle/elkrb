@@ -143,8 +143,10 @@ RSpec.describe Elkrb::Layout::LayoutEngine do
     context "with invalid graph input" do
       # A Node sits in the Elkrb::Graph:: namespace and is not a Graph, so it
       # is the one input that tells a class check apart from a namespace check.
-      # Every other rejected type is already covered in spec/elkrb_spec.rb,
-      # through this same entry point.
+      # The plain rejected types -- nil, String, Array, Integer -- are already
+      # covered in spec/elkrb_spec.rb through this same entry point, and a
+      # namespace check rejects those just as a class check does, so repeating
+      # them here would add examples without adding coverage.
       it "raises ArgumentError for a Graph::Node" do
         expect { described_class.layout(Elkrb::Graph::Node.new) }
           .to raise_error(
