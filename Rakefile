@@ -97,7 +97,10 @@ task :flog do
   require "sexp_processor"
 
   # methods: true drops the main#none pseudo-method, which otherwise tops the
-  # table at 127.6 and is not a method at all.
+  # table and is not a method at all. No score quoted on purpose: it is the sum
+  # of everything outside a method body, so it moves with any lib/ change and a
+  # number here rots on the next merge. Re-check with
+  #   FlogCLI.new.flog(*SexpProcessor.expand_dirs_to_files("lib")).max_method
   flog = FlogCLI.new(methods: true)
   flog.flog(*SexpProcessor.expand_dirs_to_files(*QUALITY_PATHS))
 
