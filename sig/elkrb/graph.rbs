@@ -46,7 +46,7 @@ module Elkrb
       attr_accessor labels: Array[Label]?
       attr_accessor sections: Array[EdgeSection]?
       def layout_options: () -> Hash[String, untyped]?
-      def layout_options=: (Hash[String | Symbol, untyped]? value) -> void
+      def layout_options=: ((Hash[String | Symbol, untyped] | _ToH[untyped, untyped])? value) -> void
       attr_accessor properties: Hash[String, untyped]?
 
       def self.from_hash: (Hash[String | Symbol, untyped] hash) -> Edge
@@ -65,7 +65,7 @@ module Elkrb
       attr_accessor children: Array[Node]?
       attr_accessor edges: Array[Edge]?
       def layout_options: () -> Hash[String, untyped]?
-      def layout_options=: (Hash[String | Symbol, untyped]? value) -> void
+      def layout_options=: ((Hash[String | Symbol, untyped] | _ToH[untyped, untyped])? value) -> void
       attr_accessor properties: Hash[String, untyped]?
 
       def self.from_hash: (Hash[String | Symbol, untyped] hash) -> Node
@@ -85,7 +85,7 @@ module Elkrb
       attr_accessor children: Array[Node]?
       attr_accessor edges: Array[Edge]?
       def layout_options: () -> Hash[String, untyped]?
-      def layout_options=: (Hash[String | Symbol, untyped]? value) -> void
+      def layout_options=: ((Hash[String | Symbol, untyped] | _ToH[untyped, untyped])? value) -> void
       attr_accessor properties: Hash[String, untyped]?
 
       def self.from_hash: (Hash[String | Symbol, untyped] hash) -> Graph
