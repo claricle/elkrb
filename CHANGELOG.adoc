@@ -1,0 +1,42 @@
+= Changelog
+
+All notable changes to Elkrb are recorded here.
+
+== Unreleased (v2)
+
+=== Breaking changes
+
+* `NodeConstraints` now writes YAML in snake_case, like every other model in
+  the gem. `fixedPosition`, `alignGroup`, `alignDirection`, `relativeTo`,
+  `relativeOffset` and `positionPriority` are still read, so old documents keep
+  parsing, but they are no longer produced. Code that reads the camelCase keys
+  out of generated YAML must be updated. JSON and the other key-value formats
+  are unchanged and stay camelCase.
+
+* `Elkrb.layout` and `Elkrb::Layout::LayoutEngine.layout` now raise
+  `ArgumentError` when the graph is neither a `Hash` nor an
+  `Elkrb::Graph::Graph`. Before, other objects were accepted and failed later
+  with a `NoMethodError`, or silently did nothing. Anything passing a wrapper
+  or a duck-typed graph has to pass a real `Graph` now.
+
+=== Added
+
+* Edges read the elkjs primitive endpoint keys `source`, `target`,
+  `sourcePort` and `targetPort` in every format, YAML included. A blank port
+  value is ignored, so a real `source` or `target` still wins. Output stays
+  `sources` and `targets` only.
+
+* `junctionPoints`, `container`, `incomingSections` and `outgoingSections` on
+  edges, and `properties` on labels, are no longer dropped when parsing.
+
+=== Fixed
+
+* `Rectangle#position` and `Rectangle#center` no longer raise.
+
+* `Bezier.calculate_curve` with fewer than two sample points returns copies of
+  the two endpoints instead of the caller's own `Point` objects. Its fifth
+  parameter is now named `sample_count`, which is what it always counted.
+
+=== Changed
+
+* `lutaml-model` is now capped below 0.9.
