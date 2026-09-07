@@ -7,10 +7,16 @@ SimpleCov.start do
   # Without this, a file no spec ever loads is ABSENT from the report rather
   # than reported at 0% -- which is the case most worth surfacing.
   track_files "lib/**/*.rb"
-  add_filter %r{^/spec/}
-  add_filter %r{^/benchmarks/}
-  # The gemspec requires this file, and bundler runs the gemspec before
-  # Coverage starts, so it can never be observed and would sit at 0% forever.
+  # Anchored with no leading slash on purpose. SimpleCov matches a Regexp filter
+  # against SourceFile#project_filename, which is root-relative with its leading
+  # separator already stripped -- it reads "spec/foo.rb" -- so the older
+  # `%r{^/spec/}` idiom matches nothing at all and silently guards nothing.
+  add_filter %r{\Aspec/}
+  add_filter %r{\Abenchmarks/}
+  # A String filter rather than a Regexp one, so this is a path-segment match
+  # rather than an anchored pattern. The gemspec requires this file, and bundler
+  # runs the gemspec before Coverage starts, so it can never be observed and
+  # would otherwise sit at 0% forever.
   add_filter "lib/elkrb/version.rb"
   # Only the full-suite run can meet a floor, so only the full-suite run
   # enforces one: `rake` sets COVERAGE_ENFORCE, and a partial run (one spec

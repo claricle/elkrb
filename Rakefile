@@ -18,9 +18,15 @@ end
 # anywhere, with every run still green. CI runs `bundle exec rake`, so the
 # default task is where the floor has to be armed.
 #
-# The value is load-bearing: spec_helper compares it to "1" exactly, so that
-# COVERAGE_ENFORCE=0 disables the floor instead of enabling it the way a bare
-# truthiness check would.
+# The value is load-bearing, but note what it does and does not buy. Under
+# `rake` the floor is ALWAYS armed -- this line overwrites whatever the caller
+# set, deliberately, because CI must not be able to opt out. The exact `== "1"`
+# in spec_helper is for the OTHER path: someone with COVERAGE_ENFORCE=0 in their
+# shell running `rspec` directly gets no floor, where a bare truthiness check
+# would have fired one, since every string is truthy in Ruby.
+#
+# No `desc`, deliberately: it is a prerequisite of `default`, not a task anyone
+# should invoke, so it stays out of `rake -T`.
 task :coverage_enforce do
   ENV["COVERAGE_ENFORCE"] = "1"
 end
@@ -35,26 +41,26 @@ task :audit do
   sh "bundle exec bundle-audit check --update"
 end
 
+# exe/elkrb has no .rb extension, so expand_dirs_to_files skips it, and lib is
+# the whole of what any of these three tools can see here.
+QUALITY_PATHS = ["lib"].freeze
+
+# Flog and flay both exit 0 whatever they find, so on their own they are
+# reporters, not gates. These tasks read the score off their Ruby APIs and add
+# the comparison. Both scores move when the parser underneath them moves, and
+# for these two that is prism and sexp_processor -- not the `parser` gem, which
+# is rubocop's and reek's. Gemfile.lock is gitignored, so all four are pinned or
+# a fresh `bundle install` alone could move a baseline.
+FLOG_MAX_METHOD = 107.0 # worst method today is 106.5
+FLAY_MAX_TOTAL = 4990   # total today is 4990, so this has no headroom by design
+
 # Not in `default`: the pre-existing smell count means this is only ever green
 # behind .reek.yml, and behind that baseline it duplicates rubocop's role in
 # the task CI runs on every matrix cell.
 desc "Report code smells (baseline in .reek.yml)"
 task :reek do
-  sh "bundle exec reek lib"
+  sh "bundle", "exec", "reek", *QUALITY_PATHS
 end
-
-# Flog and flay both exit 0 whatever they find, so on their own they are
-# reporters, not gates. These tasks read the score off their Ruby APIs and add
-# the comparison. Both scores move when the PARSER underneath moves, and for
-# these two that is prism and sexp_processor -- not `parser`, which belongs to
-# rubocop and reek. Gemfile.lock is gitignored, so all four gems are pinned or
-# a fresh `bundle install` alone could move a baseline.
-FLOG_MAX_METHOD = 107.0 # worst today is 106.5
-FLAY_MAX_TOTAL = 4990
-
-# exe/elkrb has no .rb extension, so expand_dirs_to_files skips it and lib is
-# the whole of what either tool can see here.
-QUALITY_PATHS = ["lib"].freeze
 
 desc "Fail if any method's flog score exceeds the recorded ceiling"
 task :flog do
@@ -73,8 +79,10 @@ task :flog do
   name, score = flog.max_method
   flog.report($stdout)
 
+  # Two decimals, not one: the comparison is exact, so a score of 107.04 would
+  # round to "107.0, over the 107.0 ceiling" and read like a bug in the task.
   if score > FLOG_MAX_METHOD
-    abort "flog: #{name} scores #{score.round(1)}, " \
+    abort "flog: #{name} scores #{format('%.2f', score)}, " \
           "over the #{FLOG_MAX_METHOD} ceiling"
   end
 end
@@ -86,7 +94,11 @@ task :flay do
 
   flay = Flay.new(Flay.default_options)
   flay.process(*SexpProcessor.expand_dirs_to_files(*QUALITY_PATHS))
-  flay.analyze # #total stays 0 until this runs
+
+  # Read the total AFTER reporting -- the exact opposite of flog above, so do
+  # not "fix" one to match the other. Flay#report runs the analysis itself
+  # (flay.rb `data = analyze only`), and the analysis starts by resetting the
+  # total to 0, so #total reads 0 until report has run.
   flay.report($stdout)
 
   if flay.total > FLAY_MAX_TOTAL
@@ -107,12 +119,16 @@ task :mutant do
   # The Gemfile only installs mutant on 3.3+, so say why rather than letting
   # bundler report a missing binary the Gemfile deliberately never asked for.
   if Gem::Version.new(RUBY_VERSION) < Gem::Version.new("3.3")
-    abort "mutant needs Ruby >= 3.3; this is #{RUBY_VERSION}. " \
-          "The gemspec floor is 3.2.0, so the Gemfile skips it here."
+    abort "mutant needs Ruby >= 3.3; this is #{RUBY_VERSION}. The gemspec " \
+          "floor is 3.2.0, so the Gemfile skips it here. Re-run on 3.3+."
   end
 
+  # Array form, so `sh` runs the command directly instead of through a shell.
+  # BASE is caller-supplied and the single-string form hands it to sh -c
+  # verbatim, so BASE='v2; some-other-command' would run that command. The array
+  # form also means `Elkrb*` needs no quoting, because nothing can glob it.
   base = ENV.fetch("BASE", "origin/v2")
-  sh "bundle exec mutant run --since #{base} -- 'Elkrb*'"
+  sh "bundle", "exec", "mutant", "run", "--since", base, "--", "Elkrb*"
 end
 
 namespace :benchmark do

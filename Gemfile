@@ -22,7 +22,7 @@ gem "rubocop-performance", "~> 1.27.0"
 # flog and flay parse through them rather than through `parser`, they declare
 # them only as `~> 1.7` and `~> 4.0`, and Gemfile.lock is gitignored here -- so
 # pinning flog and flay alone still lets a fresh `bundle install` resolve a
-# newer parser and move both baselines with no code change.
+# newer prism or sexp_processor and move both baselines with no code change.
 gem "bundler-audit", "~> 0.9.3"
 gem "flay", "~> 2.14.4"
 gem "flog", "~> 4.9.4"
@@ -33,7 +33,12 @@ gem "sexp_processor", "~> 4.17.5"
 # assumed: bundler exits 6 with "Ruby >= 3.3 is required". CI runs a Ruby x OS
 # matrix over the gemspec floor, so that would be every 3.2 cell red on code
 # nobody touched. Gemfile.lock is gitignored here, so a conditional dependency
-# costs nothing. Compared as Gem::Version: "3.10" < "3.3" as strings.
+# costs nothing. Compared as Gem::Version, never as strings -- as strings
+# "3.10" sorts BELOW "3.3", which would exclude Ruby 3.10 from a 3.3+ guard.
 gem "mutant-rspec", "~> 0.16.3" if Gem::Version.new(RUBY_VERSION) >= Gem::Version.new("3.3")
 gem "reek", "~> 6.5.0"
-gem "simplecov", "~> 1.1", require: false
+# Pinned to a patch series like the rest of this block, not `~> 1.1`. SimpleCov
+# has changed filter semantics within 1.x -- SourceFile#project_filename strips
+# the leading separator, so a filter written for an older minor can quietly stop
+# matching -- and that is exactly the kind of drift a coverage floor hides.
+gem "simplecov", "~> 1.1.1", require: false
