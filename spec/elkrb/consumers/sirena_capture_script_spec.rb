@@ -4,6 +4,7 @@ require "spec_helper"
 require "English"
 require "json"
 require "rbconfig"
+require "stringio"
 require "tmpdir"
 require "support/sirena_provenance"
 
@@ -136,6 +137,72 @@ RSpec.describe "spec/fixtures/consumers/sirena/capture.rb" do
       expect(File.read(existing)).to eq(%({"id":"the previous capture"}\n))
       expect(written).to eq(["c4_nested.json"])
     end
+
+    # The two below drive `publish` directly, because they are about what
+    # happens AFTER every transform has succeeded -- the transform stub
+    # cannot reach that far.
+    it "leaves no temp file behind when a graph cannot be serialized" do
+      out, status = run_ruby(<<~RUBY)
+        require #{script.inspect}
+        unserializable = Object.new
+        def unserializable.to_json(*) = raise("cannot serialize")
+        SirenaCapture.publish([["a", { "ok" => 1 }],
+                               ["b", { "x" => unserializable }]],
+                              #{@out_dir.inspect})
+      RUBY
+
+      expect(status).not_to eq(0)
+      expect(out).to include("cannot serialize")
+      expect(written).to eq([])
+    end
+
+    it "publishes nothing when one target cannot be replaced" do
+      Dir.mkdir(@out_dir)
+      # A directory where "b.json" belongs. Renaming one file at a time,
+      # "a.json" was replaced before this raised EISDIR.
+      Dir.mkdir(File.join(@out_dir, "b.json"))
+      File.write(File.join(@out_dir, "a.json"), "PREVIOUS")
+
+      out, status = run_ruby(<<~RUBY)
+        require #{script.inspect}
+        SirenaCapture.publish([["a", { "v" => "new" }], ["b", { "v" => "new" }]],
+                              #{@out_dir.inspect})
+      RUBY
+
+      expect(status).not_to eq(0)
+      expect(out).to include("is not a regular file")
+      expect(File.read(File.join(@out_dir, "a.json"))).to eq("PREVIOUS")
+      expect(written).to eq(["a.json", "b.json"])
+    end
+
+    it "restores every target it had already replaced when a rename fails" do
+      Dir.mkdir(@out_dir)
+      %w[a b].each do |n|
+        File.write(File.join(@out_dir, "#{n}.json"), "OLD-#{n}")
+      end
+
+      out, status = run_ruby(<<~RUBY)
+        require #{script.inspect}
+        # Let the first rename through, then fail the second -- the shape
+        # `refuse_unpublishable!` cannot see, so only the undo log saves it.
+        File.singleton_class.prepend(Module.new do
+          define_method(:rename) do |from, to|
+            publishing_b = to.end_with?("/b.json") && from.end_with?(".tmp")
+            raise Errno::EXDEV, to if publishing_b
+
+            super(from, to)
+          end
+        end)
+        SirenaCapture.publish([["a", { "v" => "new" }], ["b", { "v" => "new" }]],
+                              #{@out_dir.inspect})
+      RUBY
+
+      expect(status).not_to eq(0)
+      expect(out).to include("Errno::EXDEV")
+      expect(File.read(File.join(@out_dir, "a.json"))).to eq("OLD-a")
+      expect(File.read(File.join(@out_dir, "b.json"))).to eq("OLD-b")
+      expect(written).to eq(["a.json", "b.json"])
+    end
   end
 end
 
@@ -183,21 +250,108 @@ RSpec.describe SirenaProvenance do
   end
 
   describe ".assert!" do
-    # The pure `check!` examples above decide the policy; this one proves
-    # the sha and status actually reach it from a real checkout.
-    it "refuses a real checkout that is dirty and on the wrong sha" do
+    # The pure `check!` examples above decide the policy; these prove the
+    # sha and the status each reach it from a real checkout. TWO examples,
+    # not one: a dirty tree short-circuits before the sha is compared, so
+    # a single dirty example passes even with `rev-parse` and `status`
+    # wired to the wrong arguments.
+    let(:log) { StringIO.new }
+
+    def fake_checkout(dir)
+      system("git", "init", "-q", dir)
+      system("git", "-C", dir, "config", "user.email", "t@example.com")
+      system("git", "-C", dir, "config", "user.name", "t")
+      File.write(File.join(dir, "lib.rb"), "x")
+      system("git", "-C", dir, "add", "lib.rb")
+      system("git", "-C", dir, "commit", "-qm", "init", out: File::NULL)
+      `git -C #{dir} rev-parse HEAD`.strip
+    end
+
+    it "refuses a real checkout whose working tree is dirty" do
       Dir.mktmpdir("fake-sirena") do |dir|
-        system("git", "init", "-q", dir)
-        system("git", "-C", dir, "config", "user.email", "t@example.com")
-        system("git", "-C", dir, "config", "user.name", "t")
-        File.write(File.join(dir, "lib.rb"), "x")
-        system("git", "-C", dir, "add", "lib.rb")
-        system("git", "-C", dir, "commit", "-qm", "init", out: File::NULL)
+        fake_checkout(dir)
         File.write(File.join(dir, "lib.rb"), "dirty")
 
         expect do
-          described_class.assert!(sirena_dir: dir, fixture_dir: fixture_dir)
+          described_class.assert!(sirena_dir: dir, fixture_dir: fixture_dir,
+                                  io: log)
         end.to raise_error(SirenaProvenance::Mismatch, /dirty/)
+      end
+    end
+
+    it "refuses a real CLEAN checkout that is on the wrong sha" do
+      Dir.mktmpdir("fake-sirena") do |dir|
+        head = fake_checkout(dir)
+
+        expect do
+          described_class.assert!(sirena_dir: dir, fixture_dir: fixture_dir,
+                                  io: log)
+        end.to raise_error(SirenaProvenance::Mismatch,
+                           /is at #{head}, but the fixtures record #{recorded}/)
+      end
+    end
+
+    it "accepts a real clean checkout when SIRENA_SHA names its head" do
+      Dir.mktmpdir("fake-sirena") do |dir|
+        head = fake_checkout(dir)
+
+        expect(
+          described_class.assert!(sirena_dir: dir, fixture_dir: fixture_dir,
+                                  expected: head, io: log),
+        ).to eq(head)
+      end
+    end
+
+    # The confirmation has to name the thing actually checked. It used to
+    # say "matches the provenance table" on every accepted run, including
+    # one where SIRENA_SHA had replaced that table.
+    it "says the override, not the table, when SIRENA_SHA decided it" do
+      Dir.mktmpdir("fake-sirena") do |dir|
+        head = fake_checkout(dir)
+        described_class.assert!(sirena_dir: dir, fixture_dir: fixture_dir,
+                                expected: head, io: log)
+
+        expect(log.string).to eq(
+          "sirena is at #{head}, clean, and matches the SIRENA_SHA override.\n",
+        )
+      end
+    end
+
+    it "says the provenance table when the README's own sha decided it" do
+      Dir.mktmpdir("fake-sirena") do |dir|
+        head = fake_checkout(dir)
+        Dir.mktmpdir("fake-fixtures") do |fixtures|
+          File.write(File.join(fixtures, "README.md"),
+                     "| sirena commit | `#{head}` |\n")
+          described_class.assert!(sirena_dir: dir, fixture_dir: fixtures,
+                                  io: log)
+        end
+
+        expect(log.string).to eq(
+          "sirena is at #{head}, clean, and matches the provenance table.\n",
+        )
+      end
+    end
+
+    # git writes to stderr for reasons nobody chose -- a repository
+    # format hint, a redirect notice, GIT_TRACE. Merged into stdout, that
+    # text became part of the value read back as the status, and a clean
+    # checkout was reported dirty. GIT_TRACE is simply the cheapest way
+    # to make git talk on a run that succeeds.
+    it "ignores what git writes to stderr on a successful command" do
+      Dir.mktmpdir("fake-sirena") do |dir|
+        head = fake_checkout(dir)
+        previous = ENV.fetch("GIT_TRACE", nil)
+        ENV["GIT_TRACE"] = "1"
+
+        begin
+          expect(
+            described_class.assert!(sirena_dir: dir, fixture_dir: fixture_dir,
+                                    expected: head, io: log),
+          ).to eq(head)
+        ensure
+          ENV["GIT_TRACE"] = previous
+        end
       end
     end
   end

@@ -84,9 +84,9 @@ end
 desc "Re-capture the sirena consumer fixtures " \
      "(SIRENA_DIR=<sirena checkout>, OUT_DIR=<where to write>)"
 task "fixtures:sirena" do
-  usage = "Set SIRENA_DIR to a sirena checkout, e.g. ~/claricle/sirena"
   sirena_dir = ENV.fetch("SIRENA_DIR", nil).to_s
-  abort usage if sirena_dir.empty?
+  abort "Set SIRENA_DIR to a sirena checkout, e.g. ~/claricle/sirena" if
+    sirena_dir.empty?
 
   sirena_dir = File.expand_path(sirena_dir)
   abort "No such directory: #{sirena_dir}" unless Dir.exist?(sirena_dir)
@@ -97,13 +97,12 @@ task "fixtures:sirena" do
   # The provenance check REFUSES. It used to print the sha and ask a
   # human to compare it, and a wrong sha on a dirty tree got all the way
   # to the capture command, which overwrites the fixtures in place.
-  sha = begin
+  begin
     SirenaProvenance.assert!(sirena_dir: sirena_dir, fixture_dir: fixture_dir,
                              expected: ENV.fetch("SIRENA_SHA", nil))
   rescue SirenaProvenance::Mismatch => e
     abort e.message
   end
-  puts "sirena is at #{sha}, clean, and matches the provenance table."
 
   # sirena is a separate gem, so the capture runs in sirena's own bundle.
   Bundler.with_unbundled_env do

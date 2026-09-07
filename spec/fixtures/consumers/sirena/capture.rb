@@ -72,24 +72,82 @@ module SirenaCapture
   # after all of them have been written, so a failure part-way through
   # publishing leaves the committed fixtures exactly as they were.
   # `File.write` follows a symlink; `rename` replaces the link itself.
+  #
+  # Each tmp path is recorded BEFORE its bytes are written, so a write
+  # that dies part-way still leaves a path for `ensure` to remove. With
+  # the recording after the write, a failure on the second graph left
+  # both temp files behind -- measured.
   def publish(graphs, out_dir)
     FileUtils.mkdir_p(out_dir)
-    staged = graphs.to_h { |name, graph| stage(out_dir, name, graph) }
-    staged.each do |tmp, target|
-      File.rename(tmp, target)
-      puts "wrote #{target}"
+    staged = {}
+    graphs.each do |name, graph|
+      tmp, target = paths_for(out_dir, name)
+      staged[tmp] = target
+      write_json(tmp, graph)
     end
+    commit(staged)
   ensure
     staged&.each_key { |tmp| FileUtils.rm_f(tmp) }
   end
 
-  def stage(out_dir, name, graph)
-    target = File.join(out_dir, "#{name}.json")
-    tmp = File.join(out_dir, ".#{name}.json.#{Process.pid}.tmp")
+  def paths_for(out_dir, name)
+    [File.join(out_dir, ".#{name}.json.#{Process.pid}.tmp"),
+     File.join(out_dir, "#{name}.json")]
+  end
+
+  def write_json(tmp, graph)
     File.open(tmp, File::WRONLY | File::CREAT | File::TRUNC) do |file|
       file.write("#{JSON.pretty_generate(graph)}\n")
     end
-    [tmp, target]
+  end
+
+  # Renames every staged file into place, and puts the directory back
+  # the way it was if any rename fails. Renaming one at a time is not
+  # all-or-nothing on its own: a DIRECTORY standing where a fixture
+  # belongs made the second rename raise EISDIR with the first target
+  # already replaced -- measured. `refuse_unpublishable!` rejects that
+  # case before anything moves; the undo log covers the rest.
+  def commit(staged)
+    refuse_unpublishable!(staged)
+    undone = []
+    staged.each { |tmp, target| replace(tmp, target, undone) }
+    undone.each { |entry| FileUtils.rm_f(entry.last) if entry.last }
+  rescue SystemCallError
+    undone.each { |target, stashed| roll_back(target, stashed) }
+    raise
+  end
+
+  # The undo entry is recorded BEFORE the rename, so the file whose
+  # rename is the one that failed gets rolled back too.
+  def replace(tmp, target, undone)
+    undone.unshift([target, stash(target)])
+    File.rename(tmp, target)
+    puts "wrote #{target}"
+  end
+
+  # A rename may replace a regular file, a symlink or nothing at all.
+  # Anything else is refused while the directory is still untouched.
+  def refuse_unpublishable!(staged)
+    blocked = staged.each_value.reject do |target|
+      !File.exist?(target) || File.file?(target)
+    end
+    return if blocked.empty?
+
+    raise Error, "refusing to publish: #{blocked.join(', ')} " \
+                 "is not a regular file"
+  end
+
+  def stash(target)
+    return nil unless File.exist?(target)
+
+    stashed = "#{target}.#{Process.pid}.bak"
+    File.rename(target, stashed)
+    stashed
+  end
+
+  def roll_back(target, stashed)
+    FileUtils.rm_f(target)
+    File.rename(stashed, target) if stashed
   end
 end
 
