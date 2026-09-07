@@ -38,7 +38,7 @@ module Elkrb
 
       private
 
-      def self.validate_graph!: (untyped graph) -> void
+      def self.graph_argument: (untyped graph) -> Graph::Graph
       def self.convert_to_graph: (Hash[String | Symbol, untyped] hash) -> Graph::Graph
     end
 

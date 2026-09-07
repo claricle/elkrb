@@ -113,21 +113,27 @@ module Elkrb
           has_children || has_edges
       end
 
+      # Position first, then size: this is the order ELK itself writes.
+      def shape_layout_parts(node)
+        parts = []
+        if node[:x] && node[:y]
+          parts << "position: #{format_number(node[:x])}, " \
+                   "#{format_number(node[:y])}"
+        end
+        if node[:width] && node[:height]
+          parts << "size: #{format_number(node[:width])}, " \
+                   "#{format_number(node[:height])}"
+        end
+        parts
+      end
+
       def serialize_node_block(node)
         indent = " " * (@indent_level * @indent_size)
 
-        # Serialize layout attributes
-        if node[:width] && node[:height]
-          width = format_number(node[:width])
-          height = format_number(node[:height])
-          @output << "#{indent}layout [ size: #{width}, #{height} ]"
-        end
-
-        if node[:x] && node[:y]
-          x = format_number(node[:x])
-          y = format_number(node[:y])
-          @output << "#{indent}layout [ position: #{x}, #{y} ]"
-        end
+        # ELKT allows ONE layout block per node, so position and size go in
+        # the same block. Two blocks cannot be read back by the parser.
+        layout = shape_layout_parts(node)
+        @output << "#{indent}layout [ #{layout.join('  ')} ]" if layout.any?
 
         # Serialize labels
         (node[:labels] || []).each do |label|

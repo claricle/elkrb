@@ -1,0 +1,5 @@
+edge a -> b
+node p {
+  edge x -> y
+}
+edge c -> d
