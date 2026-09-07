@@ -157,6 +157,27 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
         )
     end
 
+    # `""` is truthy in Ruby, so an `if edge.id` guard puts the empty
+    # message straight back for an edge whose id is the empty string. This
+    # example is the one that fails if the emptiness test is dropped; the
+    # nil examples pass either way.
+    it "treats an empty-string edge id the same as no id at all" do
+      graph = {
+        id: "r",
+        children: %w[a b c].map { |id| { id: id, width: 10, height: 10 } },
+        edges: [
+          { id: "", sources: ["a"], targets: ["b"] },
+          { id: "", sources: ["b"], targets: ["c"] },
+        ],
+      }
+
+      expect { Elkrb.layout(graph, algorithm: "layered") }
+        .to raise_error(
+          Elkrb::ValidationError,
+          'duplicate edge id: (none), "b" -> "c"',
+        )
+    end
+
     it "names an id-less edge by its endpoints in a missing-endpoint error" do
       graph = {
         id: "r",
