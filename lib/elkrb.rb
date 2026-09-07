@@ -11,7 +11,8 @@ require_relative "elkrb/geometry/vector"
 
 # Graph models
 require_relative "elkrb/graph/deep_stringify_keys"
-require_relative "elkrb/graph/layout_options"
+require_relative "elkrb/graph/normalize_option_keys"
+require_relative "elkrb/graph/read_only_mapping"
 require_relative "elkrb/graph/label"
 require_relative "elkrb/graph/port"
 require_relative "elkrb/graph/node_constraints"
@@ -21,6 +22,10 @@ require_relative "elkrb/graph/graph"
 
 # Serializers
 require_relative "elkrb/serializers/dot_serializer"
+require_relative "elkrb/serializers/elkt_serializer"
+
+# Parsers
+require_relative "elkrb/parsers/elkt_parser"
 
 # Options parsers
 require_relative "elkrb/options/elk_padding"
@@ -263,11 +268,16 @@ module Elkrb
   # a Graph model object and applies the chosen layout algorithm to compute
   # node positions and edge routes.
   #
+  # A Graph argument is mutated in place and returned, so the caller's object
+  # carries the computed positions. A Hash argument is converted to a fresh
+  # Graph and left untouched.
+  #
   # @param graph [Hash, Graph::Graph] The graph to layout
   # @param options [Hash] Layout options including:
   #   - :algorithm (String) - Algorithm name (default: "layered")
   #   - Algorithm-specific options (e.g., "elk.spacing.nodeNode")
   # @return [Graph::Graph] The input graph with computed positions
+  # @raise [ArgumentError] If graph is neither a Hash nor a Graph::Graph
   #
   # @example With hash input
   #   result = Elkrb.layout({

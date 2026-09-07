@@ -12,6 +12,7 @@ module Elkrb
       attribute :width, :float
       attribute :height, :float
       attribute :layout_options, :hash
+      attribute :properties, :hash
 
       key_value do
         map "id", to: :id
@@ -21,6 +22,7 @@ module Elkrb
         map "width", to: :width
         map "height", to: :height
         map "layoutOptions", to: :layout_options
+        map "properties", to: :properties
       end
 
       yaml do
@@ -31,6 +33,7 @@ module Elkrb
         map "width", to: :width
         map "height", to: :height
         map "layout_options", to: :layout_options
+        map "properties", to: :properties
       end
 
       def initialize(**attributes)
@@ -49,7 +52,7 @@ module Elkrb
         value_set_for(:layout_options)
         attr = self.class.attributes(lutaml_register)[:layout_options]
         cast = attr.cast_value(DeepStringifyKeys.call(value), lutaml_register)
-        instance_variable_set(:@layout_options, LayoutOptions.wrap(cast))
+        instance_variable_set(:@layout_options, NormalizeOptionKeys.call(cast))
       end
     end
   end

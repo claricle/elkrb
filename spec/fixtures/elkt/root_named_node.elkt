@@ -1,0 +1,3 @@
+node root
+node a { port p }
+edge root.a.p -> b
