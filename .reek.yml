@@ -27,9 +27,9 @@ detectors:
   BooleanParameter:
     exclude:
     - Elkrb::Options::Registry#for_algorithm
+    - Elkrb::Parsers::Elkt::Parser#single_id
   ControlParameter:
     exclude:
-    - Elkrb::Graph::LayoutOptions#initialize
     - Elkrb::Layout::Algorithms::VertiFlex#distribute_nodes
     - Elkrb::Layout::Constraints::AlignmentConstraint#align_nodes
     - Elkrb::Layout::Constraints::AlignmentConstraint#validate_group_alignment
@@ -43,16 +43,21 @@ detectors:
     - Elkrb::Layout::NodeIndex#endpoint_owners
     - Elkrb::Options::Registry#coerce_typed
     - Elkrb::Options::Registry#for_algorithm
-    - Elkrb::Parsers::ElktParser#parse_layout_block
-    - Elkrb::Parsers::ElktParser#parse_port
+    - Elkrb::Parsers::Elkt::Lexer#step_location
+    - Elkrb::Parsers::Elkt::Parser#assign_geometry
+    - Elkrb::Parsers::Elkt::Parser#assign_shape
+    - Elkrb::Parsers::Elkt::Parser#consume?
+    - Elkrb::Parsers::Elkt::Parser#parse_member
+    - Elkrb::Parsers::Elkt::Parser#single_id
+    - Elkrb::Parsers::Elkt::Token#keyword?
   DataClump:
     exclude:
-    - Elkrb::Graph::LayoutOptions
     - Elkrb::Layout::Algorithms::Disco
     - Elkrb::Layout::Algorithms::Libavoid
     - Elkrb::Layout::Algorithms::MRTree
     - Elkrb::Layout::EdgeRouter
     - Elkrb::Layout::LabelPlacer
+    - Elkrb::Parsers::Elkt::Lexer
   DuplicateMethodCall:
     exclude:
     - Elkrb::Cli#algorithms
@@ -79,7 +84,6 @@ detectors:
     - Elkrb::Geometry::Rectangle#contains?
     - Elkrb::Graph::DeepStringifyKeys#call
     - Elkrb::Graph::Graph#all_edges
-    - Elkrb::Graph::LayoutOptions#assign_kwarg
     - Elkrb::Graph::NodeConstraints#cast_legacy
     - Elkrb::Layout::Algorithms::BaseAlgorithm#apply_padding
     - Elkrb::Layout::Algorithms::BaseAlgorithm#calculate_bounding_box
@@ -203,16 +207,24 @@ detectors:
     - Elkrb::Options::Registry#default
     - Elkrb::Options::Registry#for_algorithm
     - Elkrb::Options::Registry#render_known_options
-    - Elkrb::Parsers::ElktParser#parse_algorithm
-    - Elkrb::Parsers::ElktParser#parse_direction
-    - Elkrb::Parsers::ElktParser#parse_edge
-    - Elkrb::Parsers::ElktParser#parse_label
-    - Elkrb::Parsers::ElktParser#parse_layout_block
-    - Elkrb::Parsers::ElktParser#parse_line
-    - Elkrb::Parsers::ElktParser#parse_node_with_block
-    - Elkrb::Parsers::ElktParser#parse_port
-    - Elkrb::Parsers::ElktParser#parse_property
-    - Elkrb::Parsers::ElktParser#parse_simple_node
+    - Elkrb::Parsers::Elkt::Lexer#advance
+    - Elkrb::Parsers::Elkt::Lexer#read_string_body
+    - Elkrb::Parsers::Elkt::Lexer#step_location
+    - Elkrb::Parsers::Elkt::Lexer#take_escape
+    - Elkrb::Parsers::Elkt::Lexer#take_punctuation
+    - Elkrb::Parsers::Elkt::Lexer#take_string_char
+    - Elkrb::Parsers::Elkt::Parser#assign_shape
+    - Elkrb::Parsers::Elkt::Parser#decode_escape
+    - Elkrb::Parsers::Elkt::Parser#parse_edge_layout
+    - Elkrb::Parsers::Elkt::Parser#parse_outgoing_refs
+    - Elkrb::Parsers::Elkt::Parser#point
+    - Elkrb::Parsers::Elkt::Parser#qualified_id
+    - Elkrb::Parsers::Elkt::Parser#raise_at
+    - Elkrb::Parsers::Elkt::Parser#single_id
+    - Elkrb::Parsers::Elkt::Parser#validate_segments
+    - Elkrb::Parsers::Elkt::Resolver#assign_edge_ids
+    - Elkrb::Parsers::Elkt::Resolver#candidates
+    - Elkrb::Parsers::Elkt::Resolver#resolve_section
     - Elkrb::Serializers::DotSerializer#build_edge_attributes
     - Elkrb::Serializers::DotSerializer#build_node_attributes
     - Elkrb::Serializers::DotSerializer#format_edge
@@ -225,9 +237,9 @@ detectors:
     - Elkrb::Serializers::ElktSerializer#serialize_graph
     - Elkrb::Serializers::ElktSerializer#serialize_layout_options
     - Elkrb::Serializers::ElktSerializer#serialize_node
-    - Elkrb::Serializers::ElktSerializer#serialize_node_block
     - Elkrb::Serializers::ElktSerializer#serialize_port
     - Elkrb::Serializers::ElktSerializer#serialize_port_block
+    - Elkrb::Serializers::ElktSerializer#shape_layout_parts
   FeatureEnvy:
     exclude:
     - Elkrb::Commands::ValidateCommand#collect_node_ids
@@ -304,15 +316,24 @@ detectors:
     - Elkrb::Options::ElkPadding#==
     - Elkrb::Options::KVector#==
     - Elkrb::Options::KVectorChain#==
+    - Elkrb::Parsers::Elkt::Lexer#normalize
+    - Elkrb::Parsers::Elkt::Parser#assign_shape
+    - Elkrb::Parsers::Elkt::Parser#raise_at
+    - Elkrb::Parsers::Elkt::Parser#validate_segments
+    - Elkrb::Parsers::Elkt::Resolver#assign_edge_ids
+    - Elkrb::Parsers::Elkt::Resolver#resolve_edge
+    - Elkrb::Parsers::Elkt::Resolver#resolve_in
+    - Elkrb::Parsers::Elkt::Resolver#resolve_path
+    - Elkrb::Parsers::Elkt::Resolver#resolve_section
     - Elkrb::Serializers::DotSerializer#format_attrs
     - Elkrb::Serializers::DotSerializer#format_graph_attributes
     - Elkrb::Serializers::ElktSerializer#serialize_edge
     - Elkrb::Serializers::ElktSerializer#serialize_graph
     - Elkrb::Serializers::ElktSerializer#serialize_layout_options
+    - Elkrb::Serializers::ElktSerializer#shape_layout_parts
   InstanceVariableAssumption:
     exclude:
     - Elkrb::Geometry::Point
-    - Elkrb::Graph::LayoutOptions
     - Elkrb::Graph::Node
     - Elkrb::Layout::AlgorithmRegistry
     - Elkrb::Layout::Algorithms::LayeredAlgorithm
@@ -332,7 +353,6 @@ detectors:
     - Elkrb::Graph::Port
     - Elkrb::GraphvizWrapper::GraphvizNotFoundError
     - Elkrb::Layout::AlgorithmRegistry
-    - Elkrb::Parsers::ElktParser::ParseError
   LongParameterList:
     exclude:
     - Elkrb::Geometry::Bezier#self.bezier_point
@@ -373,6 +393,8 @@ detectors:
     - Elkrb::Layout::LabelPlacer#place_label_outside_node
     - Elkrb::Layout::LabelPlacer#place_port_label
     - Elkrb::Layout::LabelPlacer#place_port_label_by_side
+    - Elkrb::Parsers::Elkt::Lexer#emit
+    - Elkrb::Parsers::Elkt::Lexer#step_location
   ManualDispatch:
     exclude:
     - Elkrb::Graph::NodeConstraints#__elkrb_merge_legacy_aliases
@@ -382,11 +404,10 @@ detectors:
     - Elkrb::Serializers::ElktSerializer#serialize
   MissingSafeMethod:
     exclude:
-    - Elkrb::Graph::LayoutOptions
     - Elkrb::GraphvizWrapper
+    - Elkrb::Parsers::Elkt::Resolver
   NestedIterators:
     exclude:
-    - Elkrb::Graph::LayoutOptions#merge!
     - Elkrb::Graph::NodeConstraints#__elkrb_merge_legacy_aliases
     - Elkrb::Layout::Algorithms::Disco#arrange_in_column
     - Elkrb::Layout::Algorithms::Disco#arrange_in_grid
@@ -408,11 +429,11 @@ detectors:
     - Elkrb::Layout::LabelPlacer#place_node_labels
     - Elkrb::Layout::LabelPlacer#place_port_labels
     - Elkrb::Layout::NodeIndex#index_descendants
+    - Elkrb::Parsers::Elkt::Resolver#resolve_edge
   NilCheck:
     exclude:
     - Elkrb::Graph::Edge#__elkrb_endpoint_ids
-    - Elkrb::Graph::LayoutOptions#transform_keys!
-    - Elkrb::Graph::LayoutOptions#wrap
+    - Elkrb::Graph::NormalizeOptionKeys#call
     - Elkrb::Graph::Port#detect_side
     - Elkrb::Graph::Port#side=
     - Elkrb::GraphvizWrapper#available?
@@ -432,28 +453,34 @@ detectors:
     - Elkrb::Layout::NodeIndex#add
     - Elkrb::Layout::NodeIndex#claim_descendant
     - Elkrb::Options::Registry#default
+    - Elkrb::Parsers::Elkt::Lexer#take_escape
   RepeatedConditional:
     exclude:
     - Elkrb::Commands::ValidateCommand
     - Elkrb::Layout::Algorithms::SporeOverlap
     - Elkrb::Layout::Constraints::ConstraintProcessor
+    - Elkrb::Parsers::Elkt::Parser
+    - Elkrb::Parsers::Elkt::Resolver
   TooManyConstants:
     exclude:
     - Elkrb::Graph::Port
+    - Elkrb::Parsers::Elkt::Lexer
   TooManyInstanceVariables:
     exclude:
     - Elkrb::Layout::Algorithms::Layered::CycleBreaker
     - Elkrb::Layout::Algorithms::Layered::LayerAssigner
     - Elkrb::Layout::Algorithms::Layered::NodePlacer
     - Elkrb::Layout::Algorithms::Libavoid::PathNode
-    - Elkrb::Parsers::ElktParser
+    - Elkrb::Parsers::Elkt::Lexer
+    - Elkrb::Parsers::Elkt::Parser
     - Elkrb::Serializers::DotSerializer
     - Elkrb::Serializers::ElktSerializer
   TooManyMethods:
     exclude:
     - Elkrb::Geometry::Rectangle
     - Elkrb::Layout::Algorithms::Libavoid
-    - Elkrb::Parsers::ElktParser
+    - Elkrb::Parsers::Elkt::Lexer
+    - Elkrb::Parsers::Elkt::Parser
   TooManyStatements:
     exclude:
     - initialize
@@ -486,9 +513,6 @@ detectors:
     - Elkrb::Geometry::Bezier#self.calculate_control_points
     - Elkrb::Geometry::Bezier#self.calculate_curve
     - Elkrb::Graph::EdgeSection#length
-    - Elkrb::Graph::LayoutOptions#assign_kwarg
-    - Elkrb::Graph::LayoutOptions#merge!
-    - Elkrb::Graph::LayoutOptions#replace
     - Elkrb::Graph::Node#find_node
     - Elkrb::Graph::NodeConstraints#__elkrb_merge_legacy_aliases
     - Elkrb::Graph::Port#detect_side
@@ -599,11 +623,19 @@ detectors:
     - Elkrb::Options::Registry#canonical
     - Elkrb::Options::Registry#coerce_padding
     - Elkrb::Options::Registry#coerce_typed
-    - Elkrb::Parsers::ElktParser#create_edge
-    - Elkrb::Parsers::ElktParser#parse_edge
-    - Elkrb::Parsers::ElktParser#parse_layout_block
-    - Elkrb::Parsers::ElktParser#parse_line
-    - Elkrb::Parsers::ElktParser#parse_port
+    - Elkrb::Parsers::Elkt::Lexer#first_invalid_location
+    - Elkrb::Parsers::Elkt::Lexer#read_string_body
+    - Elkrb::Parsers::Elkt::Lexer#take_block_comment
+    - Elkrb::Parsers::Elkt::Lexer#take_line_comment
+    - Elkrb::Parsers::Elkt::Lexer#take_string
+    - Elkrb::Parsers::Elkt::Parser#parse_edge
+    - Elkrb::Parsers::Elkt::Parser#parse_geometry
+    - Elkrb::Parsers::Elkt::Parser#parse_label
+    - Elkrb::Parsers::Elkt::Parser#parse_root
+    - Elkrb::Parsers::Elkt::Parser#parse_section
+    - Elkrb::Parsers::Elkt::Parser#parse_shape_member
+    - Elkrb::Parsers::Elkt::Resolver#assign_edge_ids
+    - Elkrb::Parsers::Elkt::Resolver#resolve_path
     - Elkrb::Serializers::DotSerializer#build_edge_attributes
     - Elkrb::Serializers::DotSerializer#build_node_attributes
     - Elkrb::Serializers::DotSerializer#format_edge
@@ -703,9 +735,9 @@ detectors:
     - Elkrb::Options::KVectorChain#self.from_string
     - Elkrb::Options::KVectorChain#to_s
     - Elkrb::Options::Registry
-    - Elkrb::Parsers::ElktParser#parse_layout_block
+    - Elkrb::Parsers::Elkt::Parser#point
+    - Elkrb::Parsers::Elkt::Resolver#resolve_edge
     - Elkrb::Serializers::DotSerializer#build_edge_attributes
-    - Elkrb::Serializers::ElktSerializer#serialize_node_block
   UnusedParameters:
     exclude:
     - Elkrb::Graph::ReadOnlyMapping#__elkrb_omit_from_output
@@ -807,9 +839,15 @@ detectors:
     - Elkrb::Layout::PortConstraintProcessor#distribute_ports_vertically
     - Elkrb::Layout::PortConstraintProcessor#group_ports_by_side
     - Elkrb::Layout::PortConstraintProcessor#order_ports_on_side
-    - Elkrb::Parsers::ElktParser#create_edge
-    - Elkrb::Parsers::ElktParser#parse_value
-    - Elkrb::Parsers::ElktParser#preprocess
+    - Elkrb::Parsers::Elkt::Lexer#build_segments
+    - Elkrb::Parsers::Elkt::Lexer#cast_number
+    - Elkrb::Parsers::Elkt::Lexer#step_location
+    - Elkrb::Parsers::Elkt::Parser#decode_code_unit
+    - Elkrb::Parsers::Elkt::Parser#decode_surrogate_pair
+    - Elkrb::Parsers::Elkt::Parser#label_width
+    - Elkrb::Parsers::Elkt::Parser#literal?
+    - Elkrb::Parsers::Elkt::Resolver#build_index
+    - Elkrb::Parsers::Elkt::Resolver#candidates
     - Elkrb::Serializers::DotSerializer#build_edge_attributes
     - Elkrb::Serializers::DotSerializer#build_node_attributes
     - Elkrb::Serializers::DotSerializer#elk_direction_to_rankdir

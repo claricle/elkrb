@@ -51,8 +51,35 @@ QUALITY_PATHS = ["lib"].freeze
 # for these two that is prism and sexp_processor -- not the `parser` gem, which
 # is rubocop's and reek's. Gemfile.lock is gitignored, so all four are pinned or
 # a fresh `bundle install` alone could move a baseline.
-FLOG_MAX_METHOD = 107.0 # worst method today is 106.5
-FLAY_MAX_TOTAL = 4990   # total today is 4990, so this has no headroom by design
+#
+# TO RE-BASELINE, whenever lib/ changes under this branch. Both numbers come
+# from the tasks' own APIs, so measure them the way the tasks do rather than by
+# reading a failure message, and take each reading TWICE -- a number that moves
+# between two runs is not a baseline:
+#
+#   bundle exec ruby -e 'require "flog_cli"; require "sexp_processor"
+#     f = FlogCLI.new(methods: true)
+#     f.flog(*SexpProcessor.expand_dirs_to_files("lib"))
+#     n, s = f.max_method; puts "#{n} #{s}"'
+#
+#   bundle exec ruby -e 'require "flay"; require "sexp_processor"
+#     f = Flay.new(Flay.default_options)
+#     f.process(*SexpProcessor.expand_dirs_to_files("lib"))
+#     f.report(File.open(File::NULL, "w")); puts f.total'
+#
+# Note the report call in the flay one: Flay#total reads 0 until #report has
+# run, for the reason the :flay task explains below. Then seed a violation --
+# a duplicated file for flay, a deliberately tangled method for flog -- and
+# watch the task go red before trusting the new number. A ceiling that cannot
+# fail is not a gate.
+FLOG_MAX_METHOD = 107.0 # worst method today is 106.52
+# Re-baselined 2026-09-07 from 4990 when origin/v2 1b305c4 was merged in: PR #10
+# deleted graph/layout_options.rb and added graph/normalize_option_keys.rb, and
+# PR #17 replaced parsers/elkt_parser.rb with parsers/elkt/. Measured twice.
+# This has no headroom by design, which is why any lib/ arriving from v2 reddens
+# it on day one -- that is the ratchet working, not a bug, but it does mean a
+# refresh onto a moved v2 always owes this measurement.
+FLAY_MAX_TOTAL = 5006
 
 # Not in `default`: the pre-existing smell count means this is only ever green
 # behind .reek.yml, and behind that baseline it duplicates rubocop's role in
