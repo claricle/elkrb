@@ -128,6 +128,47 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::CycleBreaker do
       end
     end
 
+    # Across the whole suite the reversal set never held more than one
+    # member, so nothing distinguished "collects every back edge" from
+    # "collects the first one and stops". A CycleBreaker mutated to
+    # `reversed << edge_id if reversed.empty?` left every other example in
+    # the suite green while laying d out above c.
+    context "with two independent cycles" do
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "r",
+          children: %w[a b c d].map do |id|
+            Elkrb::Graph::Node.new(id: id, width: 10, height: 10)
+          end,
+          edges: [
+            Elkrb::Graph::Edge.new(id: "ab", sources: ["a"], targets: ["b"]),
+            Elkrb::Graph::Edge.new(id: "ba", sources: ["b"], targets: ["a"]),
+            Elkrb::Graph::Edge.new(id: "cd", sources: ["c"], targets: ["d"]),
+            Elkrb::Graph::Edge.new(id: "dc", sources: ["d"], targets: ["c"]),
+          ],
+        )
+      end
+
+      it "reverses a back edge from each one, not just the first" do
+        reversed = described_class.new(
+          graph, Elkrb::Layout::NodeIndex.build(graph)
+        ).break_cycles
+
+        expect(reversed).to eq(Set["ba", "dc"])
+      end
+
+      it "lays both cycles out in edge order without warning" do
+        laid_out = nil
+        expect do
+          laid_out = Elkrb.layout(graph, algorithm: "layered")
+        end.not_to output.to_stderr
+
+        y = laid_out.children.to_h { |node| [node.id, node.y] }
+        expect(y["a"]).to be < y["b"]
+        expect(y["c"]).to be < y["d"]
+      end
+    end
+
     context "with a self-loop" do
       let(:graph) do
         Elkrb::Graph::Graph.new(

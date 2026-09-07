@@ -172,6 +172,59 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
         )
     end
 
+    # `endpoint_present?` rejects nil only, deliberately. NodeIndex#add
+    # rejects a nil id and accepts every other value, so "" is a legal node
+    # id and an edge reaching it must lay out. Tightening the guard to
+    # `!endpoint.to_s.empty?` raises here instead -- and left every other
+    # example in the suite green, because nothing else ever passes an empty
+    # string to that predicate.
+    it "lays out an edge whose endpoint is a node with an empty-string id" do
+      graph = {
+        id: "r",
+        children: [
+          { id: "", width: 10, height: 10 },
+          { id: "b", width: 10, height: 10 },
+        ],
+        edges: [{ id: "e", sources: [""], targets: ["b"] }],
+      }
+
+      laid_out = Elkrb.layout(graph, algorithm: "layered")
+      y = laid_out.children.to_h { |node| [node.id, node.y] }
+
+      expect(y.keys).to contain_exactly("", "b")
+      expect(y[""]).to be < y["b"]
+    end
+
+    # An unresolvable endpoint is skipped, not rejected -- and "" is not a
+    # special case of that. Every id below names no node, and all of them
+    # must behave the same way, which is what stops the guard above from
+    # being tightened for only one of them. The absolute expectation is the
+    # positive control: without it the example would pass on any change that
+    # broke every id identically.
+    it "treats an unresolvable empty-string endpoint like other absent ids" do
+      build = lambda do |target|
+        {
+          id: "r",
+          children: [
+            { id: "a", width: 10, height: 10 },
+            { id: "b", width: 10, height: 10 },
+          ],
+          edges: [{ id: "e", sources: ["a"], targets: [target] }],
+        }
+      end
+
+      positions = lambda do |target|
+        laid_out = Elkrb.layout(build.call(target), algorithm: "layered")
+        laid_out.children.map { |node| [node.id, node.x, node.y] }
+      end
+
+      unlinked = [["a", 12.0, 12.0], ["b", 42.0, 12.0]]
+      expect(positions.call("nosuchnode")).to eq(unlinked)
+      ["", "  ", "no such node", "A"].each do |absent|
+        expect(positions.call(absent)).to eq(unlinked)
+      end
+    end
+
     it "validates edges when children are omitted" do
       graph = {
         id: "r",
