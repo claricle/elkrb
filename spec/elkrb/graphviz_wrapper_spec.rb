@@ -278,6 +278,7 @@ RSpec.describe Elkrb::GraphvizWrapper do
         expect(File.read("out.png").strip).to eq("SECOND")
       end
     end
+
   end
 
   # Every example above stubs CANDIDATES to isolate the resolution logic
@@ -560,6 +561,10 @@ RSpec.describe Elkrb::GraphvizWrapper do
     before do
       allow(wrapper).to receive(:available?).and_return(true)
       allow(File).to receive(:exist?).and_return(true)
+      # Pin the binary. Left to `CommandResolver` this comes off the real
+      # filesystem, so argv[0] is nil on a host without graphviz and every
+      # exact-argv assertion below turns into a host-dependent failure.
+      wrapper.instance_variable_set(:@dot_path, "/usr/bin/dot")
     end
 
     it "renders DOT file to PNG" do
@@ -572,8 +577,6 @@ RSpec.describe Elkrb::GraphvizWrapper do
     # element, so the whole no-shell guarantee rests on this argv being long.
     # Keep this: it is the only assertion on the command's overall shape.
     it "passes dot a multi-element argv, never a single command string" do
-      wrapper.instance_variable_set(:@dot_path, "/usr/bin/dot")
-
       expect(wrapper).to receive(:system) do |*command|
         expect(command).to eq(
           ["/usr/bin/dot", "-Kdot", "-Tpng", "-Gdpi=96", "-ooutput.png",
@@ -754,6 +757,35 @@ RSpec.describe Elkrb::GraphvizWrapper do
       end.to raise_error(ArgumentError, "Input file not found: missing.dot")
     end
 
+    # Same reachable set as the input path, and not even narrowed by
+    # `validate_file_exists!`. Uncoerced, dot was handed "#<Object:0x...>" as
+    # the -o value, wrote a file by that name, and reported success.
+    it "coerces a to_path output file to its real path" do
+      custom_path = Object.new
+      def custom_path.to_path = "output.png"
+
+      expect(wrapper).to receive(:system) do |*command|
+        expect(command).to include("-ooutput.png")
+        expect(command).to all(be_a(String))
+        true
+      end
+
+      wrapper.render("input.dot", custom_path, :png)
+    end
+
+    # Removing the shell closes command injection, not ARGUMENT injection: dot
+    # reads a bare positional beginning with "-" as an option, so an input file
+    # named "-ovictim.txt" became a second -o. Measured against graphviz
+    # 15.1.1, "--" is rejected ("dot: option -- unrecognized") and "./" works.
+    it "keeps a dash-leading input file from being read as a dot option" do
+      expect(wrapper).to receive(:system) do |*command|
+        expect(command.last).to eq("./-ovictim.txt")
+        true
+      end
+
+      wrapper.render("-ovictim.txt", "output.png", :png)
+    end
+
     it "coerces a Pathname input file to a String" do
       expect(wrapper).to receive(:system) do |*command|
         expect(command).to include("input.dot")
@@ -827,6 +859,35 @@ RSpec.describe Elkrb::GraphvizWrapper do
   end
 
   describe "#version" do
+    # Runs a REAL stand-in binary rather than a stub, so `&:read` and
+    # `err: %i[child out]` are both load-bearing: without the block `version`
+    # calls `match` on an IO, and without `err:` the version line -- which dot
+    # writes to stderr -- never arrives.
+    it "reads the version from the binary's own stderr" do
+      Dir.mktmpdir do |dir|
+        stand_in = File.join(dir, "dot")
+        File.write(stand_in,
+                   "#!#{RbConfig.ruby}\n" \
+                   "$stderr.puts 'dot - graphviz version 2.44.1 (20200629.0846)'\n")
+        File.chmod(0o755, stand_in)
+
+        allow(wrapper).to receive(:available?).and_return(true)
+        wrapper.instance_variable_set(:@dot_path, stand_in)
+
+        expect(wrapper.version).to eq("2.44.1")
+      end
+    end
+
+    # `available?` only proves a path looked executable once. The backticks
+    # this replaced always returned a String, because /bin/sh absorbed the
+    # failure; `IO.popen` execs directly and raises.
+    it "returns nil when the recorded path can no longer be executed" do
+      allow(wrapper).to receive(:available?).and_return(true)
+      wrapper.instance_variable_set(:@dot_path, "/nonexistent/dot")
+
+      expect(wrapper.version).to be_nil
+    end
+
     it "returns Graphviz version when available" do
       allow(wrapper).to receive(:available?).and_return(true)
       wrapper.instance_variable_set(:@dot_path, "/usr/bin/dot")
