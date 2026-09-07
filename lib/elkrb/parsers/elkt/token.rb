@@ -3,13 +3,19 @@
 module Elkrb
   module Parsers
     module Elkt
+      # One dotted part of an identifier, caret stripped. `escaped` is true
+      # when the source wrote `^name`.
+      #
+      # @api private
+      Segment = Data.define(:name, :escaped)
+
       # A single ELKT token.
       #
-      # `segments` is populated for `:identifier` only: one `[name, escaped]`
-      # pair per dotted segment, carets stripped. `value` is the joined
-      # semantic name. Both are needed because ELKT's leading-caret escape is
-      # per segment -- `org.eclipse.elk.^port.side` escapes only its fourth --
-      # and because a declaration site accepts a single segment only.
+      # `segments` is populated for `:identifier` only: one Segment per dotted
+      # part. `value` is the joined semantic name. Both are needed because
+      # ELKT's leading-caret escape is per segment --
+      # `org.eclipse.elk.^port.side` escapes only its fourth -- and because a
+      # declaration site accepts a single segment only.
       #
       # A `:string` value is the unquoted RAW inner lexeme. Labels and property
       # values decode differently upstream, so decoding happens at the parse
@@ -18,7 +24,7 @@ module Elkrb
       # @api private
       Token = Data.define(:type, :value, :segments, :line, :column) do
         def keyword?(name)
-          type == :identifier && value == name && !segments.first[1]
+          type == :identifier && value == name && !segments.first.escaped
         end
 
         def single_segment?

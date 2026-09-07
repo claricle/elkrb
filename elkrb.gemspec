@@ -23,7 +23,7 @@ Gem::Specification.new do |spec|
 
   spec.metadata["homepage_uri"] = spec.homepage
   spec.metadata["source_code_uri"] = "https://github.com/claricle/elkrb"
-  spec.metadata["changelog_uri"] = "https://github.com/claricle/elkrb"
+  spec.metadata["changelog_uri"] = "https://github.com/claricle/elkrb/blob/main/CHANGELOG.adoc"
   spec.metadata["rubygems_mfa_required"] = "true"
 
   # Specify which files should be added to the gem when it is released.
@@ -38,7 +38,10 @@ Gem::Specification.new do |spec|
 
   # 0.8 is the floor: the layout_options setters call the instance-level
   # lutaml_register, which 0.7.x does not define.
-  spec.add_dependency "lutaml-model", "~> 0.8"
+  # Capped below 0.9 on purpose. NodeConstraints mirrors lutaml's own
+  # deserialization for the legacy YAML spellings, so a minor bump can change
+  # what it does. Lift the cap once the new minor is checked.
+  spec.add_dependency "lutaml-model", ">= 0.8", "< 0.9"
   spec.add_dependency "rbs", "~> 3.0"
   spec.add_dependency "thor", "~> 1.4"
 end

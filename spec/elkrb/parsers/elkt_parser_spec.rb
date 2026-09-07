@@ -393,6 +393,39 @@ RSpec.describe Elkrb::Parsers::ElktParser do
       expect { parse("<html><body>nonsense</body></html>") }
         .to raise_error(Elkrb::ParseError, /line 1, column 1/)
     end
+
+    it "points at the real line and column of the bad UTF-8 bytes" do
+      malformed = +"node a\nnode b\nnode \xC3\x28\n"
+      malformed.force_encoding(Encoding::UTF_8)
+
+      expect { parse(malformed) }
+        .to raise_error(Elkrb::ParseError) { |error|
+          expect([error.line, error.column]).to eq([3, 6])
+        }
+    end
+  end
+
+  describe "the public API" do
+    it "raises TypeError instead of parsing nil as an empty graph" do
+      expect { parse(nil) }.to raise_error(TypeError, /must be a String/)
+    end
+
+    it "still answers to the old ElktParser::ParseError constant" do
+      error = begin
+        parse("node")
+      rescue Elkrb::Parsers::ElktParser::ParseError => e
+        e
+      end
+
+      expect(error).to be_a(Elkrb::ParseError)
+    end
+
+    it "still supports ElktParser.new(source).parse" do
+      graph = described_class.new("node a\nnode b\nedge a -> b\n").parse
+
+      expect(graph[:children].map { |child| child[:id] }).to eq(%w[a b])
+      expect(graph[:edges].length).to eq(1)
+    end
   end
 
   # Carried forward from the pre-rewrite spec. Only its three sourcePort
