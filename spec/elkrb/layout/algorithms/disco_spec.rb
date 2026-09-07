@@ -311,6 +311,23 @@ RSpec.describe Elkrb::Layout::Algorithms::Disco do
         expect { algorithm.layout(graph) }.not_to raise_error
       end
     end
+    # ELK allows a node with no width or height.
+    context "with a node that declares no size" do
+      %w[row column grid].each do |arrangement|
+        it "places it instead of raising, for the #{arrangement} arrangement" do
+          graph = Elkrb::Graph::Graph.new
+          graph.layout_options = { "disco.componentArrangement" => arrangement }
+          graph.children = [Elkrb::Graph::Node.new(id: "a"),
+                            Elkrb::Graph::Node.new(id: "b")]
+          graph.edges = []
+
+          algorithm.layout(graph)
+
+          expect(graph.children.map(&:x)).to all(be_a(Numeric).and(be_finite))
+          expect(graph.children.map(&:y)).to all(be_a(Numeric).and(be_finite))
+        end
+      end
+    end
   end
 end
 

@@ -16,7 +16,7 @@ module Elkrb
       end
 
       def position
-        Point.new(@x, @y)
+        Point.new(x: @x, y: @y)
       end
 
       def position=(point)
@@ -50,7 +50,7 @@ module Elkrb
       end
 
       def center
-        Point.new(@x + (@width / 2.0), @y + (@height / 2.0))
+        Point.new(x: @x + (@width / 2.0), y: @y + (@height / 2.0))
       end
 
       def contains?(point)
