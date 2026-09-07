@@ -3,6 +3,8 @@
 
 require "json"
 require "fileutils"
+require "pathname"
+require "uri"
 
 # Importer for Java ELK test cases
 class JavaElkTestImporter
@@ -86,11 +88,17 @@ class JavaElkTestImporter
     # This is a simplified parser - full implementation would be more complex
 
     content = File.read(file)
-    test_name = File.basename(file, ".elkt")
+    relative = Pathname(file).relative_path_from(Pathname(TEST_MODELS_PATH))
+    test_name = relative.sub_ext("").each_filename.to_a.join("/")
 
     # For now, create a placeholder test case
     @test_cases << {
-      id: "java_elk_#{test_name}",
+      # Keep the relative path so two models with the same basename remain
+      # distinct. Percent-encoding turns separators into filename-safe text
+      # and escapes `%` itself, so `a/same` cannot collide with a literal
+      # `a%2Fsame` name. Not the www-form encoder: that maps a space to "+",
+      # a URL-query semantic this is not.
+      id: "java_elk_#{URI.encode_uri_component(test_name)}",
       source: "java_elk",
       category: "elkt_import",
       algorithm: "layered",

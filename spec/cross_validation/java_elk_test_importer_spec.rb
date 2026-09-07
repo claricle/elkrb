@@ -31,10 +31,16 @@ RSpec.describe JavaElkTestImporter do
     $stdout = stdout
   end
 
+  # `rel` may name a subdirectory, so each file's own parent is created
+  # rather than only the repo root.
   def models_repo(parent, name, files)
     dir = File.join(parent, name)
     FileUtils.mkdir_p(dir)
-    files.each { |rel| File.write(File.join(dir, rel), "") }
+    files.each do |rel|
+      path = File.join(dir, rel)
+      FileUtils.mkdir_p(File.dirname(path))
+      File.write(path, "")
+    end
     dir
   end
 
@@ -98,6 +104,48 @@ RSpec.describe JavaElkTestImporter do
 
       expect(error).to be_nil
       expect(written_ids(tmp)).to eq(["java_elk_mine"])
+    end
+  end
+
+  # The id was the file's BASENAME, so every model called `same.elkt` in a
+  # different directory produced the same id -- and the corpus runner then
+  # wrote them all to one dump file. The relative path is what makes them
+  # distinct.
+  it "keeps equal basenames in different directories distinct" do
+    Dir.mktmpdir do |tmp|
+      stub_const(
+        "#{described_class}::TEST_MODELS_PATH",
+        models_repo(tmp, "models", %w[a/same.elkt b/same.elkt]),
+      )
+
+      error = Dir.chdir(tmp) { import(described_class.new) }
+
+      expect(error).to be_nil
+      # contain_exactly, not eq: Dir.glob's enumeration order is not a
+      # language guarantee, and order is not the property under test here.
+      expect(written_ids(tmp))
+        .to contain_exactly("java_elk_a%2Fsame", "java_elk_b%2Fsame")
+    end
+  end
+
+  # Encoding the separator is only safe if it cannot collide with an id a
+  # literal filename could already produce. The encoder escapes `%` as `%25`
+  # too, so `a/same` and `a%2Fsame` stay two ids. A bare `%2F` substitution
+  # maps BOTH to "a%2Fsame" -- measured, and it is what this example kills.
+  it "does not collide a slash with a literal percent escape" do
+    Dir.mktmpdir do |tmp|
+      stub_const(
+        "#{described_class}::TEST_MODELS_PATH",
+        models_repo(tmp, "models", %w[a/same.elkt a%2Fsame.elkt]),
+      )
+
+      error = Dir.chdir(tmp) { import(described_class.new) }
+
+      expect(error).to be_nil
+      expect(written_ids(tmp)).to contain_exactly(
+        "java_elk_a%2Fsame",
+        "java_elk_a%252Fsame",
+      )
     end
   end
 end
