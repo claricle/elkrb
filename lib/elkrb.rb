@@ -11,8 +11,8 @@ require_relative "elkrb/geometry/vector"
 
 # Graph models
 require_relative "elkrb/graph/deep_stringify_keys"
+require_relative "elkrb/graph/normalize_option_keys"
 require_relative "elkrb/graph/read_only_mapping"
-require_relative "elkrb/graph/layout_options"
 require_relative "elkrb/graph/label"
 require_relative "elkrb/graph/port"
 require_relative "elkrb/graph/node_constraints"
@@ -22,6 +22,10 @@ require_relative "elkrb/graph/graph"
 
 # Serializers
 require_relative "elkrb/serializers/dot_serializer"
+require_relative "elkrb/serializers/elkt_serializer"
+
+# Parsers
+require_relative "elkrb/parsers/elkt_parser"
 
 # Options parsers
 require_relative "elkrb/options/elk_padding"

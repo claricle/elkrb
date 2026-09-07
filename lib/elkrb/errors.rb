@@ -18,6 +18,18 @@ module Elkrb
   # Exception raised when graph validation fails
   class ValidationError < Error; end
 
+  # Exception raised when input cannot be parsed. Carries the source position
+  # so a caller can report it without re-parsing the message.
+  class ParseError < Error
+    attr_reader :line, :column
+
+    def initialize(message, line: nil, column: nil)
+      @line = line
+      @column = column
+      super(message)
+    end
+  end
+
   # Exception raised when an algorithm is not found
   class AlgorithmNotFoundError < Error
     attr_reader :algorithm_name
