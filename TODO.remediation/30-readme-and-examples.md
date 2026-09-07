@@ -144,8 +144,10 @@ Everything below is settled — do not re-decide.
 8. Replace the performance section with the measured table, or delete it.
    Do not leave numbers the repo's own benchmark contradicts.
 9. Fix `benchmarks/generate_report.rb:15`: `require "fileutils"` and
-   `FileUtils.mkdir_p("docs")` before the write — the sibling
-   `generate_validation_report.rb` already does this.
+   `FileUtils.mkdir_p("docs")` before the write. (The sibling
+   `generate_validation_report.rb` used to do this; item 02 deleted it
+   together with `rake validate:report`, so copy the two lines instead of
+   looking for them there.)
 10. Remove the dead links at `:757`, `:772`, `:787`, `:804` and `:811`.
     Keep `:830`'s `docs/MIGRATION_FROM_ELKJS.adoc` link only because item
     37 creates that file; if 37 has not merged, this item's placeholder

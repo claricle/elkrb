@@ -1,0 +1,12 @@
+graph G
+node a { port p }
+node b
+edge G.a.p -> G.b
+edge x -> y {
+  layout [
+    section S [
+      incoming: G.a.p
+      outgoing: G.b
+    ]
+  ]
+}
