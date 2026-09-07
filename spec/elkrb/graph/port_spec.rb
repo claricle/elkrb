@@ -3,7 +3,6 @@
 require "spec_helper"
 require "elkrb/graph/port"
 require "elkrb/graph/label"
-require "elkrb/graph/layout_options"
 
 RSpec.describe Elkrb::Graph::Port do
   describe "initialization" do
