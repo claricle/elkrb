@@ -39,10 +39,29 @@ module GraphvizPathHelpers
     allow(File).to receive(:executable?).with(path).and_return(present)
   end
 
-  # REMOVES the capability rather than watching for it: a subclass whose every
-  # shell route raises. An implementation that shells out fails loudly here
-  # instead of passing unnoticed, and the expectation stays POSITIVE -- the
-  # honest PATH walk still finds the binary.
+  # TWO LAYERS, and neither is "removes the capability" -- say what each one
+  # actually covers so the next reader does not stop looking.
+  #
+  # Layer 1, `shell_free_subclass`, is a SUPPLEMENT and it is a denylist. It
+  # overrides five Kernel INSTANCE methods, so it catches only a route
+  # dispatched on the wrapper itself. Measured: it intercepts `system("true")`
+  # written inside the class, and does NOT intercept `Kernel.system`,
+  # `IO.popen`, `Process.spawn`, or a `system` call moved into a module -- the
+  # leak is by RECEIVER, so adding names cannot close it.
+  #
+  # Layer 2, `no_child_reaped`, is receiver-INDEPENDENT: `Process.last_status`
+  # is set whenever this thread reaps a child, whoever asked for it. Measured
+  # on a fresh thread, where it starts nil:
+  #
+  #   Kernel#system in the class  detected      module method calling system  detected
+  #   backticks                   detected      IO.popen(argv, &:read)        detected
+  #   Process.spawn + wait        detected      the honest File-walk          NOT detected
+  #
+  # It is not total either: `Open3.capture2` reaps on its own thread, and an
+  # unwaited `IO.popen`/`Process.spawn` never reaps at all, so both slip past.
+  # Between them the two layers kill every counterexample raised in review; a
+  # route that leaks a child on purpose still would not be caught here, and
+  # `available? == true` is what carries the positive half regardless.
   def shell_free_subclass
     raise "no shell routes derived from Kernel" if SHELL_ROUTES.empty?
 
@@ -52,6 +71,18 @@ module GraphvizPathHelpers
         define_method(route) { |*| raise "spawned a child through ##{route}" }
       end
     end
+  end
+
+  # Runs the block on a fresh thread so `Process.last_status` starts nil, and
+  # returns whether it was still nil afterwards.
+  def no_child_reaped
+    reaped = nil
+    value = nil
+    Thread.new do
+      value = yield
+      reaped = Process.last_status
+    end.join
+    [value, reaped.nil?]
   end
 
   # `ENV.fetch("PATH", "")` cannot tell unset from empty, so capture the raw
@@ -87,7 +118,13 @@ RSpec.describe Elkrb::GraphvizWrapper do
       allow(File).to receive(:file?).and_return(false)
       allow(File).to receive(:executable?).and_return(true)
 
-      expect(described_class.new.available?).to be false
+      # PATH is pinned even though the File stubs already make the walk
+      # find nothing: without it this example runs against the real host
+      # PATH, so WHAT IT CATCHES varies with whether the machine has
+      # graphviz installed, even while it passes everywhere.
+      with_path("/nonexistent") do
+        expect(described_class.new.available?).to be false
+      end
     end
 
     # Deleting the `File.executable?` fast path would make every absolute
@@ -118,7 +155,10 @@ RSpec.describe Elkrb::GraphvizWrapper do
     it "returns false when Graphviz is not found" do
       allow(File).to receive(:executable?).and_return(false)
 
-      expect(described_class.new.available?).to be false
+      # Pinned for the same reason as the directory example above.
+      with_path("/nonexistent") do
+        expect(described_class.new.available?).to be false
+      end
     end
 
     # Without the `File::SEPARATOR` guard in `executable_candidate?`, an
@@ -149,7 +189,10 @@ RSpec.describe Elkrb::GraphvizWrapper do
       stub_candidates_missing
       stub_executable("/fake/bin/dot", true)
 
-      with_path("/fake/bin") do
+      # The fake directory is SECOND on purpose. With it first, a walk reduced
+      # to `dirs.first` passes, and every PATH example in this file put it
+      # first -- so nothing here pinned that the walk looks past entry one.
+      with_path("/nonexistent#{File::PATH_SEPARATOR}/fake/bin") do
         expect(described_class.new.available?).to be true
       end
     end
@@ -158,8 +201,13 @@ RSpec.describe Elkrb::GraphvizWrapper do
       stub_candidates_missing
       stub_executable("/fake/bin/dot", true)
 
-      with_path("/fake/bin") do
-        expect(shell_free_subclass.new.available?).to be true
+      with_path("/nonexistent#{File::PATH_SEPARATOR}/fake/bin") do
+        found, no_child = no_child_reaped do
+          shell_free_subclass.new.available?
+        end
+
+        expect(found).to be true
+        expect(no_child).to be true
       end
     end
   end
