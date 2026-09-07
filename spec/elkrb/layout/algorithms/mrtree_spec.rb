@@ -1061,11 +1061,16 @@ RSpec.describe "MRTree on many disjoint cyclic components" do
   end
 
   it "places every component without hanging" do
-    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-    result = Elkrb.layout(disjoint_cycles(80), algorithm: "mrtree")
-    elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+    # Same reason as the 20-node cycle above: the bound has to INTERRUPT
+    # the call, not be read after it returns. Measuring elapsed time only
+    # reports a regression that finishes; one that does not finish stalls
+    # the whole suite. That is not hypothetical here -- reverting this
+    # branch's mrtree.rb and running its examples together ran for over
+    # thirteen minutes without a verdict.
+    result = Timeout.timeout(5.0) do
+      Elkrb.layout(disjoint_cycles(80), algorithm: "mrtree")
+    end
 
-    expect(elapsed).to be < 5.0
     # The crash this branch is named for: a component left unseeded keeps
     # nil coordinates, and apply_padding dies subtracting from them.
     expect(result.children.map(&:x)).to all(be_a(Float))
