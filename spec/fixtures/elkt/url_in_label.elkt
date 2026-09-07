@@ -1,0 +1,3 @@
+node n1 { label "see http://x/y" }
+// a real comment
+node n2

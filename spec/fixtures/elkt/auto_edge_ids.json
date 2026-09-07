@@ -1,0 +1,1 @@
+{"id":"e0","children":[{"id":"e1","width":40.0,"height":40.0,"labels":[{"id":"e3","text":"L","width":7.0,"height":14.0}],"ports":[{"id":"e2","index":-1,"offset":0.0}]}],"edges":[{"id":"e5","sources":["a"],"targets":["b"],"sections":[{"id":"e4","startPoint":{"x":0.0,"y":0.0}}]},{"id":"e6","sources":["a"],"targets":["c"]}]}
