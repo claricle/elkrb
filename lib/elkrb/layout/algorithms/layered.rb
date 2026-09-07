@@ -106,7 +106,10 @@ module Elkrb
         # one helper: fixing only some of them makes the rest look
         # deliberate.
         def edge_label(edge)
-          return edge.id if edge.id
+          # `""` is truthy in Ruby, so a plain `if edge.id` here puts the
+          # empty message straight back. An id-less edge and an
+          # empty-string-id edge are the same thing to a reader.
+          return edge.id unless edge.id.to_s.empty?
 
           "(none), #{endpoint_list(edge.sources)} -> " \
             "#{endpoint_list(edge.targets)}"
