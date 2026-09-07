@@ -148,4 +148,23 @@ RSpec.describe JavaElkTestImporter do
       )
     end
   end
+
+  # The importer's comment rules out `encode_www_form_component` because it
+  # maps a space to "+", a URL-query semantic a filename does not have. That
+  # sentence was true and unpinned: swapping the encoder left all the other
+  # examples green, because no fixture name contained a space. This one names
+  # a space so the choice of encoder is asserted rather than only explained.
+  it "percent-encodes a space rather than turning it into a plus" do
+    Dir.mktmpdir do |tmp|
+      stub_const(
+        "#{described_class}::TEST_MODELS_PATH",
+        models_repo(tmp, "models", ["a b.elkt"]),
+      )
+
+      error = Dir.chdir(tmp) { import(described_class.new) }
+
+      expect(error).to be_nil
+      expect(written_ids(tmp)).to eq(["java_elk_a%20b"])
+    end
+  end
 end
