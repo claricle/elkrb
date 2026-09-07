@@ -34,9 +34,23 @@ RSpec::Matchers.define :preserve_ids_and_endpoints do |input_hash|
   define_method(:check_level) do |input_level, actual_owner|
     actual_children = actual_owner.children || []
     actual_edges = actual_owner.edges || []
+    # The owner's OWN id, not just its children's. Nothing in the harness
+    # looked at the root's id -- renaming "root" to anything else produced
+    # no exact, structural or smoke difference and passed this matcher.
+    # Children are checked by the id sequence below, so at every level
+    # below the root this is a second, cheap check; at the ROOT it is the
+    # only one there is.
+    check_own_id(input_level, actual_owner)
     check_duplicates(actual_owner.id, actual_children, actual_edges)
     check_children(input_level["children"] || [], actual_children)
     check_edges(input_level["edges"] || [], actual_edges)
+  end
+
+  define_method(:check_own_id) do |input_level, actual_owner|
+    return if input_level["id"].nil? || input_level["id"] == actual_owner.id
+
+    @violations << "id #{input_level['id'].inspect} became " \
+                   "#{actual_owner.id.inspect}"
   end
 
   define_method(:check_duplicates) do |owner_id, actual_children, actual_edges|
