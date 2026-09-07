@@ -1,0 +1,8 @@
+edge a -> b {
+  layout [
+    section S1 [
+      ^start: foo
+      myProp: 3
+    ]
+  ]
+}

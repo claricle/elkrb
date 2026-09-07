@@ -1,0 +1,13 @@
+{
+  "algorithm": "layered",
+  "graph": {
+    "id": "root",
+    "children": [
+      { "id": "a" },
+      { "id": "b", "width": 30, "height": 30 }
+    ],
+    "edges": [
+      { "id": "e1", "sources": ["a"], "targets": ["b"] }
+    ]
+  }
+}
