@@ -536,11 +536,21 @@ RSpec.describe Elkrb::Layout::Algorithms::MRTree do
       # de-duplicating the raw ids instead of the resolved nodes leaves b in
       # a's child list twice.
       #
-      # z is what makes that visible. With only a and b, the duplicate moves
-      # a and b together and apply_padding's bounding box takes the shift
-      # straight back out -- the result is byte-identical either way. z is a
-      # second tree, and a second tree starts at the width of the first one,
-      # so it moves as soon as a's tree claims a column it should not have.
+      # WHAT THIS PINS, corrected 2026-09-07 after measuring it: the shape
+      # is right and the assertion is a placement pin, but it does NOT
+      # guard `map.each_value { |children| children.uniq!(&:id) }`. Deleting
+      # that line leaves z.x=42.0 and graph.width=64.0 unchanged, and the
+      # whole 31-example set green. Making b wider does not help either --
+      # b.width 10 gives 42.0/64.0 and b.width 50 gives 82.0/104.0 with and
+      # without the line, identically. `build_subtree` carries a `visited`
+      # Set, so the second copy of b is skipped before it can be placed,
+      # and no coordinate can see it.
+      # So: an observable for the duplicate has to come from somewhere
+      # other than coordinates, or the `uniq!` line is redundant with the
+      # visited Set and should go. That is an author decision, not a
+      # wording one. Do not delete this comment on the grounds that the
+      # numbers look specific -- they are, and they still prove nothing
+      # about the line above.
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
