@@ -691,6 +691,53 @@ RSpec.describe GoldenComparator, "rejecting a corrupted actual result" do
                                          ports graph])).to be_empty
   end
 
+  # The three below all annotate BOTH sides, so the golden's own shapes
+  # are non-empty and the set comparison is what decides. The example
+  # above annotates only the actual side, which exercises the membership
+  # check instead -- different arm, and it used to be the only one tested.
+  def annotate_first_section(graph, incoming, outgoing)
+    copy = Marshal.load(Marshal.dump(graph))
+    section = copy["edges"].find do |e|
+      e["sources"] == ["a"] && e["targets"] == ["b"]
+    end["sections"].first
+    section["incomingShape"] = incoming
+    section["outgoingShape"] = outgoing
+    copy
+  end
+
+  def shape_diffs(expected, actual)
+    described_class.diff_exact(expected, actual,
+                               %i[nodes sections labels ports graph])
+  end
+
+  it "accepts a section whose shapes are reversed against the golden" do
+    # Cycle breaking reverses a section's own annotations without
+    # rewiring the edge, which is why edge_endpoint_ids unions sources
+    # and targets. A key-by-key comparison reported this as two diffs.
+    base = golden_expected("force_tri")
+
+    expect(shape_diffs(annotate_first_section(base, "a", "b"),
+                       annotate_first_section(base, "b", "a"))).to be_empty
+  end
+
+  it "rejects a section that names a different node in place of one" do
+    # Both "a" and "a" ARE endpoints of this edge, so the membership
+    # check cannot see this -- only the set comparison can.
+    base = golden_expected("force_tri")
+    diffs = shape_diffs(annotate_first_section(base, "a", "b"),
+                        annotate_first_section(base, "a", "a"))
+
+    expect(diffs.join).to include('expected shapes ["a", "b"], got ["a", "a"]')
+  end
+
+  it "rejects a section that dropped one of the golden's shapes" do
+    base = golden_expected("force_tri")
+    diffs = shape_diffs(annotate_first_section(base, "a", "b"),
+                        annotate_first_section(base, "a", nil))
+
+    expect(diffs.join).to include('expected shapes ["a", "b"], got ["a"]')
+  end
+
   it "rejects a label that lost its coordinates entirely (exact tier)" do
     # labeled_node's label really does sit at (0,0) in the golden, so
     # coercing a missing coordinate to 0.0 made deleting it a no-op.

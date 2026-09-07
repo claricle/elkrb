@@ -126,9 +126,9 @@ module GoldenComparator
   # `check_level_sections`'s own edge/child indexing). `nil` ids are
   # excluded: real elkjs output has id-less labels (confirmed — ELK does
   # not require a label id), and multiple id-less items on the same owner
-  # are a legitimate shape, not a duplicate-id bug; `diff_by_id` still
-  # only ever matches the LAST id-less item pair-for-pair (a known,
-  # narrower limitation than duplicate-id detection, out of scope here).
+  # are a legitimate shape, not a duplicate-id bug. `diff_by_id` compares
+  # every id-less item, positionally within the id-less subset of each
+  # side — see `diff_unnamed_items`.
   def duplicate_id_diffs(items, label)
     items.filter_map do |item|
       item["id"]
@@ -376,24 +376,46 @@ module GoldenComparator
     endpoint_ids = edge_endpoint_ids(actual_edge)
 
     (actual_edge["sections"] || []).each_with_index.flat_map do |a_sec, i|
-      e_sec = expected_sections[i]
-      SHAPE_KEYS.flat_map do |shape_key|
-        shape_diff(a_sec[shape_key], e_sec && e_sec[shape_key], endpoint_ids,
-                   "#{path}/sections[#{i}]/#{shape_key}")
-      end
+      section_shape_diff(a_sec, expected_sections[i], endpoint_ids,
+                         "#{path}/sections[#{i}]")
     end
   end
 
-  def shape_diff(actual_shape, expected_shape, endpoint_ids, sec_path)
-    if actual_shape && !endpoint_ids.include?(actual_shape)
-      ["#{sec_path}: #{actual_shape.inspect} is not an endpoint of this " \
-       "edge (#{endpoint_ids.inspect})"]
-    elsif expected_shape && expected_shape != actual_shape
-      ["#{sec_path}: expected #{expected_shape.inspect}, " \
-       "got #{actual_shape.inspect}"]
-    else
-      []
+  # Two checks, and neither pins WHICH key a shape sits under.
+  #
+  # `edge_endpoint_ids` above unions sources and targets precisely because
+  # ELK reverses a section's own shapes for cycle breaking without
+  # rewiring the edge. A key-by-key `expected == actual` comparison here
+  # said the opposite: swapping a valid a/b annotation to b/a produced two
+  # differences in both tiers, which is the legitimate reversal that
+  # comment says must be accepted. One rule, stated twice, disagreeing.
+  #
+  # Comparing the pair as a sorted SET keeps everything the equality gave
+  # us -- the same nodes must be named, and a shape that vanishes or
+  # appears is still a difference -- while allowing the one thing ELK is
+  # documented to do. The membership check below is per key so its message
+  # can still say which annotation named a stranger.
+  def section_shape_diff(a_sec, e_sec, endpoint_ids, sec_path)
+    diffs = SHAPE_KEYS.filter_map do |key|
+      shape = a_sec[key]
+      next if shape.nil? || endpoint_ids.include?(shape)
+
+      "#{sec_path}/#{key}: #{shape.inspect} is not an endpoint of this " \
+        "edge (#{endpoint_ids.inspect})"
     end
+
+    expected = shape_set(e_sec)
+    return diffs if expected.empty? || expected == shape_set(a_sec)
+
+    diffs + ["#{sec_path}: expected shapes #{expected.inspect}, got " \
+             "#{shape_set(a_sec).inspect} (which key each sits under is " \
+             "not pinned -- cycle breaking may reverse them)"]
+  end
+
+  def shape_set(section)
+    return [] if section.nil?
+
+    SHAPE_KEYS.filter_map { |key| section[key] }.sort
   end
 
   # Sections are matched POSITIONALLY within an edge (by index), never by
