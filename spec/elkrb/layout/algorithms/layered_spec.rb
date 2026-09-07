@@ -27,14 +27,17 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
     end
 
     it "does not stack-overflow on a two-port self-loop beside a real edge" do
-      # Regression guard: resolving get_incoming_edges' target check
-      # through the index while leaving self_loop_edge? comparing RAW
-      # ids (sources.first == targets.first, "p1" != "p2") makes this
-      # edge look like an incoming edge from node "a" to itself, and
-      # calculate_layer recurses on "a" again before it is memoized ->
-      # SystemStackError. Confirmed by reproducing that version;
-      # incoming_to? below compares resolved owners instead, so this
-      # example is green.
+      # Regression guard, rewritten 2026-09-07: the methods it used to
+      # name (get_incoming_edges, self_loop_edge?, calculate_layer,
+      # incoming_to?) no longer exist anywhere in lib/.
+      #
+      # "p1" and "p2" are two ports of ONE node, so this edge is a
+      # self-loop on "a" however its endpoints are spelled. A layer pass
+      # that compares RAW endpoint ids sees "p1" != "p2", treats the edge
+      # as real incoming traffic into "a" from "a", and makes "a" its own
+      # predecessor. LayerAssigner#usable_edge? is what refuses that: it
+      # resolves both endpoints to their owning node through the index and
+      # drops the edge when the two are the same node.
       graph = {
         id: "r",
         children: [
@@ -54,7 +57,9 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
       a = result.children.find { |n| n.id == "a" }
       b = result.children.find { |n| n.id == "b" }
 
-      # Pins S7's interim behaviour; S8 replaces with hyperedge raise.
+      # Both edges are one source and one target, so the validator has
+      # nothing to say about either: the self-loop is dropped when layers
+      # are assigned, not refused at the door.
       expect(b.y).to be > a.y
     end
 
@@ -133,36 +138,39 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
         .to raise_error(Elkrb::ValidationError, /duplicate edge id: e/)
     end
 
-    # An edge id is optional in ELK, so every one of these three messages
-    # could name the edge as the empty string. The duplicate-id one is the
-    # sharpest case: it fires precisely when TWO edges share that empty
-    # name. These pin the MESSAGE, not the refusal -- the refusal was
-    # already there and was never the defect. All three are asserted
-    # together on purpose: fixing only some of them makes the rest look
-    # deliberate.
-    it "names an id-less edge by its endpoints in a duplicate-id error" do
+    # An edge id is optional in ELK, so an error message could name the
+    # edge as the empty string. The endpoints are the fallback handle, and
+    # "(no endpoints)" is what the fallback itself falls back to -- which
+    # is the whole reason the comment above `edge_label` no longer claims
+    # an edge always has endpoints. Both halves are pinned here, in the one
+    # message that can show them together.
+    it "names an id-less edge by its endpoints in an endpoint error" do
       graph = {
         id: "r",
-        children: %w[a b c].map { |id| { id: id, width: 10, height: 10 } },
-        edges: [
-          { sources: ["a"], targets: ["b"] },
-          { sources: ["b"], targets: ["c"] },
-        ],
+        children: %w[a b].map { |id| { id: id, width: 10, height: 10 } },
+        edges: [{ sources: [], targets: ["b"] }],
       }
 
       expect { Elkrb.layout(graph, algorithm: "layered") }
         .to raise_error(
-          Elkrb::ValidationError,
-          'duplicate edge id: (none), "b" -> "c"',
+          Elkrb::UnsupportedConfigurationException,
+          "layered requires non-empty edge endpoints " \
+          '(edge (none), (no endpoints) -> "b")',
         )
     end
 
-    # nil and "" are one name to the reader, so they have to be one key to
-    # the validator. Before this, a graph carrying one of each was accepted
-    # in silence while every error message called both of them "(none)" --
-    # two edges with the same name and no complaint. This is a deliberate
-    # behaviour change: such a graph is now refused.
-    it "treats a nil id and an empty-string id as the same id" do
+    # nil and "" are one name to the reader, so they are one thing to the
+    # validator too: NEITHER is an id. An anonymous edge carries no handle,
+    # so it has nothing to be a duplicate of, and a graph may hold as many
+    # as it likes.
+    #
+    # This example is the regression this branch had to undo. While the
+    # cycle breaker keyed reversals by edge id, every anonymous edge shared
+    # one key, and the validator refused the second one to cover that --
+    # so `Elkrb.layout` rejected an ordinary two-edge graph written without
+    # ids, which v2 lays out. Reversals are keyed by edge identity now, so
+    # the refusal is gone with the reason for it.
+    it "lays out a nil id and an empty-string id as two anonymous edges" do
       graph = {
         id: "r",
         children: %w[a b c d].map { |id| { id: id, width: 10, height: 10 } },
@@ -172,11 +180,33 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
         ],
       }
 
-      expect { Elkrb.layout(graph, algorithm: "layered") }
-        .to raise_error(
-          Elkrb::ValidationError,
-          'duplicate edge id: (none), "c" -> "d"',
-        )
+      result = Elkrb.layout(graph, algorithm: "layered")
+      y = result.children.to_h { |node| [node.id, node.y] }
+
+      # Both edges took effect: each target sits a layer below its source.
+      expect(y["a"]).to be < y["b"]
+      expect(y["c"]).to be < y["d"]
+    end
+
+    # The reversal set holds edge OBJECTS compared by identity. Keyed by id
+    # instead, the anonymous back edge b -> a puts `nil` in the set, and
+    # every other anonymous edge in the graph then reads as reversed: c -> d
+    # is laid out as d -> c and d comes out ABOVE c.
+    it "reverses only the anonymous edge that closes the cycle" do
+      graph = {
+        id: "r",
+        children: %w[a b c d].map { |id| { id: id, width: 10, height: 10 } },
+        edges: [
+          { sources: ["a"], targets: ["b"] },
+          { sources: ["b"], targets: ["a"] },
+          { sources: ["c"], targets: ["d"] },
+        ],
+      }
+
+      result = Elkrb.layout(graph, algorithm: "layered")
+      y = result.children.to_h { |node| [node.id, node.y] }
+
+      expect(y["c"]).to be < y["d"]
     end
 
     it "still accepts two edges carrying different real ids" do
@@ -193,11 +223,12 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
         .not_to raise_error
     end
 
-    # `""` is truthy in Ruby, so an `if edge.id` guard puts the empty
-    # message straight back for an edge whose id is the empty string. This
-    # example is the one that fails if the emptiness test is dropped; the
-    # nil examples pass either way.
-    it "treats an empty-string edge id the same as no id at all" do
+    # `""` is truthy in Ruby, so a plain `edge.id.nil?` test reads the
+    # empty string as a real id -- and then these two edges are duplicates
+    # of each other and the graph is refused. This example is the one that
+    # fails if the emptiness half of `anonymous?` is dropped; the nil
+    # examples pass either way.
+    it "treats an empty-string edge id as no id, not as the id \"\"" do
       graph = {
         id: "r",
         children: %w[a b c].map { |id| { id: id, width: 10, height: 10 } },
@@ -207,11 +238,11 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
         ],
       }
 
-      expect { Elkrb.layout(graph, algorithm: "layered") }
-        .to raise_error(
-          Elkrb::ValidationError,
-          'duplicate edge id: (none), "b" -> "c"',
-        )
+      result = Elkrb.layout(graph, algorithm: "layered")
+      y = result.children.to_h { |node| [node.id, node.y] }
+
+      expect(y["a"]).to be < y["b"]
+      expect(y["b"]).to be < y["c"]
     end
 
     it "names an id-less edge by its endpoints in a missing-endpoint error" do

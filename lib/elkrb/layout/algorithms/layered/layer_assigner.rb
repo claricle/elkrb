@@ -14,10 +14,14 @@ module Elkrb
         class LayerAssigner
           attr_reader :layers
 
-          def initialize(graph, index, reversed_edge_ids = Set.new)
+          # `reversed_edges` holds the edge OBJECTS CycleBreaker decided to
+          # orient backwards, compared by identity. See CycleBreaker for why
+          # neither an id nor a plain Set can carry that decision.
+          def initialize(graph, index,
+                         reversed_edges = Set.new.compare_by_identity)
             @graph = graph
             @index = index
-            @reversed_edge_ids = reversed_edge_ids
+            @reversed_edges = reversed_edges
             @layers = []
             @node_layers = {}
           end
@@ -149,7 +153,7 @@ module Elkrb
             target_id = endpoint_owner_id(edge.targets)
             return [nil, nil] unless source_id && target_id
 
-            if @reversed_edge_ids.include?(edge.id)
+            if @reversed_edges.include?(edge)
               [target_id, source_id]
             else
               [source_id, target_id]
