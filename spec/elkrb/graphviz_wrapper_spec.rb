@@ -2,7 +2,6 @@
 
 require "spec_helper"
 require "tmpdir"
-require "fileutils"
 require "pathname"
 require_relative "../../lib/elkrb/graphviz_wrapper"
 
@@ -128,17 +127,16 @@ RSpec.describe Elkrb::GraphvizWrapper do
     # an unrelated file sitting there would be reported as Graphviz. execvp
     # does not PATH-search a name containing a slash, and neither do we.
     it "does not PATH-search a candidate that is already a path" do
-      Dir.mktmpdir do |dir|
-        decoy = File.join(dir, "usr", "bin", "dot")
-        FileUtils.mkdir_p(File.dirname(decoy))
-        File.write(decoy, "")
-        File.chmod(0o755, decoy)
+      stub_candidates_missing
+      # A decoy sitting exactly where the bad join would land. Stubbed rather
+      # than written, because the walk only ever asks File.file? and
+      # File.executable?, and `chmod +x` does not make a file executable on
+      # Windows -- File.executable? goes by extension there, so a real file
+      # named "dot" would answer false and this would fail for the wrong reason.
+      stub_executable("/fake/bin/usr/bin/dot", true)
 
-        stub_candidates_missing
-
-        with_path(dir) do
-          expect(described_class.new.available?).to be false
-        end
+      with_path("/fake/bin") do
+        expect(described_class.new.available?).to be false
       end
     end
 
@@ -148,30 +146,20 @@ RSpec.describe Elkrb::GraphvizWrapper do
     # spawning anything. `available? == true` alone proves only the first --
     # an implementation running `system("command -v #{path}")` passes it.
     it "resolves a bare 'dot' on PATH" do
-      Dir.mktmpdir do |dir|
-        fake_dot = File.join(dir, "dot")
-        File.write(fake_dot, "")
-        File.chmod(0o755, fake_dot)
+      stub_candidates_missing
+      stub_executable("/fake/bin/dot", true)
 
-        stub_candidates_missing
-
-        with_path(dir) do
-          expect(described_class.new.available?).to be true
-        end
+      with_path("/fake/bin") do
+        expect(described_class.new.available?).to be true
       end
     end
 
     it "resolves it without spawning a child process" do
-      Dir.mktmpdir do |dir|
-        fake_dot = File.join(dir, "dot")
-        File.write(fake_dot, "")
-        File.chmod(0o755, fake_dot)
+      stub_candidates_missing
+      stub_executable("/fake/bin/dot", true)
 
-        stub_candidates_missing
-
-        with_path(dir) do
-          expect(shell_free_subclass.new.available?).to be true
-        end
+      with_path("/fake/bin") do
+        expect(shell_free_subclass.new.available?).to be true
       end
     end
   end
@@ -389,6 +377,8 @@ RSpec.describe Elkrb::GraphvizWrapper do
     # calls `match` on an IO, and without `err:` the version line -- which dot
     # writes to stderr -- never arrives.
     it "reads the version from the binary's own stderr" do
+      skip "a chmod +x shebang script is not executable" if Gem.win_platform?
+
       Dir.mktmpdir do |dir|
         stand_in = File.join(dir, "dot")
         File.write(stand_in,
