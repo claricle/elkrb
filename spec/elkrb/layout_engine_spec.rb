@@ -141,8 +141,9 @@ RSpec.describe Elkrb::Layout::LayoutEngine do
     end
 
     context "with invalid graph input" do
-      [nil, 42, "not a graph", [], :root, false, Object.new].each do |bad_input|
-        it "raises ArgumentError for a #{bad_input.class} before dispatching" do
+      [nil, 42, "not a graph", [], :root, false, Object.new,
+       Elkrb::Graph::Node.new].each do |bad_input|
+        it "raises ArgumentError for #{bad_input.class}" do
           expect { described_class.layout(bad_input) }
             .to raise_error(
               ArgumentError,
