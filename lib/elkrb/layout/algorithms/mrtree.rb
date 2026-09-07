@@ -220,7 +220,7 @@ module Elkrb
         # belong to, bounded by those components' sizes. Seeds may span
         # SEVERAL components -- the roots do on a forest -- so the groups are
         # collected per component and each is relaxed once, carrying its own
-        # seeds into the relaxation as that sweep's starting front.
+        # seeds into the relaxation as its starting front.
         #
         # `compare_by_identity` is load-bearing. The values are arrays of
         # graph nodes, and lutaml-model gives those VALUE equality: two
@@ -254,8 +254,9 @@ module Elkrb
         # puts a node reachable by two routes below its deepest parent. Walking
         # every simple path to find that is factorial — a complete 8-node cycle
         # took 2.5s and each extra node multiplied it by roughly ten. Relax
-        # instead: a longest path visits each node at most once, so one sweep
-        # per node settles every level a DAG can produce.
+        # instead: a longest path visits each node at most once, so a node
+        # re-queued whenever its own level moves settles every level a DAG
+        # can produce.
         #
         # A cyclic component has no longest path, so what its nodes get here is
         # a bounded fallback number rather than a depth — `max_level` stops it
@@ -276,9 +277,16 @@ module Elkrb
         # measured before this change at 0.16s for 80 nodes, 1.03s for 160,
         # 2.75s for 240 and past five seconds at 320.
         #
-        # The fixpoint is unchanged. A sweep and a worklist agree on the
-        # levels a monotone relaxation settles at; only the number of times a
-        # settled node is re-read differs.
+        # WHAT THIS CHANGED, measured over 3000 random graphs. Every ACYCLIC
+        # graph lays out byte-identically: on a DAG both forms reach the same
+        # longest-path levels, and 525 of 525 agreed. All 571 differences are
+        # CYCLIC, where a level is a bounded fallback number rather than a
+        # depth (see the comment above) -- and the difference is that the
+        # sweep stopped after `component size` passes whether or not it had
+        # settled, so what it produced depended on the order the component's
+        # nodes happened to come out of the DFS. Reversing that order in
+        # place changed 710 of 3000 layouts under the sweep and 0 of 3000
+        # under the worklist, which runs to the fixpoint every time.
         #
         # Mutates `levels` in place and returns nothing useful.
         def relax_levels(nodes, seeds, adjacent, levels)

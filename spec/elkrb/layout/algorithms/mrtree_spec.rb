@@ -874,13 +874,14 @@ RSpec.describe "MRTree on a cycle hanging off a real root" do
 end
 
 RSpec.describe "MRTree relaxing a shared node listed above its own parents" do
-  # a -> b, a -> c and b -> c, with the children listed bottom-up. One
-  # sweep over that order reaches c through the short a -> c hop and stops:
-  # nothing has told it about the longer a -> b -> c route yet, so c lands
-  # level with b, its own parent. Only a second sweep pushes it below.
-  #
-  # Listed top-down the same graph converges in a single sweep and cannot
-  # tell a one-shot relaxation from a repeated one.
+  # a -> b, a -> c and b -> c. Relaxation reaches c first through the short
+  # a -> c hop, which puts it level with b, its own parent. It only lands
+  # below b because b is RE-QUEUED when its own level moves and offers c the
+  # deeper route afterwards. A relaxation that levels each node once and
+  # never revisits it leaves c level with b. Measured: replacing the
+  # "only if this candidate is deeper" test with "only if unlevelled" reds
+  # this example and the two-route one above it, and nothing else in the
+  # file -- 44 examples, 2 failures.
   let(:graph) do
     {
       "id" => "root",
@@ -895,7 +896,7 @@ RSpec.describe "MRTree relaxing a shared node listed above its own parents" do
     }
   end
 
-  it "keeps sweeping until the deeper route reaches c" do
+  it "keeps relaxing until the deeper route reaches c" do
     by_id = Elkrb.layout(graph, algorithm: "mrtree")
       .children.to_h { |node| [node.id, node] }
 
@@ -1164,10 +1165,10 @@ end
 RSpec.describe "MRTree levelling a digraph it cannot find a path through" do
   # Another complete digraph, not a cycle: root is the only real root and
   # c1..c5 point at each other in every direction. Relaxation has no
-  # longest path to settle on here, so each
-  # sweep keeps offering a deeper candidate and the levels climb until the
-  # bound stops them. Drop that bound and the depth grows with the SQUARE
-  # of the node count instead of with the node count.
+  # longest path to settle on here, so the cycle keeps handing each node
+  # back a deeper candidate and the levels climb until the ceiling stops
+  # them. Drop that ceiling and the depth grows with the SQUARE of the node
+  # count instead of with the node count.
   let(:graph) do
     ids = %w[c1 c2 c3 c4 c5]
     edges = [{ "id" => "seed", "sources" => ["root"], "targets" => ["c1"] }]
