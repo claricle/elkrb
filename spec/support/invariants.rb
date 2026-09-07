@@ -18,4 +18,11 @@ module InvariantGeometry
   def box(node)
     [node.x || 0.0, node.y || 0.0, node.width || 0.0, node.height || 0.0]
   end
+
+  # Whether the node's box has any interior. An unsized leaf, and a node
+  # with one dimension at zero, occupy no area -- nothing is strictly
+  # inside them and they are strictly inside nothing.
+  def area?(node)
+    (node.width || 0.0).positive? && (node.height || 0.0).positive?
+  end
 end

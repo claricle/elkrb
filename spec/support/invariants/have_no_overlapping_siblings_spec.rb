@@ -43,6 +43,27 @@ RSpec.describe "have_no_overlapping_siblings" do
     expect(graph).not_to have_no_overlapping_siblings
   end
 
+  # Zero AREA, not just zero width: a node with a real width and no
+  # height is a segment, and a segment has no interior either. Both rows
+  # sit strictly inside the sibling, so every one of the four coordinate
+  # comparisons holds and only the area test can reject them.
+  {
+    "an unsized node (nil width and height)" => { width: nil, height: nil },
+    "an explicitly 0x0 node" => { width: 0.0, height: 0.0 },
+    "a zero-height node with a real width" => { width: 6.0, height: 0.0 },
+  }.each do |label, size|
+    it "passes #{label} sitting inside a sized sibling" do
+      graph = Elkrb::Graph::Graph.new(id: "root")
+      graph.children = [
+        Elkrb::Graph::Node.new(id: "box", x: 0.0, y: 0.0, width: 10.0,
+                               height: 10.0),
+        Elkrb::Graph::Node.new(id: "point", x: 2.0, y: 5.0, **size),
+      ]
+
+      expect(graph).to have_no_overlapping_siblings
+    end
+  end
+
   # Overlap needs BOTH axes. Without the Y half of the predicate these two --
   # same column, stacked with a gap -- get reported as overlapping, which is
   # what a bounding-box test degrading to a one-axis test looks like.
