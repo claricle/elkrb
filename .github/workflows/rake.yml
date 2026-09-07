@@ -23,8 +23,13 @@ jobs:
     # permission requests against the CALLING JOB before it evaluates any
     # `if:`. So a caller granting only `contents: read` is refused at startup,
     # which creates zero jobs and reports no check at all -- it reads as "no CI
-    # configured" rather than "CI is broken". That is why every elkrb run
-    # between 2025-11-14 and 2026-09-07 was a startup_failure.
+    # configured" rather than "CI is broken". Every run of this file's shared
+    # call since 2026-08-19 was a startup_failure.
+    #
+    # Nothing changed here to cause that: this caller was byte-identical from
+    # the initial commit until 2026-09-04. metanorma/ci commit 30a34e4
+    # (2026-05-12, "add write permissions to tests passed") added the grant
+    # upstream, and `uses: ...@main` picked it up with no commit to elkrb.
     #
     # `cascade: false` does NOT avoid this. Verified on run 34117181565:
     # `with: { cascade: false }` under a `contents: read` caller still gave
@@ -76,7 +81,7 @@ jobs:
       group: ${{ github.workflow }}-ruby-floor-${{ github.head_ref || github.ref_name }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.2"
