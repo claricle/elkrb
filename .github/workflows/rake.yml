@@ -23,34 +23,29 @@ jobs:
     # permission requests against the CALLING JOB before it evaluates any
     # `if:`. So a caller granting only `contents: read` is refused at startup,
     # which creates zero jobs and reports no check at all -- it reads as "no CI
-    # configured" rather than "CI is broken". Every run of this file's shared
-    # call since 2026-08-19 was a startup_failure.
+    # configured" rather than "CI is broken". That refused every run of this
+    # workflow from 2026-08-19 until this commit.
     #
-    # Nothing changed here to cause that: this caller was byte-identical from
-    # the initial commit until 2026-09-04. metanorma/ci commit 30a34e4
-    # (2026-05-12, "add write permissions to tests passed") added the grant
-    # upstream, and `uses: ...@main` picked it up with no commit to elkrb.
+    # Nothing changed here to cause it: this caller was byte-identical from the
+    # initial commit until 2026-09-04. metanorma/ci commit 30a34e4 (2026-05-12,
+    # "add write permissions to tests passed") added the grant upstream, and
+    # `uses: ...@main` picked it up with no commit to elkrb.
     #
-    # `cascade: false` does NOT avoid this. Verified on run 34117181565:
-    # `with: { cascade: false }` under a `contents: read` caller still gave
-    # startup_failure with zero jobs. The `if:` is not consulted at validation
-    # time, so the grant has to be here.
-    #
-    # claricle/sirena is the positive control: an otherwise identical caller
-    # that grants contents+packages write, and its runs start normally
-    # (run 34113504298 produced 11 jobs).
+    # `cascade: false` does NOT avoid this, so do not "simplify" the grant away
+    # by relying on it. Run 34117181565 carried `cascade: false` under a
+    # `contents: read` caller and still gave startup_failure with zero jobs;
+    # run 34118177872 adds the grant and starts 12 jobs.
     permissions:
       contents: write
 
     with:
       # Skip the `tests-passed` / `do-release` repository_dispatch. The grant
-      # above makes the call legal; this keeps it unused. `do-release` fires on
-      # v* tags and release.yml listens for it, so leaving the cascade on would
-      # newly auto-publish on every tag. Both elkrb releases to date were run
-      # by hand via workflow_dispatch and no repository_dispatch has ever fired
-      # on this repo, so turning it on is a behaviour change nobody asked for.
-      # Releases stay manual; flip this to true in a PR of its own if that
-      # should change.
+      # above makes the call legal; this keeps it unused, and `tests-passed`
+      # reports as `skipped`. `do-release` fires on v* tags and release.yml
+      # listens for it, so leaving the cascade on would newly auto-publish on
+      # every tag. Both elkrb releases to date were run by hand and no
+      # repository_dispatch has ever fired here. Releases stay manual; flip
+      # this to true in a PR of its own if that should change.
       cascade: false
 
   # The shared matrix does not cover the version this gem promises.
@@ -61,11 +56,14 @@ jobs:
   # at run time, and that file lists ruby 3.3, 3.4 and 4.0 (experimental) --
   # no 3.2. The gemspec floor is ">= 3.2.0" and is deliberate: lutaml-model
   # 0.8 does not parse on 3.1 or below. This job covers that one version and
-  # nothing else; the shared workflow covers the rest.
+  # nothing else; the shared workflow covers the rest. The alternative that
+  # would delete this job is raising the gemspec floor to 3.3, which the shared
+  # matrix already tests -- that breaks consumers, so it is not taken here.
   #
   # Note the URLs prepare-rake.yml fetches are hardcoded to metanorma/ci's
-  # `main` and re-read on every run, so pinning the `uses:` ref above would
-  # not pin them. That is by design, and it means this job is the only leg of
+  # `main` and re-read on every run. Pinning the `uses:` ref above would pin
+  # the workflow logic, but not those two files -- the matrix would still come
+  # from whatever `main` holds at run time. So this job is the only leg of
   # elkrb's matrix that elkrb itself controls and that a reviewer can read
   # from this tree.
   #
