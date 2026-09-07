@@ -103,12 +103,15 @@ RSpec.describe Elkrb::GraphvizWrapper do
     end
 
     # An empty PATH element must be DROPPED, not walked: File.join("", "dot")
-    # is "/dot", so walking it would probe the root directory.
+    # is "/dot", so walking it would probe the root directory. The separator
+    # is taken from `File::PATH_SEPARATOR` rather than hard-coded ":" -- it is
+    # ";" on Windows, where a literal ":" would build no empty element at all
+    # and this example would pass without asserting anything.
     it "does not probe the root directory for an empty PATH entry" do
       stub_candidates_missing
       stub_executable("/dot", true)
 
-      with_path(":/nonexistent") do
+      with_path("#{File::PATH_SEPARATOR}/nonexistent") do
         expect(described_class.new.available?).to be false
       end
     end
