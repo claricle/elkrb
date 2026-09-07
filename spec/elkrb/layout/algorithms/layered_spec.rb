@@ -157,6 +157,42 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
         )
     end
 
+    # nil and "" are one name to the reader, so they have to be one key to
+    # the validator. Before this, a graph carrying one of each was accepted
+    # in silence while every error message called both of them "(none)" --
+    # two edges with the same name and no complaint. This is a deliberate
+    # behaviour change: such a graph is now refused.
+    it "treats a nil id and an empty-string id as the same id" do
+      graph = {
+        id: "r",
+        children: %w[a b c d].map { |id| { id: id, width: 10, height: 10 } },
+        edges: [
+          { sources: ["a"], targets: ["b"] },
+          { id: "", sources: ["c"], targets: ["d"] },
+        ],
+      }
+
+      expect { Elkrb.layout(graph, algorithm: "layered") }
+        .to raise_error(
+          Elkrb::ValidationError,
+          'duplicate edge id: (none), "c" -> "d"',
+        )
+    end
+
+    it "still accepts two edges carrying different real ids" do
+      graph = {
+        id: "r",
+        children: %w[a b c d].map { |id| { id: id, width: 10, height: 10 } },
+        edges: [
+          { id: "e1", sources: ["a"], targets: ["b"] },
+          { id: "e2", sources: ["c"], targets: ["d"] },
+        ],
+      }
+
+      expect { Elkrb.layout(graph, algorithm: "layered") }
+        .not_to raise_error
+    end
+
     # `""` is truthy in Ruby, so an `if edge.id` guard puts the empty
     # message straight back for an edge whose id is the empty string. This
     # example is the one that fails if the emptiness test is dropped; the

@@ -69,12 +69,23 @@ module Elkrb
         end
 
         def validate_unique_edge_id!(seen_ids, edge)
-          if seen_ids.key?(edge.id)
+          key = edge_id_key(edge)
+
+          if seen_ids.key?(key)
             raise Elkrb::ValidationError,
                   "duplicate edge id: #{edge_label(edge)}"
           end
 
-          seen_ids[edge.id] = true
+          seen_ids[key] = true
+        end
+
+        # The validator has to key on the SAME normalisation `edge_label`
+        # names by, or nil and "" are two ids to the validator and one name
+        # to the reader: a graph carrying both was accepted silently while
+        # every message called both of them "(none)". Normalising here is
+        # what makes the message honest, so the two must move together.
+        def edge_id_key(edge)
+          edge.id.to_s.empty? ? nil : edge.id
         end
 
         def validate_simple_edge!(edge)
