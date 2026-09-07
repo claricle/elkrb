@@ -2,10 +2,46 @@
 
 require "spec_helper"
 require "tmpdir"
+require "fileutils"
 require "pathname"
 require_relative "../../lib/elkrb/graphviz_wrapper"
 
+# Helpers for the PATH-resolution examples below. A `let` cannot take a block
+# or an argument -- `let(:x) { |a| a }` yields the RSpec example, not the
+# argument -- so these have to be methods. They live in a module included into
+# the example group rather than as bare `def`s in this file, because a bare
+# `def` here becomes a private method on Object and is then reachable from
+# every other spec in the suite.
+module GraphvizPathHelpers
+  DOT_CANDIDATES = [
+    "dot",
+    "/usr/bin/dot",
+    "/usr/local/bin/dot",
+    "/opt/homebrew/bin/dot",
+    "/opt/local/bin/dot",
+  ].freeze
+
+  # Make every candidate `find_graphviz` probes directly look absent, so an
+  # example can prove what the PATH walk alone does.
+  def stub_candidates_missing
+    allow(File).to receive(:executable?).and_call_original
+    DOT_CANDIDATES.each do |candidate|
+      allow(File).to receive(:executable?).with(candidate).and_return(false)
+    end
+  end
+
+  def with_path(dir)
+    original = ENV.fetch("PATH", "")
+    ENV["PATH"] = dir
+    yield
+  ensure
+    ENV["PATH"] = original
+  end
+end
+
 RSpec.describe Elkrb::GraphvizWrapper do
+  include GraphvizPathHelpers
+
   let(:wrapper) { described_class.new }
 
   describe "#available?" do
@@ -21,6 +57,26 @@ RSpec.describe Elkrb::GraphvizWrapper do
       expect(described_class.new.available?).to be false
     end
 
+    # Without the `File::SEPARATOR` guard in `executable_candidate?`, an
+    # absolute candidate would be joined onto every PATH entry --
+    # File.join("/some/dir", "/usr/bin/dot") is "/some/dir/usr/bin/dot" -- and
+    # an unrelated file sitting there would be reported as Graphviz. execvp
+    # does not PATH-search a name containing a slash, and neither do we.
+    it "does not PATH-search a candidate that is already a path" do
+      Dir.mktmpdir do |dir|
+        decoy = File.join(dir, "usr", "bin", "dot")
+        FileUtils.mkdir_p(File.dirname(decoy))
+        File.write(decoy, "")
+        File.chmod(0o755, decoy)
+
+        stub_candidates_missing
+
+        with_path(dir) do
+          expect(described_class.new.available?).to be false
+        end
+      end
+    end
+
     # `find_graphviz` used to resolve the bare name "dot" by shelling out to
     # `which`. This proves the replacement PATH walk finds it, so removing the
     # shell did not quietly remove the capability along with it.
@@ -30,18 +86,10 @@ RSpec.describe Elkrb::GraphvizWrapper do
         File.write(fake_dot, "")
         File.chmod(0o755, fake_dot)
 
-        allow(File).to receive(:executable?).and_call_original
-        ["dot", "/usr/bin/dot", "/usr/local/bin/dot", "/opt/homebrew/bin/dot",
-         "/opt/local/bin/dot"].each do |candidate|
-          allow(File).to receive(:executable?).with(candidate).and_return(false)
-        end
+        stub_candidates_missing
 
-        original_path = ENV.fetch("PATH", "")
-        begin
-          ENV["PATH"] = dir
+        with_path(dir) do
           expect(described_class.new.available?).to be true
-        ensure
-          ENV["PATH"] = original_path
         end
       end
     end
