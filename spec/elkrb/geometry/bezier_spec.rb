@@ -92,6 +92,15 @@ RSpec.describe Elkrb::Geometry::Bezier do
 
         expect(points).to eq([start_point, end_point])
       end
+
+      it "returns copies, so the caller's own points do not move" do
+        points = described_class.calculate_curve(
+          start_point, end_point, control1, control2, 1
+        )
+        points.first.instance_variable_set(:@x, 99.0)
+
+        expect(start_point.x).to eq(0.0)
+      end
     end
 
     it "generates correct number of points" do

@@ -43,7 +43,9 @@ RSpec.describe Elkrb do
         "children" => [{ "id" => "a", "width" => 10.0, "height" => 10.0 }] }
     end
 
-    # The card settles the exact message, so the whole string is asserted.
+    # The exact message is part of the contract, so assert the whole string.
+    # The check lives in LayoutEngine.layout, so both doors are asserted: the
+    # CLI and the commands call the engine directly.
     {
       nil => "NilClass",
       "{}" => "String",
@@ -55,6 +57,14 @@ RSpec.describe Elkrb do
           ArgumentError,
           "graph must be a Hash or Elkrb::Graph::Graph, got #{class_name}",
         )
+      end
+
+      it "rejects #{argument.inspect} in the layout engine too" do
+        expect { Elkrb::Layout::LayoutEngine.layout(argument) }
+          .to raise_error(
+            ArgumentError,
+            "graph must be a Hash or Elkrb::Graph::Graph, got #{class_name}",
+          )
       end
     end
 

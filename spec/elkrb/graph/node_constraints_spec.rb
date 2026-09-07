@@ -12,7 +12,7 @@ require "spec_helper"
 # accept-and-normalise path here. The rejecting path is pinned separately, in
 # "validation through the legacy alias". Both shapes satisfy parity -- measured
 # -- so this is about coverage, not about making the example pass.
-nc_bad_values = [
+nc_parity_cases = [
   { snake: "relative_offset", camel: "relativeOffset",
     yaml: "nope", reader: :relative_offset },
   { snake: "relative_to", camel: "relativeTo",
@@ -27,8 +27,8 @@ nc_bad_values = [
     yaml: "horizontal", reader: :align_direction },
 ]
 
-# The five scalar fields of the six Do 7 covers; relative_offset is nested and
-# gets its own block below.
+# The five scalar fields of the six; relative_offset is nested and gets its
+# own block below.
 nc_fields = [
   { snake: "fixed_position", camel: "fixedPosition",
     reader: :fixed_position, value: true, default: false },
@@ -211,7 +211,7 @@ RSpec.describe Elkrb::Graph::NodeConstraints do
       expect(constraints.align_direction).to eq("horizontal")
     end
   end
-  # Do 7: YAML is written in snake_case like every other model, with the old
+  # YAML is written in snake_case like every other model, with the old
   # camelCase spellings kept as read-only aliases. Every one of the six fields
   # is covered on all four axes so no alias or hook can be reverted silently.
   describe "snake_case YAML with camelCase read aliases" do
@@ -302,7 +302,7 @@ RSpec.describe Elkrb::Graph::NodeConstraints do
         [:raised, e.class]
       end
 
-      nc_bad_values.each do |field|
+      nc_parity_cases.each do |field|
         it "treats #{field[:camel]} exactly like #{field[:snake]}" do
           reader = field[:reader]
 

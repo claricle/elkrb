@@ -153,16 +153,18 @@ module Elkrb
         # Declared last, so a legacy spelling wins. See the note above the
         # block for why this is one rule and why `to:` names no attribute.
         map nil, to: :__legacy_yaml_aliases,
-                 with: { from: :merge_legacy_aliases, to: :omit_from_output }
+                 with: { from: :__elkrb_merge_legacy_aliases,
+                         to: :__elkrb_omit_from_output }
       end
 
       # Serialization hook for every legacy camelCase spelling. Receives the
       # whole YAML document, so a key that is present with a blank value is
-      # still seen. Public because lutaml invokes it with `public_send`; not
-      # part of the supported API.
+      # still seen. Public because lutaml invokes it with `public_send`; the
+      # `__elkrb_` prefix keeps a subclass from taking the name by accident.
+      # Not part of the supported API.
       #
       # @api private
-      def merge_legacy_aliases(model, doc)
+      def __elkrb_merge_legacy_aliases(model, doc)
         # Only a NONBLANK value reaches here: transform.rb:251 drops the
         # rule for nil, "", [] and {} before the hook runs. So a non-Hash
         # arrives only when lutaml unwrapped a sole `__legacy_yaml_aliases`
