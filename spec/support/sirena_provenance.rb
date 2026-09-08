@@ -59,11 +59,18 @@ module SirenaProvenance
   # provenance table" even on a run where SIRENA_SHA had replaced it.
   def assert!(sirena_dir:, fixture_dir:, expected: nil, io: $stdout)
     readme = File.join(fixture_dir, "README.md")
+    # `SIRENA_SHA= rake ...` arrives here as "" -- ENV.fetch returns the
+    # empty string, not nil, and "" is truthy in Ruby. Left alone it would
+    # replace the README's sha with an empty one, guaranteeing a Mismatch
+    # AND blaming "the SIRENA_SHA override" for it. A blank override states
+    # no sha, so it means no override.
+    override = expected.to_s.strip
+    override = nil if override.empty?
     sha = check!(sha: git(sirena_dir, "rev-parse", "HEAD"),
                  status: git(sirena_dir, "status", "--porcelain"),
-                 expected: expected || expected_sha(readme))
+                 expected: override || expected_sha(readme))
     io.puts "sirena is at #{sha}, clean, and matches " \
-            "#{expected ? 'the SIRENA_SHA override' : 'the provenance table'}."
+            "#{override ? 'the SIRENA_SHA override' : 'the provenance table'}."
     sha
   end
 

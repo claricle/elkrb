@@ -402,6 +402,24 @@ RSpec.describe SirenaProvenance do
       end
     end
 
+    # `SIRENA_SHA= rake ...` -- the variable set but empty, which is what an
+    # unset shell variable expands to in CI -- reaches assert! as "" via
+    # ENV.fetch, and "" is truthy. Before the blank normalisation it replaced
+    # the README sha with an empty one: a guaranteed Mismatch on a checkout
+    # that is actually correct, reported against "the SIRENA_SHA override".
+    # A blank override names no sha, so it must fall back to the table.
+    it "treats a blank SIRENA_SHA as no override at all" do
+      Dir.mktmpdir("fake-sirena") do |dir|
+        head = fake_checkout(dir)
+
+        expect do
+          described_class.assert!(sirena_dir: dir, fixture_dir: fixture_dir,
+                                  expected: "", io: log)
+        end.to raise_error(SirenaProvenance::Mismatch,
+                           /is at #{head}, but the fixtures record #{recorded}/)
+      end
+    end
+
     # The confirmation has to name the thing actually checked. It used to
     # say "matches the provenance table" on every accepted run, including
     # one where SIRENA_SHA had replaced that table.
