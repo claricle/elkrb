@@ -1166,13 +1166,47 @@ RSpec.describe "MRTree on rootless cycles that share ONE component" do
   end
 end
 
+RSpec.describe "MRTree on a chain deep enough to reach the stack limit" do
+  # `layout_tree` recurses once per LEVEL, so every Ruby frame standing
+  # between one level and the next is paid once per level. Putting the
+  # child loop in a `layout_children` helper added a third frame per level
+  # and cut the depth this algorithm can handle by a third: measured by
+  # bisection on ruby 3.4.8, ~2,042 against origin/v2's ~2,975.
+  #
+  # 2,500 is between those two numbers on purpose. A bound this example
+  # could satisfy from either side would not be a regression test, and a
+  # bound at the very edge would be flaky as ruby's own frame size moves,
+  # so it sits in the gap the regression actually opened.
+  def chain(size)
+    { "id" => "g",
+      "children" => Array.new(size) do |i|
+        { "id" => i.to_s, "width" => 10, "height" => 10 }
+      end,
+      "edges" => Array.new(size - 1) do |i|
+        { "id" => "e#{i}", "sources" => [i.to_s], "targets" => [(i + 1).to_s] }
+      end }
+  end
+
+  it "lays out a 2,500-node chain without exhausting the stack" do
+    result = Elkrb.layout(chain(2500), algorithm: "mrtree")
+
+    # Not `not_to raise_error`: that passes for any result at all, and what
+    # is being pinned is that every node was actually placed on its own row.
+    expect(result.children.size).to eq(2500)
+    expect(result.children.map(&:y).uniq.size).to eq(2500)
+  end
+end
+
 RSpec.describe "MRTree levelling a digraph it cannot find a path through" do
   # Another complete digraph, not a cycle: root is the only real root and
   # c1..c5 point at each other in every direction. Relaxation has no
   # longest path to settle on here, so the cycle keeps handing each node
   # back a deeper candidate and the levels climb until the ceiling stops
-  # them. Drop that ceiling and the depth grows with the SQUARE of the node
-  # count instead of with the node count.
+  # them. Drop that ceiling and this graph does not lay out AT ALL: the
+  # worklist re-queues each node forever and a five-second bound expires
+  # -- measured, both with the guard (594.0 tall) and without it (timeout).
+  # It is not a quadratic-depth ceiling, which is what this said before and
+  # what the example at the bottom of this block has always said correctly.
   let(:graph) do
     ids = %w[c1 c2 c3 c4 c5]
     edges = [{ "id" => "seed", "sources" => ["root"], "targets" => ["c1"] }]
@@ -1347,9 +1381,12 @@ RSpec.describe "MRTree forest spacing and component cost" do
     left = by_id.fetch("c")
     right = by_id.fetch("q2")
 
-    # These two land on the same row and belong to different trees. Naming
-    # the gap matters: they used to overlap by 10px, so a >= 0 assertion
-    # would have passed with the defect in place.
+    # These two land on the same row and belong to different trees. They
+    # used to OVERLAP by 10px, which is a signed gap of -10, so a `>= 0`
+    # assertion would have caught that too -- the earlier note here had
+    # that backwards. What `>= 37` adds is the other half: a gap that is
+    # positive but SMALLER than the spacing that was asked for, which `>= 0`
+    # cannot see and which is the same defect one step less severe.
     expect(left.y).to eq(right.y)
     expect(right.x - (left.x + left.width)).to be >= 37
   end

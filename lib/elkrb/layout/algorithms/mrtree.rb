@@ -363,8 +363,17 @@ module Elkrb
         # this change -- 20,099 visits for 200 nodes and 320,399 for 800.
         # That is (n+2)(n-1)/2, not n^2/2; the shape is what matters, and
         # doubling n multiplies the visits by four.
+        # The child loop is INLINE, not a `layout_children` helper, and that
+        # is a stack-depth decision rather than a style one. Every frame
+        # standing between one level's `layout_tree` and the next is paid
+        # once per level of the tree: with the helper in the middle a chain
+        # of ~2,042 nodes raised SystemStackError on ruby 3.4.8 where
+        # origin/v2 managed ~2,975 -- measured by bisection, and the ratio
+        # is the 3-frames-per-level against 2 that the backtrace shows.
+        # `settle_subtree` below is a helper and costs nothing, because it
+        # runs AFTER the recursion has returned and so is never on the
+        # stack during the descent.
         def layout_tree(tree, x_offset, y_offset, placed = [])
-          node = tree[:node]
           start = placed.size
 
           if tree[:children].empty?
@@ -372,26 +381,41 @@ module Elkrb
                               placed)
           end
 
-          left, right = layout_children(tree, x_offset, y_offset, placed)
-          centre_over_children(tree, y_offset)
-          placed << node
+          child_x = x_offset
+          left = nil
+          right = nil
+          tree[:children].each do |child_tree|
+            consumed, child_left, child_right =
+              layout_tree(child_tree, child_x, y_offset, placed)
+            child_x += consumed
+            left = child_left if left.nil? || child_left < left
+            right = child_right if right.nil? || child_right > right
+          end
 
-          # The width CONSUMED, measured from where the nodes actually landed.
-          # `child_x` alone is not it: it accounts only for the children's
-          # allocation, and a node WIDER than its children protrudes past them
-          # on both sides. A 200px parent over two 10px children reported 60
-          # while occupying 200, and the next tree started 60px inside it.
-          # Centring can also push the parent left of `x_offset`, so the
-          # subtree is nudged back before its extent is read.
+          centre_over_children(tree, y_offset)
+          placed << tree[:node]
+          settle_subtree(tree[:node], placed, start, x_offset, [left, right])
+        end
+
+        # The width CONSUMED, measured from where the nodes actually landed.
+        # `child_x` alone is not it: it accounts only for the children's
+        # allocation, and a node WIDER than its children protrudes past them
+        # on both sides. A 200px parent over two 10px children reported 60
+        # while occupying 200, and the next tree started 60px inside it.
+        # Centring can also push the parent left of `x_offset`, so the
+        # subtree is nudged back before its extent is read.
+        #
+        # Only when the parent actually protrudes LEFT does this touch the
+        # subtree again, and then only that subtree's own slice. Reading the
+        # extent by re-walking every level instead cost n^2/2 node visits on
+        # a deep tree -- measured on a chain: 320,399 visits for 800 nodes,
+        # now 0, and the layout went from 0.443s to 0.244s.
+        def settle_subtree(node, placed, start, x_offset, extent)
+          left, right = extent
           own_right = node.x + (node.width || 0.0)
           left = node.x if node.x < left
           right = own_right if own_right > right
 
-          # Only when the parent actually protrudes LEFT does this touch the
-          # subtree again, and then only that subtree's own slice. Reading the
-          # extent by re-walking every level instead cost n^2/2 node visits on
-          # a deep tree -- measured on a chain: 320,399 visits for 800 nodes,
-          # now 0, and the layout went from 0.443s to 0.244s.
           if left < x_offset
             shift = x_offset - left
             shift_slice(placed, start, shift)
@@ -423,24 +447,6 @@ module Elkrb
 
           node.x = center_x - ((node.width || 0.0) / 2.0)
           node.y = y_offset + (tree[:level] * LEVEL_HEIGHT)
-        end
-
-        # Places every child left to right and answers the interval they
-        # occupy between them.
-        def layout_children(tree, x_offset, y_offset, placed)
-          child_x = x_offset
-          left = nil
-          right = nil
-
-          tree[:children].each do |child_tree|
-            consumed, child_left, child_right =
-              layout_tree(child_tree, child_x, y_offset, placed)
-            child_x += consumed
-            left = child_left if left.nil? || child_left < left
-            right = child_right if right.nil? || child_right > right
-          end
-
-          [left, right]
         end
 
         def shift_slice(placed, start, shift)
