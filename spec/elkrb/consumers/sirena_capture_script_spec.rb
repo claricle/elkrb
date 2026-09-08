@@ -266,10 +266,18 @@ RSpec.describe "spec/fixtures/consumers/sirena/capture.rb" do
     end
 
     # A deletion that FAILS used to read as a completed rollback, because
-    # `FileUtils.rm_f` swallows every error including EACCES. The run is
-    # given a read-only output directory after it has published, so the
-    # removal of the new file cannot succeed and the warning is the only
-    # thing that can tell anyone.
+    # `FileUtils.rm_f` swallows every error including EACCES -- and the
+    # `present?` guard that replaced it read an inaccessible file as an
+    # absent one, which is the same silence by another route.
+    #
+    # REAL permissions, not a stubbed `unlink`. A stub cannot reach the
+    # second defect at all: `present?` answers false before `unlink` is
+    # ever called, so a stubbed raise never fires. The directory loses its
+    # SEARCH bit the moment a.json lands, which makes b.json's install
+    # fail on its own and makes both file predicates answer false for
+    # a.json -- 0600, not 0500, because 0500 keeps the search bit and
+    # `present?` then answers true, which does not reach the defect
+    # (measured: the guard restored, this example stayed green at 0500).
     it "reports a target it published and could not delete" do
       Dir.mkdir(@out_dir)
       # b.json exists, a.json does NOT -- so a.json's rollback is the
@@ -278,26 +286,34 @@ RSpec.describe "spec/fixtures/consumers/sirena/capture.rb" do
 
       out, status = run_ruby(<<~RUBY)
         require #{script.inspect}
-        File.singleton_class.prepend(Module.new do
-          define_method(:unlink) do |*paths|
-            raise Errno::EACCES, paths.first
-          end
-        end)
+        out = #{@out_dir.inspect}
         File.singleton_class.prepend(Module.new do
           define_method(:rename) do |from, to|
-            raise Errno::EXDEV, to if to.end_with?("/b.json") &&
-                                      File.basename(from) == "b.json"
-
-            super(from, to)
+            result = super(from, to)
+            File.chmod(0o600, out) if to.end_with?("/a.json")
+            result
           end
         end)
-        SirenaCapture.publish([["a", { "v" => "new" }], ["b", { "v" => "new" }]],
-                              #{@out_dir.inspect})
+        begin
+          SirenaCapture.publish([["a", { "v" => "new" }],
+                                 ["b", { "v" => "new" }]], out)
+        ensure
+          File.chmod(0o700, out)
+        end
       RUBY
 
       expect(status).not_to eq(0)
-      expect(out).to match(%r{could not restore \S+/a\.json})
+      # a.json is NAMED as stranded -- not merely "something failed". It
+      # is not necessarily first in the list: b.json's restore cannot run
+      # in this directory either, so both are reported.
+      expect(out).to match(/could not restore[^\n]*\/a\.json/)
+      # And the file really is still there, which is what makes the
+      # message true rather than merely present.
       expect(File.exist?(File.join(@out_dir, "a.json"))).to be(true)
+      # No `bak.` file is asserted here on purpose: neither target could
+      # be STAT'd once the search bit went, so neither was ever stashed.
+      # What this example measures is the DELETE arm of rollback, which
+      # is the one that used to fail in silence.
     end
 
     # The one example here that needs real wall-clock time. Two runs

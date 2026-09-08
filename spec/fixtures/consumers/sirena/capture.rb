@@ -249,8 +249,15 @@ module SirenaCapture
   # incomplete-rollback warning never fired, measured. Absence is the only
   # outcome that counts as already-removed; anything else is a failure
   # `restore_all` has to hear about.
+  #
+  # And unlink UNCONDITIONALLY, with no `present?` guard in front of it.
+  # Both file predicates answer false for a path inside a directory this
+  # process cannot search, so the guard read an inaccessible file as an
+  # absent one and skipped the deletion silently -- measured, the file
+  # survived and `restore_all` still reported nothing stranded. ENOENT is
+  # the only absence there is; everything else has to raise.
   def remove(path)
-    File.unlink(path) if present?(path)
+    File.unlink(path)
   rescue Errno::ENOENT
     nil
   end
