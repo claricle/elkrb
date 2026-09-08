@@ -233,13 +233,26 @@ module SirenaCapture
   # this exists to restore.
   def roll_back(target, stashed, existed)
     unless existed
-      FileUtils.rm_f(target)
+      remove(target)
       return
     end
     return unless present?(stashed)
 
-    FileUtils.rm_f(target)
+    remove(target)
     File.rename(stashed, target)
+  end
+
+  # `File.unlink`, not `FileUtils.rm_f`. `rm_f` swallows EVERY error, so a
+  # file this run published and then could NOT delete -- a read-only output
+  # directory -- came back through `restore_all` as a completed rollback:
+  # it returned [] with the new file still sitting there and the
+  # incomplete-rollback warning never fired, measured. Absence is the only
+  # outcome that counts as already-removed; anything else is a failure
+  # `restore_all` has to hear about.
+  def remove(path)
+    File.unlink(path) if present?(path)
+  rescue Errno::ENOENT
+    nil
   end
 end
 

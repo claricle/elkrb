@@ -97,15 +97,19 @@ RSpec.describe "sirena consumer capture fixtures" do
     expect(File).to exist(File.join(dir, "README.md"))
   end
 
-  # Asserts the row is THERE and well-formed, not that it holds one
-  # particular sha. A copy of the sha here would have to be edited in
+  # Asserts each row is THERE and well-formed, not that it holds one
+  # particular value. A copy of the sha here would have to be edited in
   # lockstep with the README on every legitimate re-capture, which is
-  # the duplication `rake fixtures:sirena` exists to avoid.
+  # the duplication `rake fixtures:sirena` exists to avoid -- and the
+  # DATE said the same thing while being pinned to 2026-08-28 anyway, so
+  # re-capturing today failed this example, measured. The format is what
+  # the row promises; the value is the README's to own.
   it "records its provenance in the README" do
     readme_path = File.join(dir, "README.md")
 
     expect(SirenaProvenance.expected_sha(readme_path)).to match(/\A\h{40}\z/)
-    expect(File.read(readme_path)).to include("2026-08-28")
+    expect(File.read(readme_path))
+      .to match(/^\|\s*captured on\s*\|\s*\d{4}-\d{2}-\d{2}\s*\|/)
   end
 
   captured.each do |name|

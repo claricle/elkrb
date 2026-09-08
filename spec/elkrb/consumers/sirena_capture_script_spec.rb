@@ -265,6 +265,41 @@ RSpec.describe "spec/fixtures/consumers/sirena/capture.rb" do
       expect(written).to eq([])
     end
 
+    # A deletion that FAILS used to read as a completed rollback, because
+    # `FileUtils.rm_f` swallows every error including EACCES. The run is
+    # given a read-only output directory after it has published, so the
+    # removal of the new file cannot succeed and the warning is the only
+    # thing that can tell anyone.
+    it "reports a target it published and could not delete" do
+      Dir.mkdir(@out_dir)
+      # b.json exists, a.json does NOT -- so a.json's rollback is the
+      # DELETE arm, which is the one that used to fail silently.
+      File.write(File.join(@out_dir, "b.json"), "OLD-b")
+
+      out, status = run_ruby(<<~RUBY)
+        require #{script.inspect}
+        File.singleton_class.prepend(Module.new do
+          define_method(:unlink) do |*paths|
+            raise Errno::EACCES, paths.first
+          end
+        end)
+        File.singleton_class.prepend(Module.new do
+          define_method(:rename) do |from, to|
+            raise Errno::EXDEV, to if to.end_with?("/b.json") &&
+                                      File.basename(from) == "b.json"
+
+            super(from, to)
+          end
+        end)
+        SirenaCapture.publish([["a", { "v" => "new" }], ["b", { "v" => "new" }]],
+                              #{@out_dir.inspect})
+      RUBY
+
+      expect(status).not_to eq(0)
+      expect(out).to match(%r{could not restore \S+/a\.json})
+      expect(File.exist?(File.join(@out_dir, "a.json"))).to be(true)
+    end
+
     # The one example here that needs real wall-clock time. Two runs
     # sharing an output directory used to interleave: A published a.json,
     # B published both of its files, then A published b.json, and the
