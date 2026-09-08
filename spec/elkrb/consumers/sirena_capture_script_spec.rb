@@ -123,6 +123,33 @@ RSpec.describe "spec/fixtures/consumers/sirena/capture.rb" do
       expect(out).to include("RESCUED RuntimeError: Set SIRENA_DIR")
       expect(out).to include("CALLER SURVIVED")
     end
+
+    # A provenance refusal reaches the caller AS a Mismatch. `abort` made it
+    # SystemExit and killed the caller; `raise e.message`, which replaced
+    # that, made it a RuntimeError indistinguishable from the two argument
+    # checks above. The class is the whole point of having a dedicated
+    # error, so the class is what is asserted.
+    it "lets a provenance Mismatch reach its caller as a Mismatch" do
+      root = File.expand_path("../../..", __dir__)
+      out, status = run_ruby(<<~RUBY)
+        require "rake"
+        Dir.chdir(#{root.inspect}) { load "Rakefile" }
+        ENV["SIRENA_DIR"] = #{@tmp.inspect}
+        ENV.delete("SIRENA_SHA")
+        begin
+          Rake::Task["fixtures:sirena"].invoke
+        rescue SirenaProvenance::Mismatch => e
+          puts "RESCUED \#{e.class}"
+          puts "BACKTRACE NAMES assert!: \#{e.backtrace.join(' ').include?("assert!")}"
+        end
+        puts "CALLER SURVIVED"
+      RUBY
+
+      expect(status).to eq(0)
+      expect(out).to include("RESCUED SirenaProvenance::Mismatch")
+      expect(out).to include("BACKTRACE NAMES assert!: true")
+      expect(out).to include("CALLER SURVIVED")
+    end
   end
 
   describe "publishing" do

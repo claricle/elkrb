@@ -89,28 +89,37 @@ desc "Re-capture the sirena consumer fixtures " \
 # ordinary `rescue StandardError` -- measured. Only the `rake` command
 # itself may decide an exit status, and it still does: an exception out
 # of a task is what makes rake exit 1.
-task "fixtures:sirena" do
-  sirena_dir = ENV.fetch("SIRENA_DIR", nil).to_s
+# The sirena checkout SIRENA_DIR names, as an absolute path.
+def sirena_checkout
+  requested = ENV.fetch("SIRENA_DIR", nil).to_s
   raise "Set SIRENA_DIR to a sirena checkout, e.g. ~/claricle/sirena" if
-    sirena_dir.empty?
+    requested.empty?
 
-  sirena_dir = File.expand_path(sirena_dir)
-  raise "No such directory: #{sirena_dir}" unless Dir.exist?(sirena_dir)
+  File.expand_path(requested).tap do |dir|
+    raise "No such directory: #{dir}" unless Dir.exist?(dir)
+  end
+end
 
+task "fixtures:sirena" do
+  sirena_dir = sirena_checkout
   fixture_dir = File.expand_path("spec/fixtures/consumers/sirena", __dir__)
   # Blank is "not given", not "here" -- see SirenaProvenance.out_dir.
-  requested = ENV.fetch("OUT_DIR", nil)
-  out_dir = SirenaProvenance.out_dir(requested, default: fixture_dir)
+  out_dir = SirenaProvenance.out_dir(ENV.fetch("OUT_DIR", nil),
+                                     default: fixture_dir)
 
   # The provenance check REFUSES. It used to print the sha and ask a
   # human to compare it, and a wrong sha on a dirty tree got all the way
   # to the capture command, which overwrites the fixtures in place.
-  begin
-    SirenaProvenance.assert!(sirena_dir: sirena_dir, fixture_dir: fixture_dir,
-                             expected: ENV.fetch("SIRENA_SHA", nil))
-  rescue SirenaProvenance::Mismatch => e
-    raise e.message
-  end
+  #
+  # `Mismatch` propagates UNCAUGHT. There is nothing to add to it here, and
+  # both shapes this line has worn already lost something: `abort e.message`
+  # raised SystemExit and took the calling process down, and `raise
+  # e.message` -- which replaced it -- reduced a dedicated `Mismatch` to a
+  # RuntimeError and reset its backtrace, so a caller could no longer tell a
+  # provenance refusal from any other failure. `Mismatch` is a StandardError
+  # and rake turns it into exit status 1 on its own.
+  SirenaProvenance.assert!(sirena_dir: sirena_dir, fixture_dir: fixture_dir,
+                           expected: ENV.fetch("SIRENA_SHA", nil))
 
   # sirena is a separate gem, so the capture runs in sirena's own bundle.
   Bundler.with_unbundled_env do
