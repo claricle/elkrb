@@ -140,6 +140,52 @@ RSpec.describe Elkrb::Layout::LayoutEngine do
       end
     end
 
+    context "with invalid graph input" do
+      # A Node is in the Elkrb::Graph:: namespace and is not a Graph, so it
+      # separates a class check from a namespace check. Six siblings do that
+      # too. Node is the pick because it is the only one of them answering
+      # both `children` and `edges`, so it is also the only input that kills a
+      # duck-typed guard -- swap it for an Edge or a Label and that goes.
+      # The plain rejected types -- nil, String, Array, Integer -- are already
+      # covered in spec/elkrb_spec.rb through this same entry point, and a
+      # namespace check rejects those just as a class check does, so they are
+      # not repeated here. The nil below is there for the ordering, not the type.
+      it "raises ArgumentError for a Graph::Node" do
+        expect { described_class.layout(Elkrb::Graph::Node.new) }
+          .to raise_error(
+            ArgumentError,
+            "graph must be a Hash or Elkrb::Graph::Graph, " \
+            "got Elkrb::Graph::Node",
+          )
+      end
+
+      # Ordering is asserted by removing the capability, not by watching for
+      # its use -- and the removal is DERIVED from the registry's public surface
+      # rather than naming a route. Stubbing only :get leaves an implementation
+      # that resolves through algorithm_info green while the guard runs second.
+      # singleton_methods returns the public routes; the registry's private
+      # helpers are unreachable from layout without an explicit send.
+      #
+      # Keep NotImplementedError. It buys nothing today, because layout carries
+      # no rescue and a StandardError sentinel behaves identically. It becomes
+      # the only thing holding this example up the moment layout gains a
+      # `rescue StandardError`, which would swallow a StandardError sentinel
+      # and leave this passing while asserting nothing.
+      it "rejects the graph before the algorithm is resolved" do
+        registry = Elkrb::Layout::AlgorithmRegistry
+        (registry.singleton_methods - Object.singleton_methods).each do |route|
+          allow(registry).to receive(route)
+            .and_raise(NotImplementedError, "algorithm resolution must not run")
+        end
+
+        expect { described_class.layout(nil, algorithm: "layered") }
+          .to raise_error(
+            ArgumentError,
+            "graph must be a Hash or Elkrb::Graph::Graph, got NilClass",
+          )
+      end
+    end
+
     context "with a node missing width and height" do
       it "treats missing size as 0 and does not raise" do
         graph = { id: "r", children: [{ id: "a" }] }
