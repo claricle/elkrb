@@ -402,6 +402,48 @@ RSpec.describe SirenaProvenance do
       end
     end
 
+    # `present` is the one place the blank-env rule lives, because the two
+    # callers got it wrong in two different ways: SIRENA_SHA="" overrode the
+    # README with an empty sha, and OUT_DIR="" published the fixtures into
+    # Dir.pwd, since File.expand_path("") is the working directory. The
+    # values below are what ENV.fetch actually hands back, not invented ones.
+    describe ".present" do
+      it "keeps a value that names something" do
+        expect(described_class.present("abc123")).to eq("abc123")
+        expect(described_class.present("  abc123  ")).to eq("abc123")
+      end
+
+      it "reads every blank ENV shape as not given" do
+        # "" is ENV.fetch(k, nil) for `K=`; " " is `K=" "`; nil is absent.
+        expect(described_class.present("")).to be_nil
+        expect(described_class.present("   ")).to be_nil
+        expect(described_class.present(nil)).to be_nil
+      end
+    end
+
+    # The Rakefile used to write `File.expand_path(ENV.fetch("OUT_DIR", dir))`.
+    # ENV.fetch's default only fires when the key is ABSENT, so `OUT_DIR=`
+    # reached expand_path as "" -- and File.expand_path("") is Dir.pwd, which
+    # would publish the fixtures into whatever directory rake was run from.
+    describe ".out_dir" do
+      it "falls back to the default for every blank shape" do
+        ["", "   ", nil].each do |blank|
+          expect(described_class.out_dir(blank, default: "/d"))
+            .to eq(File.expand_path("/d")), "blank #{blank.inspect} leaked"
+        end
+      end
+
+      it "honours a directory that was actually named" do
+        expect(described_class.out_dir("/tmp/elsewhere", default: "/d"))
+          .to eq(File.expand_path("/tmp/elsewhere"))
+      end
+
+      # The specific regression: a blank must not resolve to the cwd.
+      it "never resolves a blank to the working directory" do
+        expect(described_class.out_dir("", default: "/d")).not_to eq(Dir.pwd)
+      end
+    end
+
     # `SIRENA_SHA= rake ...` -- the variable set but empty, which is what an
     # unset shell variable expands to in CI -- reaches assert! as "" via
     # ENV.fetch, and "" is truthy. Before the blank normalisation it replaced

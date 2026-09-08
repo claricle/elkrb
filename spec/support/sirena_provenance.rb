@@ -59,19 +59,33 @@ module SirenaProvenance
   # provenance table" even on a run where SIRENA_SHA had replaced it.
   def assert!(sirena_dir:, fixture_dir:, expected: nil, io: $stdout)
     readme = File.join(fixture_dir, "README.md")
-    # `SIRENA_SHA= rake ...` arrives here as "" -- ENV.fetch returns the
-    # empty string, not nil, and "" is truthy in Ruby. Left alone it would
-    # replace the README's sha with an empty one, guaranteeing a Mismatch
-    # AND blaming "the SIRENA_SHA override" for it. A blank override states
-    # no sha, so it means no override.
-    override = expected.to_s.strip
-    override = nil if override.empty?
+    # A blank override states no sha, so it means no override -- see
+    # `present` for why "" is what actually arrives here.
+    override = present(expected)
     sha = check!(sha: git(sirena_dir, "rev-parse", "HEAD"),
                  status: git(sirena_dir, "status", "--porcelain"),
                  expected: override || expected_sha(readme))
     io.puts "sirena is at #{sha}, clean, and matches " \
             "#{override ? 'the SIRENA_SHA override' : 'the provenance table'}."
     sha
+  end
+
+  # `SIRENA_SHA= rake ...` and `OUT_DIR= rake ...` -- a variable set but
+  # empty, which is what an unset shell variable expands to in CI -- arrive
+  # as "", not nil: ENV.fetch's default only fires when the key is ABSENT,
+  # and "" is truthy in Ruby. Both callers mean "not given" by a blank, and
+  # both were wrong about it in different ways, so the rule lives in one
+  # place: blank names nothing.
+  # The capture task's output directory. Blank means "not given", not
+  # "here": File.expand_path("") is Dir.pwd, so `OUT_DIR= rake ...` would
+  # publish the fixtures into whatever directory rake was run from.
+  def out_dir(value, default:)
+    File.expand_path(present(value) || default)
+  end
+
+  def present(value)
+    text = value.to_s.strip
+    text.empty? ? nil : text
   end
 
   # stdout ONLY. Merging stderr in made a benign git warning part of the

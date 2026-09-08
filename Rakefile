@@ -92,7 +92,9 @@ task "fixtures:sirena" do
   abort "No such directory: #{sirena_dir}" unless Dir.exist?(sirena_dir)
 
   fixture_dir = File.expand_path("spec/fixtures/consumers/sirena", __dir__)
-  out_dir = File.expand_path(ENV.fetch("OUT_DIR", fixture_dir))
+  # Blank is "not given", not "here" -- see SirenaProvenance.out_dir.
+  requested = ENV.fetch("OUT_DIR", nil)
+  out_dir = SirenaProvenance.out_dir(requested, default: fixture_dir)
 
   # The provenance check REFUSES. It used to print the sha and ask a
   # human to compare it, and a wrong sha on a dirty tree got all the way
