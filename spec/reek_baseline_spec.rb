@@ -1,6 +1,10 @@
 # frozen_string_literal: true
 
 require "reek"
+# reek uses Pathname but does not require it -- `grep -rn 'require "pathname"'`
+# over the installed gem returns nothing -- so this file must not rely on
+# something else in the process having loaded it.
+require "pathname"
 require "yaml"
 
 # `.reek.yml` is a generated todo baseline, and reek matches a String
