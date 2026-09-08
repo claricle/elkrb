@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "prism"
+require "reek"
 require "yaml"
 
 # `.reek.yml` is a generated todo baseline, and reek matches a String
@@ -24,58 +24,32 @@ require "yaml"
 # recorded set below is the same kind of ratchet as `.reek.yml` itself and
 # `.rubocop_todo.yml` -- burn it down, never regenerate it larger.
 RSpec.describe ".reek.yml" do
-  # Every `Class#method` and `Class#self.method` defined under lib/, built from
-  # the AST rather than a grep so a `def` inside a nested module gets its real
-  # qualified name.
-  def method_full_names
-    root = File.expand_path("../lib/**/*.rb", __dir__)
-    # Order is irrelevant: the assertion sorts. Glob order is not a language
-    # guarantee, so nothing here may depend on it.
-    Dir.glob(root).flat_map do |file|
-      methods_in(Prism.parse_file(file).value, [])
+  # Reek's OWN context enumeration, not a hand-rolled AST walk. This is the
+  # whole point of the shape: `ContextBuilder` produces exactly the
+  # `full_name`s that `CodeContext#matches?` later tests the exclusions
+  # against, so the scanner cannot disagree with reek about what a declaration
+  # is called.
+  #
+  # A `def`-only Prism walk stood here for two rounds and was wrong twice, in
+  # ways that are invisible until someone writes that form: it missed
+  # `attr_accessor :x`, then `self.attr_accessor :x`, then `private def x`.
+  # Each was a real declaration reek names and the baseline could silently
+  # exempt. Enumerating forms is a list of the ones you thought of; asking
+  # reek is the list that exists. DO NOT replace this with a bespoke walk.
+  #
+  # The `respond_to?` guard is for the root context, which is a sentinel with
+  # no expression to name.
+  def reek_context_names
+    files = Dir.glob(File.expand_path("../lib/**/*.rb", __dir__))
+    files.flat_map { |file| context_names(Pathname.new(file)) }.uniq
+  end
+
+  def context_names(source)
+    tree = Reek::Source::SourceCode.from(source).syntax_tree
+    named = Reek::ContextBuilder.new(tree).context_tree.each.select do |context|
+      context.exp.respond_to?(:full_name)
     end
-  end
-
-  # attr_* counts. reek names an Attribute smell `Class#the_attribute`, exactly
-  # like a method, so an `attr_accessor :width_extra` inherits an exemption
-  # written for `#width` just as a `def` would. A `def`-only scan reported []
-  # for it while reek reported the smell and the baseline swallowed it --
-  # measured, and it is why this is not a `when Prism::DefNode` alone.
-  # A method, not a constant: RuboCop's Lint/ConstantDefinitionInBlock fires on
-  # a constant inside a block and its autocorrect makes it a block-local.
-  def attr_declarations
-    %i[attr_accessor attr_reader attr_writer]
-  end
-
-  def methods_in(node, scope)
-    case node
-    when Prism::ModuleNode, Prism::ClassNode then members_in(node, scope)
-    when Prism::DefNode then [def_name(node, scope)]
-    when Prism::CallNode then attributes_in(node, scope)
-    else children_of(node).flat_map { |child| methods_in(child, scope) }
-    end
-  end
-
-  def members_in(node, scope)
-    nested = scope + [node.constant_path.slice]
-    children_of(node.body).flat_map { |child| methods_in(child, nested) }
-  end
-
-  def def_name(node, scope)
-    "#{scope.join('::')}#{node.receiver ? '#self.' : '#'}#{node.name}"
-  end
-
-  def attributes_in(node, scope)
-    return [] if node.receiver
-    return [] unless attr_declarations.include?(node.name)
-
-    arguments = node.arguments&.arguments || []
-    symbols = arguments.grep(Prism::SymbolNode)
-    symbols.map { |symbol| "#{scope.join('::')}##{symbol.unescaped}" }
-  end
-
-  def children_of(node)
-    node ? node.child_nodes.compact : []
+    named.map(&:full_name).reject { |name| name.nil? || name.empty? }
   end
 
   def method_level_exclusions
@@ -85,11 +59,11 @@ RSpec.describe ".reek.yml" do
     excluded.grep(String).uniq.select { |name| name.include?("#") }
   end
 
-  # Recorded 2026-09-08 against the baseline as generated. Each entry is a real
-  # method that is exempt from some detector only because a SHORTER excluded
-  # name is a substring of it -- `#serialize` swallowing `#serialize_node`,
-  # `#initialize` swallowing `#initialize_positions`. Nothing may be ADDED here
-  # without saying why; shrinking it is the point.
+  # Recorded 2026-09-08. Each entry is a real declaration that is exempt from
+  # some detector only because a SHORTER excluded name is a substring of it --
+  # `#serialize` swallowing `#serialize_node`, `#initialize` swallowing
+  # `#initialize_positions`. Nothing may be ADDED here without saying why;
+  # shrinking it is the point.
   #
   # A `let` and not a constant: RuboCop's Lint/ConstantDefinitionInBlock fires
   # on a constant here, and its autocorrect turns one into a block-local, which
@@ -126,21 +100,37 @@ RSpec.describe ".reek.yml" do
     ]
   end
 
-  it "exempts no method it does not name, beyond the recorded set" do
+  it "exempts no declaration it does not name, beyond the recorded set" do
     exclusions = method_level_exclusions
-    swallowed = method_full_names.select do |name|
+    swallowed = reek_context_names.select do |name|
       exclusions.any? { |excluded| name != excluded && name.include?(excluded) }
     end
 
     expect(swallowed.uniq.sort).to eq(recorded_swallowed.sort)
   end
 
-  # The positive control for the example above. If the AST walk or the YAML
-  # read silently returned nothing, the comparison would still hold whenever
-  # the recorded set happened to be empty -- and it would go on holding as
-  # methods were added. These two say the inputs are real.
+  # The positive control. If the enumeration or the YAML read silently returned
+  # nothing, the comparison above would still hold whenever the recorded set
+  # happened to be empty, and would go on holding as declarations were added.
   it "reads a real baseline and a real lib tree" do
     expect(method_level_exclusions.size).to be > 100
-    expect(method_full_names.size).to be > 500
+    expect(reek_context_names.size).to be > 500
+  end
+
+  # The three forms that broke the hand-rolled walk, pinned against reek's
+  # enumeration so a future change to it cannot quietly stop seeing them.
+  it "names every declaration form the baseline can match" do
+    source = <<~RUBY
+      class Probe
+        attr_accessor :plain_attr
+        self.attr_accessor :self_attr
+        private def private_method; end
+        def public_method; end
+      end
+    RUBY
+    expect(context_names(source)).to include(
+      "Probe#plain_attr", "Probe#self_attr",
+      "Probe#private_method", "Probe#public_method"
+    )
   end
 end
