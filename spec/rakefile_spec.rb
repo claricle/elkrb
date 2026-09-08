@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "rbconfig"
 require "ripper"
 
 # The Rakefile is loadable by any Ruby process -- `load "Rakefile"`, or
@@ -24,7 +25,14 @@ RSpec.describe "Rakefile" do
         node.each { |child| walk.call(child) }
       end
     end
-    walk.call(Ripper.sexp(File.read(path)))
+    sexp = Ripper.sexp(File.read(path))
+    # Ripper.sexp returns nil -- not a raise -- when the source does not
+    # parse. Walking nil yields no terminators, so without this the example
+    # would report a syntactically BROKEN Rakefile as free of `abort`.
+    # Verified: Ripper.sexp("task :x do\n  abort \"boom\"\n") -> nil.
+    expect(sexp).not_to be_nil, "Rakefile did not parse; this example cannot " \
+                                "judge it. Fix the syntax error first."
+    walk.call(sexp)
 
     expect(terminators).to eq([])
   end
