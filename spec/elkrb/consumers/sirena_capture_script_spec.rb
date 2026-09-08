@@ -322,18 +322,23 @@ RSpec.describe "spec/fixtures/consumers/sirena/capture.rb" do
       File.write(File.join(@out_dir, "a.json"), "OLD-a")
       # The undo entry used to be recorded AFTER the stash rename, so an
       # Interrupt landing in between left the original in the backup with
-      # nothing naming it: rollback restored nothing and a.json stayed
-      # missing. Interrupting the INSTALL rename lands in that window,
-      # because the stash rename has already run by then.
+      # nothing naming it and a.json stayed missing.
+      #
+      # The interruption has to land on the STASH rename, AFTER it
+      # completes. Interrupting the INSTALL rename instead does not
+      # discriminate: by then registration has run under either ordering,
+      # so that version of this example passed with the registration
+      # deliberately moved back after the move -- measured.
       out, status = run_ruby(<<~RUBY)
         require #{script.inspect}
         File.singleton_class.prepend(Module.new do
           define_method(:rename) do |from, to|
-            installing_a = to.end_with?("/a.json") &&
-                           File.basename(from) == "a.json"
-            raise Interrupt if installing_a
+            result = super(from, to)
+            stashing_a = from.end_with?("/a.json") &&
+                         File.basename(to).start_with?("bak.")
+            raise Interrupt if stashing_a
 
-            super(from, to)
+            result
           end
         end)
         SirenaCapture.publish([["a", { "v" => "new" }]], #{@out_dir.inspect})
@@ -343,6 +348,48 @@ RSpec.describe "spec/fixtures/consumers/sirena/capture.rb" do
       expect(out).to include("Interrupt")
       expect(File.read(File.join(@out_dir, "a.json"))).to eq("OLD-a")
       expect(written).to eq(["a.json"])
+    end
+
+    # `finish` stopped at the first restoration that raised, and the
+    # staging sweep then took every backup it had not put back: the
+    # output directory came out EMPTY. Three rows, with the FIRST
+    # restoration failing, so the two behind it are what the example
+    # actually measures.
+    it "restores the rest when one restoration raises, and keeps what " \
+       "it could not" do
+      Dir.mkdir(@out_dir)
+      %w[a b c].each do |n|
+        File.write(File.join(@out_dir, "#{n}.json"), "OLD-#{n}")
+      end
+
+      out, status = run_ruby(<<~RUBY)
+        require #{script.inspect}
+        File.singleton_class.prepend(Module.new do
+          define_method(:rename) do |from, to|
+            # Fail the INSTALL of c.json, to force a rollback, and then
+            # fail the RESTORE of c.json, which is the first row undone.
+            raise Errno::EXDEV, to if to.end_with?("/c.json")
+
+            super(from, to)
+          end
+        end)
+        SirenaCapture.publish([["a", { "v" => "new" }], ["b", { "v" => "new" }],
+                               ["c", { "v" => "new" }]],
+                              #{@out_dir.inspect})
+      RUBY
+
+      expect(status).not_to eq(0)
+      # The rows BEHIND the failing restoration are back.
+      expect(File.read(File.join(@out_dir, "a.json"))).to eq("OLD-a")
+      expect(File.read(File.join(@out_dir, "b.json"))).to eq("OLD-b")
+      # And the one that could not be restored is still on disk, in the
+      # place the message names, rather than swept.
+      expect(out).to include("could not restore")
+      expect(out).to match(%r{could not restore \S+/c\.json})
+      kept = out[/the originals are in (\S+)/, 1]
+      backups = Dir.children(kept).grep(/\Abak\./)
+      expect(backups.map { |b| File.read(File.join(kept, b)) })
+        .to eq(["OLD-c"])
     end
 
     it "rolls back when the publish is INTERRUPTED, not only on an errno" do

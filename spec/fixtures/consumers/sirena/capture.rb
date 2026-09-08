@@ -87,11 +87,19 @@ module SirenaCapture
   # exactly the same reason.
   def publish(graphs, out_dir)
     FileUtils.mkdir_p(out_dir)
-    with_directory_lock(out_dir) do
-      Dir.mktmpdir(".capture", out_dir) do |staging|
-        commit(stage(graphs, staging, out_dir))
-      end
-    end
+    with_directory_lock(out_dir) { publish_locked(graphs, out_dir) }
+  end
+
+  def publish_locked(graphs, out_dir)
+    staging = Dir.mktmpdir(".capture", out_dir)
+    undone = []
+    published = false
+    staged = stage(graphs, staging, out_dir)
+    refuse_unpublishable!(staged)
+    staged.each { |row| replace(*row, undone) }
+    published = true
+  ensure
+    settle(staging, undone, published)
   end
 
   # Two runs pointed at one output directory used to interleave -- measured
@@ -137,33 +145,42 @@ module SirenaCapture
     end
   end
 
-  # Renames every staged file into place, and puts the directory back
-  # the way it was if any rename fails. Renaming one at a time is not
-  # all-or-nothing on its own: a DIRECTORY standing where a fixture
-  # belongs made the second rename raise EISDIR with the first target
-  # already replaced -- measured. `refuse_unpublishable!` rejects that
-  # case before anything moves; the undo log covers the rest.
-  def commit(staged)
-    undone = []
-    published = false
-    refuse_unpublishable!(staged)
-    staged.each { |row| replace(*row, undone) }
-    published = true
-  ensure
-    finish(undone, published)
-  end
-
   # `ensure`, not `rescue SystemCallError`. Ctrl-C raises Interrupt,
   # which that rescue did not catch: an interrupted publish left a.json
   # updated, b.json missing and both backups on disk -- measured. An
   # ensure runs for EVERY exit, so the undo does not depend on
-  # enumerating which exceptions an interruption can arrive as. A
-  # successful publish needs no cleanup at all: the backups sit in the
-  # staging directory, which goes when it does.
-  def finish(undone, published)
-    return if published
+  # enumerating which exceptions an interruption can arrive as.
+  #
+  # Sweeping the staging directory is what makes the backups disposable,
+  # so it may only happen once nothing in there is still needed. The
+  # block form of `Dir.mktmpdir` removed it UNCONDITIONALLY: one SIGINT
+  # during restoration stopped the undo at that row and the sweep then
+  # took every backup it had not yet put back, leaving the output
+  # directory EMPTY -- measured. When anything is stranded the directory
+  # stays and its path is printed, because a backup nobody can find is
+  # the same as no backup.
+  def settle(staging, undone, published)
+    return if staging.nil?
 
-    undone.each { |row| roll_back(*row) }
+    stranded = published ? [] : restore_all(undone)
+    return FileUtils.remove_entry(staging) if stranded.empty?
+
+    warn "capture could not restore #{stranded.join(', ')} -- " \
+         "the originals are in #{staging}"
+  end
+
+  # Attempts EVERY restoration whatever any one of them raises, and
+  # returns the targets still not back in place. Stopping at the first
+  # failure left the remaining fixtures missing with their only copies
+  # about to be swept. Interrupt is named beside StandardError because
+  # Ctrl-C is the interruption this path exists for and is not one.
+  def restore_all(undone)
+    undone.filter_map do |target, stashed, existed|
+      roll_back(target, stashed, existed)
+      nil
+    rescue StandardError, Interrupt
+      target
+    end
   end
 
   # The undo entry is recorded BEFORE anything moves, and it records
@@ -180,6 +197,12 @@ module SirenaCapture
     puts "wrote #{target}"
   end
 
+  # Renaming one at a time is not all-or-nothing on its own: a DIRECTORY
+  # standing where a fixture belongs made the second rename raise EISDIR
+  # with the first target already replaced -- measured. This rejects that
+  # case while the output directory is still untouched; the undo log
+  # covers everything it cannot see.
+  #
   # A rename may replace a regular file or nothing at all, and a symlink
   # to a regular file counts as a regular file here because `File.file?`
   # follows it -- the rename then replaces the LINK, not its referent. A
