@@ -83,13 +83,19 @@ end
 
 desc "Re-capture the sirena consumer fixtures " \
      "(SIRENA_DIR=<sirena checkout>, OUT_DIR=<where to write>)"
+# `raise`, not `abort`. A rake task is a method any Ruby caller can
+# invoke, and `abort` raises SystemExit: `Rake::Task["fixtures:sirena"]
+# .invoke` with no SIRENA_DIR took the CALLING process down past every
+# ordinary `rescue StandardError` -- measured. Only the `rake` command
+# itself may decide an exit status, and it still does: an exception out
+# of a task is what makes rake exit 1.
 task "fixtures:sirena" do
   sirena_dir = ENV.fetch("SIRENA_DIR", nil).to_s
-  abort "Set SIRENA_DIR to a sirena checkout, e.g. ~/claricle/sirena" if
+  raise "Set SIRENA_DIR to a sirena checkout, e.g. ~/claricle/sirena" if
     sirena_dir.empty?
 
   sirena_dir = File.expand_path(sirena_dir)
-  abort "No such directory: #{sirena_dir}" unless Dir.exist?(sirena_dir)
+  raise "No such directory: #{sirena_dir}" unless Dir.exist?(sirena_dir)
 
   fixture_dir = File.expand_path("spec/fixtures/consumers/sirena", __dir__)
   # Blank is "not given", not "here" -- see SirenaProvenance.out_dir.
@@ -103,7 +109,7 @@ task "fixtures:sirena" do
     SirenaProvenance.assert!(sirena_dir: sirena_dir, fixture_dir: fixture_dir,
                              expected: ENV.fetch("SIRENA_SHA", nil))
   rescue SirenaProvenance::Mismatch => e
-    abort e.message
+    raise e.message
   end
 
   # sirena is a separate gem, so the capture runs in sirena's own bundle.

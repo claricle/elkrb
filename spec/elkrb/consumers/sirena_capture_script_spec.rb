@@ -99,6 +99,32 @@ RSpec.describe "spec/fixtures/consumers/sirena/capture.rb" do
     end
   end
 
+  # The task lives in the Rakefile rather than in a library file, but
+  # `Rake::Task#invoke` is an ordinary Ruby call, so the same rule holds:
+  # a task that `abort`s decides an exit status for a process it does not
+  # own. This runs in a subprocess because "does invoking this kill my
+  # caller" cannot be asked from inside the process doing the asking.
+  describe "the fixtures:sirena task" do
+    it "raises a StandardError rather than exiting its Ruby caller" do
+      root = File.expand_path("../../..", __dir__)
+      out, status = run_ruby(<<~RUBY)
+        require "rake"
+        Dir.chdir(#{root.inspect}) { load "Rakefile" }
+        ENV.delete("SIRENA_DIR")
+        begin
+          Rake::Task["fixtures:sirena"].invoke
+        rescue StandardError => e
+          puts "RESCUED \#{e.class}: \#{e.message}"
+        end
+        puts "CALLER SURVIVED"
+      RUBY
+
+      expect(status).to eq(0)
+      expect(out).to include("RESCUED RuntimeError: Set SIRENA_DIR")
+      expect(out).to include("CALLER SURVIVED")
+    end
+  end
+
   describe "publishing" do
     it "writes every fixture when all eight transforms succeed" do
       _out, status = run_ruby(<<~RUBY)
@@ -175,25 +201,148 @@ RSpec.describe "spec/fixtures/consumers/sirena/capture.rb" do
       expect(written).to eq(["a.json", "b.json"])
     end
 
-    it "refuses a staging path that already exists as a symlink" do
+    # Staging moved out of the output directory and into a private
+    # `Dir.mktmpdir` under it, so the four examples below are all one
+    # question: can this script touch something it did not create? Each
+    # names a file that used to be collateral damage.
+    it "leaves a file sitting at the OLD staging path alone" do
       Dir.mkdir(@out_dir)
-      victim = File.join(@tmp, "victim.txt")
-      File.write(victim, "PRECIOUS")
-      # The staging name is predictable, so a link can be waiting there.
-      # `CREAT|TRUNC` wrote the capture straight through it and then
-      # installed the link as a.json.
+      # `.a.json.<pid>.tmp` is where staging used to go. A plain file
+      # there made exclusive creation raise EEXIST, and cleanup then
+      # deleted the file, because a path that had been REGISTERED could
+      # not be told from one this run had actually created.
+      out, status = run_ruby(<<~RUBY)
+        stale = File.join(#{@out_dir.inspect}, ".a.json.\#{Process.pid}.tmp")
+        File.write(stale, "NOT THIS SCRIPT'S FILE")
+        require #{script.inspect}
+        SirenaCapture.publish([["a", { "v" => "new" }]], #{@out_dir.inspect})
+        puts "survives=\#{File.exist?(stale)}"
+        puts "contents=\#{File.read(stale)}"
+      RUBY
+
+      expect(status).to eq(0)
+      expect(out).to include("survives=true")
+      expect(out).to include("contents=NOT THIS SCRIPT'S FILE")
+    end
+
+    it "leaves a file sitting at the OLD backup path alone" do
+      Dir.mkdir(@out_dir)
+      # Backups used to be `<target>.<pid>.bak` beside the target, so a
+      # file already at that name was overwritten by the stash rename and
+      # then deleted by the success path. Both halves are asserted.
+      out, status = run_ruby(<<~RUBY)
+        File.write(File.join(#{@out_dir.inspect}, "a.json"), "OLD-a")
+        bak = File.join(#{@out_dir.inspect}, "a.json.\#{Process.pid}.bak")
+        File.write(bak, "SOMEONE ELSE'S BACKUP")
+        require #{script.inspect}
+        SirenaCapture.publish([["a", { "v" => "new" }]], #{@out_dir.inspect})
+        puts "survives=\#{File.exist?(bak)}"
+        puts "contents=\#{File.read(bak)}"
+      RUBY
+
+      expect(status).to eq(0)
+      expect(out).to include("survives=true")
+      expect(out).to include("contents=SOMEONE ELSE'S BACKUP")
+      expect(File.read(File.join(@out_dir, "a.json")))
+        .to eq(%({\n  "v": "new"\n}\n))
+    end
+
+    # Replaces the example that used to pre-create a symlink at
+    # `.a.json.<pid>.tmp`. That path is unreachable now -- staging is a
+    # directory this run creates -- so the question EXCL still answers is
+    # this one, and it is the only reachable way to make it fire.
+    it "refuses two staged rows that claim one name" do
+      Dir.mkdir(@out_dir)
+
       out, status = run_ruby(<<~RUBY)
         require #{script.inspect}
-        link = File.join(#{@out_dir.inspect}, ".a.json.\#{Process.pid}.tmp")
-        File.symlink(#{victim.inspect}, link)
-        SirenaCapture.publish([["a", { "v" => "attacker" }]],
+        SirenaCapture.publish([["a", { "v" => 1 }], ["a", { "v" => 2 }]],
                               #{@out_dir.inspect})
       RUBY
 
       expect(status).not_to eq(0)
       expect(out).to include("File exists")
-      expect(File.read(victim)).to eq("PRECIOUS")
-      expect(File.exist?(File.join(@out_dir, "a.json"))).to be(false)
+      expect(written).to eq([])
+    end
+
+    # The one example here that needs real wall-clock time. Two runs
+    # sharing an output directory used to interleave: A published a.json,
+    # B published both of its files, then A published b.json, and the
+    # directory was left holding a.json from B beside b.json from A with
+    # both runs reporting success. What is asserted is that PROPERTY --
+    # the committed pair comes from one run -- not that a lock exists.
+    it "never commits a pair of fixtures from two different runs" do
+      Dir.mkdir(@out_dir)
+      pause = File.join(@tmp, "pause.rb")
+      File.write(pause, <<~RUBY)
+        # Hold run A open after a.json lands, before b.json does.
+        File.singleton_class.prepend(Module.new do
+          define_method(:rename) do |from, to|
+            result = super(from, to)
+            # Keyed on the TARGET only. Keying on the staged file's name
+            # too would make this hook design-specific, and a hook that
+            # cannot fire against the previous staging layout would leave
+            # this example green when the serialisation is removed.
+            sleep 2 if to.end_with?("/a.json")
+            result
+          end
+        end)
+      RUBY
+
+      body = lambda do |who, preload|
+        <<~RUBY
+          #{preload}
+          require #{script.inspect}
+          SirenaCapture.publish([["a", { "who" => #{who.inspect} }],
+                                 ["b", { "who" => #{who.inspect} }]],
+                                #{@out_dir.inspect})
+        RUBY
+      end
+
+      %w[a b].each { |n| File.write(File.join(@tmp, "#{n}.rb"), "") }
+      File.write(File.join(@tmp, "run_a.rb"),
+                 body.call("A", %(load #{pause.inspect})))
+      File.write(File.join(@tmp, "run_b.rb"), body.call("B", ""))
+
+      a = spawn(RbConfig.ruby, "-I", @stub_dir, File.join(@tmp, "run_a.rb"),
+                out: File::NULL, err: File::NULL)
+      sleep 0.5
+      b = spawn(RbConfig.ruby, "-I", @stub_dir, File.join(@tmp, "run_b.rb"),
+                out: File::NULL, err: File::NULL)
+      [a, b].each { |pid| Process.waitpid(pid) }
+
+      who = %w[a b].map do |n|
+        JSON.parse(File.read(File.join(@out_dir, "#{n}.json")))["who"]
+      end
+      expect(who.uniq.length).to eq(1)
+    end
+
+    it "restores the original when interrupted after the backup is made" do
+      Dir.mkdir(@out_dir)
+      File.write(File.join(@out_dir, "a.json"), "OLD-a")
+      # The undo entry used to be recorded AFTER the stash rename, so an
+      # Interrupt landing in between left the original in the backup with
+      # nothing naming it: rollback restored nothing and a.json stayed
+      # missing. Interrupting the INSTALL rename lands in that window,
+      # because the stash rename has already run by then.
+      out, status = run_ruby(<<~RUBY)
+        require #{script.inspect}
+        File.singleton_class.prepend(Module.new do
+          define_method(:rename) do |from, to|
+            installing_a = to.end_with?("/a.json") &&
+                           File.basename(from) == "a.json"
+            raise Interrupt if installing_a
+
+            super(from, to)
+          end
+        end)
+        SirenaCapture.publish([["a", { "v" => "new" }]], #{@out_dir.inspect})
+      RUBY
+
+      expect(status).not_to eq(0)
+      expect(out).to include("Interrupt")
+      expect(File.read(File.join(@out_dir, "a.json"))).to eq("OLD-a")
+      expect(written).to eq(["a.json"])
     end
 
     it "rolls back when the publish is INTERRUPTED, not only on an errno" do
@@ -207,7 +356,9 @@ RSpec.describe "spec/fixtures/consumers/sirena/capture.rb" do
         # Interrupt is what Ctrl-C raises, and it is NOT a SystemCallError.
         File.singleton_class.prepend(Module.new do
           define_method(:rename) do |from, to|
-            raise Interrupt if to.end_with?("/b.json") && from.end_with?(".tmp")
+            installing_b = to.end_with?("/b.json") &&
+                           File.basename(from) == "b.json"
+            raise Interrupt if installing_b
 
             super(from, to)
           end
@@ -234,7 +385,8 @@ RSpec.describe "spec/fixtures/consumers/sirena/capture.rb" do
         require #{script.inspect}
         File.singleton_class.prepend(Module.new do
           define_method(:rename) do |from, to|
-            publishing_b = to.end_with?("/b.json") && from.end_with?(".tmp")
+            publishing_b = to.end_with?("/b.json") &&
+                           File.basename(from) == "b.json"
             raise Errno::EXDEV, to if publishing_b
 
             super(from, to)
@@ -262,7 +414,8 @@ RSpec.describe "spec/fixtures/consumers/sirena/capture.rb" do
         # `refuse_unpublishable!` cannot see, so only the undo log saves it.
         File.singleton_class.prepend(Module.new do
           define_method(:rename) do |from, to|
-            publishing_b = to.end_with?("/b.json") && from.end_with?(".tmp")
+            publishing_b = to.end_with?("/b.json") &&
+                           File.basename(from) == "b.json"
             raise Errno::EXDEV, to if publishing_b
 
             super(from, to)

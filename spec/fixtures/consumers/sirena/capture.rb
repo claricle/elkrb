@@ -15,6 +15,7 @@ require "date"
 require "fileutils"
 require "json"
 require "sirena"
+require "tmpdir"
 
 # Everything this script does lives in methods that RAISE. Nothing in the
 # module decides an exit status, because requiring the file used to run
@@ -68,40 +69,68 @@ module SirenaCapture
     end
   end
 
-  # Stages every file beside its target and renames them into place only
-  # after all of them have been written, so a failure part-way through
-  # publishing leaves the committed fixtures exactly as they were.
-  # `File.write` follows a symlink; `rename` replaces the link itself.
+  # Stages every file inside a private directory this run creates, and
+  # renames them into place only once all of them exist, so a failure
+  # part-way through publishing leaves the committed fixtures exactly as
+  # they were. `File.write` follows a symlink; `rename` replaces the link.
   #
-  # Each tmp path is recorded BEFORE its bytes are written, so a write
-  # that dies part-way still leaves a path for `ensure` to remove. With
-  # the recording after the write, a failure on the second graph left
-  # both temp files behind -- measured.
+  # The private staging directory is the design, not a detail. Staging
+  # used to be `.<name>.json.<pid>.tmp` NEXT TO the target, which is a
+  # predictable path in a directory other people own, and two defects came
+  # out of that. A symlink pre-created there had the capture written
+  # straight through it to the link's referent. A plain FILE pre-created
+  # there made the run refuse to write and then DELETE that file on the
+  # way out, because cleanup could not tell a path it had created from one
+  # it had merely named. Both measured. Everything under `Dir.mktmpdir`
+  # was created by this invocation, so removing all of it can never take
+  # someone else's file with it -- and the backups live there too, for
+  # exactly the same reason.
   def publish(graphs, out_dir)
     FileUtils.mkdir_p(out_dir)
-    staged = {}
-    graphs.each do |name, graph|
-      tmp, target = paths_for(out_dir, name)
-      staged[tmp] = target
-      write_json(tmp, graph)
+    with_directory_lock(out_dir) do
+      Dir.mktmpdir(".capture", out_dir) do |staging|
+        commit(stage(graphs, staging, out_dir))
+      end
     end
-    commit(staged)
-  ensure
-    staged&.each_key { |tmp| FileUtils.rm_f(tmp) }
   end
 
-  def paths_for(out_dir, name)
-    [File.join(out_dir, ".#{name}.json.#{Process.pid}.tmp"),
-     File.join(out_dir, "#{name}.json")]
+  # Two runs pointed at one output directory used to interleave -- measured
+  # in a two-process probe that committed a.json from one run beside b.json
+  # from the other, with both runs reporting success. The lock is taken on
+  # the output DIRECTORY itself: `flock` works on any descriptor, and a
+  # lock file would have to sit among the committed fixtures. Measured on
+  # macOS only. If a platform ever refuses to open a directory read-only
+  # the open RAISES here, before anything is staged, so the failure is
+  # loud and the fixtures are untouched.
+  def with_directory_lock(out_dir)
+    File.open(out_dir, File::RDONLY) do |lock|
+      lock.flock(File::LOCK_EX)
+      begin
+        yield
+      ensure
+        lock.flock(File::LOCK_UN)
+      end
+    end
   end
 
-  # EXCL, not TRUNC. The staging path is predictable, and `CREAT|TRUNC`
-  # FOLLOWS a symlink sitting there: a link pre-created at
-  # `.a.json.<pid>.tmp` had the capture written straight through it to
-  # the link's referent, and the link was then installed as a.json --
-  # measured, a file outside the directory was overwritten. `CREAT|EXCL`
-  # refuses any existing path, symlink included, before a byte is
-  # written; NOFOLLOW would be redundant beside it.
+  # Each row carries the path its target will be backed up to, so `commit`
+  # never has to invent one. A backup name derived from the target used to
+  # land beside it as `<target>.<pid>.bak`, where it overwrote a file
+  # already at that name and then deleted it -- measured. `bak.<n>` also
+  # keeps a backup from ever looking like a `<name>.json` staged file.
+  def stage(graphs, staging, out_dir)
+    graphs.each_with_index.map do |(name, graph), index|
+      tmp = File.join(staging, "#{name}.json")
+      write_json(tmp, graph)
+      [tmp, File.join(out_dir, "#{name}.json"),
+       File.join(staging, "bak.#{index}")]
+    end
+  end
+
+  # EXCL, not TRUNC. The staging directory is created fresh by this run
+  # and is mode 0700, so nothing can be lying in wait at this path; EXCL
+  # is what says so out loud, and it refuses rather than silently
+  # overwriting should two rows ever claim one name.
   def write_json(tmp, graph)
     File.open(tmp, File::WRONLY | File::CREAT | File::EXCL) do |file|
       file.write("#{JSON.pretty_generate(graph)}\n")
@@ -118,7 +147,7 @@ module SirenaCapture
     undone = []
     published = false
     refuse_unpublishable!(staged)
-    staged.each { |tmp, target| replace(tmp, target, undone) }
+    staged.each { |row| replace(*row, undone) }
     published = true
   ensure
     finish(undone, published)
@@ -128,29 +157,36 @@ module SirenaCapture
   # which that rescue did not catch: an interrupted publish left a.json
   # updated, b.json missing and both backups on disk -- measured. An
   # ensure runs for EVERY exit, so the undo does not depend on
-  # enumerating which exceptions an interruption can arrive as.
+  # enumerating which exceptions an interruption can arrive as. A
+  # successful publish needs no cleanup at all: the backups sit in the
+  # staging directory, which goes when it does.
   def finish(undone, published)
-    undone.each do |target, stashed|
-      if published
-        FileUtils.rm_f(stashed) if stashed
-      else
-        roll_back(target, stashed)
-      end
-    end
+    return if published
+
+    undone.each { |row| roll_back(*row) }
   end
 
-  # The undo entry is recorded BEFORE the rename, so the file whose
-  # rename is the one that failed gets rolled back too.
-  def replace(tmp, target, undone)
-    undone.unshift([target, stash(target)])
+  # The undo entry is recorded BEFORE anything moves, and it records
+  # whether the target was THERE, because that is the one thing rollback
+  # cannot work out afterwards. Recording it after the stash rename left a
+  # window an Interrupt fitted into: the original was already sitting in
+  # the backup with no entry naming it, so rollback ran with nothing to
+  # restore and the fixture stayed missing -- measured with a TracePoint.
+  def replace(tmp, target, stashed, undone)
+    existed = present?(target)
+    undone.unshift([target, stashed, existed])
+    File.rename(target, stashed) if existed
     File.rename(tmp, target)
     puts "wrote #{target}"
   end
 
-  # A rename may replace a regular file, a symlink or nothing at all.
-  # Anything else is refused while the directory is still untouched.
+  # A rename may replace a regular file or nothing at all, and a symlink
+  # to a regular file counts as a regular file here because `File.file?`
+  # follows it -- the rename then replaces the LINK, not its referent. A
+  # link to a directory reads as neither, so it is refused along with a
+  # real directory, while the output directory is still untouched.
   def refuse_unpublishable!(staged)
-    blocked = staged.each_value.reject do |target|
+    blocked = staged.map { |row| row[1] }.reject do |target|
       !File.exist?(target) || File.file?(target)
     end
     return if blocked.empty?
@@ -167,17 +203,20 @@ module SirenaCapture
     File.exist?(path) || File.symlink?(path)
   end
 
-  def stash(target)
-    return nil unless present?(target)
+  # Asks the filesystem which side of the stash rename this row stopped
+  # on rather than assuming the rename ran. An ABSENT backup for a target
+  # that existed means the original never moved and is still sitting at
+  # the target, so removing the target there would destroy the very file
+  # this exists to restore.
+  def roll_back(target, stashed, existed)
+    unless existed
+      FileUtils.rm_f(target)
+      return
+    end
+    return unless present?(stashed)
 
-    stashed = "#{target}.#{Process.pid}.bak"
-    File.rename(target, stashed)
-    stashed
-  end
-
-  def roll_back(target, stashed)
-    FileUtils.rm_f(target) if present?(target)
-    File.rename(stashed, target) if stashed
+    FileUtils.rm_f(target)
+    File.rename(stashed, target)
   end
 end
 
