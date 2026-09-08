@@ -786,44 +786,67 @@ module GoldenComparator
   # point would be measured against whatever rectangle elkrb chose to
   # name, which is no check at all.
   def check_edge_ends(edge, actual_edge, rects, edge_path)
+    anchors = edge_anchors(edge, actual_edge)
+    ids = anchors.map do |_name, anchor|
+      anchored_candidates(actual_edge, rects, anchor.golden)
+    end
+    shape_orientation_diffs(anchors, ids, edge_path) +
+      anchors.zip(ids).flat_map do |(name, anchor), candidates|
+        point_near_any_reference(anchor.point, rects.actual,
+                                 anchor.shape ? [anchor.shape] : candidates,
+                                 "#{edge_path}/#{name}")
+      end
+  end
+
+  def edge_anchors(edge, actual_edge)
     actual_sections = actual_edge["sections"]
     golden_sections = edge["sections"] || []
-    EDGE_ENDS.flat_map do |name, pick, point_key, shape_key|
+    EDGE_ENDS.map do |name, pick, point_key, shape_key|
       section = actual_sections.public_send(pick)
-      anchor = Anchor.new(section[point_key], section[shape_key],
-                          golden_sections.public_send(pick)&.fetch(point_key,
-                                                                   nil))
-      check_section_border(actual_edge, rects, "#{edge_path}/#{name}", anchor)
+      golden = golden_sections.public_send(pick)&.fetch(point_key, nil)
+      [name, Anchor.new(section[point_key], section[shape_key], golden)]
     end
   end
 
-  # An annotation names the rectangle the point must clip to, and the
-  # ACTUAL result used to be trusted with that unchallenged. That is a
-  # way back into the collapsed-section hole: adding `outgoingShape: "a"`
-  # to force_tri's collapsed section made the end point measure against
-  # the SOURCE and pass -- measured. `diff_section_shapes` cannot catch
-  # it, because it only rejects a shape naming a NON-endpoint and the
-  # source IS one, and because an unannotated golden lets any annotation
-  # appear.
+  # An annotation names the rectangle the point is then measured against,
+  # and the ACTUAL result used to be trusted with that unchallenged. That
+  # is a way back into the collapsed-section hole: adding
+  # `outgoingShape: "a"` to force_tri's collapsed section made the end
+  # point measure against the SOURCE and pass -- measured.
+  # `diff_section_shapes` cannot catch it, because it only rejects a shape
+  # naming a NON-endpoint and the source IS one, and because an
+  # unannotated golden lets any annotation appear.
   #
-  # So the shape must name an endpoint the GOLDEN's own point is on. When
-  # the golden's point is on neither, `anchored_candidates` hands back the
-  # full list and this admits exactly what it admitted before.
-  def check_section_border(actual_edge, rects, point_path, anchor)
-    ids = anchored_candidates(actual_edge, rects, anchor.golden)
-    return [disowned_shape(anchor, ids, point_path)] if strays?(anchor, ids)
+  # Checked as a PAIR in either orientation, never end by end.
+  # `diff_section_shapes` documents ELK reversing a section's own shapes
+  # for cycle breaking without rewiring the edge, and an end-by-end
+  # version of this rejected exactly that: swapping the start/end points
+  # together with their shapes produced two differences -- measured. One
+  # rule stated twice, disagreeing, which is the defect this file warns
+  # about.
+  #
+  # A reversal needs BOTH ends annotated. Allowing it with one end unnamed
+  # let the collapsed section back in by naming only its outgoing shape,
+  # since the unnamed end then matched anything.
+  def shape_orientation_diffs(anchors, ids, edge_path)
+    shapes = anchors.map { |_name, anchor| anchor.shape }
+    return [] if shapes_anchored?(shapes, ids)
 
-    point_near_any_reference(anchor.point, rects.actual,
-                             anchor.shape ? [anchor.shape] : ids, point_path)
+    ["#{edge_path}: section shapes #{shapes.inspect} are not where the " \
+     "golden anchors this edge (#{ids.inspect})"]
   end
 
-  def strays?(anchor, ids)
-    !anchor.shape.nil? && !ids.include?(anchor.shape)
+  def shapes_anchored?(shapes, ids)
+    return true if shapes.compact.empty?
+    return true if shapes_fit?(shapes, ids)
+
+    shapes.none?(&:nil?) && shapes_fit?(shapes, ids.reverse)
   end
 
-  def disowned_shape(anchor, ids, path)
-    "#{path}: shape #{anchor.shape.inspect} is not where the golden " \
-      "anchors this end (#{ids.inspect})"
+  def shapes_fit?(shapes, ids)
+    shapes.zip(ids).all? do |shape, candidates|
+      shape.nil? || candidates.include?(shape)
+    end
   end
 
   # Narrows the either-endpoint list to the endpoints the GOLDEN's own
