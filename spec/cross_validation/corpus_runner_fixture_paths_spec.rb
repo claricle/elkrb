@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "support/filename_probe"
 require "fileutils"
 require "tmpdir"
 require_relative "corpus_runner"
@@ -20,6 +21,8 @@ require_relative "corpus_runner"
 # directions at once: a sibling's file would show up in it, and a missing file
 # of the directory's own would drop out of it.
 RSpec.describe CorpusRunner, ".fixture_paths" do
+  include FilenameProbe
+
   # Each scenario gets its own parent. Sharing one would let the patterns match
   # each other's directories and manufacture findings that are not real.
   def in_isolated_parent(&)
@@ -62,8 +65,11 @@ RSpec.describe CorpusRunner, ".fixture_paths" do
 
   # `*` matches its own directory, so the old form listed there AND reached out.
   it "does not reach a sibling when the name holds a star" do
+    name = "fix*"
+    skip_unless_creatable(name)
+
     in_isolated_parent do |parent|
-      starred = fixture_dir(parent, "fix*", %w[a.json b.json])
+      starred = fixture_dir(parent, name, %w[a.json b.json])
       fixture_dir(parent, "fixtures", %w[foreign.json])
 
       expect(fixture_paths(starred, "*.json"))
@@ -72,8 +78,11 @@ RSpec.describe CorpusRunner, ".fixture_paths" do
   end
 
   it "does not reach a sibling when the name holds a question mark" do
+    name = "fix?ures"
+    skip_unless_creatable(name)
+
     in_isolated_parent do |parent|
-      marked = fixture_dir(parent, "fix?ures", %w[a.json b.json])
+      marked = fixture_dir(parent, name, %w[a.json b.json])
       fixture_dir(parent, "fixtures", %w[foreign.json])
 
       expect(fixture_paths(marked, "*.json"))
