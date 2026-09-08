@@ -773,7 +773,51 @@ RSpec.describe GoldenComparator, "rejecting a corrupted actual result" do
     section["outgoingShape"] = collapsed["edges"][0]["sources"][0]
 
     expect(described_class.diff_structural(expected, collapsed).join)
-      .to include("is not where the golden anchors this end")
+      .to include("are not where the golden anchors this edge")
+  end
+
+  # The shapes are checked as a PAIR in either orientation, because
+  # `diff_section_shapes` documents ELK reversing a section's own shapes
+  # for cycle breaking without rewiring the edge. Checking each end
+  # against the golden's own end rejected that legitimate reversal.
+  it "accepts a section reversed end for end, points and shapes together " \
+     "(structural tier)" do
+    expected = {
+      "id" => "root",
+      "children" => [0, 30].zip(%w[a b]).map do |x, id|
+        { "id" => id, "x" => x, "y" => 0, "width" => 10, "height" => 10 }
+      end,
+      "edges" => [{ "id" => "e", "sources" => ["a"], "targets" => ["b"],
+                    "sections" => [{ "startPoint" => { "x" => 10, "y" => 5 },
+                                     "endPoint" => { "x" => 30, "y" => 5 },
+                                     "incomingShape" => "a",
+                                     "outgoingShape" => "b" }] }],
+    }
+    reversed = Marshal.load(Marshal.dump(expected))
+    section = reversed["edges"][0]["sections"][0]
+    section["startPoint"], section["endPoint"] =
+      section["endPoint"], section["startPoint"]
+    section["incomingShape"], section["outgoingShape"] =
+      section["outgoingShape"], section["incomingShape"]
+
+    expect(described_class.diff_structural(expected, reversed)).to be_empty
+  end
+
+  # The counterweight: a reversal needs BOTH ends named. Allowing it with
+  # one end unnamed let the collapse back in, because the unnamed end
+  # matched whatever the other orientation wanted.
+  it "rejects a collapsed section that annotates BOTH ends to the source " \
+     "(structural tier)" do
+    expected = golden_expected("force_tri")
+    collapsed = Marshal.load(Marshal.dump(expected))
+    edge = collapsed["edges"][0]
+    section = edge["sections"][0]
+    section["endPoint"] = section["startPoint"].dup
+    section["incomingShape"] = edge["sources"][0]
+    section["outgoingShape"] = edge["sources"][0]
+
+    expect(described_class.diff_structural(expected, collapsed).join)
+      .to include("are not where the golden anchors this edge")
   end
 
   # The counterweight: an annotation that agrees with the golden is still
