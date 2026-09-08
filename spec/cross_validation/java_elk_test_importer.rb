@@ -33,15 +33,46 @@ class JavaElkTestImporter
   # Percent-encoding EXPANDS: "界" is 3 bytes and encodes to 9, so a
   # 242-byte source name that used to dump as a 251-byte "<id>.json" reached
   # 725 bytes and the write raised Errno::ENAMETOOLONG -- after the corpus
-  # runner had already claimed the output directory. 241 is what is left of
-  # the 255-byte per-component limit once "java_elk_" (9) and ".json" (5)
-  # are taken out.
-  MAX_ID_BYTES = 241
+  # runner had already claimed the output directory.
+  #
+  # The budget is NOT 255 minus the dump name's own decoration. The name that
+  # has to fit is the TEMPORARY one: CorpusRunner#write_file writes
+  # ".#{basename}.#{Process.pid}.tmp" and renames it over the target, so the
+  # longest name the filesystem ever sees is 6 bytes plus the pid's width
+  # longer than the dump's -- the leading ".", the "." before the pid, and
+  # ".tmp". Measured: ".x.json.12345.tmp".bytesize - "x.json".bytesize is 11.
+  # Budgeting for the dump alone let a 247-byte
+  # "java_elk_<id>.json" produce a 258-byte temp name and raise
+  # Errno::ENAMETOOLONG anyway -- measured, and it is what these constants
+  # exist to prevent.
+  NAME_MAX_BYTES = 255
+  ID_PREFIX = "java_elk_"
+  DUMP_SUFFIX = ".json"
+  # A fixed reservation, never Process.pid.to_s.bytesize. The ids are written
+  # into imported_tests.json and read back by later runs, so a budget that
+  # moved with the pid would give the same source name two different ids on
+  # two different days. Ten digits covers any 32-bit pid, well past Linux's
+  # highest configurable pid_max of 4194304.
+  MAX_PID_DIGITS = 10
+  # ".", then the dump name, then ".", the pid, and ".tmp".
+  TEMP_NAME_OVERHEAD = 1 + 1 + MAX_PID_DIGITS + ".tmp".bytesize
+  MAX_ID_BYTES = NAME_MAX_BYTES - ID_PREFIX.bytesize -
+    DUMP_SUFFIX.bytesize - TEMP_NAME_OVERHEAD
   # Long enough that two different names colliding is not a real risk, short
   # enough to leave the readable prefix most of the budget. A collision would
   # not lose data in any case: CorpusRunner#refuse_duplicate_ids! raises on
   # two equal ids before anything is written.
   DIGEST_CHARS = 16
+  # The separator between the readable prefix and the digest, and it must be
+  # a byte the encoder can NEVER emit, or a shortened id collides with an
+  # ordinary one. Measured: URI.encode_uri_component passes through exactly
+  # `*-.0-9A-Z_a-z` and otherwise emits "%" plus two hex digits. `-` is in
+  # that set, so with a `-` separator the ordinary source name
+  # "界" * 24 + "-45445a6f319910a2" encoded to the SAME id as "界" * 79
+  # shortened -- no SHA collision needed, and the corpus runner then refused
+  # the whole corpus as duplicate. "+" is escaped to "%2B", so a literal "+"
+  # in a source name can never reach the id as a bare "+".
+  DIGEST_SEPARATOR = "+"
 
   SAMPLE_ALGORITHMS = %w[layered force stress box random fixed mrtree radial
                          rectpacking disco sporeOverlap sporeCompaction].freeze
@@ -123,14 +154,14 @@ class JavaElkTestImporter
 
   # The encoded name when it fits, and a readable prefix plus a digest of the
   # WHOLE name when it does not -- so two long names sharing a prefix stay
-  # distinct. The `-1` is the separator between the two.
+  # distinct.
   def bounded_id(test_name)
     encoded = URI.encode_uri_component(test_name)
     return encoded if encoded.bytesize <= MAX_ID_BYTES
 
     digest = Digest::SHA256.hexdigest(test_name)[0, DIGEST_CHARS]
-    prefix = encoded_prefix(test_name, MAX_ID_BYTES - digest.bytesize - 1)
-    "#{prefix}-#{digest}"
+    budget = MAX_ID_BYTES - digest.bytesize - DIGEST_SEPARATOR.bytesize
+    "#{encoded_prefix(test_name, budget)}#{DIGEST_SEPARATOR}#{digest}"
   end
 
   # Encodes one CHARACTER at a time and stops before the budget is exceeded,

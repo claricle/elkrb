@@ -6,6 +6,10 @@ require "json"
 require "stringio"
 require "tmpdir"
 require_relative "java_elk_test_importer"
+# The dump writer itself, not a re-derivation of what it does. The bound
+# below is a claim about a name the FILESYSTEM accepts, and only the real
+# writer can settle that.
+require_relative "corpus_runner"
 
 RSpec.describe JavaElkTestImporter do
   def committed_fixture
@@ -108,9 +112,12 @@ RSpec.describe JavaElkTestImporter do
   end
 
   # The id was the file's BASENAME, so every model called `same.elkt` in a
-  # different directory produced the same id -- and the corpus runner then
-  # wrote them all to one dump file. The relative path is what makes them
-  # distinct.
+  # different directory produced the same id. The corpus runner did NOT then
+  # overwrite one dump with the other: origin/v2 already calls
+  # `refuse_duplicate_ids!` before anything is written, so it raised
+  # ArgumentError and REFUSED THE WHOLE CORPUS -- measured against the base
+  # file. Every Java ELK model was unusable while two of them shared a
+  # basename. The relative path is what makes them distinct.
   it "keeps equal basenames in different directories distinct" do
     Dir.mktmpdir do |tmp|
       stub_const(
@@ -189,13 +196,47 @@ RSpec.describe JavaElkTestImporter do
       id = written_ids(tmp).first
 
       expect(error).to be_nil
-      expect("#{id}.json".bytesize).to be <= 255
-      # Readable head, so the dump is still identifiable, and every escape in
-      # it is whole -- truncating the ENCODED text instead of the source would
-      # leave a half escape like "%E7%95".
-      expect(id).to start_with("java_elk_%E7%95%8C")
-      expect(id.scan(/%.{0,2}/)).to all(match(/\A%[0-9A-F]{2}\z/))
+      # The REAL writer, not a byte count standing in for it. `write_file`
+      # writes ".#{basename}.#{pid}.tmp" and renames it, so the longest name
+      # the filesystem sees is the temporary one -- and a budget that counted
+      # only "<id>.json" produced a 247-byte dump name whose 258-byte temp
+      # name raised Errno::ENAMETOOLONG with this example still green.
+      dump = File.join(tmp, "#{id}.json")
+      expect { CorpusRunner.send(:write_file, dump, "{}") }.not_to raise_error
+      expect(File).to exist(dump)
+      # Readable head, so the dump is still identifiable, and every CHARACTER
+      # in it is whole. Asserted by DECODING rather than by inspecting the
+      # escapes: "%E7%95" is two well-formed escapes and half a character, so
+      # a per-escape shape check calls it whole -- measured, and dropping the
+      # trailing "%8C" passed that check, the prefix check, and the writer.
+      # Decoding cannot be fooled that way, and comparing against the source
+      # says the head is a real prefix of a real name rather than any old
+      # valid text.
+      prefix = URI.decode_uri_component(id.delete_prefix("java_elk_")
+                                          .rpartition("+").first)
+      expect(prefix.encoding).to eq(Encoding::UTF_8)
+      expect(prefix).to be_valid_encoding
+      expect(name).to start_with(prefix)
+      expect(prefix).not_to be_empty
     end
+  end
+
+  # A shortened id must not be reachable by an ORDINARY source name, or the
+  # runner refuses the whole corpus as duplicate. The separator is the whole
+  # of it: `URI.encode_uri_component` passes `-` through unescaped, so with a
+  # `-` between prefix and digest the plain file "界"*23 + "-" + <digest>.elkt
+  # -- a legal name a person could commit -- encoded to exactly the id the
+  # long name shortens to. No SHA collision required. The adversary here is
+  # DERIVED by decoding the real id rather than written out, so it stays the
+  # exact collision whatever the digest of the day is.
+  it "keeps a shortened id out of reach of an ordinary source name" do
+    importer = described_class.new
+    long = "界" * 79
+    shortened = importer.send(:bounded_id, long)
+    adversary = URI.decode_uri_component(shortened)
+
+    expect(adversary).not_to eq(long)
+    expect(importer.send(:bounded_id, adversary)).not_to eq(shortened)
   end
 
   # The bound must not collapse two names into one dump file. Both of these
