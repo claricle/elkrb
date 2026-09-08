@@ -67,11 +67,24 @@ class JavaElkTestImporter
   # a byte the encoder can NEVER emit, or a shortened id collides with an
   # ordinary one. Measured: URI.encode_uri_component passes through exactly
   # `*-.0-9A-Z_a-z` and otherwise emits "%" plus two hex digits. `-` is in
-  # that set, so with a `-` separator the ordinary source name
-  # "界" * 24 + "-45445a6f319910a2" encoded to the SAME id as "界" * 79
-  # shortened -- no SHA collision needed, and the corpus runner then refused
-  # the whole corpus as duplicate. "+" is escaped to "%2B", so a literal "+"
-  # in a source name can never reach the id as a bare "+".
+  # that set, so with a `-` separator you could DECODE a shortened id and get
+  # back an ordinary source name -- a legal thing to commit -- that encoded
+  # straight to the SAME id. No SHA collision needed, and the corpus runner
+  # then refused the whole corpus as duplicate. "+" is escaped to "%2B", so a
+  # literal "+" in a source name can never reach the id as a bare "+".
+  #
+  # No example name is written down here on purpose: both the readable head
+  # and the digest move with MAX_ID_BYTES and DIGEST_CHARS above, so any
+  # quoted one rots the next time either changes -- an earlier draft of this
+  # comment named a 24-character head that a 225-byte budget makes 23. The
+  # spec derives the collision instead, in "keeps a shortened id out of reach
+  # of an ordinary source name", and this reproduces it:
+  #
+  #   ruby -r ./spec/cross_validation/java_elk_test_importer -e \
+  #     'i = JavaElkTestImporter.new
+  #      long = "界" * 79
+  #      short = URI.decode_uri_component(i.send(:bounded_id, long))
+  #      p i.send(:bounded_id, short) == i.send(:bounded_id, long)'
   DIGEST_SEPARATOR = "+"
 
   SAMPLE_ALGORITHMS = %w[layered force stress box random fixed mrtree radial
