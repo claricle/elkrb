@@ -25,7 +25,13 @@ RSpec.describe "Rakefile" do
   #   h[:exit] = 1           -> ["exit"]    a symbol key, not a call
   #   exit_code = 1          -> []          not matched, the token differs
   #   # abort in a comment   -> []          Ripper drops comments
-  #   puts "abort"           -> []          Ripper drops string bodies
+  #   puts "abort"           -> []          a string body is :@tstring_content
+  #
+  # Only the comment row is Ripper dropping anything. Ripper KEEPS a string
+  # body -- Ripper.sexp(%q{puts "abort"}) still carries
+  # [:@tstring_content, "abort", [1, 6]] -- and it is the :@ident match below
+  # that passes over it. Say why correctly, because the next person to widen
+  # the match is the one who needs to know a string is still in the tree.
   #
   # So the last three rows are what this buys over a grep; the middle two are
   # accepted noise. Narrowing to call-node shapes would risk missing a real

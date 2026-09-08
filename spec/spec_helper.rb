@@ -1,5 +1,10 @@
 # frozen_string_literal: true
 
+# English gives $ERROR_INFO its readable name; the at_exit guard at the bottom
+# of this file reads it.
+require "English"
+require "fileutils"
+
 # Must start before any application code loads, or Coverage observes nothing.
 require "simplecov"
 SimpleCov.start do
@@ -89,5 +94,62 @@ RSpec.configure do |config|
     end
 
     SimpleCov.minimum_coverage(line: 85, branch: 68)
+
+    # The receipt the Rakefile's :coverage_enforced task reads after `spec`.
+    # Written HERE because this is the only line in the process that proves
+    # the floors are armed, and read from a task OUTSIDE this file because
+    # every check inside it presupposes the file was loaded -- which
+    # `rspec --help` and `rspec --version` skip entirely. The Rakefile owns
+    # the path; nothing here decides it.
+    receipt = ENV.fetch("COVERAGE_ENFORCE_RECEIPT", nil)
+    next unless receipt
+
+    FileUtils.mkdir_p(File.dirname(receipt))
+    File.write(receipt, Process.pid.to_s)
   end
+end
+
+# The SECOND layer, and the one that cannot be skipped. The hook above is a
+# before(:suite) hook, and rspec-core skips EVERY suite hook on a dry run --
+# configuration.rb#with_suite_hooks opens `return yield if dry_run?` (measured
+# on rspec-core 3.13.6). So before this existed, with the SAME single spec file:
+#
+#   COVERAGE_ENFORCE=1 rspec spec/rakefile_spec.rb
+#     -> exit 1, refused
+#   COVERAGE_ENFORCE=1 SPEC_OPTS=--dry-run rspec spec/rakefile_spec.rb
+#     -> exit 0, GREEN
+#
+# One environment variable turned the gate off and reported success, which is
+# the exact opt-out the arming exists to prevent.
+#
+# This is deliberately NOT another list of invocation modes to reject. It
+# asserts the property itself: if this was a gate run, a floor is in force at
+# exit. Any route that skips the hook -- --dry-run today, anything else later
+# -- fails here, because the check does not depend on how RSpec was invoked.
+#
+# It must be registered AFTER SimpleCov.start. at_exit handlers run LIFO, so
+# this runs BEFORE SimpleCov's own handler reads the minimum and reports.
+#
+# It RAISES rather than calling exit. Ruby turns an exception raised in an
+# at_exit handler into exit status 1 and still runs the remaining handlers, so
+# SimpleCov's report is not suppressed. Measured, both facts.
+#
+# DO NOT DELETE. Deleting this restores the bypass above, with every run green.
+# spec/coverage_enforcement_spec.rb pins both arms of it.
+at_exit do
+  # Only judge a run that is otherwise on course to succeed. A run already
+  # failing -- including one the hook above refused -- has its own message, and
+  # a second error stacked on top would obscure it.
+  error = $ERROR_INFO
+  next unless error.nil? || (error.is_a?(SystemExit) && error.success?)
+  next unless ENV["COVERAGE_ENFORCE"] == "1"
+
+  # The floors themselves, not a flag recording that the hook ran.
+  # SimpleCov.minimum_coverage reads {} until something sets it, and it is what
+  # SimpleCov actually enforces at exit.
+  next unless SimpleCov.minimum_coverage.empty?
+
+  raise "COVERAGE_ENFORCE=1 but no coverage floor was ever armed, so this " \
+        "run enforced nothing. before(:suite) hooks do not run under " \
+        "--dry-run. Re-run `rake` without --dry-run."
 end

@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require "bundler/gem_tasks"
+require "fileutils"
+require "tmpdir"
 require "rspec/core/rake_task"
 require "rubocop/rake_task"
 
@@ -29,9 +31,54 @@ end
 # should invoke, so it stays out of `rake -T`.
 task :coverage_enforce do
   ENV["COVERAGE_ENFORCE"] = "1"
+  # A FRESH directory per invocation, and the receipt path handed to the spec
+  # subprocess through the environment. Not one fixed path: two `rake` runs
+  # overlapping in the same checkout then shared a single receipt, and the
+  # unarmed one accepted -- and deleted -- the armed one's proof. Measured, an
+  # unarmed `SPEC_OPTS=--help` run passed on a receipt it had not produced.
+  #
+  # A fresh directory also means a receipt left behind by an EARLIER run is
+  # structurally unable to satisfy this one, rather than merely being deleted
+  # first, and it keeps the file out of the repository altogether.
+  #
+  # Nothing can pre-seed the path: this assignment overwrites whatever the
+  # caller set.
+  ENV["COVERAGE_ENFORCE_RECEIPT"] =
+    File.join(Dir.mktmpdir("elkrb-coverage"), "receipt")
 end
 
-task default: %i[coverage_enforce spec rubocop]
+# The half of the gate that lives OUTSIDE the thing being gated, and it is the
+# only half that can be trusted on its own. Every guard inside spec_helper.rb
+# assumes spec_helper.rb was loaded, and `.rspec` loads it with
+# `--require spec_helper`, which RSpec honours only on a run that gets that
+# far. Measured on rspec-core 3.13.6, through this very task:
+#
+#   SPEC_OPTS=--help    rspec prints help and exits 0
+#   SPEC_OPTS=--version rspec prints versions and exits 0
+#
+# Neither loads spec_helper at all, so before(:suite) never runs, the at_exit
+# backstop is never registered, and `rake` reported success having enforced
+# nothing. That is a family of routes, not two of them, so this does not list
+# them: it asserts the property. The spec step has to come back with proof it
+# armed the floors, and no proof is a failure whatever the reason.
+#
+# No `desc` for the same reason as :coverage_enforce.
+task :coverage_enforced do
+  receipt = ENV.fetch("COVERAGE_ENFORCE_RECEIPT", nil)
+  unless receipt && File.exist?(receipt)
+    raise "the spec step finished without arming the coverage floors, so " \
+          "this run enforced nothing. RSpec exits early for --help and " \
+          "--version without loading spec/spec_helper.rb. Re-run `rake` " \
+          "with no SPEC_OPTS."
+  end
+
+  # The whole directory, so a run that gets this far leaves nothing behind.
+  # A run whose spec step FAILS never reaches here and leaves one empty
+  # directory under the system temp root, which the OS reclaims.
+  FileUtils.remove_entry(File.dirname(receipt))
+end
+
+task default: %i[coverage_enforce spec coverage_enforced rubocop]
 
 # Not in `default`: CI runs `bundle exec rake` across a Ruby x OS matrix, and
 # this task clones the ruby-advisory-db. A network dependency multiplied across
