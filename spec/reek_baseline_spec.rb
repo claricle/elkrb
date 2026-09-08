@@ -52,11 +52,28 @@ RSpec.describe ".reek.yml" do
     named.map(&:full_name).reject { |name| name.nil? || name.empty? }
   end
 
-  def method_level_exclusions
+  # EVERY exclusion, class-level ones included. Filtering to entries containing
+  # "#" dropped them, and reek applies the same substring match to a bare class
+  # name: `.reek.yml`'s `Elkrb::Graph::Node` exemption silently covered a new
+  # `Elkrb::Graph::NodeProbe`. Measured -- NodeProbe reported no smells while an
+  # identically-shaped FreshProbe reported InstanceVariableAssumption.
+  def baseline_exclusions
     config = YAML.load_file(File.expand_path("../.reek.yml", __dir__))
     detectors = config.fetch("detectors").values
     excluded = detectors.flat_map { |detector| detector["exclude"] || [] }
-    excluded.grep(String).uniq.select { |name| name.include?("#") }
+    excluded.grep(String).uniq
+  end
+
+  # A containment is INTENDED when the excluded name is followed by a real
+  # boundary: `Foo` covering `Foo#bar` and `Foo::Inner#bar` is the whole point
+  # of a class-level entry. It is ACCIDENTAL for anything else -- `Node`
+  # reaching `NodeConstraints`, `#serialize` reaching `#serialize_node` -- and
+  # accidental is what this file exists to hold still.
+  def accidentally_covered?(name, excluded)
+    return false if name == excluded
+    return false unless name.include?(excluded)
+
+    !name.start_with?("#{excluded}#", "#{excluded}::")
   end
 
   # Recorded 2026-09-08. Each entry is a real declaration that is exempt from
@@ -70,12 +87,34 @@ RSpec.describe ".reek.yml" do
   # is a documented way to make a spec quietly stop asserting what it says.
   let(:recorded_swallowed) do
     [
+      "Elkrb::Graph::EdgeSection",
+      "Elkrb::Graph::EdgeSection#add_bend_point",
+      "Elkrb::Graph::EdgeSection#initialize",
+      "Elkrb::Graph::EdgeSection#length",
+      "Elkrb::Graph::NodeConstraints",
+      "Elkrb::Graph::NodeConstraints#__elkrb_merge_legacy_aliases",
+      "Elkrb::Graph::NodeConstraints#align_direction=",
+      "Elkrb::Graph::NodeConstraints#cast_legacy",
+      "Elkrb::GraphvizWrapper",
+      "Elkrb::GraphvizWrapper#available?",
+      "Elkrb::GraphvizWrapper#build_command",
+      "Elkrb::GraphvizWrapper#execute_command",
+      "Elkrb::GraphvizWrapper#find_graphviz",
+      "Elkrb::GraphvizWrapper#initialize",
+      "Elkrb::GraphvizWrapper#installation_message",
+      "Elkrb::GraphvizWrapper#render",
+      "Elkrb::GraphvizWrapper#supported_engines",
+      "Elkrb::GraphvizWrapper#supported_formats",
+      "Elkrb::GraphvizWrapper#validate_engine!",
+      "Elkrb::GraphvizWrapper#validate_file_exists!",
+      "Elkrb::GraphvizWrapper#validate_format!",
+      "Elkrb::GraphvizWrapper#version",
+      "Elkrb::GraphvizWrapper::GraphvizNotFoundError",
       "Elkrb::Layout::Algorithms::BaseAlgorithm#layout_flat",
       "Elkrb::Layout::Algorithms::Force#initialize_positions",
       "Elkrb::Layout::Algorithms::Stress#initialize_positions",
       "Elkrb::Layout::Constraints::AlignmentConstraint#validate_group_alignment",
-      "Elkrb::Layout::Constraints::RelativePositionConstraint" \
-      "#apply_relative_position",
+      "Elkrb::Layout::Constraints::RelativePositionConstraint#apply_relative_position",
       "Elkrb::Layout::EdgeRouter#route_edge_with_style",
       "Elkrb::Layout::EdgeRouter#route_edges",
       "Elkrb::Layout::EdgeRouter#route_self_loop_with_ports",
@@ -84,6 +123,20 @@ RSpec.describe ".reek.yml" do
       "Elkrb::Layout::LabelPlacer#place_edge_labels",
       "Elkrb::Layout::LabelPlacer#place_port_label_by_side",
       "Elkrb::Layout::LabelPlacer#place_port_labels",
+      "Elkrb::Options::KVectorChain",
+      "Elkrb::Options::KVectorChain#==",
+      "Elkrb::Options::KVectorChain#[]",
+      "Elkrb::Options::KVectorChain#add",
+      "Elkrb::Options::KVectorChain#each",
+      "Elkrb::Options::KVectorChain#empty?",
+      "Elkrb::Options::KVectorChain#initialize",
+      "Elkrb::Options::KVectorChain#self.coordinate_pairs?",
+      "Elkrb::Options::KVectorChain#self.from_array",
+      "Elkrb::Options::KVectorChain#self.from_string",
+      "Elkrb::Options::KVectorChain#self.parse",
+      "Elkrb::Options::KVectorChain#size",
+      "Elkrb::Options::KVectorChain#to_a",
+      "Elkrb::Options::KVectorChain#to_s",
       "Elkrb::Parsers::Elkt::Lexer#advance_with",
       "Elkrb::Parsers::Elkt::Lexer#take_string_char",
       "Elkrb::Parsers::Elkt::Parser#parse_edge_body",
@@ -100,20 +153,20 @@ RSpec.describe ".reek.yml" do
     ]
   end
 
-  it "exempts no declaration it does not name, beyond the recorded set" do
-    exclusions = method_level_exclusions
-    swallowed = reek_context_names.select do |name|
-      exclusions.any? { |excluded| name != excluded && name.include?(excluded) }
+  it "covers no declaration accidentally, beyond the recorded set" do
+    exclusions = baseline_exclusions
+    covered = reek_context_names.select do |name|
+      exclusions.any? { |excluded| accidentally_covered?(name, excluded) }
     end
 
-    expect(swallowed.uniq.sort).to eq(recorded_swallowed.sort)
+    expect(covered.uniq.sort).to eq(recorded_swallowed.sort)
   end
 
   # The positive control. If the enumeration or the YAML read silently returned
   # nothing, the comparison above would still hold whenever the recorded set
   # happened to be empty, and would go on holding as declarations were added.
   it "reads a real baseline and a real lib tree" do
-    expect(method_level_exclusions.size).to be > 100
+    expect(baseline_exclusions.size).to be > 100
     expect(reek_context_names.size).to be > 500
   end
 
