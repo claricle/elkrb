@@ -23,6 +23,21 @@ SimpleCov.start do
   # DO NOT DELETE. Every other guard in this file checks that a floor was
   # ARMED; this is what keeps an armed floor from being ignored.
   parallel_tests false
+  # And result MERGING, which `parallel_tests false` does NOT turn off. With
+  # merging on, SimpleCov folds a cached result from an earlier process into
+  # this run's report, so a run that covers almost nothing inherits a passing
+  # number from one that covered everything. Measured on the tiny project
+  # Codex's probe builds, with the floors this file arms:
+  #
+  #   fresh low-coverage run                  8% line, exit 2   correct
+  #   seed a covered run under TEST_ENV_NUMBER   100%, exit 0
+  #   the SAME low-coverage run again          100%, exit 0   MERGED, WRONG
+  #   the same again with `merging false`       8%, exit 2   correct
+  #
+  # Nothing here runs across processes, so a merged result can only ever be a
+  # stale one. DO NOT DELETE: without this the floor is armed, obeyed, and
+  # measuring a number this run did not earn.
+  merging false
   # Without this, a file no spec ever loads is ABSENT from the report rather
   # than reported at 0% -- which is the case most worth surfacing.
   track_files "lib/**/*.rb"

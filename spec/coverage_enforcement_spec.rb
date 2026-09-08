@@ -88,8 +88,90 @@ RSpec.describe "coverage floor arming" do
       $CHILD_STATUS.exitstatus
     end
 
+    # A two-line library, a spec that can be made to exercise it or not, and
+    # the SHIPPED spec_helper.rb verbatim.
+    def build_probe_project(root)
+      FileUtils.mkdir_p(["#{root}/lib", "#{root}/spec"])
+      FileUtils.cp(File.expand_path("spec_helper.rb", __dir__),
+                   "#{root}/spec/spec_helper.rb")
+      File.write("#{root}/lib/elkrb.rb", <<~LIB)
+        class CoverageProbe
+          def self.exercise(flag)
+            #{Array.new(20) { |n| "value = #{n}" }.join("\n            ")}
+            flag ? value : 0
+          end
+        end
+      LIB
+      File.write("#{root}/spec/tiny_spec.rb", <<~SPEC)
+        RSpec.describe("probe") do
+          it("runs") do
+            if ENV["EXERCISE"] == "1"
+              CoverageProbe.exercise(true)
+              # BOTH arms, or the branch floor fails the seeding run and it
+              # never caches a passing result to inherit.
+              CoverageProbe.exercise(false)
+            end
+            expect(true).to eq(true)
+          end
+        end
+      SPEC
+    end
+
+    # parallel: true is what gives the seeding run a DIFFERENT SimpleCov
+    # command name, so its result merges into the next run instead of
+    # replacing it. That is the mechanism the finding turns on.
+    def probe_run(root, exercise:, parallel: false)
+      env = {
+        "COVERAGE_ENFORCE" => "1",
+        "COVERAGE_ENFORCE_RECEIPT" => "#{root}/receipt",
+        "SPEC_OPTS" => nil,
+        "EXERCISE" => exercise ? "1" : nil,
+        "TEST_ENV_NUMBER" => parallel ? "2" : nil,
+        "PARALLEL_TEST_GROUPS" => parallel ? "2" : nil,
+      }
+      IO.popen(
+        env,
+        [RbConfig.ruby, "-Ilib", "-Ispec", Gem.bin_path("rspec-core", "rspec"),
+         "--require", "spec_helper", "spec/tiny_spec.rb"],
+        err: %i[child out], chdir: root, &:read
+      )
+      $CHILD_STATUS.exitstatus
+    end
+
     it "fails a run below the floor" do
       expect(exit_status_with_floor("line: 99, branch: 99")).not_to eq(0)
+    end
+
+    # `parallel_tests false` alone was not enough. It stops SimpleCov SKIPPING
+    # enforcement but leaves result MERGING on, so a run still folds in a
+    # cached result from an earlier process and passes on a number it did not
+    # earn.
+    #
+    # This runs in a throwaway project rather than against this repository,
+    # for two reasons: it has to write a coverage/ directory and seed a result
+    # into it, which against the real tree would corrupt the report of the
+    # `rake` run executing this example; and the coverage has to be made to
+    # differ sharply between two runs, which a copy of the helper over two
+    # lines of library code can do and the real suite cannot.
+    #
+    # The helper is READ from the shipped file, so it cannot drift from it.
+    # A first draft of this example asserted a 100% floor against the real
+    # tree and passed with `merging false` deleted -- 90% fails a 100% floor
+    # whether it was merged or not. It asserted a consequence, not the
+    # property.
+    it "does not inherit a cached result from an earlier run" do
+      Dir.mktmpdir("coverage-merge") do |root|
+        build_probe_project(root)
+
+        fresh = probe_run(root, exercise: false)
+        seeded = probe_run(root, exercise: true, parallel: true)
+        cached = probe_run(root, exercise: false)
+
+        expect(fresh).to eq(2)
+        expect(seeded).to eq(0)
+        # The whole finding: this was 0 while the run covered 8%.
+        expect(cached).to eq(2)
+      end
     end
 
     # The other arm. Without it the example above would pass just as well if
