@@ -56,6 +56,49 @@ RSpec.describe "coverage floor arming" do
   # `rspec --version` print and exit 0 first, so under `rake` the whole gate
   # was absent and the build was green. The Rakefile's :coverage_enforced task
   # is the half that sits outside, and these two examples are its matrix.
+  # Everything else here checks that a floor was ARMED. This checks that an
+  # armed floor is OBEYED, which SimpleCov skips for a process it believes is
+  # one worker of a parallel run -- and it believes that whenever
+  # TEST_ENV_NUMBER is in the environment. Nothing in this repository runs in
+  # parallel, so `parallel_tests false` in the SimpleCov.start block turns the
+  # autodetection off.
+  describe "enforcement under a parallel-worker environment variable" do
+    # The REAL spec/spec_helper.rb, so this is the shipped SimpleCov config.
+    # COVERAGE_ENFORCE is cleared because `rake` sets it for the outer run and
+    # the at_exit backstop would otherwise fire in the child for its own,
+    # unrelated reason.
+    def exit_status_with_floor(floor)
+      script = <<~RUBY
+        ENV.delete("COVERAGE_ENFORCE")
+        # spec_helper.rb calls RSpec.configure, so rspec-core has to be loaded
+        # first. Without it the child died with a NameError and the
+        # below-the-floor example passed for entirely the wrong reason --
+        # which is what the meets-the-floor example below exists to catch.
+        require "rspec/core"
+        load #{File.expand_path('spec_helper.rb', __dir__).inspect}
+        SimpleCov.minimum_coverage(#{floor})
+      RUBY
+      IO.popen(
+        { "TEST_ENV_NUMBER" => "2", "COVERAGE_ENFORCE" => nil },
+        [RbConfig.ruby, "-Ilib", "-Ispec", "-e", script],
+        err: %i[child out],
+        chdir: File.expand_path("..", __dir__),
+        &:read
+      )
+      $CHILD_STATUS.exitstatus
+    end
+
+    it "fails a run below the floor" do
+      expect(exit_status_with_floor("line: 99, branch: 99")).not_to eq(0)
+    end
+
+    # The other arm. Without it the example above would pass just as well if
+    # the child were failing for some reason of its own.
+    it "passes a run that meets its floor" do
+      expect(exit_status_with_floor("line: 0, branch: 0")).to eq(0)
+    end
+  end
+
   describe "the Rakefile's coverage receipt" do
     # The repository's OWN Rakefile, loaded in a child process rather than
     # copied, so this is the shipped file and not a paraphrase of it. Nothing
@@ -127,7 +170,10 @@ RSpec.describe "coverage floor arming" do
     # interleaving.
     it "gives each invocation a receipt path of its own" do
       paths = Array.new(2) do
-        run_default(armed_spec_task)[/COMPLETED (\S+)/, 1]
+        # The whole rest of the LINE. `(\S+)` cut every path at its first
+        # space, so under a TMPDIR containing one both paths read as the same
+        # truncated string and this example passed while asserting nothing.
+        run_default(armed_spec_task)[/^COMPLETED (.+)$/, 1]
       end
 
       expect(paths).to all(be_a(String))

@@ -9,6 +9,20 @@ require "fileutils"
 require "simplecov"
 SimpleCov.start do
   enable_coverage :branch
+  # SimpleCov treats a process with TEST_ENV_NUMBER set as one worker of a
+  # parallel run, and a non-first worker does NOT enforce the minimum -- it
+  # leaves that to whoever merges the results. Nothing here runs in parallel,
+  # so that autodetection can only ever be wrong, and it turned the gate off
+  # from the environment. Measured against this very config, with a floor the
+  # run cannot meet:
+  #
+  #   (nothing set)                          exit 2   floor enforced
+  #   TEST_ENV_NUMBER=2                      exit 0   SILENTLY NOT ENFORCED
+  #   TEST_ENV_NUMBER=2 + parallel_tests false  exit 2   enforced again
+  #
+  # DO NOT DELETE. Every other guard in this file checks that a floor was
+  # ARMED; this is what keeps an armed floor from being ignored.
+  parallel_tests false
   # Without this, a file no spec ever loads is ABSENT from the report rather
   # than reported at 0% -- which is the case most worth surfacing.
   track_files "lib/**/*.rb"
