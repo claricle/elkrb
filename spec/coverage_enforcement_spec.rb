@@ -225,6 +225,49 @@ RSpec.describe "coverage floor arming" do
       TASK
     end
 
+    # :coverage_enforced REMOVES a directory, and for one round it removed the
+    # one named by COVERAGE_ENFORCE_RECEIPT -- a caller-supplied value. Invoked
+    # on its own against a directory holding an unrelated keep.txt, it deleted
+    # the receipt, the keep.txt and the directory. Measured, before the path
+    # became a local the two task blocks close over.
+    #
+    # The task is independently invokable, so "only `default` reaches it" was
+    # never a defence.
+    def enforced_alone(receipt)
+      script = <<~RUBY
+        $LOADED_FEATURES << "bundler/gem_tasks.rb"
+        require "rake"
+        Rake.application = Rake::Application.new
+        Rake.application.init("rake", [])
+        load #{File.expand_path('../Rakefile', __dir__).inspect}
+        begin
+          Rake::Task[:coverage_enforced].invoke
+          puts "COMPLETED"
+        rescue RuntimeError => e
+          puts "RAISED: \#{e.message}"
+        end
+      RUBY
+      IO.popen(
+        { "COVERAGE_ENFORCE_RECEIPT" => receipt },
+        [RbConfig.ruby, "-e", script], err: %i[child out], &:read
+      )
+    end
+
+    it "deletes nothing when this invocation created nothing" do
+      Dir.mktmpdir("victim") do |tmp|
+        keep = File.join(tmp, "keep.txt")
+        File.write(keep, "keep")
+        File.write(File.join(tmp, "receipt"), "1")
+
+        out = enforced_alone(File.join(tmp, "receipt"))
+
+        expect(out).to include("finished without arming the coverage floors")
+        # The whole point: an unrelated file in a caller-named directory.
+        expect(File).to exist(keep)
+        expect(Dir).to exist(tmp)
+      end
+    end
+
     it "refuses a spec step that left no receipt" do
       out = run_default("task(:spec) { nil }")
 
@@ -254,7 +297,9 @@ RSpec.describe "coverage floor arming" do
       paths = Array.new(2) do
         # The whole rest of the LINE. `(\S+)` cut every path at its first
         # space, so under a TMPDIR containing one both paths read as the same
-        # truncated string and this example passed while asserting nothing.
+        # truncated string, uniq.size was 1, and this example FAILED against
+        # correct code -- a false alarm, not a silent pass. Measured: with the
+        # old regex and TMPDIR="/tmp/with space", "expected: 2, got: 1".
         run_default(armed_spec_task)[/^COMPLETED (.+)$/, 1]
       end
 

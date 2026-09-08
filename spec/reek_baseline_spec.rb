@@ -36,16 +36,42 @@ RSpec.describe ".reek.yml" do
     end
   end
 
+  # attr_* counts. reek names an Attribute smell `Class#the_attribute`, exactly
+  # like a method, so an `attr_accessor :width_extra` inherits an exemption
+  # written for `#width` just as a `def` would. A `def`-only scan reported []
+  # for it while reek reported the smell and the baseline swallowed it --
+  # measured, and it is why this is not a `when Prism::DefNode` alone.
+  # A method, not a constant: RuboCop's Lint/ConstantDefinitionInBlock fires on
+  # a constant inside a block and its autocorrect makes it a block-local.
+  def attr_declarations
+    %i[attr_accessor attr_reader attr_writer]
+  end
+
   def methods_in(node, scope)
     case node
-    when Prism::ModuleNode, Prism::ClassNode
-      nested = scope + [node.constant_path.slice]
-      children_of(node.body).flat_map { |child| methods_in(child, nested) }
-    when Prism::DefNode
-      ["#{scope.join('::')}#{node.receiver ? '#self.' : '#'}#{node.name}"]
-    else
-      children_of(node).flat_map { |child| methods_in(child, scope) }
+    when Prism::ModuleNode, Prism::ClassNode then members_in(node, scope)
+    when Prism::DefNode then [def_name(node, scope)]
+    when Prism::CallNode then attributes_in(node, scope)
+    else children_of(node).flat_map { |child| methods_in(child, scope) }
     end
+  end
+
+  def members_in(node, scope)
+    nested = scope + [node.constant_path.slice]
+    children_of(node.body).flat_map { |child| methods_in(child, nested) }
+  end
+
+  def def_name(node, scope)
+    "#{scope.join('::')}#{node.receiver ? '#self.' : '#'}#{node.name}"
+  end
+
+  def attributes_in(node, scope)
+    return [] if node.receiver
+    return [] unless attr_declarations.include?(node.name)
+
+    arguments = node.arguments&.arguments || []
+    symbols = arguments.grep(Prism::SymbolNode)
+    symbols.map { |symbol| "#{scope.join('::')}##{symbol.unescaped}" }
   end
 
   def children_of(node)

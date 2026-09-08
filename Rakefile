@@ -29,6 +29,16 @@ end
 #
 # No `desc`, deliberately: it is a prerequisite of `default`, not a task anyone
 # should invoke, so it stays out of `rake -T`.
+# Set by :coverage_enforce and read by :coverage_enforced -- a local both task
+# blocks close over, deliberately NOT read back out of the environment. This
+# value decides what gets DELETED, and an environment variable is whatever the
+# caller says it is. Measured before this was a local: with
+# COVERAGE_ENFORCE_RECEIPT pointed at a directory holding an unrelated
+# keep.txt, invoking :coverage_enforced on its own removed the receipt, the
+# keep.txt and the directory. nil here means this invocation created nothing,
+# so there is nothing of ours to remove.
+receipt_path = nil
+
 task :coverage_enforce do
   ENV["COVERAGE_ENFORCE"] = "1"
   # A FRESH directory per invocation, and the receipt path handed to the spec
@@ -43,8 +53,10 @@ task :coverage_enforce do
   #
   # Nothing can pre-seed the path: this assignment overwrites whatever the
   # caller set.
-  ENV["COVERAGE_ENFORCE_RECEIPT"] =
-    File.join(Dir.mktmpdir("elkrb-coverage"), "receipt")
+  receipt_path = File.join(Dir.mktmpdir("elkrb-coverage"), "receipt")
+  # The environment is how the path reaches the spec SUBPROCESS, and that is
+  # all it is for. Nothing on this side reads it back.
+  ENV["COVERAGE_ENFORCE_RECEIPT"] = receipt_path
 end
 
 # The half of the gate that lives OUTSIDE the thing being gated, and it is the
@@ -64,18 +76,18 @@ end
 #
 # No `desc` for the same reason as :coverage_enforce.
 task :coverage_enforced do
-  receipt = ENV.fetch("COVERAGE_ENFORCE_RECEIPT", nil)
-  unless receipt && File.exist?(receipt)
+  unless receipt_path && File.exist?(receipt_path)
     raise "the spec step finished without arming the coverage floors, so " \
           "this run enforced nothing. RSpec exits early for --help and " \
           "--version without loading spec/spec_helper.rb. Re-run `rake` " \
           "with no SPEC_OPTS."
   end
 
-  # The whole directory, so a run that gets this far leaves nothing behind.
-  # A run whose spec step FAILS never reaches here and leaves one empty
-  # directory under the system temp root, which the OS reclaims.
-  FileUtils.remove_entry(File.dirname(receipt))
+  # The whole directory, so a run that gets this far leaves nothing behind --
+  # and only ever a directory THIS invocation made, above. A run whose spec
+  # step FAILS never reaches here and leaves one empty directory under the
+  # system temp root, which the OS reclaims.
+  FileUtils.remove_entry(File.dirname(receipt_path))
 end
 
 task default: %i[coverage_enforce spec coverage_enforced rubocop]
