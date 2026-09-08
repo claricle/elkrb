@@ -12,8 +12,24 @@ RSpec.describe "Rakefile" do
 
   # Structural, and deliberately so: the property is about the whole file, not
   # about the three task bodies that happen to have a failure path today. An
-  # example per task would leave every task added later uncovered. Ripper drops
-  # comments and string bodies, so only a real call site is reported.
+  # example per task would leave every task added later uncovered.
+  #
+  # The scan OVER-reports, and that is the safe direction for a guard: a false
+  # positive is a failing build someone reads, a false negative ships an
+  # `abort`. Measured on ruby 3.4.8, what a bare `:@ident` match does and does
+  # not see:
+  #
+  #   abort "boom"           -> ["abort"]   the real call site, caught
+  #   obj.exit               -> ["exit"]    a call on a receiver
+  #   def exit; end          -> ["exit"]    a method DEFINITION, not a call
+  #   h[:exit] = 1           -> ["exit"]    a symbol key, not a call
+  #   exit_code = 1          -> []          not matched, the token differs
+  #   # abort in a comment   -> []          Ripper drops comments
+  #   puts "abort"           -> []          Ripper drops string bodies
+  #
+  # So the last three rows are what this buys over a grep; the middle two are
+  # accepted noise. Narrowing to call-node shapes would risk missing a real
+  # terminator, which is the failure this file exists to prevent.
   it "makes no process-terminating call" do
     terminators = []
     walk = lambda do |node|
