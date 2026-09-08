@@ -181,6 +181,43 @@ RSpec.describe "GoldenFixtures (Rakefile)" do
       end
     end
 
+    # The undo used to start only after both live paths had been moved
+    # aside, so a failure on the SECOND keep-aside left `expected/` sitting
+    # under `.previous` with the old manifest still live and nothing to
+    # put it back. The injection point is that rename, not the ones the
+    # example below covers.
+    it "puts the old tree back when moving the manifest ASIDE fails" do
+      Dir.mktmpdir do |tmp|
+        golden = golden_dir_with(tmp, expected_body: "OLD",
+                                      manifest_body: "OLD-MANIFEST")
+        out, status = probe(root, <<~RUBY)
+          File.singleton_class.prepend(Module.new do
+            define_method(:rename) do |from, to|
+              raise Errno::ENOSPC, to if from.end_with?("/MANIFEST.json") &&
+                                         to.end_with?(".previous")
+
+              super(from, to)
+            end
+          end)
+          begin
+            GoldenFixtures.publish_into(#{generated(tmp).inspect},
+                                        #{golden.inspect})
+          rescue Errno::ENOSPC
+            puts "RAISED ENOSPC"
+          end
+        RUBY
+
+        expect(status).to eq(0)
+        expect(out).to include("RAISED ENOSPC")
+        expect(File.read(File.join(golden, "expected", "box3.json")))
+          .to eq("OLD")
+        expect(File.read(File.join(golden, "MANIFEST.json")))
+          .to eq("OLD-MANIFEST")
+        # No `.previous` left over: the tree is BACK, not merely survived.
+        expect(Dir.children(golden).sort).to eq(%w[MANIFEST.json expected])
+      end
+    end
+
     it "puts the old tree back when only the manifest rename fails" do
       Dir.mktmpdir do |tmp|
         golden = golden_dir_with(tmp, expected_body: "OLD",

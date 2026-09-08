@@ -79,6 +79,21 @@ module GoldenComparator
   POSITION_FIELDS = %w[x y].freeze
   SIZE_FIELDS = %w[width height].freeze
 
+  # The two rect indexes a section check needs at once: `actual` is what a
+  # point is measured against, `expected` is what says which endpoint the
+  # golden anchored that point to.
+  Rects = Struct.new(:actual, :expected)
+
+  # One end of one edge: the ACTUAL point being checked, the shape it
+  # names if it names one, and the GOLDEN's own point for that end.
+  Anchor = Struct.new(:point, :shape, :golden)
+
+  # start and end read identically from opposite ends of the section
+  # list, so they are one table rather than two near-identical call
+  # sites that can drift apart.
+  EDGE_ENDS = [["start", :first, "startPoint", "incomingShape"],
+               ["end", :last, "endPoint", "outgoingShape"]].freeze
+
   def numeric_or_zero(hash, key)
     (hash[key] || 0.0).to_f
   end
@@ -599,11 +614,27 @@ module GoldenComparator
   end
 
   def diff_strict_dimension(e_node, a_node, path, key)
-    e, e_error = strict_numeric(e_node, key, path, "expected")
-    a, a_error = strict_numeric(a_node, key, path, "actual")
+    e, e_error = lenient_dimension(e_node, key, path, "expected")
+    a, a_error = lenient_dimension(a_node, key, path, "actual")
     return [e_error, a_error].compact if e_error || a_error
 
     (e - a).abs > 1 ? ["#{path}/#{key}: expected #{e}, got #{a} (>1px)"] : []
+  end
+
+  # An ABSENT width/height reads as 0.0 here, exactly as the exact tier's
+  # `diff_own_numeric` reads it through `numeric_or_zero`. `strict_numeric`
+  # demanded the key, which made structural reject the very output the rest
+  # of the suite requires: `spec/support/invariants/
+  # omit_size_for_unsized_input.rb` says an unsized input node must NOT gain
+  # a size, so elkrb OMITS those dimensions -- and deleting the zero
+  # width/height from sizeless.json's golden passed exact and failed
+  # structural, measured. Only absence is forgiven. A dimension that is
+  # PRESENT still has to be a finite number, which is what keeps a NaN or a
+  # string from slipping through as zero.
+  def lenient_dimension(hash, key, path, side)
+    return [0.0, nil] if hash[key].nil?
+
+    strict_numeric(hash, key, path, side)
   end
 
   # Each side arrives as `{node:, width:, height:}` -- the node plus the
@@ -670,7 +701,7 @@ module GoldenComparator
   end
 
   def check_level_edges(expected_level, actual_level, path)
-    rects = rect_index(actual_level)
+    rects = Rects.new(rect_index(actual_level), rect_index(expected_level))
     expected_edges = expected_level["edges"] || []
     actual_edges_list = actual_level["edges"] || []
     diffs = duplicate_id_diffs(expected_edges, "#{path}/edges: expected")
@@ -721,18 +752,7 @@ module GoldenComparator
     sections = actual_edge["sections"] || []
     return diffs << "#{edge_path}: no sections in actual" if sections.empty?
 
-    first_section = sections.first
-    last_section = sections.last
-    diffs.concat(check_section_border(
-                   actual_edge, rects, "#{edge_path}/start",
-                   point: first_section["startPoint"],
-                   shape: first_section["incomingShape"]
-                 ))
-    diffs.concat(check_section_border(
-                   actual_edge, rects, "#{edge_path}/end",
-                   point: last_section["endPoint"],
-                   shape: last_section["outgoingShape"]
-                 ))
+    diffs.concat(check_edge_ends(edge, actual_edge, rects, edge_path))
   end
 
   # Where `incomingShape`/`outgoingShape` are populated is stated
@@ -758,9 +778,53 @@ module GoldenComparator
   # anything other than this edge's own endpoints — otherwise the
   # point would be measured against whatever rectangle elkrb chose to
   # name, which is no check at all.
-  def check_section_border(actual_edge, rects, point_path, point:, shape:)
-    ids = shape ? [shape] : endpoint_candidates(actual_edge)
-    point_near_any_reference(point, rects, ids, point_path)
+  def check_edge_ends(edge, actual_edge, rects, edge_path)
+    actual_sections = actual_edge["sections"]
+    golden_sections = edge["sections"] || []
+    EDGE_ENDS.flat_map do |name, pick, point_key, shape_key|
+      section = actual_sections.public_send(pick)
+      anchor = Anchor.new(section[point_key], section[shape_key],
+                          golden_sections.public_send(pick)&.fetch(point_key,
+                                                                   nil))
+      check_section_border(actual_edge, rects, "#{edge_path}/#{name}", anchor)
+    end
+  end
+
+  def check_section_border(actual_edge, rects, point_path, anchor)
+    ids = if anchor.shape
+            [anchor.shape]
+          else
+            anchored_candidates(actual_edge, rects, anchor.golden)
+          end
+    point_near_any_reference(anchor.point, rects.actual, ids, point_path)
+  end
+
+  # Narrows the either-endpoint list to the endpoints the GOLDEN's own
+  # point is already sitting on.
+  #
+  # The full list used to be handed straight through, and "near EITHER
+  # endpoint" is satisfied by a section that never leaves its source:
+  # setting force_tri's endPoint equal to its startPoint passed the
+  # structural tier with the edge reaching nothing -- measured. Rejecting
+  # a degenerate section outright is NOT the fix, because radial_star5's
+  # four committed goldens are legitimately degenerate (startPoint ==
+  # endPoint on every one, measured), so such a rule would reject real
+  # elkjs output. What the golden decides here is only WHICH node a point
+  # belongs to; how far the point may drift is still the border check's
+  # call, so this adds no tolerance of its own.
+  #
+  # Falls back to the full candidate list whenever the golden's point is
+  # on neither endpoint, so this can never be stricter than the golden
+  # itself supports.
+  def anchored_candidates(actual_edge, rects, golden)
+    candidates = endpoint_candidates(actual_edge)
+    return candidates unless numeric_point?(golden)
+
+    anchored = candidates.select do |id|
+      rect = rects.expected[id]
+      rect && point_on_border(golden, rect, "").empty?
+    end
+    anchored.empty? ? candidates : anchored
   end
 
   def check_level_children(expected_level, actual_level, path)
@@ -1006,8 +1070,8 @@ module GoldenComparator
   # ports finiteness are `have_finite_coordinates`'s job (Task 3), not this
   # tier's.
   def diff_smoke(expected, actual)
-    expected_ids = collect_ids(expected)
-    actual_ids = collect_ids(actual)
+    expected_ids = graph_ids(expected)
+    actual_ids = graph_ids(actual)
     diffs = []
     if expected_ids.sort != actual_ids.sort
       diffs << "node ids differ: expected #{expected_ids.sort}, " \
@@ -1015,6 +1079,16 @@ module GoldenComparator
     end
     diffs.concat(collect_non_finite_positions(actual))
     diffs
+  end
+
+  # The root's OWN id, then every descendant's. `collect_ids` starts at
+  # `children`, so the root's id reached neither list and renaming ONLY
+  # the root left the two sorted id lists identical -- measured on
+  # force_tri, which the smoke tier then matched. "Same node ids present"
+  # is a claim about every node, and the root is one. What the root is
+  # exempt from is carrying a POSITION, which is a separate check.
+  def graph_ids(level)
+    [level["id"]].compact + collect_ids(level)
   end
 
   def collect_ids(level)

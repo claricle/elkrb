@@ -154,34 +154,49 @@ module GoldenFixtures
     FileUtils.rm_rf([staged, staged_manifest].compact)
   end
 
-  # The two renames, with an undo. One rename cannot half-happen; two of
-  # them can, so the first is put back if the second fails and the
-  # directory never holds a new tree beside an old manifest.
+  # FOUR renames, all under one undo. Two move the live tree aside and two
+  # move the new one in, and any of the four can fail on its own.
+  #
+  # The undo used to cover only the last two: forcing ENOSPC on the SECOND
+  # keep-aside left `expected/` already moved to `.previous` beside the old
+  # MANIFEST.json, with nothing to put it back -- measured. And `ensure`,
+  # not `rescue SystemCallError`, because Ctrl-C raises Interrupt, which
+  # that rescue never caught.
   def swap_into_place(golden_dir, staged, staged_manifest)
     live = [File.join(golden_dir, "expected"),
             File.join(golden_dir, "MANIFEST.json")]
-    kept = live.map { |path| keep_aside(path) }
-    rename_pair([staged, staged_manifest], live, kept)
-    FileUtils.rm_rf(kept.compact)
+    kept = []
+    swapped = false
+    live.each_with_index { |path, index| keep_aside(path, kept, index) }
+    [staged, staged_manifest].zip(live)
+      .each { |from, to| File.rename(from, to) }
+    swapped = true
+  ensure
+    finish_swap(kept, live, swapped)
   end
 
-  def rename_pair(sources, live, kept)
-    sources.zip(live).each { |from, to| File.rename(from, to) }
-  rescue SystemCallError
+  def finish_swap(kept, live, swapped)
+    return FileUtils.rm_rf(kept.compact) if swapped
+
     kept.zip(live).each { |aside, path| restore(aside, path) }
-    raise
   end
 
-  def keep_aside(path)
-    return nil unless File.exist?(path)
-
-    aside = "#{path}.#{Process.pid}.previous"
-    File.rename(path, aside)
-    aside
+  # Records the aside path BEFORE the rename, and at a FIXED index, so an
+  # interruption between the two still leaves an entry naming where the
+  # original went and `kept` still lines up with `live`. Appending after
+  # the rename left a moved tree with no entry pointing at it.
+  def keep_aside(path, kept, index)
+    kept[index] = File.exist?(path) ? "#{path}.#{Process.pid}.previous" : nil
+    File.rename(path, kept[index]) if kept[index]
   end
 
+  # Asks the filesystem which side of the rename this entry stopped on
+  # rather than assuming it ran. An aside that is NOT there means the
+  # original never moved and is still at `path`, so removing `path` would
+  # destroy the very tree this exists to restore.
   def restore(aside, path)
     return if aside.nil?
+    return unless File.exist?(aside)
 
     FileUtils.rm_rf(path)
     File.rename(aside, path)

@@ -271,12 +271,18 @@ RSpec.describe GoldenComparator do
 
   it "flags a NaN actual value instead of silently treating it as a match " \
      "(exact tier)" do
-    expected = { "id" => "root", "children" => [{ "id" => "n1", "x" => 10.0 }] }
+    # Both nodes carry a MATCHING y, so the NaN x is the only thing that
+    # can produce a difference. They used to carry x alone: the missing y
+    # raised its own diff on each side, so stubbing the NaN check out left
+    # this green. `not_to be_empty` could not tell the two apart, which is
+    # why the message is named here rather than the emptiness.
+    expected = { "id" => "root",
+                 "children" => [{ "id" => "n1", "x" => 10.0, "y" => 5.0 }] }
     actual = { "id" => "root",
-               "children" => [{ "id" => "n1", "x" => Float::NAN }] }
+               "children" => [{ "id" => "n1", "x" => Float::NAN, "y" => 5.0 }] }
 
     diffs = described_class.diff_exact(expected, actual, %i[nodes])
-    expect(diffs).not_to be_empty
+    expect(diffs).to eq(["/children/n1/x: actual is non-finite (NaN)"])
   end
 
   it "flags a NaN root dimension instead of silently treating it as a match " \
@@ -741,6 +747,62 @@ RSpec.describe GoldenComparator, "rejecting a corrupted actual result" do
   # Every other id in the harness is matched inside a children/edges
   # collection, and the root sits in neither -- renaming it produced no
   # difference in any of the three paths below.
+  # "Near EITHER endpoint" is satisfied by a section that never leaves its
+  # source, so an edge could be disconnected and still match.
+  it "rejects a section whose end point has collapsed onto its start " \
+     "(structural tier)" do
+    expected = golden_expected("force_tri")
+    collapsed = Marshal.load(Marshal.dump(expected))
+    section = collapsed["edges"][0]["sections"][0]
+    section["endPoint"] = section["startPoint"].dup
+
+    expect(described_class.diff_structural(expected, collapsed).join)
+      .to include("/end:")
+  end
+
+  # The counterweight to the example above, and the reason a plain
+  # "start must differ from end" rule is wrong: radial_star5's four
+  # committed goldens really are degenerate, so such a rule would reject
+  # real elkjs output. Both must hold, or the fix is fitted to one case.
+  it "still accepts radial_star5's legitimately degenerate sections" do
+    expected = golden_expected("radial_star5")
+    sections = expected["edges"].flat_map { |e| e["sections"] }
+
+    expect(sections.map { |sec| sec["startPoint"] == sec["endPoint"] })
+      .to all(be(true))
+    expect(described_class.diff_structural(expected, expected)).to be_empty
+  end
+
+  # `spec/support/invariants/omit_size_for_unsized_input.rb` REQUIRES an
+  # unsized input node to come back with no width/height, so a strict
+  # "the key must be there" rule made the structural tier reject the very
+  # output the rest of the suite demands -- and the exact tier, which
+  # coerces an absent dimension to 0.0, accepted the same graph.
+  it "accepts an unsized leaf whose zero dimensions are OMITTED " \
+     "(structural tier)" do
+    expected = golden_expected("sizeless")
+    unsized = Marshal.load(Marshal.dump(expected))
+    leaf = unsized["children"].find { |n| n["id"] == "a" }
+    expect([leaf["width"], leaf["height"]]).to eq([0, 0])
+    leaf.delete("width")
+    leaf.delete("height")
+
+    expect(described_class.diff_exact(expected, unsized, %i[nodes])).to be_empty
+    expect(described_class.diff_structural(expected, unsized)).to be_empty
+  end
+
+  # Absence is forgiven; a present-but-broken value is not. Without this
+  # the leniency above could have been written as "coerce anything",
+  # which would swallow a NaN width as 0.0.
+  it "still rejects a NaN width in the structural tier" do
+    expected = golden_expected("sizeless")
+    broken = Marshal.load(Marshal.dump(expected))
+    broken["children"].find { |n| n["id"] == "a" }["width"] = Float::NAN
+
+    expect(described_class.diff_structural(expected, broken).join)
+      .to include("non-finite")
+  end
+
   it "rejects a renamed root graph id in every tier" do
     expected = golden_expected("force_tri")
     renamed = Marshal.load(Marshal.dump(expected))
@@ -749,6 +811,11 @@ RSpec.describe GoldenComparator, "rejecting a corrupted actual result" do
     expect(shape_diffs(expected, renamed).join).to include("graph/id")
     expect(described_class.diff_structural(expected, renamed).join)
       .to include("graph/id")
+    # The smoke tier was the one this example named and did not check.
+    # It collected ids from `children` down, so the root's own id reached
+    # neither list and a renamed root matched.
+    expect(described_class.diff_smoke(expected, renamed).join)
+      .to include("node ids differ")
   end
 
   it "rejects a label that lost its coordinates entirely (exact tier)" do
