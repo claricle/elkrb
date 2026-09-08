@@ -631,8 +631,15 @@ module GoldenComparator
   # structural, measured. Only absence is forgiven. A dimension that is
   # PRESENT still has to be a finite number, which is what keeps a NaN or a
   # string from slipping through as zero.
+  #
+  # `key?`, not `hash[key].nil?`. An explicit JSON `null` is PRESENT, and
+  # reading it as absent let `{"width": null}` match a golden's `0` --
+  # measured. Omission is the only thing forgiven, and elkrb really does
+  # omit: laying out an unsized node gives a child whose keys are
+  # ["id", "x", "y"], with no width entry at all, so nothing in the suite
+  # needs a null to be tolerated.
   def lenient_dimension(hash, key, path, side)
-    return [0.0, nil] if hash[key].nil?
+    return [0.0, nil] unless hash.key?(key)
 
     strict_numeric(hash, key, path, side)
   end
@@ -790,13 +797,33 @@ module GoldenComparator
     end
   end
 
+  # An annotation names the rectangle the point must clip to, and the
+  # ACTUAL result used to be trusted with that unchallenged. That is a
+  # way back into the collapsed-section hole: adding `outgoingShape: "a"`
+  # to force_tri's collapsed section made the end point measure against
+  # the SOURCE and pass -- measured. `diff_section_shapes` cannot catch
+  # it, because it only rejects a shape naming a NON-endpoint and the
+  # source IS one, and because an unannotated golden lets any annotation
+  # appear.
+  #
+  # So the shape must name an endpoint the GOLDEN's own point is on. When
+  # the golden's point is on neither, `anchored_candidates` hands back the
+  # full list and this admits exactly what it admitted before.
   def check_section_border(actual_edge, rects, point_path, anchor)
-    ids = if anchor.shape
-            [anchor.shape]
-          else
-            anchored_candidates(actual_edge, rects, anchor.golden)
-          end
-    point_near_any_reference(anchor.point, rects.actual, ids, point_path)
+    ids = anchored_candidates(actual_edge, rects, anchor.golden)
+    return [disowned_shape(anchor, ids, point_path)] if strays?(anchor, ids)
+
+    point_near_any_reference(anchor.point, rects.actual,
+                             anchor.shape ? [anchor.shape] : ids, point_path)
+  end
+
+  def strays?(anchor, ids)
+    !anchor.shape.nil? && !ids.include?(anchor.shape)
+  end
+
+  def disowned_shape(anchor, ids, path)
+    "#{path}: shape #{anchor.shape.inspect} is not where the golden " \
+      "anchors this end (#{ids.inspect})"
   end
 
   # Narrows the either-endpoint list to the endpoints the GOLDEN's own
