@@ -893,6 +893,73 @@ RSpec.describe "Elkrb layout corpus" do
       end
     end
 
+    # The lock is held on an open file description, so it protects an INODE,
+    # not a path. Installing the marker by renaming a temp file over it gave
+    # two runs whose claims interleaved a lock each, on two different inodes,
+    # and neither blocked -- measured 28 of 30 concurrent trials. So the
+    # marker's inode has to be installed exactly once, and these three pin
+    # that from three directions.
+    #
+    # The create step is reached directly rather than through
+    # `claim_output_directory!`, because once the marker exists the claim
+    # returns early and the step is unreachable. That unreachability IS the
+    # defect: the racing run decided to create before the winner's marker
+    # appeared.
+
+    # A DIAGNOSTIC rather than a unit of coverage -- it names the inode, so a
+    # failure points at the rename instead of at the lock. The content is
+    # asserted here because nothing else in the suite does, which let a
+    # create step writing no bytes at all stay green.
+    it "installs the owner marker once, leaving the first inode in place" do
+      Dir.mktmpdir do |dir|
+        marker = File.join(dir, CorpusRunner::OWNER_MARKER)
+
+        CorpusRunner.send(:create_owner_marker, marker)
+        first = File.stat(marker).ino
+        CorpusRunner.send(:create_owner_marker, marker)
+
+        expect(File.stat(marker).ino).to eq(first)
+        expect(File.read(marker)).to eq(CorpusRunner::OWNER_MARKER_TEXT)
+      end
+    end
+
+    it "keeps the directory excluded while a racing run performs its claim" do
+      Dir.mktmpdir do |dir|
+        outdir = File.join(dir, "dump")
+        marker = File.join(outdir, CorpusRunner::OWNER_MARKER)
+        CorpusRunner.send(:claim_output_directory!, outdir)
+
+        still_excluded = nil
+        CorpusRunner.send(:with_directory_lock, outdir) do
+          CorpusRunner.send(:create_owner_marker, marker)
+          still_excluded = !lockable?(marker)
+        end
+
+        expect(still_excluded).to be(true)
+      end
+    end
+
+    # The one input that separates an atomic exclusive create from an
+    # `unless File.exist?` guard, which is the refactor most likely to land
+    # here -- `place_summary_marker` uses that exact idiom a few lines below
+    # the lock. `File.exist?` FOLLOWS a symlink, so on a dangling one it
+    # reports false and the guard writes through the link; O_CREAT|O_EXCL
+    # tests the link itself and refuses. Both shapes satisfy every other
+    # example in this file, so without this one the suite cannot tell them
+    # apart.
+    it "refuses to create the owner marker through a dangling symlink" do
+      Dir.mktmpdir do |dir|
+        marker = File.join(dir, CorpusRunner::OWNER_MARKER)
+        target = File.join(dir, "absent-target")
+        File.symlink(target, marker)
+
+        CorpusRunner.send(:create_owner_marker, marker)
+
+        expect(File.symlink?(marker)).to be(true)
+        expect(File.exist?(target)).to be(false)
+      end
+    end
+
     def lockable?(path)
       File.open(path, File::RDONLY) do |file|
         next false unless file.flock(File::LOCK_EX | File::LOCK_NB)

@@ -168,15 +168,39 @@ class CorpusRunner
       end
 
       FileUtils.mkdir_p(outdir)
-      write_file(File.join(outdir, OWNER_MARKER), OWNER_MARKER_TEXT)
+      create_owner_marker(File.join(outdir, OWNER_MARKER))
+    end
+
+    # `write_file` renames a temp file over its target, which installs a NEW
+    # inode. The marker is what `with_directory_lock` flocks, and a flock is
+    # held on an inode rather than on a path, so two runs whose claims
+    # interleaved ended up locking two different files and neither blocked.
+    # Creating it exclusively installs that inode exactly once: EEXIST means
+    # another run won the race and its inode is the one both will lock.
+    #
+    # Separate from the claim so the rescue covers this open and nothing
+    # else -- `FileUtils.mkdir_p` raises EEXIST too, when a path component
+    # is a regular file, and swallowing that would lock a directory that was
+    # never created.
+    def create_owner_marker(marker)
+      File.open(marker, File::WRONLY | File::CREAT | File::EXCL) do |file|
+        file.write(OWNER_MARKER_TEXT)
+      end
+    rescue Errno::EEXIST
+      nil
     end
 
     # Two runs pointed at one directory used to interleave: one pruned and
     # wrote while the other was still dumping, so the directory held files
-    # that neither summary.json described. The owner marker doubles as the
-    # lock, so the second run waits instead. The previous summary is read
-    # inside the lock, after it is taken, so pruning sees a settled
-    # directory.
+    # that neither summary.json described. The second run waits on the owner
+    # marker instead. The previous summary is read inside the lock, after it
+    # is taken, so pruning sees a settled directory.
+    #
+    # What makes that sound is that `create_owner_marker` installs the
+    # marker's inode exactly once. A flock is held on an inode, not on a
+    # path, so anything that replaces the marker -- a rename over it, most
+    # of all -- hands the next run a second file to lock and the exclusion
+    # is silently gone.
     def with_directory_lock(outdir)
       File.open(File.join(outdir, OWNER_MARKER), File::RDONLY) do |lock|
         lock.flock(File::LOCK_EX)
