@@ -1,5 +1,7 @@
 name: rake
 
+# Default for every job. The `rake` job below raises its own grant; nothing
+# else in this file needs more than read.
 permissions:
   contents: read
 
@@ -14,65 +16,162 @@ on:
 
 jobs:
   rake:
+    uses: metanorma/ci/.github/workflows/generic-rake.yml@main
+
+    # MEASURED, not assumed. generic-rake.yml's `tests-passed` job declares
+    # `permissions: contents: write`, and GitHub validates a called workflow's
+    # permission requests against the CALLING JOB before it evaluates any
+    # `if:`. So a caller granting only `contents: read` is refused at startup,
+    # which creates zero jobs and reports no check at all -- it reads as "no CI
+    # configured" rather than "CI is broken". That refused every run of this
+    # workflow from 2026-08-19 until this commit.
+    #
+    # Nothing changed here to cause it: this caller was byte-identical from the
+    # initial commit until 2026-09-04. metanorma/ci commit 30a34e4 (2026-05-12,
+    # "add write permissions to tests passed") added the grant upstream, and
+    # `uses: ...@main` picked it up with no commit to elkrb.
+    #
+    # `cascade: false` does NOT avoid this, so do not "simplify" the grant away
+    # by relying on it. Run 34117181565 carried `cascade: false` under a
+    # `contents: read` caller and still gave startup_failure with zero jobs;
+    # run 34118177872 adds the grant and starts 12 jobs.
+    permissions:
+      contents: write
+
+    with:
+      # Skip the `tests-passed` / `do-release` repository_dispatch. The grant
+      # above makes the call legal; this keeps it unused, and `tests-passed`
+      # reports as `skipped`. `do-release` fires on v* tags and release.yml
+      # listens for it, so leaving the cascade on would newly auto-publish on
+      # every tag. Both elkrb releases to date were run by hand and no
+      # repository_dispatch has ever fired here. Releases stay manual; flip
+      # this to true in a PR of its own if that should change.
+      cascade: false
+
+  # The shared matrix does not cover the version this gem promises.
+  # generic-rake.yml takes 13 workflow_call inputs and none of them selects a
+  # ruby version or an OS, so a caller cannot override the matrix.
+  # prepare-rake.yml fetches
+  # https://raw.githubusercontent.com/metanorma/ci/main/.github/workflows/ruby-matrix.json
+  # at run time, and that file lists ruby 3.3, 3.4 and 4.0 (experimental) --
+  # no 3.2. The gemspec floor is ">= 3.2.0" and is deliberate: lutaml-model
+  # 0.8 does not parse on 3.1 or below. This job covers that one version and
+  # nothing else; the shared workflow covers the rest. The alternative that
+  # would delete this job is raising the gemspec floor to 3.3, which the shared
+  # matrix already tests -- that breaks consumers, so it is not taken here.
+  #
+  # Note the URLs prepare-rake.yml fetches are hardcoded to metanorma/ci's
+  # `main` and re-read on every run. Pinning the `uses:` ref above would pin
+  # the workflow logic, but not those two files -- the matrix would still come
+  # from whatever `main` holds at run time. So this job is the only leg of
+  # elkrb's matrix that elkrb itself controls and that a reviewer can read
+  # from this tree.
+  #
+  # Blocking on purpose. An advisory job guarding a promise made to consumers
+  # of the gem is not a guard.
+  ruby-floor:
+    name: rake (ruby 3.2.0, gemspec floor)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # generic-rake.yml cancels a superseded in-flight run on the same ref for
+    # its own matrix legs; keep that behaviour for this one.
+    #
+    # Keyed on github.ref, NOT on upstream's `github.head_ref || github.ref_name`.
+    # Neither of those is unique: head_ref is the SOURCE BRANCH NAME only, so two
+    # fork PRs both opened from `patch-1` share a group and cancel each other,
+    # and ref_name drops refs/heads vs refs/tags, so the tag `v2` and the branch
+    # `v2` collapse -- and this workflow triggers on both (`branches: [... v2]`,
+    # `tags: [v*]`). github.ref keeps them apart: measured on run 34126787619,
+    # the pull_request checkout was `refs/pull/26/merge`, which carries the PR
+    # number, while head_ref was just `fix/ci-self-contained-rake`.
+    concurrency:
+      group: ${{ github.workflow }}-ruby-floor-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ruby/setup-ruby@v1
+        with:
+          # "3.2.0", not "3.2". setup-ruby resolves a two-part version to the
+          # LATEST patch release, which is not the floor: run 34126787619
+          # printed `ruby 3.2.11` for this job. The gemspec promises 3.2.0, so a
+          # regression that needs 3.2.1+ would ship green under "3.2". This is
+          # the only job that tests the version elkrb actually advertises.
+          ruby-version: "3.2.0"
+          # No Gemfile.lock is committed. setup-ruby runs `bundle lock` first,
+          # which re-resolves to the latest compatible gems and yields the
+          # cache key, then installs -- so no separate `bundle install` step.
+          bundler-cache: true
+      # The whole default task rather than its two commands separately, so CI
+      # and a local `bundle exec rake` cannot drift apart.
+      - run: bundle exec rake
+
+  # macOS and Windows. THE ONLY REASON THIS IS A SEPARATE JOB is that the
+  # shared workflow cannot be asked for an OS: generic-rake.yml takes 13
+  # workflow_call inputs and not one of them selects a ruby version or a
+  # runner, as the `rake` job's comment above records. So the only route to a
+  # non-Linux leg is a self-contained job, and this is it.
+  #
+  # ADVISORY, all of it. This repository has never had a green macOS or
+  # Windows run -- the first run that created jobs at all was PR #26's, on
+  # 2026-09-08. That is the whole reason for continue-on-error, not a claim
+  # about how those platforms behave. A local `bundle exec rake` on a
+  # developer Mac is not evidence for a macos-latest runner: different
+  # toolchain, different installed binaries.
+  #
+  # KNOWN RED, and expected to stay red until it is fixed separately: all
+  # three Windows legs fail seven specs where ubuntu and macOS fail two.
+  # The extra five are pre-existing v2 path-handling defects, not a
+  # regression -- see .claude/measurements/windows-ci-first-run-2026-09-08.md.
+  # Blocking this job today would block every PR in the repository.
+  #
+  # HOW TO PROMOTE A LEG. A continue-on-error job reports conclusion
+  # `success` whatever happened, so the job conclusion cannot tell you.
+  # Read the STEP:
+  #   gh api repos/claricle/elkrb/actions/runs/<id>/jobs --jq \
+  #     '.jobs[]|{name, step: (.steps[]|select(.name|test("rake"))|.conclusion)}'
+  # When `Run bundle exec rake` is `success` on a leg across a few runs,
+  # replace the `true` below with an allowlist naming the combinations that
+  # have earned it, e.g.
+  #   ${{ !(matrix.os == 'macos-latest'
+  #         && contains(fromJSON('["3.3","3.4"]'), matrix.ruby)) }}
+  # An allowlist is the safe direction: adding a ruby or an OS to the matrix
+  # then lands advisory until someone deliberately promotes it.
+  os-matrix:
     name: rake (ruby ${{ matrix.ruby }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    # The reusable workflow this replaces (metanorma/ci/generic-rake.yml)
-    # cancelled a superseded in-flight run on the same ref; keep that so a
-    # rapid push sequence doesn't queue redundant matrix runs.
+    timeout-minutes: 30
+    continue-on-error: true
+    # matrix.ruby AND matrix.os both belong in the group. The group is
+    # evaluated per matrix combination and cancel-in-progress cancels the
+    # older run in a group, so without matrix.os every ruby 3.3 leg would
+    # share one group and the OSes would cancel each other -- one would run
+    # and the rest would report `cancelled`.
     #
-    # matrix.os is added to the group by this commit and must not be removed.
-    # The group is evaluated per matrix combination and cancel-in-progress
-    # cancels the older run in a group, so without it ruby 3.2 on ubuntu,
-    # macos and windows would all share `rake-3.2-<ref>` and cancel each
-    # other -- two of the three legs would report `cancelled` and only one
-    # would actually run. It was absent before this commit only because the
-    # matrix was single-OS, where ruby alone made the group unique.
+    # Keyed on github.ref for the reason the ruby-floor job above records:
+    # head_ref is the source BRANCH NAME only, so two fork PRs opened from
+    # `patch-1` collide, and ref_name drops refs/heads vs refs/tags, so the
+    # tag `v2` and the branch `v2` collapse -- and this workflow triggers on
+    # both.
     concurrency:
-      group: ${{ github.workflow }}-${{ matrix.ruby }}-${{ matrix.os }}-${{ github.head_ref || github.ref_name }}
+      group: ${{ github.workflow }}-os-${{ matrix.ruby }}-${{ matrix.os }}-${{ github.ref }}
       cancel-in-progress: true
     strategy:
       fail-fast: false
       matrix:
         # 3.2 is the gemspec floor; the gemspec sets no upper bound, so 4.0
-        # is admitted too.
+        # is admitted too. ubuntu is absent on purpose -- the `rake` and
+        # `ruby-floor` jobs above already cover it, and blocking.
         ruby: [ "3.2", "3.3", "3.4", "4.0" ]
-        os: [ "ubuntu-latest", "macos-latest", "windows-latest" ]
-    # An ALLOWLIST: blocking only for combinations with a green CI run behind
-    # them. Everything else is advisory. Adding a ruby or an OS above therefore
-    # lands non-blocking until someone deliberately adds it to the list below,
-    # which is the safe direction for a matrix nobody has run yet.
-    #
-    # The three blocking legs are the ones measured green on this workflow's own
-    # run at f0d994b (PR #26):
-    #   gh api repos/claricle/elkrb/actions/runs/33870486536/jobs \
-    #     --jq '.jobs[]|{name, conclusion}'
-    #
-    # macOS and Windows are advisory because this repo has NEVER run either.
-    # That is the whole reason -- not a claim about how those platforms behave.
-    # A local `bundle exec rake` on a developer Mac is not evidence for a
-    # macos-latest runner: different toolchain, different installed binaries.
-    #
-    # HOW TO PROMOTE ONE. A continue-on-error job reports conclusion `success`
-    # whatever happened, so the job conclusion cannot tell you. Read the STEP:
-    #   gh api repos/claricle/elkrb/actions/runs/<id>/jobs --jq \
-    #     '.jobs[]|{name, step: (.steps[]|select(.name|test("rake"))|.conclusion)}'
-    # When the `Run bundle exec rake` step is `success` on a leg across a few
-    # runs, add that combination to the allowlist below.
-    timeout-minutes: 30
-    continue-on-error: >-
-      ${{ !(matrix.os == 'ubuntu-latest'
-            && contains(fromJSON('["3.2","3.3","3.4"]'), matrix.ruby)) }}
+        os: [ "macos-latest", "windows-latest" ]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: ruby/setup-ruby@v1
         with:
+          # Two-part, unlike ruby-floor above. That job exists to test the
+          # exact version the gemspec promises; this one is a platform
+          # smoke test, where the latest patch of each line is what a user
+          # on that platform would actually install.
           ruby-version: ${{ matrix.ruby }}
-          # No Gemfile.lock is committed. setup-ruby handles that: it runs
-          # `bundle lock` first, which re-resolves to the latest compatible
-          # gems and yields the cache key, then installs. The generated
-          # lockfile stays in the runner's working tree and is gitignored, so
-          # the gem's "resolve fresh every run" rule holds. This also does the
-          # install, hence no `bundle install` step.
           bundler-cache: true
       # The whole default task rather than its two commands separately, so CI
       # and a local `bundle exec rake` cannot drift apart.

@@ -2,6 +2,7 @@
 
 require "lutaml/model"
 require_relative "../geometry/point"
+require_relative "read_only_mapping"
 
 module Elkrb
   module Graph
@@ -13,6 +14,8 @@ module Elkrb
       attribute :bend_points, Geometry::Point, collection: true
       attribute :incoming_shape, :string
       attribute :outgoing_shape, :string
+      attribute :incoming_sections, :string, collection: true
+      attribute :outgoing_sections, :string, collection: true
 
       key_value do
         map "id", to: :id
@@ -21,6 +24,8 @@ module Elkrb
         map "bendPoints", to: :bend_points
         map "incomingShape", to: :incoming_shape
         map "outgoingShape", to: :outgoing_shape
+        map "incomingSections", to: :incoming_sections
+        map "outgoingSections", to: :outgoing_sections
       end
 
       yaml do
@@ -30,6 +35,8 @@ module Elkrb
         map "bend_points", to: :bend_points
         map "incoming_shape", to: :incoming_shape
         map "outgoing_shape", to: :outgoing_shape
+        map "incoming_sections", to: :incoming_sections
+        map "outgoing_sections", to: :outgoing_sections
       end
 
       def initialize(**attributes)
@@ -63,6 +70,8 @@ module Elkrb
     end
 
     class Edge < Lutaml::Model::Serializable
+      include ReadOnlyMapping
+
       attribute :id, :string
       attribute :sources, :string, collection: true
       attribute :targets, :string, collection: true
@@ -70,7 +79,22 @@ module Elkrb
       attribute :sections, EdgeSection, collection: true
       attribute :layout_options, :hash
       attribute :properties, :hash
+      attribute :junction_points, Geometry::Point, collection: true
+      attribute :container, :string
 
+      # The legacy elkjs endpoint keys mapped at the end of the block below are
+      # read-only, and they reach every key-value format -- JSON, Hash, TOML,
+      # JSONL, YAMLS -- but NOT YAML, which declares its own block after it.
+      # Precedence: a non-empty sources/targets wins, an explicit [] counts as
+      # absent, and a NONBLANK sourcePort precedes source (in ELK JSON the port
+      # id IS the endpoint) by declaration order rather than key order. The
+      # hooks drop nil and blank ids themselves, so `"sourcePort": ""` next to
+      # a real `source` leaves the edge connected to that source; targetPort
+      # and target behave the same way.
+      #
+      # Do NOT "simplify" the pairs into a second `map "source", to: :sources`:
+      # a plain rule fires even when its key is absent, clobbering sources with
+      # nil, and emits both spellings on write.
       key_value do
         map "id", to: :id
         map "sources", to: :sources
@@ -79,6 +103,18 @@ module Elkrb
         map "sections", to: :sections
         map "layoutOptions", to: :layout_options
         map "properties", to: :properties
+        map "junctionPoints", to: :junction_points
+        map "container", to: :container
+
+        # Read-only legacy keys; see the note above the block. Order matters.
+        map "sourcePort", with: { from: :__elkrb_merge_legacy_source,
+                                  to: :__elkrb_omit_from_output }
+        map "source", with: { from: :__elkrb_merge_legacy_source,
+                              to: :__elkrb_omit_from_output }
+        map "targetPort", with: { from: :__elkrb_merge_legacy_target,
+                                  to: :__elkrb_omit_from_output }
+        map "target", with: { from: :__elkrb_merge_legacy_target,
+                              to: :__elkrb_omit_from_output }
       end
 
       yaml do
@@ -89,6 +125,20 @@ module Elkrb
         map "sections", to: :sections
         map "layout_options", to: :layout_options
         map "properties", to: :properties
+        map "junction_points", to: :junction_points
+        map "container", to: :container
+
+        # The same read-only legacy endpoint keys as the key_value block, so a
+        # YAML edge written the elkjs way keeps its endpoints. Order matters
+        # here too; see the note above the key_value block.
+        map "sourcePort", with: { from: :__elkrb_merge_legacy_source,
+                                  to: :__elkrb_omit_from_output }
+        map "source", with: { from: :__elkrb_merge_legacy_source,
+                              to: :__elkrb_omit_from_output }
+        map "targetPort", with: { from: :__elkrb_merge_legacy_target,
+                                  to: :__elkrb_omit_from_output }
+        map "target", with: { from: :__elkrb_merge_legacy_target,
+                              to: :__elkrb_omit_from_output }
       end
 
       # Normalizes a Symbol key however the options arrive — a constructor,
@@ -99,7 +149,32 @@ module Elkrb
         value_set_for(:layout_options)
         attr = self.class.attributes(lutaml_register)[:layout_options]
         cast = attr.cast_value(DeepStringifyKeys.call(value), lutaml_register)
-        instance_variable_set(:@layout_options, LayoutOptions.wrap(cast))
+        instance_variable_set(:@layout_options, NormalizeOptionKeys.call(cast))
+      end
+
+      # Serialization hooks for the legacy endpoint keys above. Public because
+      # lutaml invokes them with `public_send`; the `__elkrb_` prefix keeps a
+      # subclass from taking the name by accident. Not part of the supported
+      # API.
+      #
+      # @api private
+      def __elkrb_merge_legacy_source(model, value)
+        ids = __elkrb_endpoint_ids(value)
+        model.sources = ids if ids.any? && Array(model.sources).empty?
+      end
+
+      # @api private
+      def __elkrb_merge_legacy_target(model, value)
+        ids = __elkrb_endpoint_ids(value)
+        model.targets = ids if ids.any? && Array(model.targets).empty?
+      end
+
+      private
+
+      # Drops nil and blank ids. Without this a `"sourcePort": ""` would win
+      # over a real `"source"` and leave the edge with an empty endpoint.
+      def __elkrb_endpoint_ids(value)
+        Array(value).reject { |id| id.nil? || id.to_s.strip.empty? }
       end
     end
   end

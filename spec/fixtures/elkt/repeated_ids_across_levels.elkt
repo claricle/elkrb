@@ -1,0 +1,8 @@
+node L {
+  node shared { port lp }
+  edge shared.lp -> L2
+}
+node R {
+  node shared { port rp }
+  edge shared.rp -> R2
+}
