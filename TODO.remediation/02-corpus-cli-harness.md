@@ -580,14 +580,25 @@ filesystem during the run.
 
 `File.write` FOLLOWS a symlink. A link sitting inside a directory the
 runner owns sent a dump straight out of it — measured, a case wrote over
-`/tmp/probe_symlink/victim.txt`. Every write now goes to a temp file in
-the same directory and is renamed over the target, and `rename` replaces
-the link itself.
+`/tmp/probe_symlink/victim.txt`. Every dump write now goes to a temp file
+in the same directory and is renamed over the target, and `rename` replaces
+the link itself. The owner marker is the one exception: it is created
+exclusively instead, for the reason below.
 
 Two runs pointed at one directory used to interleave: one pruned and wrote
 while the other was still dumping, leaving files that neither summary
-described. The owner marker doubles as an exclusive `flock`, taken around
-pruning and every write, and the previous summary is read inside it.
+described. The second run now waits on an exclusive `flock` taken on the
+owner marker, around pruning and every write, and the previous summary is
+read inside it.
+
+A `flock` is held on an inode, not on a path, so that only excludes anything
+if the marker's inode is installed exactly once. Installing it by rename
+gave two runs whose claims interleaved a lock each, on two different inodes,
+and neither blocked — measured 28 of 30 concurrent trials, and 30 of 30
+under a forced interleaving. `create_owner_marker` therefore opens it with
+`O_CREAT | O_EXCL` and treats `EEXIST` as "another run won, and its inode is
+the one we will both lock". A `unless File.exist?` guard is NOT equivalent:
+`File.exist?` follows a symlink and puts the race back.
 
 ### Ids with invalid bytes
 
