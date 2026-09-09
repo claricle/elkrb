@@ -118,15 +118,23 @@ jobs:
   # developer Mac is not evidence for a macos-latest runner: different
   # toolchain, different installed binaries.
   #
-  # KNOWN RED, and expected to stay red until it is fixed separately: all
-  # three Windows legs fail seven specs where ubuntu and macOS fail two.
-  # The extra five are pre-existing v2 path-handling defects, not a
-  # regression -- see .claude/measurements/windows-ci-first-run-2026-09-08.md.
+  # KNOWN RED, and expected to stay red until it is fixed separately. On
+  # PR #26's run -- the only run this repo has ever produced that created
+  # jobs -- the three Windows legs it carried (3.3, 3.4, 4.0) each failed
+  # seven specs where ubuntu and macOS failed two. The extra five are
+  # pre-existing v2 path-handling defects, not a regression; see
+  # .claude/measurements/windows-ci-first-run-2026-09-08.md.
+  #
+  # Windows on ruby 3.2 is the fourth leg here and has NEVER been measured,
+  # because #26's matrix had no 3.2 at all. Expect it to behave like the
+  # other three; do not record that as measured until a run says so.
   # Blocking this job today would block every PR in the repository.
   #
-  # HOW TO PROMOTE A LEG. A continue-on-error job reports conclusion
-  # `success` whatever happened, so the job conclusion cannot tell you.
-  # Read the STEP:
+  # HOW TO PROMOTE A LEG. continue-on-error makes a job tolerate FAILURE, so
+  # a leg whose steps failed still reports conclusion `success` and the job
+  # conclusion cannot tell you whether the suite passed. It is not absolute:
+  # the concurrency cancellation configured below still yields `cancelled`.
+  # Read the STEP rather than the job:
   #   gh api repos/claricle/elkrb/actions/runs/<id>/jobs --jq \
   #     '.jobs[]|{name, step: (.steps[]|select(.name|test("rake"))|.conclusion)}'
   # When `Run bundle exec rake` is `success` on a leg across a few runs,
