@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "support/filename_probe"
 require "fileutils"
 require "json"
 require "stringio"
@@ -12,6 +13,8 @@ require_relative "java_elk_test_importer"
 require_relative "corpus_runner"
 
 RSpec.describe JavaElkTestImporter do
+  include FilenameProbe
+
   def committed_fixture
     path = File.expand_path("fixtures/java_elk/imported_tests.json", __dir__)
     File.read(path)
@@ -99,9 +102,12 @@ RSpec.describe JavaElkTestImporter do
   # the checkout path be interpreted rather than matched, so a sibling
   # checkout's models were written into the committed fixture.
   it "does not import a model from a sibling checkout" do
+    name = "models*"
+    skip_unless_creatable(name)
+
     Dir.mktmpdir do |tmp|
       stub_const("#{described_class}::TEST_MODELS_PATH",
-                 models_repo(tmp, "models*", %w[mine.elkt]))
+                 models_repo(tmp, name, %w[mine.elkt]))
       models_repo(tmp, "models2", %w[foreign.elkt])
 
       error = Dir.chdir(tmp) { import(described_class.new) }
