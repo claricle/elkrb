@@ -717,6 +717,7 @@ detectors:
     - Elkrb::Commands::BatchCommand#run
     - Elkrb::Commands::DiagramCommand#render_to_image
     - Elkrb::Commands::ValidateCommand#run
+    - Elkrb::FormatSniffer#parse_elkt_declared!
     - Elkrb::Geometry::Bezier#self.bezier_point
     - Elkrb::Geometry::Bezier#self.calculate_control_points
     - Elkrb::Geometry::Bezier#self.calculate_curve

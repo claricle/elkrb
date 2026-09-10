@@ -98,7 +98,7 @@ module Elkrb
       def read_by_extension(text, extension)
         case extension
         when ".json", ".yml", ".yaml" then read_model(text, extension)
-        when ".elkt" then parse_elkt!(text)
+        when ".elkt" then parse_elkt_declared!(text)
         when ".dot", ".gv" then raise ArgumentError, DOT_UNSUPPORTED
         else parse(text)
         end
@@ -268,14 +268,23 @@ module Elkrb
       # strict grammar (see parse_elkt! below) already raises directly on
       # content it cannot parse at all.
       #
-      # The declared `.elkt` path applies no such guard: the extension names
-      # the format, so an options-only, label-only, port-only, or header-only
-      # graph is content the author meant to write, and parse_elkt! raising
-      # on genuinely unparseable syntax is the only refusal it needs.
+      # The message stays the generic UNPARSEABLE one here even when the
+      # parser raised a located Elkrb::ParseError -- unlike the declared
+      # path below, nothing here told the user this was ELKT, so a location
+      # inside an ELKT grammar they never invoked is not something they can
+      # act on. `spec/elkrb/cli/shell_boundary_spec.rb`'s "an empty but
+      # recognized collection" and "top-level JSON/YAML sequence" examples
+      # pin this on the sniffed path specifically.
       def parse_elkt_or_fail(content)
         graph = parse_elkt!(content)
         return graph unless childless?(graph)
 
+        reject_unparseable!
+      rescue StandardError
+        reject_unparseable!
+      end
+
+      def reject_unparseable!
         raise ArgumentError, UNPARSEABLE
       end
 
@@ -294,12 +303,36 @@ module Elkrb
       # StandardError from the new parser (ParseError included) already
       # reports refusal; there is no longer a silent-junk case for the
       # declared path to catch. The SNIFFED path keeps its own guard,
-      # `childless?` below -- that one is about a graph legitimately parsing
+      # `childless?` above -- that one is about a graph legitimately parsing
       # to nothing when nothing declared it to be ELKT in the first place,
       # which strict grammar does not change.
+      #
+      # Raises whatever the real parser raised, unwrapped: an
+      # Elkrb::ParseError (location-bearing) or the Lexer's `TypeError` for
+      # non-String input. Callers decide how much of that to keep --
+      # `parse_elkt_declared!` below keeps the location, `parse_elkt_or_fail`
+      # above discards it.
       def parse_elkt!(content)
         require_relative "parsers/elkt_parser"
         Elkrb::Parsers::ElktParser.parse(content)
+      end
+
+      # The declared `.elkt` path: the extension names the format, so the
+      # located Elkrb::ParseError message ("...at line 4, column 9") is
+      # something the author can act on directly, and it is kept. Losing it
+      # and substituting the generic UNPARSEABLE text was the actual defect
+      # -- the CLI already writes to stderr on purpose (commit eefcfd1), so
+      # keeping the location keeps BOTH the deliberate stream and the
+      # diagnostic detail, instead of trading one for the other.
+      #
+      # Only ParseError gets this treatment. The one other StandardError the
+      # real parser can raise, Lexer's `TypeError` for non-String input, has
+      # no location to report -- the generic message is the correct
+      # fallback for it, not a narrower case of the same bug.
+      def parse_elkt_declared!(content)
+        parse_elkt!(content)
+      rescue Elkrb::ParseError => e
+        raise ArgumentError, e.message
       rescue StandardError
         raise ArgumentError, UNPARSEABLE
       end
