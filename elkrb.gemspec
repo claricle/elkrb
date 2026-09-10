@@ -16,16 +16,10 @@ Gem::Specification.new do |spec|
 
   spec.homepage = "https://github.com/claricle/elkrb"
   spec.license = "BSD-2-Clause"
-  # Ruby 3.2 reached end of life on 2026-03-31, so the floor is 3.3.
-  #
-  # It is also what the shared CI matrix tests. metanorma/ci's
-  # ruby-matrix.json lists 3.3, 3.4 and 4.0 and no 3.2, so a 3.2 floor was a
-  # promise nothing verified unless this repo carried a matrix leg of its own.
-  # Raising it here deletes that leg instead of maintaining it.
-  #
-  # The floor cannot go BELOW 3.2 whatever CI says: lutaml-model 0.8 does not
-  # parse on 3.1 or older -- 66 of its files are syntax errors on 3.0 and 15
-  # on 3.1. Its own gemspec understates this as >= 3.0.0.
+  # Do not lower this below 3.3. The shared CI matrix starts at 3.3, so a lower
+  # floor is a promise nothing tests. Below 3.2 the gem cannot load at all:
+  # lutaml-model 0.8 is a syntax error on 3.1 and older, and its own gemspec
+  # understates that as ">= 3.0.0".
   spec.required_ruby_version = ">= 3.3.0"
 
   spec.metadata["homepage_uri"] = spec.homepage

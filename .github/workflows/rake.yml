@@ -18,32 +18,18 @@ jobs:
   rake:
     uses: metanorma/ci/.github/workflows/generic-rake.yml@main
 
-    # MEASURED, not assumed. generic-rake.yml's `tests-passed` job declares
-    # `permissions: contents: write`, and GitHub validates a called workflow's
-    # permission requests against the CALLING JOB before it evaluates any
-    # `if:`. So a caller granting only `contents: read` is refused at startup,
-    # which creates zero jobs and reports no check at all -- it reads as "no CI
-    # configured" rather than "CI is broken". That refused every run of this
-    # workflow from 2026-08-19 until this commit.
+    # Do not narrow this to `contents: read`. generic-rake.yml's `tests-passed`
+    # job declares `contents: write`, and GitHub checks a called workflow's
+    # permissions against the calling job before evaluating any `if:`. A
+    # read-only caller is refused at startup, which creates zero jobs and
+    # reports no check at all, so it looks like no CI rather than broken CI.
     #
-    # Nothing changed here to cause it: this caller was byte-identical from the
-    # initial commit until 2026-09-04. metanorma/ci commit 30a34e4 (2026-05-12,
-    # "add write permissions to tests passed") added the grant upstream, and
-    # `uses: ...@main` picked it up with no commit to elkrb.
-    #
-    # `cascade: false` does NOT avoid this, so do not "simplify" the grant away
-    # by relying on it. Run 34117181565 carried `cascade: false` under a
-    # `contents: read` caller and still gave startup_failure with zero jobs;
-    # run 34118177872 adds the grant and starts 12 jobs.
+    # `cascade: false` below does not make the narrower grant safe. It was tried.
     permissions:
       contents: write
 
     with:
-      # Skip the `tests-passed` / `do-release` repository_dispatch. The grant
-      # above makes the call legal; this keeps it unused, and `tests-passed`
-      # reports as `skipped`. `do-release` fires on v* tags and release.yml
-      # listens for it, so leaving the cascade on would newly auto-publish on
-      # every tag. Both elkrb releases to date were run by hand and no
-      # repository_dispatch has ever fired here. Releases stay manual; flip
-      # this to true in a PR of its own if that should change.
+      # Releases stay manual. `do-release` fires on v* tags and release.yml
+      # listens for it, so turning the cascade on would auto-publish every tag.
+      # Change it in a PR of its own.
       cascade: false

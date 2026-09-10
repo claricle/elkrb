@@ -28,19 +28,11 @@ gem "flay", "~> 2.14.4"
 gem "flog", "~> 4.9.4"
 gem "prism", "~> 1.9.0"
 gem "sexp_processor", "~> 4.17.5"
-# KEEP THIS GUARD. It does nothing today and becomes load-bearing the moment
-# mutant's own floor rises above the gemspec's.
+# Keep this guard. mutant needs 3.3 and the gemspec floor is also 3.3, so it
+# changes nothing today; it speaks again the moment mutant needs a version
+# above our floor.
 #
-# mutant 0.16 needs Ruby >= 3.3 and elkrb.gemspec's floor is now also 3.3.0, so
-# the two agree and the false branch cannot change any outcome. Line 6 calls
-# `gemspec`, which puts elkrb into resolution, so bundler enforces
-# required_ruby_version itself: on 3.2 `bundle install` fails on the gemspec
-# whether or not this line is guarded -- measured on 3.2.3 under bundler 2.4.19,
-# 2.5.6 and 4.0.17, all three reporting "Ruby >= 3.3.0 is required".
-#
-# It re-arms if mutant ever needs a version above our floor, which is the case
-# it was written for. Gemfile.lock is gitignored here, so it costs nothing.
-# Compared as Gem::Version, never as strings -- as strings "3.10" sorts BELOW
+# Compare as Gem::Version, never as strings. As strings "3.10" sorts below
 # "3.3", which would exclude Ruby 3.10 from a 3.3+ guard.
 gem "mutant-rspec", "~> 0.16.3" if Gem::Version.new(RUBY_VERSION) >= Gem::Version.new("3.3")
 gem "reek", "~> 6.5.0"

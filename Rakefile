@@ -221,10 +221,8 @@ end
 desc "Mutation-test subjects changed since BASE (default origin/v2)"
 task :mutant do
   # The Gemfile only installs mutant on 3.3+, so say why rather than letting
-  # bundler report a missing binary the Gemfile deliberately never asked for.
-  # Unreachable while the gemspec floor and mutant's floor are both 3.3: bundler
-  # refuses to install at all below that. Keep it -- it speaks again the moment
-  # either floor moves.
+  # bundler report a missing binary it deliberately never asked for. Keep it:
+  # it speaks again the moment either floor moves.
   if Gem::Version.new(RUBY_VERSION) < Gem::Version.new("3.3")
     raise "mutant needs Ruby >= 3.3; this is #{RUBY_VERSION}. The Gemfile " \
           "skips it below that. Re-run on 3.3+."
