@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 module Elkrb
+  # Reopened only to attach DeepStringifyKeys below. Graph is elkrb's data
+  # model namespace, collectively defined across lib/elkrb/graph/*.rb --
+  # there is no single file that owns it.
   module Graph
     # Recursively stringifies Hash/Array keys (Symbol -> String). Used only
     # by the five models' `layout_options=` overrides, and only on the

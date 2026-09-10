@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 module Elkrb
+  # Reopened only to attach NormalizeOptionKeys below. Graph is elkrb's data
+  # model namespace, collectively defined across lib/elkrb/graph/*.rb --
+  # there is no single file that owns it.
   module Graph
     # Normalizes the result of `attr.cast_value` for an options map, and
     # rejects the one shape that result can take when a caller used a key
