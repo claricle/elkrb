@@ -546,6 +546,14 @@ end
 RSpec.describe "a file whose extension already names the format" do
   include CliRunner
 
+  # RETARGETED, not weakened: this used to pin the generic UNPARSEABLE
+  # text (`include("Unable to parse")`), which FormatSniffer produced by
+  # flattening the parser's own located Elkrb::ParseError. That flattening
+  # was the defect elkt_loading_spec.rb caught on the same declared path --
+  # a user who names a file `.elkt` has earned the parser's real
+  # diagnostic, not a generic refusal. `parse_elkt_declared!` now keeps the
+  # location; this pins the EXACT message, not a substring, so a future
+  # weakening back to a generic string would fail here too.
   it "rejects a .elkt file whose content is not ELKT at all" do
     Dir.mktmpdir do |dir|
       path = File.join(dir, "junk.elkt")
@@ -554,7 +562,8 @@ RSpec.describe "a file whose extension already names the format" do
       _stdout, stderr, status = run_elkrb("layout", path)
 
       expect(status.exitstatus).to eq(1)
-      expect(stderr).to include("Unable to parse")
+      expect(stderr)
+        .to eq("Error: expected node, port, label, edge at line 1, column 1\n")
     end
   end
 
