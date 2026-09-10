@@ -69,14 +69,33 @@ RSpec.describe CorpusRunner, ".prune_stale_dumps" do
     end
   end
 
-  it "keeps a file the previous summary did not record" do
+  # `Dir.glob("*.json")` does not match a dot-prefixed name, so a recorded
+  # dump whose id begins with "." survived every prune and outlived the
+  # corpus that named it. Ids become filenames verbatim, and nothing
+  # forbids a leading dot.
+  it "removes a recorded dot-prefixed dump the corpus no longer names" do
     in_isolated_parent do |parent|
-      dir = previous_dump(parent, "dumps", %w[live stale],
-                          extra: %w[someones.json])
+      dir = previous_dump(parent, "dumps", %w[live .retired])
 
       prune(dir, ["live"])
 
-      expect(names_in(dir)).to eq(%w[live.json someones.json summary.json])
+      expect(names_in(dir)).to eq(%w[live.json summary.json])
+    end
+  end
+
+  # The dot-prefixed member is load-bearing: FNM_DOTMATCH is what pulls such
+  # names into the glob's scope at all, so without it here the "never a
+  # candidate" rule is pinned only on the arm that was already in scope. An
+  # unconditional `Dir.glob(".*.json")` sweep passes the whole suite otherwise.
+  it "keeps a file the previous summary did not record" do
+    in_isolated_parent do |parent|
+      dir = previous_dump(parent, "dumps", %w[live stale],
+                          extra: %w[someones.json .someones.json])
+
+      prune(dir, ["live"])
+
+      expect(names_in(dir))
+        .to eq(%w[.someones.json live.json someones.json summary.json])
     end
   end
 
