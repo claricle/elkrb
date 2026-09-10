@@ -598,6 +598,25 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
       expect(File.exist?(scratch)).to be(false)
     end
 
+    # Copilot, PR #13 round at 2167f82: remove_scratch runs from the
+    # render's own `ensure`, and the gap between its `File.directory?`
+    # check and `directory_identity`'s `File.lstat` is real -- if the
+    # directory is gone by the time lstat runs, the raise used to escape
+    # the ensure and mask whatever real failure it was cleaning up after.
+    # `File.directory?` is stubbed true (what it would have answered a
+    # moment earlier) while the directory is actually gone, so lstat hits
+    # ENOENT -- the same shape the real race produces, without needing
+    # actual concurrency to trigger it.
+    it "does not raise when the directory vanishes between the check " \
+       "and the identity capture" do
+      scratch, identity = command.send(:scratch_dir, target)
+      FileUtils.remove_entry(scratch)
+      allow(File).to receive(:directory?).with(scratch).and_return(true)
+
+      expect { command.send(:remove_scratch, scratch, identity) }
+        .not_to raise_error
+    end
+
     # The directory exists before scratch_dir returns, so the caller's ensure
     # cannot cover a failure inside it. A chmod that raised used to leak it.
     # Both things that can fail after the directory exists, because only one

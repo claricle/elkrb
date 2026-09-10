@@ -274,9 +274,15 @@ module Elkrb
         end
       end
 
+      # Mirrors file_identity's own rescue: a TOCTOU gap between a caller's
+      # existence check and this lstat -- the directory removed or replaced
+      # in between -- must not raise out of remove_scratch's ensure and mask
+      # whatever real failure it was cleaning up after.
       def directory_identity(path)
         stat = File.lstat(path)
         [stat.dev, stat.ino]
+      rescue SystemCallError
+        nil
       end
 
       # Removes the directory ONLY if the path still names the one whose
