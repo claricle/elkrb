@@ -52,11 +52,19 @@ module Elkrb
       execute_command(argv)
     end
 
+    # `available?` only proves @dot_path resolved to a real, executable file
+    # at CONSTRUCTION time. Between then and this call the binary can be
+    # deleted or lose its execute bit -- measured, Open3.capture2e raises
+    # Errno::ENOENT or Errno::EACCES in exactly those cases, which would
+    # otherwise break #version's own documented "nil when not available"
+    # contract instead of honoring it.
     def version
       return nil unless available?
 
       output, = Open3.capture2e(@dot_path, "-V")
       output.match(/version\s+([\d.]+)/i)&.captures&.first
+    rescue SystemCallError
+      nil
     end
 
     def supported_formats

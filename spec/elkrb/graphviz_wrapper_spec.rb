@@ -460,6 +460,19 @@ RSpec.describe Elkrb::GraphvizWrapper do
       end
     end
 
+    # Copilot, PR #13 round at 30a06db: `available?` only proves @dot_path
+    # resolved at CONSTRUCTION time. Deleting the binary afterward makes the
+    # real Open3.capture2e raise Errno::ENOENT instead of honoring this
+    # describe block's own "nil when not available" contract.
+    it "returns nil, not a raise, when the binary disappears after construction" do
+      with_fake_dot do |log_path|
+        wrapper = described_class.new
+        File.delete(fake_dot_executable(log_path))
+
+        expect(wrapper.version).to be_nil
+      end
+    end
+
     it "runs dot via Open3, not a shell string (a path containing a space works)" do
       with_fake_dot do |log_path|
         spaced_dir = File.join(File.dirname(log_path), "with space")
