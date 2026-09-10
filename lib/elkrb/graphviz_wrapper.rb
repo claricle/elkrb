@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "command_resolver"
+
 module Elkrb
   # Wrapper for optional Graphviz integration
   # Provides graceful degradation when Graphviz is not installed
@@ -9,8 +11,11 @@ module Elkrb
     SUPPORTED_FORMATS = %i[png svg pdf ps eps].freeze
     SUPPORTED_ENGINES = %w[dot neato fdp sfdp twopi circo].freeze
 
+    # `@dot_path` keeps the candidate as written, so a bare "dot" is resolved
+    # again when the command runs: Ruby execs a metacharacter-free command
+    # string itself and searches PATH for it.
     def initialize
-      @dot_path = find_graphviz
+      @dot_path = CommandResolver.resolve(CANDIDATES)
     end
 
     def available?
@@ -49,26 +54,14 @@ module Elkrb
 
     private
 
-    def find_graphviz
-      # Try common locations
-      candidates = [
-        "dot",
-        "/usr/bin/dot",
-        "/usr/local/bin/dot",
-        "/opt/homebrew/bin/dot",
-        "/opt/local/bin/dot",
-      ]
-
-      candidates.each do |path|
-        if File.executable?(path)
-          return path
-        elsif system("which #{path} > /dev/null 2>&1")
-          return path
-        end
-      end
-
-      nil
-    end
+    CANDIDATES = [
+      "dot",
+      "/usr/bin/dot",
+      "/usr/local/bin/dot",
+      "/opt/homebrew/bin/dot",
+      "/opt/local/bin/dot",
+    ].freeze
+    private_constant :CANDIDATES
 
     def build_command(engine, format, input_file, output_file, dpi)
       cmd_parts = [
