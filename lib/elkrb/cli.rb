@@ -4,6 +4,9 @@ require "thor"
 require "json"
 require "yaml"
 
+require_relative "errors"
+require_relative "best_effort_write"
+
 module Elkrb
   # Command-line interface for elkrb
   #
@@ -52,8 +55,7 @@ module Elkrb
 
       verbose_output "Layout complete!"
     rescue StandardError => e
-      error_output "Error: #{e.message}"
-      exit 1
+      fail_command(e)
     end
 
     desc "algorithms", "List available layout algorithms"
@@ -92,8 +94,7 @@ module Elkrb
       require_relative "commands/diagram_command"
       Commands::DiagramCommand.new(file, options).run
     rescue StandardError => e
-      error_output "Error: #{e.message}"
-      exit 1
+      fail_command(e)
     end
 
     desc "convert FILE", "Convert between formats (JSON/YAML/DOT/ELKT)"
@@ -105,8 +106,7 @@ module Elkrb
       require_relative "commands/convert_command"
       Commands::ConvertCommand.new(file, options).run
     rescue StandardError => e
-      error_output "Error: #{e.message}"
-      exit 1
+      fail_command(e)
     end
 
     desc "render DOT_FILE", "Render DOT to image (requires Graphviz)"
@@ -120,8 +120,7 @@ module Elkrb
       require_relative "commands/render_command"
       Commands::RenderCommand.new(dot_file, options).run
     rescue StandardError => e
-      error_output "Error: #{e.message}"
-      exit 1
+      fail_command(e)
     end
 
     desc "validate FILE", "Validate ELK graph structure"
@@ -131,8 +130,7 @@ module Elkrb
       require_relative "commands/validate_command"
       Commands::ValidateCommand.new(file, options).run
     rescue StandardError => e
-      error_output "Error: #{e.message}"
-      exit 1
+      fail_command(e)
     end
 
     desc "batch DIR", "Process multiple files in a directory"
@@ -146,8 +144,7 @@ module Elkrb
       require_relative "commands/batch_command"
       Commands::BatchCommand.new(directory, options).run
     rescue StandardError => e
-      error_output "Error: #{e.message}"
-      exit 1
+      fail_command(e)
     end
 
     desc "version", "Show elkrb version"
@@ -213,12 +210,37 @@ module Elkrb
       end
     end
 
+    # Best-effort: this is a progress line, not the result. On a closed
+    # stdout it must not take the command down with it -- see
+    # Elkrb::BestEffortWrite for why a dead stream here used to mean
+    # SystemExit(0) with the real work never attempted.
     def verbose_output(message)
-      say message, :yellow if options[:verbose]
+      return unless options[:verbose]
+
+      BestEffortWrite.attempt { say message, :yellow }
     end
 
     def error_output(message)
       say message, :red
+    end
+
+    # Keep the CommandFailed re-raise: ValidateCommand#run prints its own list
+    # of errors, so reporting it again here appends a second, redundant
+    # `Error: ...` line AFTER that list on every failed `elkrb validate`.
+    #
+    # Keep the Errno::EPIPE re-raise: a reader hanging up ends a SUCCESSFUL
+    # run (`elkrb layout big.json | head`), and Thor turns a re-raised EPIPE
+    # into exit 0. Wrap it instead and that clean pipeline starts exiting 1.
+    #
+    # The report is best-effort; see Elkrb::BestEffortWrite for why, and wrap
+    # any new non-result write -- a report, a progress line, anything that
+    # is not the write emitting the command's actual output -- the same way.
+    def fail_command(error)
+      raise error if error.is_a?(CommandFailed) || error.is_a?(Errno::EPIPE)
+
+      message = error.message
+      BestEffortWrite.attempt { error_output "Error: #{message}" }
+      raise CommandFailed, message
     end
   end
 end
