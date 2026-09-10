@@ -61,8 +61,10 @@ RSpec.describe "sirena consumer capture fixtures" do
   shared_examples "a graph elkrb echoes back" do
     # A graph's own algorithm key is recorded, not obeyed -- both the
     # canonical layoutOptions["elk.algorithm"] and the layoutOptions
-    # ["algorithm"] alias. c4_nested.json carries both; the rest carry
-    # only the alias. Neither is read.
+    # ["algorithm"] alias. c4_nested.json carries both SPELLINGS across the
+    # document, never in one hash: its root has only "algorithm", while each
+    # nested subgraph has only "elk.algorithm". The rest carry only the
+    # alias, at the root. Neither spelling is read.
     # LayoutEngine.layout selects from options[:algorithm] or
     # options["algorithm"] and otherwise defaults to "layered"; it never
     # reads graph.layoutOptions. So every case sharing these examples lays
