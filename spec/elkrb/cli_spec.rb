@@ -94,8 +94,6 @@ RSpec.describe "elkrb CLI" do
           end
           expect(log_entries).not_to be_empty
 
-          pending("RC10")
-
           # Accept either argv shape a real fix might land: a separate
           # "-o" token pair, or today's "-o<path>" suffix kept but built
           # via system(*argv) instead of a shell string. Either way the
