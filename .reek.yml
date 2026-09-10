@@ -453,6 +453,7 @@ detectors:
     - Elkrb::Commands::DiagramCommand#remove_scratch
     - Elkrb::Commands::DiagramCommand#unlink_owned
     - Elkrb::FormatSniffer#blank?
+    - Elkrb::FormatSniffer#default_id?
     - Elkrb::FormatSniffer#hollow_model?
     - Elkrb::Graph::Edge#__elkrb_endpoint_ids
     - Elkrb::Graph::NormalizeOptionKeys#call

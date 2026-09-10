@@ -313,8 +313,10 @@ module Elkrb
       end
 
       # An ELKT graph is itself a node and may carry only its own position or
-      # size (`layout [ size: 30, 40 ]`). That is meaningful content, so the
-      # root geometry counts alongside children, edges and options.
+      # size (`layout [ size: 30, 40 ]`), a root label, a root port, or an
+      # explicit id from a `graph <id>` header -- ElkGraph.xtext allows a
+      # bare graph header with nothing else. Each is meaningful content, so
+      # they count alongside children, edges and options.
       #
       # This blank-checks the collections where hollow_model? nil-checks
       # them, and the difference is forced rather than an oversight. The ELKT
@@ -323,10 +325,22 @@ module Elkrb
       # nothing here is ever nil and emptiness is the only signal there is.
       # On the model path absence and emptiness are distinguishable, so an
       # empty collection means the document was understood.
+      #
+      # "root" is the parser's own default id (empty.json pins it), so an id
+      # that differs is itself evidence of a `graph <id>` declaration -- the
+      # one case here with no collection to check at all.
       def hollow_hash?(graph)
-        blank?(graph[:children]) && blank?(graph[:edges]) &&
-          blank?(graph[:layoutOptions]) &&
+        blank_fields?(graph) && default_id?(graph[:id]) &&
           graph.values_at(:x, :y, :width, :height).all?(&:nil?)
+      end
+
+      def blank_fields?(graph)
+        %i[children edges layoutOptions labels ports]
+          .all? { |field| blank?(graph[field]) }
+      end
+
+      def default_id?(id)
+        id.nil? || id == "root"
       end
 
       def blank?(collection)

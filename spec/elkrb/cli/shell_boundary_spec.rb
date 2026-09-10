@@ -105,6 +105,26 @@ RSpec.describe "elkrb CLI shell boundary" do
       end
     end
 
+    # Codex round 1 on 903d342, High: a `graph <id>` header with nothing else
+    # is a real ElkGraph.xtext declaration, but the ELKT parser's hash has no
+    # children/edges/layoutOptions to show for it, so FormatSniffer's hollow
+    # check rejected it -- reproduced end to end, exit 1, "Unable to parse",
+    # before the fix. Pre-existing in #13, not introduced by this session's
+    # merge: the OLD parser silently dropped the unrecognized `graph` keyword
+    # and produced the same shape (id "root" instead of "G"), so it was
+    # equally hollow and equally rejected either way.
+    it "exits 0 for a graph-header-only file whose extension declares ELKT" do
+      Dir.mktmpdir do |dir|
+        file = File.join(dir, "header_only.elkt")
+        File.write(file, "graph G\n")
+
+        stdout, _stderr, status = run_elkrb("layout", file)
+
+        expect(status.exitstatus).to eq(0)
+        expect(JSON.parse(stdout)["id"]).to eq("G")
+      end
+    end
+
     it "exits 1 for a comment-only file with no recognized extension" do
       Dir.mktmpdir do |dir|
         file = File.join(dir, "comment.noext")
