@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "support/filename_probe"
 require "fileutils"
 require "json"
 require "stringio"
@@ -16,6 +17,8 @@ require_relative "elkjs_test_importer"
 # is relative -- a spec that got this wrong would overwrite the tracked
 # fixture from a test run.
 RSpec.describe ElkjsTestImporter do
+  include FilenameProbe
+
   # Returns the ImportError import_all raised, or nil when it ran to the
   # end. import_all used to call `exit` itself, which killed any Ruby
   # caller instead of handing back an error; only the script entry point
@@ -83,9 +86,27 @@ RSpec.describe ElkjsTestImporter do
   # match a sibling checkout too, and the foreign case landed in the
   # committed fixture.
   it "does not import a bug file from a sibling checkout" do
+    name = "elkjs*"
+    skip_unless_creatable(name)
+
     Dir.mktmpdir do |tmp|
-      stub_checkout(checkout(tmp, "elkjs*", %w[test-bug-mine.js]))
+      stub_checkout(checkout(tmp, name, %w[test-bug-mine.js]))
       checkout(tmp, "elkjs2", %w[test-bug-foreign.js])
+
+      error = Dir.chdir(tmp) { import(described_class.new) }
+
+      expect(error).to be_nil
+      expect(written_ids(tmp)).to eq(["elkjs_bug-mine"])
+    end
+  end
+
+  # `[` and `]` are legal in a Win32 filename, so this example runs on the
+  # Windows leg where the `elkjs*` one above is skipped. Without it the
+  # importer's only escape guarantee would have zero coverage there.
+  it "does not import a bug file when the checkout name holds a bracket" do
+    Dir.mktmpdir do |tmp|
+      stub_checkout(checkout(tmp, "elkjs[x]", %w[test-bug-mine.js]))
+      checkout(tmp, "elkjsx", %w[test-bug-foreign.js])
 
       error = Dir.chdir(tmp) { import(described_class.new) }
 

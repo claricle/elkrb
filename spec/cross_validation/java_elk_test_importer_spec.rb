@@ -258,4 +258,20 @@ RSpec.describe JavaElkTestImporter do
       expect(ids.uniq.size).to eq(2)
     end
   end
+
+  # `[` and `]` are legal in a Win32 filename, so this example runs on the
+  # Windows leg where the `models*` one above is skipped. Without it the
+  # importer's only escape guarantee would have zero coverage there.
+  it "does not import a model when the checkout name holds a bracket" do
+    Dir.mktmpdir do |tmp|
+      stub_const("#{described_class}::TEST_MODELS_PATH",
+                 models_repo(tmp, "models[x]", %w[mine.elkt]))
+      models_repo(tmp, "modelsx", %w[foreign.elkt])
+
+      error = Dir.chdir(tmp) { import(described_class.new) }
+
+      expect(error).to be_nil
+      expect(written_ids(tmp)).to eq(["java_elk_mine"])
+    end
+  end
 end
