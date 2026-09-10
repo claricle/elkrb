@@ -1,0 +1,155 @@
+{
+  "id": "user_journey",
+  "children": [
+    {
+      "id": "task_0",
+      "width": 156.0,
+      "height": 80,
+      "labels": [
+        {
+          "text": "Visit help center",
+          "width": 136.0,
+          "height": 16.0,
+          "position": "top"
+        },
+        {
+          "text": "3",
+          "width": 9.0,
+          "height": 18.0,
+          "position": "center"
+        },
+        {
+          "text": "Customer",
+          "width": 48.0,
+          "height": 12.0,
+          "position": "bottom"
+        }
+      ],
+      "metadata": {
+        "name": "Visit help center",
+        "score": 3,
+        "score_color": "yellow",
+        "actors": [
+          "Customer"
+        ],
+        "section_name": "Discovery",
+        "section_index": 0
+      }
+    },
+    {
+      "id": "task_1",
+      "width": 172.0,
+      "height": 80,
+      "labels": [
+        {
+          "text": "Search for solution",
+          "width": 152.0,
+          "height": 16.0,
+          "position": "top"
+        },
+        {
+          "text": "2",
+          "width": 9.0,
+          "height": 18.0,
+          "position": "center"
+        },
+        {
+          "text": "Customer",
+          "width": 48.0,
+          "height": 12.0,
+          "position": "bottom"
+        }
+      ],
+      "metadata": {
+        "name": "Search for solution",
+        "score": 2,
+        "score_color": "red",
+        "actors": [
+          "Customer"
+        ],
+        "section_name": "Discovery",
+        "section_index": 0
+      }
+    },
+    {
+      "id": "task_2",
+      "width": 140,
+      "height": 80,
+      "labels": [
+        {
+          "text": "Issue resolved",
+          "width": 112.0,
+          "height": 16.0,
+          "position": "top"
+        },
+        {
+          "text": "5",
+          "width": 9.0,
+          "height": 18.0,
+          "position": "center"
+        },
+        {
+          "text": "Customer, Agent",
+          "width": 90.0,
+          "height": 12.0,
+          "position": "bottom"
+        }
+      ],
+      "metadata": {
+        "name": "Issue resolved",
+        "score": 5,
+        "score_color": "green",
+        "actors": [
+          "Customer",
+          "Agent"
+        ],
+        "section_name": "Resolution",
+        "section_index": 1
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "flow_0",
+      "sources": [
+        "task_0"
+      ],
+      "targets": [
+        "task_1"
+      ],
+      "metadata": {
+        "type": "sequence"
+      }
+    },
+    {
+      "id": "flow_1",
+      "sources": [
+        "task_1"
+      ],
+      "targets": [
+        "task_2"
+      ],
+      "metadata": {
+        "type": "sequence"
+      }
+    }
+  ],
+  "layoutOptions": {
+    "algorithm": "layered",
+    "elk.direction": "RIGHT",
+    "elk.spacing.nodeNode": 60,
+    "elk.spacing.edgeNode": 30,
+    "elk.spacing.edgeEdge": 20,
+    "elk.layered.spacing.nodeNodeBetweenLayers": 60,
+    "elk.layered.nodePlacement.strategy": "SIMPLE",
+    "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
+    "elk.hierarchyHandling": "INCLUDE_CHILDREN"
+  },
+  "metadata": {
+    "title": "Support journey",
+    "sections": [
+      "Discovery",
+      "Resolution"
+    ]
+  }
+}

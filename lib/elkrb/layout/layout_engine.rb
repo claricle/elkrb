@@ -57,6 +57,7 @@ module Elkrb
         #   - :algorithm (String) - Algorithm name (layered, force, etc.)
         #   - Algorithm-specific options
         # @return [Elkrb::Graph::Graph] The input graph with computed positions
+        # @raise [ArgumentError] If graph is neither a Hash nor a Graph::Graph
         # @raise [Elkrb::Error] If the specified algorithm is not found
         #
         # @example With specific algorithm
@@ -73,8 +74,7 @@ module Elkrb
         #     hierarchical: true
         #   )
         def layout(graph, options = {})
-          # Convert hash to Graph if needed
-          graph = convert_to_graph(graph) if graph.is_a?(Hash)
+          graph = graph_argument(graph)
 
           # Get algorithm name from options
           algorithm_name = options[:algorithm] ||
@@ -163,6 +163,19 @@ module Elkrb
 
         def convert_to_graph(hash)
           Graph::Graph.from_hash(hash)
+        end
+
+        # Takes the two documented shapes and nothing else. The check lives
+        # here, not in Elkrb.layout, so the CLI and every other caller of the
+        # engine get the same clear error instead of a NoMethodError deep
+        # inside an algorithm.
+        def graph_argument(graph)
+          return convert_to_graph(graph) if graph.is_a?(::Hash)
+          return graph if graph.is_a?(Graph::Graph)
+
+          raise ArgumentError,
+                "graph must be a Hash or Elkrb::Graph::Graph, " \
+                "got #{graph.class}"
         end
       end
     end

@@ -141,7 +141,10 @@ RSpec.describe "elkrb CLI" do
     # that reach it directly. Measured: the BOM never arrives at
     # ElktParser here, so do not read this example as covering that one.
     # Both ids in order, not just a count -- dropping `a` and keeping `b`
-    # is the exact shape of the bug.
+    # is the exact shape of the bug. Also assert the edge (added merging
+    # PR #29's fix to this same example on v2): that fixture declares
+    # three things, and a parser that kept both nodes while dropping e0
+    # would pass a children-only check.
     it "keeps every declaration of a BOM-prefixed ELKT file" do
       Dir.mktmpdir do |dir|
         output = File.join(dir, "bom.json")
@@ -154,6 +157,8 @@ RSpec.describe "elkrb CLI" do
         graph = JSON.parse(File.read(output))
         ids = graph["children"].map { |child| child["id"] }
         expect(ids).to eq(%w[a b])
+        expect(graph["edges"].map { |e| [e["id"], e["sources"], e["targets"]] })
+          .to eq([["e0", ["a"], ["b"]]])
       end
     end
   end

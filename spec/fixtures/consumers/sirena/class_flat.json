@@ -1,0 +1,105 @@
+{
+  "id": "class_diagram",
+  "children": [
+    {
+      "id": "Animal",
+      "width": 140,
+      "height": 104,
+      "labels": [
+        {
+          "text": "Animal",
+          "width": 42.0,
+          "height": 14.0
+        }
+      ],
+      "metadata": {
+        "name": "Animal",
+        "stereotype": null,
+        "attributes": [
+          {
+            "name": "name",
+            "type": "String",
+            "visibility": "public"
+          },
+          {
+            "name": "void",
+            "type": null,
+            "visibility": "public"
+          }
+        ],
+        "methods": [
+          {
+            "name": "makeSound",
+            "parameters": "",
+            "return_type": null,
+            "visibility": "public"
+          }
+        ]
+      }
+    },
+    {
+      "id": "Dog",
+      "width": 140,
+      "height": 104,
+      "labels": [
+        {
+          "text": "Dog",
+          "width": 21.0,
+          "height": 14.0
+        }
+      ],
+      "metadata": {
+        "name": "Dog",
+        "stereotype": null,
+        "attributes": [
+          {
+            "name": "breed",
+            "type": "String",
+            "visibility": "public"
+          },
+          {
+            "name": "void",
+            "type": null,
+            "visibility": "public"
+          }
+        ],
+        "methods": [
+          {
+            "name": "bark",
+            "parameters": "",
+            "return_type": null,
+            "visibility": "public"
+          }
+        ]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "Dog_to_Animal",
+      "sources": [
+        "Dog"
+      ],
+      "targets": [
+        "Animal"
+      ],
+      "labels": [],
+      "metadata": {
+        "relationship_type": "inheritance",
+        "source_cardinality": null,
+        "target_cardinality": null
+      }
+    }
+  ],
+  "layoutOptions": {
+    "algorithm": "layered",
+    "elk.direction": "DOWN",
+    "elk.spacing.nodeNode": 80,
+    "elk.spacing.edgeNode": 40,
+    "elk.spacing.edgeEdge": 20,
+    "elk.layered.spacing.nodeNodeBetweenLayers": 80,
+    "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
+    "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
+    "elk.hierarchyHandling": "INCLUDE_CHILDREN"
+  }
+}

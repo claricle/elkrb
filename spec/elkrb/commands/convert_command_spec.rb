@@ -91,6 +91,26 @@ RSpec.describe Elkrb::Commands::ConvertCommand do
       expect(result["children"]).to be_an(Array)
     end
 
+    # Item 28 owns the ELKT serializer, which still reads edge[:sourcePort] --
+    # a key this parser no longer emits -- so a port-referenced round trip
+    # currently loses its suffixes. The expectation below is the CORRECT
+    # FUTURE one; never relax it to pin the broken output.
+    it "keeps port references through an ELKT round trip" do
+      pending("item 28: serializer must rebuild n1.p1 from the ports tree")
+
+      input_file = File.join(temp_dir, "ports.elkt")
+      output_file = File.join(temp_dir, "ports_out.elkt")
+      File.write(input_file, <<~ELKT)
+        node n1 { port p1 }
+        node n2 { port p2 }
+        edge n1.p1 -> n2.p2
+      ELKT
+
+      described_class.new(input_file, { output: output_file }).run
+
+      expect(File.read(output_file)).to include("edge n1.p1 -> n2.p2")
+    end
+
     it "converts ELKT to DOT" do
       input_file = File.join(temp_dir, "input.elkt")
       output_file = File.join(temp_dir, "output.dot")

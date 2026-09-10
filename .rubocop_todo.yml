@@ -55,7 +55,6 @@ Layout/LineLength:
     - 'lib/elkrb/commands/diagram_command.rb'
     - 'lib/elkrb/commands/render_command.rb'
     - 'lib/elkrb/commands/validate_command.rb'
-    - 'lib/elkrb/graph/layout_options.rb'
     - 'lib/elkrb/graph/node_constraints.rb'
     - 'lib/elkrb/graph/port.rb'
     - 'lib/elkrb/layout/algorithms/base_algorithm.rb'
@@ -154,7 +153,6 @@ Metrics/AbcSize:
     - 'lib/elkrb/layout/label_placer.rb'
     - 'lib/elkrb/layout/port_constraint_processor.rb'
     - 'lib/elkrb/options/registry.rb'
-    - 'lib/elkrb/parsers/elkt_parser.rb'
     - 'lib/elkrb/serializers/dot_serializer.rb'
     - 'lib/elkrb/serializers/elkt_serializer.rb'
 
@@ -203,7 +201,6 @@ Metrics/CyclomaticComplexity:
     - 'lib/elkrb/layout/port_constraint_processor.rb'
     - 'lib/elkrb/options/elk_padding.rb'
     - 'lib/elkrb/options/registry.rb'
-    - 'lib/elkrb/parsers/elkt_parser.rb'
     - 'lib/elkrb/serializers/dot_serializer.rb'
     - 'lib/elkrb/serializers/elkt_serializer.rb'
 
@@ -225,7 +222,6 @@ Metrics/MethodLength:
     - 'lib/elkrb/commands/validate_command.rb'
     - 'lib/elkrb/geometry/bezier.rb'
     - 'lib/elkrb/graph/edge.rb'
-    - 'lib/elkrb/graph/layout_options.rb'
     - 'lib/elkrb/graph/port.rb'
     - 'lib/elkrb/layout/algorithm_registry.rb'
     - 'lib/elkrb/layout/algorithms/base_algorithm.rb'
@@ -256,7 +252,6 @@ Metrics/MethodLength:
     - 'lib/elkrb/layout/layout_engine.rb'
     - 'lib/elkrb/layout/port_constraint_processor.rb'
     - 'lib/elkrb/options/registry.rb'
-    - 'lib/elkrb/parsers/elkt_parser.rb'
     - 'lib/elkrb/serializers/dot_serializer.rb'
     - 'lib/elkrb/serializers/elkt_serializer.rb'
 
@@ -339,14 +334,6 @@ Performance/RedundantMerge:
 Style/ComparableClamp:
   Exclude:
     - 'lib/elkrb/geometry/bezier.rb'
-
-# Offense count: 1
-# This cop supports safe autocorrection (--autocorrect).
-# Configuration parameters: EnforcedStyle, AllowComments.
-# SupportedStyles: empty, nil, both
-Style/EmptyElse:
-  Exclude:
-    - 'lib/elkrb/parsers/elkt_parser.rb'
 
 # Offense count: 7
 # This cop supports safe autocorrection (--autocorrect).
