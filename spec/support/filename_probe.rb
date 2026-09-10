@@ -25,9 +25,14 @@ require "tmpdir"
 #
 # It asks the FILESYSTEM, not the platform, because that is the question, and
 # the repo already draws that line (corpus_spec.rb probes case-folding rather
-# than testing the OS). The supporting claim that a FAT or exFAT mount would
-# refuse these names on any OS is a HYPOTHESIS, not a measurement -- no CI leg
-# is known to use one.
+# than testing the OS).
+#
+# The supporting claim that a FAT or exFAT mount would refuse these names on any
+# OS was a hypothesis, and it is now MEASURED FALSE for one case: a FAT16 image
+# mounted on macOS via hdiutil ACCEPTS `*` and `?` in a directory name. So the
+# refusal is a property of the OS layer, not of FAT itself, and asking the
+# filesystem is still the right question -- it just answers yes here. No CI leg
+# is known to use such a mount.
 #
 # Do not memoize: ~0.3 ms per call, and the spec stubs Dir.mkdir per example.
 # See filename_probe_spec.rb for how to exercise the rescue from a test, and
