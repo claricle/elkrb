@@ -294,7 +294,9 @@ namespace :corpus do
   desc "Dump canonical layout JSON for every corpus case to DIR"
   task :dump, [:dir] do |_t, args|
     dir = args[:dir]
-    raise "usage: rake 'corpus:dump[dir]'" if dir.nil? || dir.empty?
+    if dir.nil? || dir.empty?
+      raise ArgumentError, "usage: rake 'corpus:dump[dir]'"
+    end
 
     ruby "spec/cross_validation/corpus_runner.rb", dir
   end

@@ -27,6 +27,9 @@ module Elkrb
     def initialize: (String algorithm_name) -> void
   end
 
+  class CommandFailed < Error
+  end
+
   module Parsers
     class ElktParser
       ParseError: singleton(::Elkrb::ParseError)

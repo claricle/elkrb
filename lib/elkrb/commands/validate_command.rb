@@ -3,6 +3,9 @@
 require "json"
 require "yaml"
 
+require_relative "../errors"
+require_relative "../best_effort_write"
+
 module Elkrb
   module Commands
     # Command for validating ELK graph structure
@@ -21,9 +24,16 @@ module Elkrb
         if errors.empty?
           puts "✅ #{@file} is valid"
         else
-          puts "❌ #{@file} has #{errors.length} error(s):"
-          errors.each { |e| puts "  • #{e}" }
-          exit 1
+          # One summary, printed and raised, so the reported count and the
+          # raised count cannot drift apart. The printing is best-effort --
+          # see Elkrb::BestEffortWrite -- because this report goes out BEFORE
+          # the raise, so a dead stdout used to take the raise with it.
+          summary = "#{@file} has #{errors.length} error(s)"
+          BestEffortWrite.attempt do
+            puts "❌ #{summary}:"
+            errors.each { |e| puts "  • #{e}" }
+          end
+          raise Elkrb::CommandFailed, summary
         end
       end
 

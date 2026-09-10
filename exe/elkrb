@@ -5,4 +5,11 @@ require "bundler/setup"
 require "elkrb"
 require "elkrb/cli"
 
-Elkrb::Cli.start(ARGV)
+begin
+  Elkrb::Cli.start(ARGV)
+rescue Elkrb::CommandFailed
+  # The command already tried to report itself; only the status is left to
+  # decide. Printing again here would duplicate the report in the usual case,
+  # and a report that failed to write once will not write now either.
+  exit 1
+end
