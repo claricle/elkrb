@@ -1,0 +1,91 @@
+{
+  "id": "root",
+  "layoutOptions": {
+    "elk.algorithm": "mrtree"
+  },
+  "children": [
+    {
+      "id": "a",
+      "width": 30,
+      "height": 30,
+      "x": 45,
+      "y": 20
+    },
+    {
+      "id": "b",
+      "width": 30,
+      "height": 30,
+      "x": 20,
+      "y": 70
+    },
+    {
+      "id": "c",
+      "width": 30,
+      "height": 30,
+      "x": 70,
+      "y": 70
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "sources": [
+        "a"
+      ],
+      "targets": [
+        "b"
+      ],
+      "sections": [
+        {
+          "id": "e1_s0",
+          "startPoint": {
+            "x": 55,
+            "y": 50
+          },
+          "endPoint": {
+            "x": 35,
+            "y": 70
+          },
+          "bendPoints": [
+            {
+              "x": 55,
+              "y": 53
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "e2",
+      "sources": [
+        "a"
+      ],
+      "targets": [
+        "c"
+      ],
+      "sections": [
+        {
+          "id": "e2_s0",
+          "startPoint": {
+            "x": 65,
+            "y": 50
+          },
+          "endPoint": {
+            "x": 85,
+            "y": 70
+          },
+          "bendPoints": [
+            {
+              "x": 65,
+              "y": 53
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "x": 0,
+  "y": 0,
+  "width": 120,
+  "height": 120
+}

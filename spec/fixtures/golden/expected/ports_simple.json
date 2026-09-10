@@ -1,0 +1,58 @@
+{
+  "id": "root",
+  "children": [
+    {
+      "id": "a",
+      "width": 30,
+      "height": 30,
+      "ports": [
+        {
+          "id": "p1",
+          "width": 6,
+          "height": 6,
+          "x": 30,
+          "y": 12
+        }
+      ],
+      "x": 12,
+      "y": 12
+    },
+    {
+      "id": "b",
+      "width": 30,
+      "height": 30,
+      "x": 68,
+      "y": 12
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "sources": [
+        "p1"
+      ],
+      "targets": [
+        "b"
+      ],
+      "sections": [
+        {
+          "id": "e1_s0",
+          "startPoint": {
+            "x": 48,
+            "y": 27
+          },
+          "endPoint": {
+            "x": 68,
+            "y": 27
+          },
+          "incomingShape": "p1",
+          "outgoingShape": "b"
+        }
+      ]
+    }
+  ],
+  "x": 0,
+  "y": 0,
+  "width": 110,
+  "height": 54
+}

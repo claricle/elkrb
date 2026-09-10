@@ -1,0 +1,101 @@
+{
+  "id": "root",
+  "children": [
+    {
+      "id": "p",
+      "children": [
+        {
+          "id": "m",
+          "children": [
+            {
+              "id": "d1",
+              "width": 30,
+              "height": 30,
+              "x": 12,
+              "y": 12
+            },
+            {
+              "id": "d2",
+              "width": 30,
+              "height": 30,
+              "x": 62,
+              "y": 12
+            }
+          ],
+          "edges": [
+            {
+              "id": "ie1",
+              "sources": [
+                "d1"
+              ],
+              "targets": [
+                "d2"
+              ],
+              "sections": [
+                {
+                  "id": "ie1_s0",
+                  "startPoint": {
+                    "x": 42,
+                    "y": 27
+                  },
+                  "endPoint": {
+                    "x": 62,
+                    "y": 27
+                  },
+                  "incomingShape": "d1",
+                  "outgoingShape": "d2"
+                }
+              ]
+            }
+          ],
+          "x": 12,
+          "y": 12,
+          "width": 104,
+          "height": 54
+        },
+        {
+          "id": "nn",
+          "width": 30,
+          "height": 30,
+          "x": 136,
+          "y": 24
+        }
+      ],
+      "edges": [
+        {
+          "id": "ie2",
+          "sources": [
+            "m"
+          ],
+          "targets": [
+            "nn"
+          ],
+          "sections": [
+            {
+              "id": "ie2_s0",
+              "startPoint": {
+                "x": 116,
+                "y": 39
+              },
+              "endPoint": {
+                "x": 136,
+                "y": 39
+              },
+              "incomingShape": "m",
+              "outgoingShape": "nn"
+            }
+          ]
+        }
+      ],
+      "x": 12,
+      "y": 12,
+      "width": 178,
+      "height": 78
+    }
+  ],
+  "edges": [],
+  "x": 0,
+  "y": 0,
+  "width": 202,
+  "height": 102
+}
