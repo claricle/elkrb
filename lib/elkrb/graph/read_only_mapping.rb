@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 module Elkrb
+  # Reopened only to attach ReadOnlyMapping below. Graph is elkrb's data
+  # model namespace, collectively defined across lib/elkrb/graph/*.rb --
+  # there is no single file that owns it.
   module Graph
     # The write half of a read-only `with:` mapping. lutaml requires both
     # halves of a `with:` pair, and a legacy alias must contribute nothing to
