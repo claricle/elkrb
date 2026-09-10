@@ -209,7 +209,12 @@ RSpec.describe Elkrb::Commands::ConvertCommand do
       command.run
 
       result = JSON.parse(File.read(output_file))
-      expect(result["layoutOptions"]).to eq({ "elk.algorithm" => "layered" })
+      # PR #17 rewrote the ELKT parser to match ELK's own grammar: a bare
+      # property key is kept exactly as written, never auto-prefixed with
+      # "elk." (spec/fixtures/elkt/option_keys.json preserves "algorithm"
+      # unprefixed on v2). The expectation here moved to match that merged,
+      # reviewed behaviour.
+      expect(result["layoutOptions"]).to eq({ "algorithm" => "layered" })
     end
   end
 end

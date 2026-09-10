@@ -95,8 +95,13 @@ RSpec.describe "elkrb CLI shell boundary" do
         stdout, _stderr, status = run_elkrb("layout", file)
 
         expect(status.exitstatus).to eq(0)
+        # PR #17 rewrote the ELKT parser to match ELK's own grammar: a bare
+        # property key is kept exactly as written, never auto-prefixed with
+        # "elk." (spec/fixtures/elkt/option_keys.json preserves "algorithm"
+        # and "spacing.nodeNode" unprefixed on v2). The expectation here
+        # moved to match that merged, reviewed behaviour.
         expect(JSON.parse(stdout)["layoutOptions"])
-          .to eq({ "elk.algorithm" => "layered" })
+          .to eq({ "algorithm" => "layered" })
       end
     end
 
