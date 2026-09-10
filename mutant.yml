@@ -8,3 +8,18 @@ includes:
   - lib
 requires:
   - elkrb
+  # `require "elkrb"` does not load the files below -- lib/elkrb.rb
+  # deliberately does not require the CLI (exe/elkrb does that), and the CLI
+  # itself only requires each command lazily, inside the Thor method that
+  # needs it. Without these, mutant finds zero subjects in any of them and
+  # reports "Coverage: 100.00%" while never having looked -- measured on
+  # origin/v2 with `require "elkrb"` and `$LOADED_FEATURES`.
+  # spec/mutant_yml_spec.rb pins that this list stays complete, so this
+  # comment does not have to.
+  - elkrb/cli
+  - elkrb/graphviz_wrapper
+  - elkrb/commands/batch_command
+  - elkrb/commands/convert_command
+  - elkrb/commands/diagram_command
+  - elkrb/commands/render_command
+  - elkrb/commands/validate_command
