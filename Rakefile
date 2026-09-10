@@ -3,6 +3,7 @@
 require "bundler/gem_tasks"
 require "rspec/core/rake_task"
 require "rubocop/rake_task"
+require_relative "spec/support/sirena_provenance"
 
 RSpec::Core::RakeTask.new(:spec)
 RuboCop::RakeTask.new do |task|
@@ -77,5 +78,54 @@ namespace :corpus do
     abort "usage: rake 'corpus:dump[dir]'" if dir.nil? || dir.empty?
 
     ruby "spec/cross_validation/corpus_runner.rb", dir
+  end
+end
+
+desc "Re-capture the sirena consumer fixtures " \
+     "(SIRENA_DIR=<sirena checkout>, OUT_DIR=<where to write>)"
+# `raise`, not `abort`. A rake task is a method any Ruby caller can
+# invoke, and `abort` raises SystemExit: `Rake::Task["fixtures:sirena"]
+# .invoke` with no SIRENA_DIR took the CALLING process down past every
+# ordinary `rescue StandardError` -- measured. Only the `rake` command
+# itself may decide an exit status, and it still does: an exception out
+# of a task is what makes rake exit 1.
+# The sirena checkout SIRENA_DIR names, as an absolute path.
+def sirena_checkout
+  requested = ENV.fetch("SIRENA_DIR", nil).to_s
+  raise "Set SIRENA_DIR to a sirena checkout, e.g. ~/claricle/sirena" if
+    requested.empty?
+
+  File.expand_path(requested).tap do |dir|
+    raise "No such directory: #{dir}" unless Dir.exist?(dir)
+  end
+end
+
+task "fixtures:sirena" do
+  sirena_dir = sirena_checkout
+  fixture_dir = File.expand_path("spec/fixtures/consumers/sirena", __dir__)
+  # Blank is "not given", not "here" -- see SirenaProvenance.out_dir.
+  out_dir = SirenaProvenance.out_dir(ENV.fetch("OUT_DIR", nil),
+                                     default: fixture_dir)
+
+  # The provenance check REFUSES. It used to print the sha and ask a
+  # human to compare it, and a wrong sha on a dirty tree got all the way
+  # to the capture command, which overwrites the fixtures in place.
+  #
+  # `Mismatch` propagates UNCAUGHT. There is nothing to add to it here, and
+  # both shapes this line has worn already lost something: `abort e.message`
+  # raised SystemExit and took the calling process down, and `raise
+  # e.message` -- which replaced it -- reduced a dedicated `Mismatch` to a
+  # RuntimeError and reset its backtrace, so a caller could no longer tell a
+  # provenance refusal from any other failure. `Mismatch` is a StandardError
+  # and rake turns it into exit status 1 on its own.
+  SirenaProvenance.assert!(sirena_dir: sirena_dir, fixture_dir: fixture_dir,
+                           expected: ENV.fetch("SIRENA_SHA", nil))
+
+  # sirena is a separate gem, so the capture runs in sirena's own bundle.
+  Bundler.with_unbundled_env do
+    Dir.chdir(sirena_dir) do
+      sh "bundle", "exec", "ruby",
+         File.join(fixture_dir, "capture.rb"), fixture_dir, out_dir
+    end
   end
 end
