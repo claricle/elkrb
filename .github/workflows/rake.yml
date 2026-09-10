@@ -1,11 +1,15 @@
 name: rake
 
+# Default for every job. The `rake` job below raises its own grant; nothing
+# else in this file needs more than read.
 permissions:
   contents: read
 
 on:
   push:
-    branches: [ master, main ]
+    # v2 is the integration branch, so it needs push coverage of its own;
+    # pull_request below is unfiltered and covers PRs into it.
+    branches: [ master, main, v2 ]
     tags: [ v* ]
   pull_request:
   workflow_dispatch:
@@ -13,3 +17,19 @@ on:
 jobs:
   rake:
     uses: metanorma/ci/.github/workflows/generic-rake.yml@main
+
+    # Do not narrow this to `contents: read`. generic-rake.yml's `tests-passed`
+    # job declares `contents: write`, and GitHub checks a called workflow's
+    # permissions against the calling job before evaluating any `if:`. A
+    # read-only caller is refused at startup, which creates zero jobs and
+    # reports no check at all, so it looks like no CI rather than broken CI.
+    #
+    # `cascade: false` below does not make the narrower grant safe. It was tried.
+    permissions:
+      contents: write
+
+    with:
+      # Releases stay manual. `do-release` fires on v* tags and release.yml
+      # listens for it, so turning the cascade on would auto-publish every tag.
+      # Change it in a PR of its own.
+      cascade: false

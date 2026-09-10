@@ -28,13 +28,12 @@ gem "flay", "~> 2.14.4"
 gem "flog", "~> 4.9.4"
 gem "prism", "~> 1.9.0"
 gem "sexp_processor", "~> 4.17.5"
-# mutant 0.16 needs Ruby >= 3.3 while elkrb.gemspec's floor is 3.2.0, so an
-# unguarded entry makes `bundle install` itself fail on 3.2 -- measured, not
-# assumed: bundler exits 6 with "Ruby >= 3.3 is required". CI runs a Ruby x OS
-# matrix over the gemspec floor, so that would be every 3.2 cell red on code
-# nobody touched. Gemfile.lock is gitignored here, so a conditional dependency
-# costs nothing. Compared as Gem::Version, never as strings -- as strings
-# "3.10" sorts BELOW "3.3", which would exclude Ruby 3.10 from a 3.3+ guard.
+# Keep this guard. mutant needs 3.3 and the gemspec floor is also 3.3, so it
+# changes nothing today; it speaks again the moment mutant needs a version
+# above our floor.
+#
+# Compare as Gem::Version, never as strings. As strings "3.10" sorts below
+# "3.3", which would exclude Ruby 3.10 from a 3.3+ guard.
 gem "mutant-rspec", "~> 0.16.3" if Gem::Version.new(RUBY_VERSION) >= Gem::Version.new("3.3")
 gem "reek", "~> 6.5.0"
 # Pinned to a patch series like the rest of this block, not `~> 1.1`. SimpleCov

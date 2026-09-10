@@ -16,10 +16,11 @@ Gem::Specification.new do |spec|
 
   spec.homepage = "https://github.com/claricle/elkrb"
   spec.license = "BSD-2-Clause"
-  # lutaml-model 0.8 needs Ruby 3.2 to parse at all: 66 of its files are
-  # syntax errors on 3.0 and 15 on 3.1, none on 3.2. Its own gemspec
-  # understates this as >= 3.0.0, so the floor has to be declared here.
-  spec.required_ruby_version = ">= 3.2.0"
+  # Do not lower this below 3.3. The shared CI matrix starts at 3.3, so a lower
+  # floor is a promise nothing tests. Below 3.2 the gem cannot load at all:
+  # lutaml-model 0.8 is a syntax error on 3.1 and older, and its own gemspec
+  # understates that as ">= 3.0.0".
+  spec.required_ruby_version = ">= 3.3.0"
 
   spec.metadata["homepage_uri"] = spec.homepage
   spec.metadata["source_code_uri"] = "https://github.com/claricle/elkrb"
