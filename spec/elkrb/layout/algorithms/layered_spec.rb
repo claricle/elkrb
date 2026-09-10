@@ -27,14 +27,17 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
     end
 
     it "does not stack-overflow on a two-port self-loop beside a real edge" do
-      # Regression guard: resolving get_incoming_edges' target check
-      # through the index while leaving self_loop_edge? comparing RAW
-      # ids (sources.first == targets.first, "p1" != "p2") makes this
-      # edge look like an incoming edge from node "a" to itself, and
-      # calculate_layer recurses on "a" again before it is memoized ->
-      # SystemStackError. Confirmed by reproducing that version;
-      # incoming_to? below compares resolved owners instead, so this
-      # example is green.
+      # Regression guard, rewritten 2026-09-07: the methods it used to
+      # name (get_incoming_edges, self_loop_edge?, calculate_layer,
+      # incoming_to?) no longer exist anywhere in lib/.
+      #
+      # "p1" and "p2" are two ports of ONE node, so this edge is a
+      # self-loop on "a" however its endpoints are spelled. A layer pass
+      # that compares RAW endpoint ids sees "p1" != "p2", treats the edge
+      # as real incoming traffic into "a" from "a", and makes "a" its own
+      # predecessor. LayerAssigner#usable_edge? is what refuses that: it
+      # resolves both endpoints to their owning node through the index and
+      # drops the edge when the two are the same node.
       graph = {
         id: "r",
         children: [
@@ -51,103 +54,147 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
       }
 
       result = Elkrb.layout(graph, algorithm: "layered")
-
       a = result.children.find { |n| n.id == "a" }
       b = result.children.find { |n| n.id == "b" }
 
-      # Pins S7's interim behaviour; S8 replaces with hyperedge raise.
+      # Both edges are one source and one target, so the validator has
+      # nothing to say about either: the self-loop is dropped when layers
+      # are assigned, not refused at the door.
       expect(b.y).to be > a.y
     end
 
-    it "does not stack-overflow on a hyperedge mixing a self-referencing " \
-       "target and a real child" do
-      # Regression guard: CycleBreaker's dfs used `edge.targets.first`
-      # unconditionally; for this edge the first target ("ap") resolves
-      # back to the source node "a" itself, so dfs treated a's own
-      # in-progress DFS frame as a cycle and reversed the edge,
-      # corrupting it before LayerAssigner ever saw it ->
-      # SystemStackError there. Confirmed against that version, and
-      # confirmed this exact graph does NOT raise on origin/v2
-      # (port-id blindness there means the edge is invisible to
-      # cycle-breaking entirely, so no crash) -- a genuine regression
-      # this diff must not ship.
+    it "preserves cyclic edge directions and assigns three layers" do
       graph = {
         id: "r",
-        children: [
-          {
-            id: "a", width: 10, height: 10,
-            ports: [{ id: "ap" }]
-          },
-          { id: "b", width: 10, height: 10 },
-        ],
+        children: %w[a b c].map { |id| { id: id, width: 10, height: 10 } },
         edges: [
-          { id: "e", sources: ["a"], targets: %w[ap b] },
-        ],
-      }
-
-      expect { Elkrb.layout(graph, algorithm: "layered") }
-        .not_to raise_error
-    end
-
-    it "does not stack-overflow on a hyperedge whose first source is " \
-       "the target itself" do
-      # Regression guard: [a, b] -> a is genuine incoming traffic to
-      # "a" from "b" (incoming_to? correctly counts it), but
-      # calculate_layer picked edge.sources.first unconditionally --
-      # for this edge that is "a" itself, so it recursed on "a" again
-      # before memoizing it. first_other_source below picks the other
-      # one instead.
-      graph = {
-        id: "r",
-        children: [
-          { id: "a", width: 10, height: 10 },
-          { id: "b", width: 10, height: 10 },
-        ],
-        edges: [
-          { id: "e", sources: %w[a b], targets: ["a"] },
+          { id: "ab", sources: ["a"], targets: ["b"] },
+          { id: "bc", sources: ["b"], targets: ["c"] },
+          { id: "ca", sources: ["c"], targets: ["a"] },
         ],
       }
 
       result = Elkrb.layout(graph, algorithm: "layered")
 
+      expect(result.edges.map { |edge| [edge.sources, edge.targets] }).to eq(
+        [
+          [["a"], ["b"]],
+          [["b"], ["c"]],
+          [["c"], ["a"]],
+        ],
+      )
+      expect(result.edges).to all(
+        satisfy { |edge| !edge.properties&.key?("reversed") },
+      )
+      # Exact layer ORDER, not just a distinct count: a CycleBreaker that
+      # detects nothing still produces 3 distinct layers here, because
+      # LayerAssigner's own re-entrancy guard independently breaks the
+      # 3-node cycle during layer computation -- just into the wrong
+      # order (b, c, a instead of a, b, c). Only the order proves
+      # CycleBreaker, not the fallback, resolved it.
       a = result.children.find { |n| n.id == "a" }
       b = result.children.find { |n| n.id == "b" }
-
-      # Pins S7's interim behaviour; S8 replaces with hyperedge raise.
-      expect(a.y).to be > b.y
+      c = result.children.find { |n| n.id == "c" }
+      expect(a.y).to be < b.y
+      expect(b.y).to be < c.y
     end
 
-    it "does not stack-overflow on a cycle closing through a hyperedge's " \
-       "later target" do
-      # Regression guard: a's hyperedge fans out to three ports, and
-      # the real a -> c -> a cycle closes through the LAST of them (c's
-      # edge back to a's port). A dfs that stopped at the first
-      # non-self target never visited c during cycle-breaking, left the
-      # cycle unbroken, and calculate_layer then recursed between a and
-      # c forever. Confirmed against that version, and confirmed this
-      # exact graph does NOT raise on origin/v2 (port ids are invisible
-      # there, so the cycle is invisible too -- a genuine regression
-      # this diff must not ship). dfs now walks every resolved target,
-      # so CycleBreaker reverses the closing edge itself.
+    it "raises for a hyperedge with multiple sources" do
       graph = {
         id: "r",
-        children: [
-          {
-            id: "a", width: 10, height: 10,
-            ports: [{ id: "ap" }]
-          },
-          {
-            id: "b", width: 10, height: 10,
-            ports: [{ id: "bp" }]
-          },
-          {
-            id: "c", width: 10, height: 10,
-            ports: [{ id: "cp" }]
-          },
-        ],
+        children: %w[a b c].map { |id| { id: id, width: 10, height: 10 } },
+        edges: [{ id: "e", sources: %w[a b], targets: ["c"] }],
+      }
+
+      expect { Elkrb.layout(graph, algorithm: "layered") }
+        .to raise_error(
+          Elkrb::UnsupportedConfigurationException,
+          "layered does not support hyperedges (edge e)",
+        )
+    end
+
+    it "raises for a hyperedge with multiple targets" do
+      graph = {
+        id: "r",
+        children: %w[a b c].map { |id| { id: id, width: 10, height: 10 } },
+        edges: [{ id: "e", sources: ["a"], targets: %w[b c] }],
+      }
+
+      expect { Elkrb.layout(graph, algorithm: "layered") }
+        .to raise_error(Elkrb::UnsupportedConfigurationException)
+    end
+
+    it "raises for a duplicate edge id" do
+      graph = {
+        id: "r",
+        children: %w[a b c].map { |id| { id: id, width: 10, height: 10 } },
         edges: [
-          { id: "e1", sources: ["a"], targets: %w[ap bp cp] },
-          { id: "e2", sources: ["cp"], targets: ["ap"] },
+          { id: "e", sources: ["a"], targets: ["b"] },
+          { id: "e", sources: ["b"], targets: ["c"] },
+        ],
+      }
+
+      expect { Elkrb.layout(graph, algorithm: "layered") }
+        .to raise_error(Elkrb::ValidationError, /duplicate edge id: e/)
+    end
+
+    # nil and "" are one name to the reader, so they are one thing to the
+    # validator too: NEITHER is an id. An anonymous edge carries no handle,
+    # so it has nothing to be a duplicate of, and a graph may hold as many
+    # as it likes.
+    #
+    # This example is the regression this branch had to undo. While the
+    # cycle breaker keyed reversals by edge id, every anonymous edge shared
+    # one key, and the validator refused the second one to cover that --
+    # so `Elkrb.layout` rejected an ordinary two-edge graph written without
+    # ids, which v2 lays out. Reversals are keyed by edge identity now, so
+    # the refusal is gone with the reason for it.
+    it "lays out a nil id and an empty-string id as two anonymous edges" do
+      graph = {
+        id: "r",
+        children: %w[a b c d].map { |id| { id: id, width: 10, height: 10 } },
+        edges: [
+          { sources: ["a"], targets: ["b"] },
+          { id: "", sources: ["c"], targets: ["d"] },
+        ],
+      }
+
+      result = Elkrb.layout(graph, algorithm: "layered")
+      y = result.children.to_h { |node| [node.id, node.y] }
+
+      # Both edges took effect: each target sits a layer below its source.
+      expect(y["a"]).to be < y["b"]
+      expect(y["c"]).to be < y["d"]
+    end
+
+    # The reversal set holds edge OBJECTS compared by identity. Keyed by id
+    # instead, the anonymous back edge b -> a puts `nil` in the set, and
+    # every other anonymous edge in the graph then reads as reversed: c -> d
+    # is laid out as d -> c and d comes out ABOVE c.
+    it "reverses only the anonymous edge that closes the cycle" do
+      graph = {
+        id: "r",
+        children: %w[a b c d].map { |id| { id: id, width: 10, height: 10 } },
+        edges: [
+          { sources: ["a"], targets: ["b"] },
+          { sources: ["b"], targets: ["a"] },
+          { sources: ["c"], targets: ["d"] },
+        ],
+      }
+
+      result = Elkrb.layout(graph, algorithm: "layered")
+      y = result.children.to_h { |node| [node.id, node.y] }
+
+      expect(y["c"]).to be < y["d"]
+    end
+
+    it "still accepts two edges carrying different real ids" do
+      graph = {
+        id: "r",
+        children: %w[a b c d].map { |id| { id: id, width: 10, height: 10 } },
+        edges: [
+          { id: "e1", sources: ["a"], targets: ["b"] },
+          { id: "e2", sources: ["c"], targets: ["d"] },
         ],
       }
 
@@ -155,21 +202,196 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
         .not_to raise_error
     end
 
-    it "breaks a cycle that closes through a hyperedge's later target" do
-      # Following only the first non-self target left this cycle for
-      # LayerAssigner's re-entrancy guard to absorb, which warns on
-      # stderr. Walking every target breaks it in phase 1 instead.
+    # `""` is truthy in Ruby, so a plain `edge.id.nil?` test reads the
+    # empty string as a real id -- and then these two edges are duplicates
+    # of each other and the graph is refused. This example is the one that
+    # fails if the emptiness half of `anonymous?` is dropped; the nil
+    # examples pass either way.
+    it "treats an empty-string edge id as no id, not as the id \"\"" do
       graph = {
         id: "r",
-        children: %w[a b c].map { |i| { id: i, width: 10, height: 10 } },
+        children: %w[a b c].map { |id| { id: id, width: 10, height: 10 } },
         edges: [
-          { id: "e1", sources: ["a"], targets: %w[b c] },
-          { id: "e2", sources: ["c"], targets: ["a"] },
+          { id: "", sources: ["a"], targets: ["b"] },
+          { id: "", sources: ["b"], targets: ["c"] },
         ],
       }
 
+      result = Elkrb.layout(graph, algorithm: "layered")
+      y = result.children.to_h { |node| [node.id, node.y] }
+
+      expect(y["a"]).to be < y["b"]
+      expect(y["b"]).to be < y["c"]
+    end
+
+    # An edge id is optional in ELK, so an error message could name the
+    # edge as the empty string. The endpoints are the fallback handle, and
+    # "(no endpoints)" is what the fallback itself falls back to -- which
+    # is why the comment above `edge_label` no longer claims an edge always
+    # has endpoints. Both halves show in this one message.
+    it "names an id-less edge by its endpoints in a missing-endpoint error" do
+      graph = {
+        id: "r",
+        children: %w[a b].map { |id| { id: id, width: 10, height: 10 } },
+        edges: [{ sources: [], targets: ["b"] }],
+      }
+
       expect { Elkrb.layout(graph, algorithm: "layered") }
-        .not_to output.to_stderr
+        .to raise_error(
+          Elkrb::UnsupportedConfigurationException,
+          "layered requires non-empty edge endpoints " \
+          '(edge (none), (no endpoints) -> "b")',
+        )
+    end
+
+    it "names an id-less edge by its endpoints in a hyperedge error" do
+      graph = {
+        id: "r",
+        children: %w[a b c].map { |id| { id: id, width: 10, height: 10 } },
+        edges: [{ sources: ["a"], targets: %w[b c] }],
+      }
+
+      expect { Elkrb.layout(graph, algorithm: "layered") }
+        .to raise_error(
+          Elkrb::UnsupportedConfigurationException,
+          'layered does not support hyperedges (edge (none), "a" -> "b", "c")',
+        )
+    end
+
+    it "raises for missing or empty endpoints before the empty fast path" do
+      graph = {
+        id: "r",
+        children: [],
+        edges: [{ id: "missing", sources: [], targets: ["a"] }],
+      }
+
+      expect { Elkrb.layout(graph, algorithm: "layered") }
+        .to raise_error(Elkrb::UnsupportedConfigurationException)
+    end
+
+    it "raises for nil endpoint ids" do
+      graph = {
+        id: "r",
+        children: [{ id: "a", width: 10, height: 10 }],
+        edges: [{ id: "missing", sources: [nil], targets: ["a"] }],
+      }
+
+      expect { Elkrb.layout(graph, algorithm: "layered") }
+        .to raise_error(
+          Elkrb::UnsupportedConfigurationException,
+          "layered requires non-empty edge endpoints (edge missing)",
+        )
+    end
+
+    it "raises for nil target endpoint ids" do
+      graph = {
+        id: "r",
+        children: [{ id: "a", width: 10, height: 10 }],
+        edges: [{ id: "missing", sources: ["a"], targets: [nil] }],
+      }
+
+      expect { Elkrb.layout(graph, algorithm: "layered") }
+        .to raise_error(
+          Elkrb::UnsupportedConfigurationException,
+          "layered requires non-empty edge endpoints (edge missing)",
+        )
+    end
+
+    # `endpoint_present?` rejects nil only, deliberately. NodeIndex#add
+    # rejects a nil id and accepts every other value, so "" is a legal node
+    # id and an edge reaching it must lay out. Tightening the guard to
+    # `!endpoint.to_s.empty?` raises here instead -- and left every other
+    # example in the suite green, because nothing else ever passes an empty
+    # string to that predicate.
+    it "lays out an edge whose endpoint is a node with an empty-string id" do
+      graph = {
+        id: "r",
+        children: [
+          { id: "", width: 10, height: 10 },
+          { id: "b", width: 10, height: 10 },
+        ],
+        edges: [{ id: "e", sources: [""], targets: ["b"] }],
+      }
+
+      laid_out = Elkrb.layout(graph, algorithm: "layered")
+      y = laid_out.children.to_h { |node| [node.id, node.y] }
+
+      expect(y.keys).to contain_exactly("", "b")
+      expect(y[""]).to be < y["b"]
+    end
+
+    # An unresolvable endpoint is skipped, not rejected -- and "" is not a
+    # special case of that. Every id below names no node, and all of them
+    # must behave the same way, which is what stops the guard above from
+    # being tightened for only one of them. The absolute expectation is the
+    # positive control: without it the example would pass on any change that
+    # broke every id identically.
+    it "treats an unresolvable empty-string endpoint like other absent ids" do
+      build = lambda do |target|
+        {
+          id: "r",
+          children: [
+            { id: "a", width: 10, height: 10 },
+            { id: "b", width: 10, height: 10 },
+          ],
+          edges: [{ id: "e", sources: ["a"], targets: [target] }],
+        }
+      end
+
+      positions = lambda do |target|
+        laid_out = Elkrb.layout(build.call(target), algorithm: "layered")
+        laid_out.children.map { |node| [node.id, node.x, node.y] }
+      end
+
+      unlinked = [["a", 12.0, 12.0], ["b", 42.0, 12.0]]
+      expect(positions.call("nosuchnode")).to eq(unlinked)
+      ["", "  ", "no such node", "A"].each do |absent|
+        expect(positions.call(absent)).to eq(unlinked)
+      end
+    end
+
+    it "validates edges when children are omitted" do
+      graph = {
+        id: "r",
+        edges: [{ id: "e", sources: ["a"], targets: ["b", "c"] }],
+      }
+
+      expect { Elkrb.layout(graph, algorithm: "layered") }
+        .to raise_error(Elkrb::UnsupportedConfigurationException)
+    end
+
+    it "validates a leaf child's edges in the parent index" do
+      graph = {
+        id: "r",
+        children: [
+          {
+            id: "leaf", width: 10, height: 10,
+            edges: [{ id: "nested", sources: ["a"], targets: ["b", "c"] }]
+          },
+        ],
+        edges: [],
+      }
+
+      expect { Elkrb.layout(graph, algorithm: "layered") }
+        .to raise_error(Elkrb::UnsupportedConfigurationException)
+    end
+
+    it "lays out a 5000-node chain without overflowing the stack" do
+      count = 5000
+      graph = {
+        id: "r",
+        children: (0...count).map do |i|
+          { id: "n#{i}", width: 1, height: 1 }
+        end,
+        edges: (0...(count - 1)).map do |i|
+          { id: "e#{i}", sources: ["n#{i}"], targets: ["n#{i + 1}"] }
+        end,
+      }
+
+      result = Elkrb.layout(graph, algorithm: "layered")
+
+      expect(result.children.size).to eq(count)
+      expect(result.children.map(&:y).uniq.size).to eq(count)
     end
 
     it "leaves a nested edge whose ids alias this level's ports alone" do

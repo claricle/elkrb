@@ -20,28 +20,34 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::CycleBreaker do
         )
       end
 
-      # Edge carries value equality, so deduping the reversal list with
-      # include? collapsed these two into one and left the second cycle live.
-      it "reverses both of them" do
-        described_class.new(graph, Elkrb::Layout::NodeIndex.build(graph)).break_cycles
+      it "flags both identical back edges without mutating either" do
+        reversed = described_class.new(
+          graph, Elkrb::Layout::NodeIndex.build(graph)
+        ).break_cycles
 
         back_edges = graph.edges.select { |edge| edge.id == "back" }
 
-        expect(back_edges.map(&:sources)).to all(eq(["a"]))
-        expect(back_edges.map(&:targets)).to all(eq(["b"]))
+        # These two are `==` to each other: lutaml-model gives the graph
+        # classes VALUE equality, so a plain Set would hold ONE of them and
+        # answer `include?` true for any look-alike. The reversal set
+        # compares by identity, so it keeps both apart and holds both.
+        expect(back_edges.first).to eq(back_edges.last)
+        expect(reversed.to_a).to contain_exactly(
+          be(back_edges.first), be(back_edges.last)
+        )
+
+        expect(back_edges.map(&:sources)).to all(eq(["b"]))
+        expect(back_edges.map(&:targets)).to all(eq(["a"]))
       end
 
-      it "leaves no cycle for the layer assigner to recurse on" do
-        laid_out = Elkrb.layout(graph, algorithm: "layered")
+      it "does not mutate edge properties while finding reversals" do
+        graph.edges.each { |edge| edge.properties = { "keep" => true } }
 
-        # `not_to raise_error` alone passes with the bug restored -- the
-        # unbroken cycle warns rather than raising. Assert the orientation
-        # too, so a half-broken cycle cannot pass this example.
-        back_edges = laid_out.edges.select { |edge| edge.id == "back" }
+        described_class.new(
+          graph, Elkrb::Layout::NodeIndex.build(graph)
+        ).break_cycles
 
-        expect(back_edges.size).to eq(2)
-        expect(back_edges.map(&:sources)).to all(eq(["a"]))
-        expect(back_edges.map(&:targets)).to all(eq(["b"]))
+        expect(graph.edges.map(&:properties)).to all(eq("keep" => true))
       end
     end
 
@@ -66,13 +72,109 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::CycleBreaker do
         )
       end
 
-      it "reverses it once, not once per cyclic target" do
-        reversed = described_class.new(graph, Elkrb::Layout::NodeIndex.build(graph)).break_cycles
+      it "returns one reversal without changing the hyperedge" do
+        reversed = described_class.new(
+          graph, Elkrb::Layout::NodeIndex.build(graph)
+        ).break_cycles
         back = graph.edges.find { |edge| edge.id == "back" }
 
-        expect(reversed.size).to eq(1)
-        expect(back.sources).to eq(%w[b c])
-        expect(back.targets).to eq(["x"])
+        expect(reversed.to_a).to contain_exactly(be(back))
+        expect(back.sources).to eq(["x"])
+        expect(back.targets).to eq(%w[b c])
+      end
+    end
+
+    context "with a cycle closing through a later target" do
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "r",
+          children: %w[a b c d x].map do |id|
+            Elkrb::Graph::Node.new(id: id, width: 10, height: 10)
+          end,
+          edges: [
+            Elkrb::Graph::Edge.new(id: "ab", sources: ["a"], targets: ["b"]),
+            Elkrb::Graph::Edge.new(id: "bc", sources: ["b"], targets: ["c"]),
+            Elkrb::Graph::Edge.new(id: "cx", sources: ["c"], targets: ["x"]),
+            Elkrb::Graph::Edge.new(
+              id: "back", sources: ["x"], targets: %w[d c],
+            ),
+          ],
+        )
+      end
+
+      it "returns the reversal for the later target" do
+        reversed = described_class.new(
+          graph, Elkrb::Layout::NodeIndex.build(graph)
+        ).break_cycles
+
+        expect(reversed.map(&:id)).to contain_exactly("back")
+      end
+    end
+
+    context "with a cycle closing through a later source" do
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "r",
+          children: %w[a b c].map do |id|
+            Elkrb::Graph::Node.new(id: id, width: 10, height: 10)
+          end,
+          edges: [
+            Elkrb::Graph::Edge.new(id: "ab", sources: ["a"], targets: ["b"]),
+            Elkrb::Graph::Edge.new(
+              id: "back", sources: %w[c b], targets: ["a"],
+            ),
+          ],
+        )
+      end
+
+      it "returns the reversal for the later source" do
+        reversed = described_class.new(
+          graph, Elkrb::Layout::NodeIndex.build(graph)
+        ).break_cycles
+
+        expect(reversed.map(&:id)).to contain_exactly("back")
+      end
+    end
+
+    # Nothing outside this context distinguishes "collects every back edge"
+    # from "collects the first one and stops": measured 2026-09-07, a
+    # CycleBreaker mutated to `reversed << edge if reversed.empty?` reds
+    # three of these 32 examples and nothing anywhere else -- these two,
+    # plus the identical-back-edges one at the top of the file, which now
+    # expects both copies.
+    context "with two independent cycles" do
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "r",
+          children: %w[a b c d].map do |id|
+            Elkrb::Graph::Node.new(id: id, width: 10, height: 10)
+          end,
+          edges: [
+            Elkrb::Graph::Edge.new(id: "ab", sources: ["a"], targets: ["b"]),
+            Elkrb::Graph::Edge.new(id: "ba", sources: ["b"], targets: ["a"]),
+            Elkrb::Graph::Edge.new(id: "cd", sources: ["c"], targets: ["d"]),
+            Elkrb::Graph::Edge.new(id: "dc", sources: ["d"], targets: ["c"]),
+          ],
+        )
+      end
+
+      it "reverses a back edge from each one, not just the first" do
+        reversed = described_class.new(
+          graph, Elkrb::Layout::NodeIndex.build(graph)
+        ).break_cycles
+
+        expect(reversed.map(&:id)).to contain_exactly("ba", "dc")
+      end
+
+      it "lays both cycles out in edge order without warning" do
+        laid_out = nil
+        expect do
+          laid_out = Elkrb.layout(graph, algorithm: "layered")
+        end.not_to output.to_stderr
+
+        y = laid_out.children.to_h { |node| [node.id, node.y] }
+        expect(y["a"]).to be < y["b"]
+        expect(y["c"]).to be < y["d"]
       end
     end
 
