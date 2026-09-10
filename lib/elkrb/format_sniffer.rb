@@ -260,15 +260,18 @@ module Elkrb
       end
 
       # The sniffed path reaches ELKT only because nothing else could read
-      # the document, and no extension declared it to be ELKT either. The
-      # parser is lenient -- it skips every line it does not understand and
-      # reads any `key: value` as a layout option -- so arbitrary text comes
-      # back as a graph carrying junk options and no nodes. Requiring
-      # children or edges is what keeps `layout garbage.txt` exiting 1.
+      # the document, and no extension declared it to be ELKT either, so a
+      # childless, edgeless result is treated as "probably not meant to be
+      # ELKT" rather than a real graph -- requiring children or edges is
+      # what keeps `layout garbage.txt` exiting 1. This is a deliberate
+      # policy for the UNDECLARED case, not primarily a garbage filter: the
+      # strict grammar (see parse_elkt! below) already raises directly on
+      # content it cannot parse at all.
       #
-      # parse_elkt applies a looser guard on purpose: there the extension
-      # names the format, so an options-only or geometry-only graph is
-      # content the author meant to write.
+      # The declared `.elkt` path applies no such guard: the extension names
+      # the format, so an options-only, label-only, port-only, or header-only
+      # graph is content the author meant to write, and parse_elkt! raising
+      # on genuinely unparseable syntax is the only refusal it needs.
       def parse_elkt_or_fail(content)
         graph = parse_elkt!(content)
         return graph unless childless?(graph)
