@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require "bundler/gem_tasks"
+require "fileutils"
+require "tmpdir"
 require "rspec/core/rake_task"
 require "rubocop/rake_task"
 require_relative "spec/support/sirena_provenance"
@@ -14,7 +16,224 @@ RuboCop::RakeTask.new do |task|
   task.options = ["--ignore-parent-exclusion"]
 end
 
-task default: %i[spec rubocop]
+# DO NOT DELETE. This is the only thing that arms the SimpleCov floors in
+# spec/spec_helper.rb. Remove it and coverage silently stops being enforced
+# anywhere, with every run still green. CI runs `bundle exec rake`, so the
+# default task is where the floor has to be armed.
+#
+# The value is load-bearing, but note what it does and does not buy. Under
+# `rake` the floor is ALWAYS armed -- this line overwrites whatever the caller
+# set, deliberately, because CI must not be able to opt out. The exact `== "1"`
+# in spec_helper is for the OTHER path: someone with COVERAGE_ENFORCE=0 in their
+# shell running `rspec` directly gets no floor, where a bare truthiness check
+# would have fired one, since every string is truthy in Ruby.
+#
+# No `desc`, deliberately: it is a prerequisite of `default`, not a task anyone
+# should invoke, so it stays out of `rake -T`.
+# Set by :coverage_enforce and read by :coverage_enforced -- a local both task
+# blocks close over, deliberately NOT read back out of the environment. This
+# value decides what gets DELETED, and an environment variable is whatever the
+# caller says it is. Measured before this was a local: with
+# COVERAGE_ENFORCE_RECEIPT pointed at a directory holding an unrelated
+# keep.txt, invoking :coverage_enforced on its own removed the receipt, the
+# keep.txt and the directory. nil here means this invocation created nothing,
+# so there is nothing of ours to remove.
+receipt_path = nil
+
+task :coverage_enforce do
+  ENV["COVERAGE_ENFORCE"] = "1"
+  # A FRESH directory per invocation, and the receipt path handed to the spec
+  # subprocess through the environment. Not one fixed path: two `rake` runs
+  # overlapping in the same checkout then shared a single receipt, and the
+  # unarmed one accepted -- and deleted -- the armed one's proof. Measured, an
+  # unarmed `SPEC_OPTS=--help` run passed on a receipt it had not produced.
+  #
+  # A fresh directory also means a receipt left behind by an EARLIER run is
+  # structurally unable to satisfy this one, rather than merely being deleted
+  # first, and it keeps the file out of the repository altogether.
+  #
+  # Nothing can pre-seed the path: this assignment overwrites whatever the
+  # caller set.
+  receipt_path = File.join(Dir.mktmpdir("elkrb-coverage"), "receipt")
+  # The environment is how the path reaches the spec SUBPROCESS, and that is
+  # all it is for. Nothing on this side reads it back.
+  ENV["COVERAGE_ENFORCE_RECEIPT"] = receipt_path
+end
+
+# The half of the gate that lives OUTSIDE the thing being gated, and it is the
+# only half that can be trusted on its own. Every guard inside spec_helper.rb
+# assumes spec_helper.rb was loaded, and `.rspec` loads it with
+# `--require spec_helper`, which RSpec honours only on a run that gets that
+# far. Measured on rspec-core 3.13.6, through this very task:
+#
+#   SPEC_OPTS=--help    rspec prints help and exits 0
+#   SPEC_OPTS=--version rspec prints versions and exits 0
+#
+# Neither loads spec_helper at all, so before(:suite) never runs, the at_exit
+# backstop is never registered, and `rake` reported success having enforced
+# nothing. That is a family of routes, not two of them, so this does not list
+# them: it asserts the property. The spec step has to come back with proof it
+# armed the floors, and no proof is a failure whatever the reason.
+#
+# No `desc` for the same reason as :coverage_enforce.
+task :coverage_enforced do
+  unless receipt_path && File.exist?(receipt_path)
+    raise "the spec step finished without arming the coverage floors, so " \
+          "this run enforced nothing. RSpec exits early for --help and " \
+          "--version without loading spec/spec_helper.rb. Re-run `rake` " \
+          "with no SPEC_OPTS."
+  end
+
+  # The whole directory, so a run that gets this far leaves nothing behind --
+  # and only ever a directory THIS invocation made, above. A run whose spec
+  # step FAILS never reaches here and leaves one empty directory under the
+  # system temp root, which the OS reclaims.
+  FileUtils.remove_entry(File.dirname(receipt_path))
+end
+
+task default: %i[coverage_enforce spec coverage_enforced rubocop]
+
+# Not in `default`: CI runs `bundle exec rake` across a Ruby x OS matrix, and
+# this task clones the ruby-advisory-db. A network dependency multiplied across
+# every matrix cell turns CI red on code nobody touched.
+desc "Check dependencies against the ruby-advisory-db"
+task :audit do
+  sh "bundle exec bundle-audit check --update"
+end
+
+# exe/elkrb is named EXPLICITLY, not reached through "exe". expand_dirs_to_files
+# only globs *.rb when it expands a DIRECTORY, so `expand_dirs_to_files("exe")`
+# returns [] while `expand_dirs_to_files("exe/elkrb")` returns ["exe/elkrb"] --
+# leaving the production entry point out of all three tools if it is not listed.
+# Measured 2026-09-07: adding it moves nothing (reek 0 warnings, flog max still
+# 106.52, flay total still 5006), so it costs no baseline headroom.
+QUALITY_PATHS = ["lib", "exe/elkrb"].freeze
+
+# Flog and flay both exit 0 whatever they find, so on their own they are
+# reporters, not gates. These tasks read the score off their Ruby APIs and add
+# the comparison.
+#
+# Every failure below RAISES rather than calling `abort`. This file is loadable
+# by any Ruby process -- `load "Rakefile"`, or Rake::Application#load_rakefile
+# from an embedding tool -- so `abort` here raises SystemExit in the CALLER and
+# terminates it. Only a script entry point may decide a process exit status; the
+# rake CLI turns a raised error into exit 1 by itself. spec/rakefile_spec.rb
+# pins this for the whole file, not just the tasks that have a failure path
+# today. Both scores move when the parser underneath them moves, and
+# for these two that is prism and sexp_processor -- not the `parser` gem, which
+# is rubocop's and reek's. Gemfile.lock is gitignored, so all four are pinned or
+# a fresh `bundle install` alone could move a baseline.
+#
+# TO RE-BASELINE, whenever anything in QUALITY_PATHS changes under this branch
+# -- that is lib/ OR exe/elkrb, not lib/ alone. Both numbers come from the
+# tasks' own APIs, so measure them the way the tasks do rather than by reading
+# a failure message, and pass the SAME paths the tasks pass or the reading is
+# of a different corpus than the gate. Take each reading TWICE -- a number that
+# moves between two runs is not a baseline:
+#
+#   bundle exec ruby -e 'require "flog_cli"; require "sexp_processor"
+#     f = FlogCLI.new(methods: true)
+#     f.flog(*SexpProcessor.expand_dirs_to_files("lib", "exe/elkrb"))
+#     n, s = f.max_method; puts "#{n} #{s}"'
+#
+#   bundle exec ruby -e 'require "flay"; require "sexp_processor"
+#     f = Flay.new(Flay.default_options)
+#     f.process(*SexpProcessor.expand_dirs_to_files("lib", "exe/elkrb"))
+#     f.report(File.open(File::NULL, "w")); puts f.total'
+#
+# Note the report call in the flay one: Flay#total reads 0 until #report has
+# run, for the reason the :flay task explains below. Then seed a violation --
+# a duplicated file for flay, a deliberately tangled method for flog -- and
+# watch the task go red before trusting the new number. A ceiling that cannot
+# fail is not a gate.
+FLOG_MAX_METHOD = 107.0 # worst method today is 106.52
+# Re-baselined 2026-09-07 from 4990 when origin/v2 1b305c4 was merged in: PR #10
+# deleted graph/layout_options.rb and added graph/normalize_option_keys.rb, and
+# PR #17 replaced parsers/elkt_parser.rb with parsers/elkt/. Measured twice.
+# This has no headroom by design, which is why any lib/ arriving from v2 reddens
+# it on day one -- that is the ratchet working, not a bug, but it does mean a
+# refresh onto a moved v2 always owes this measurement.
+FLAY_MAX_TOTAL = 5006
+
+# Not in `default`: the pre-existing smell count means this is only ever green
+# behind .reek.yml, and behind that baseline it duplicates rubocop's role in
+# the task CI runs on every matrix cell.
+desc "Report code smells (baseline in .reek.yml)"
+task :reek do
+  sh "bundle", "exec", "reek", *QUALITY_PATHS
+end
+
+desc "Fail if any method's flog score exceeds the recorded ceiling"
+task :flog do
+  # Required inside the task: CI runs `rake`, and a load failure in a gem only
+  # this opt-in task needs must not break the default build.
+  require "flog_cli"
+  require "sexp_processor"
+
+  # methods: true drops the main#none pseudo-method, which otherwise tops the
+  # table and is not a method at all. No score quoted on purpose: it is the sum
+  # of everything outside a method body, so it moves with any lib/ change and a
+  # number here rots on the next merge. Re-check with
+  #   FlogCLI.new.flog(*SexpProcessor.expand_dirs_to_files("lib")).max_method
+  flog = FlogCLI.new(methods: true)
+  flog.flog(*SexpProcessor.expand_dirs_to_files(*QUALITY_PATHS))
+
+  # Read the score BEFORE reporting: FlogCLI#report ends in `ensure self.reset`,
+  # which nils @totals, and max_method would then raise on nil.
+  name, score = flog.max_method
+  flog.report($stdout)
+
+  # Two decimals, not one: the comparison is exact, so a score of 107.04 would
+  # round to "107.0, over the 107.0 ceiling" and read like a bug in the task.
+  if score > FLOG_MAX_METHOD
+    raise "flog: #{name} scores #{format('%.2f', score)}, " \
+          "over the #{FLOG_MAX_METHOD} ceiling"
+  end
+end
+
+desc "Fail if total flay duplication exceeds the recorded baseline"
+task :flay do
+  require "flay"
+  require "sexp_processor"
+
+  flay = Flay.new(Flay.default_options)
+  flay.process(*SexpProcessor.expand_dirs_to_files(*QUALITY_PATHS))
+
+  # Read the total AFTER reporting -- the exact opposite of flog above, so do
+  # not "fix" one to match the other. Flay#report runs the analysis itself
+  # (flay.rb `data = analyze only`), and the analysis starts by resetting the
+  # total to 0, so #total reads 0 until report has run.
+  flay.report($stdout)
+
+  if flay.total > FLAY_MAX_TOTAL
+    raise "flay: duplication total #{flay.total}, " \
+          "over the #{FLAY_MAX_TOTAL} baseline"
+  end
+end
+
+# Not in `default`: mutant needs a git ref to scope against, and CI's checkout
+# depth is not ours to assume. Diff-scoped it takes seconds; across all of lib/
+# it is not something to run per matrix cell.
+#
+# This does NOT replace ~/.claude/bin/mutation-check.sh. That asks whether each
+# NEW SPEC goes red when the code is reverted; this asks which parts of the
+# CHANGED CODE no test protects. Different questions -- run both.
+desc "Mutation-test subjects changed since BASE (default origin/v2)"
+task :mutant do
+  # The Gemfile only installs mutant on 3.3+, so say why rather than letting
+  # bundler report a missing binary the Gemfile deliberately never asked for.
+  if Gem::Version.new(RUBY_VERSION) < Gem::Version.new("3.3")
+    raise "mutant needs Ruby >= 3.3; this is #{RUBY_VERSION}. The gemspec " \
+          "floor is 3.2.0, so the Gemfile skips it here. Re-run on 3.3+."
+  end
+
+  # Array form, so `sh` runs the command directly instead of through a shell.
+  # BASE is caller-supplied and the single-string form hands it to sh -c
+  # verbatim, so BASE='v2; some-other-command' would run that command. The array
+  # form also means `Elkrb*` needs no quoting, because nothing can glob it.
+  base = ENV.fetch("BASE", "origin/v2")
+  sh "bundle", "exec", "mutant", "run", "--since", base, "--", "Elkrb*"
+end
 
 namespace :benchmark do
   desc "Generate test graphs for benchmarking"
@@ -75,7 +294,7 @@ namespace :corpus do
   desc "Dump canonical layout JSON for every corpus case to DIR"
   task :dump, [:dir] do |_t, args|
     dir = args[:dir]
-    abort "usage: rake 'corpus:dump[dir]'" if dir.nil? || dir.empty?
+    raise "usage: rake 'corpus:dump[dir]'" if dir.nil? || dir.empty?
 
     ruby "spec/cross_validation/corpus_runner.rb", dir
   end
