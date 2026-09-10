@@ -429,9 +429,15 @@ class CorpusRunner
     # caller-supplied `outdir` reach a sibling.
     def prune_stale_dumps(outdir, corpus)
       dropped = recorded_case_ids(outdir) - corpus.map(&:id)
-      stale = dropped.map { |id| "#{id}.json" }
-      Dir.glob("*.json", base: outdir).each do |name|
-        next unless stale.include?(name)
+      # Keyed by name rather than a list: FNM_DOTMATCH below widens what the
+      # glob yields, so this membership test runs over strictly more names
+      # than it used to, once per name.
+      stale = dropped.to_h { |id| ["#{id}.json", true] }
+      # FNM_DOTMATCH: without it `*` skips a dot-prefixed name, so a
+      # recorded dump whose id begins with "." was never pruned and
+      # outlived every corpus that stopped naming it.
+      Dir.glob("*.json", File::FNM_DOTMATCH, base: outdir).each do |name|
+        next unless stale.key?(name)
 
         path = File.join(outdir, name)
         File.delete(path) if File.file?(path)
