@@ -105,23 +105,61 @@ RSpec.describe "elkrb CLI shell boundary" do
       end
     end
 
-    # Codex round 1 on 903d342, High: a `graph <id>` header with nothing else
-    # is a real ElkGraph.xtext declaration, but the ELKT parser's hash has no
-    # children/edges/layoutOptions to show for it, so FormatSniffer's hollow
-    # check rejected it -- reproduced end to end, exit 1, "Unable to parse",
-    # before the fix. Pre-existing in #13, not introduced by this session's
-    # merge: the OLD parser silently dropped the unrecognized `graph` keyword
-    # and produced the same shape (id "root" instead of "G"), so it was
-    # equally hollow and equally rejected either way.
-    it "exits 0 for a graph-header-only file whose extension declares ELKT" do
-      Dir.mktmpdir do |dir|
-        file = File.join(dir, "header_only.elkt")
-        File.write(file, "graph G\n")
+    # Codex round 1 on 903d342, High: a `graph <id>` header, a root label, or
+    # a root port with nothing else are all real ElkGraph.xtext declarations,
+    # but the ELKT parser's hash had no children/edges/layoutOptions to show
+    # for any of them, so FormatSniffer's declared-path hollow check rejected
+    # every one -- reproduced end to end, exit 1, "Unable to parse", before
+    # the fix. Pre-existing in #13, not introduced by this session's merge:
+    # the OLD parser silently dropped `graph`/root `label`/root `port` (no
+    # case in its line-by-line dispatch matched them) and produced the same
+    # hollow shape, so all three were equally rejected under the old parser
+    # too.
+    #
+    # Codex round 2 on f8e9981, High: the first fix patched the shape check
+    # (id/labels/ports) but still could not tell an EXPLICIT `graph root`
+    # from the parser's own default id, because the hash carries no signal
+    # for "a header was present" independent of what id it set. Measured
+    # that this is not fixable by refining the shape check: PR #17's grammar
+    # is strict enough that every genuinely unrecognized line already raises
+    # Elkrb::ParseError directly (`"xyzzy foo bar"` -> "expected node, port,
+    # label, edge..."), so the declared-path hollow guard has no remaining
+    # job -- there is no silent-junk case left for it to catch. Removed
+    # entirely rather than patched again; `parse_elkt!` now raises on its
+    # own for real garbage and returns whatever the parser understood
+    # otherwise, same as `graph_header.json`'s own committed fixture already
+    # demonstrates for the ordinary case (`graph G1` plus a node).
+    # `convert`, not `layout`, on purpose: this is testing what FormatSniffer
+    # accepts and how the parser represents it, not what the Graph model does
+    # with a root-level label or port afterward. `layout` calls
+    # Graph.from_hash then #to_json, and THAT drops both --
+    # `Graph.from_hash({... labels: [{text: "Title", ...}]}).to_json` gives
+    # back only `{"id":"root"}` -- a separate, model-layer gap this content
+    # could never previously reach (FormatSniffer rejected it first), so
+    # it is newly visible rather than newly broken. Out of scope here:
+    # it is Elkrb::Graph::Graph's serialization, not FormatSniffer's.
+    # `convert` round-trips the parsed hash before the model touches it.
+    {
+      "a graph-header-only file" =>
+        ["graph G\n", ->(g) { g["id"] == "G" }],
+      "an explicit `graph root` file" =>
+        ["graph root\n", ->(g) { g["id"] == "root" }],
+      "a root-label-only file" =>
+        ["label \"Title\"\n", ->(g) { g["labels"].first["text"] == "Title" }],
+      "a root-port-only file" =>
+        ["port p\n", ->(g) { g["ports"].first["id"] == "p" }],
+    }.each do |label, (source, assertion)|
+      it "exits 0 for #{label} whose extension declares ELKT" do
+        Dir.mktmpdir do |dir|
+          file = File.join(dir, "declared.elkt")
+          output = File.join(dir, "out.json")
+          File.write(file, source)
 
-        stdout, _stderr, status = run_elkrb("layout", file)
+          _stdout, _stderr, status = run_elkrb("convert", file, "-o", output)
 
-        expect(status.exitstatus).to eq(0)
-        expect(JSON.parse(stdout)["id"]).to eq("G")
+          expect(status.exitstatus).to eq(0)
+          expect(assertion.call(JSON.parse(File.read(output)))).to be(true)
+        end
       end
     end
 

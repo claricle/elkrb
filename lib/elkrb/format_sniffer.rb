@@ -98,7 +98,7 @@ module Elkrb
       def read_by_extension(text, extension)
         case extension
         when ".json", ".yml", ".yaml" then read_model(text, extension)
-        when ".elkt" then parse_elkt(text)
+        when ".elkt" then parse_elkt!(text)
         when ".dot", ".gv" then raise ArgumentError, DOT_UNSUPPORTED
         else parse(text)
         end
@@ -166,15 +166,6 @@ module Elkrb
           !malformed_model?(graph) &&
           !hollow_model?(graph)
         raise ArgumentError, UNPARSEABLE unless usable
-
-        graph
-      end
-
-      def parse_elkt(content)
-        graph = parse_elkt!(content)
-        if hollow_hash?(graph) && declarations?(content)
-          raise ArgumentError, UNPARSEABLE
-        end
 
         graph
       end
@@ -289,58 +280,25 @@ module Elkrb
         blank?(graph[:children]) && blank?(graph[:edges])
       end
 
+      # PR #17 rewrote the ELKT grammar to be strict: a line that matches no
+      # production raises Elkrb::ParseError directly (verified --
+      # "xyzzy foo bar" and every other unrecognized-line shape we tried all
+      # raise "expected node, port, label, edge..." rather than being
+      # silently skipped). The OLD parser was lenient and swallowed anything
+      # it did not recognize, which is why this module used to carry a
+      # separate "hollow result" guard for the declared .elkt path --
+      # `hollow_hash?`, `declarations?` and friends, removed here. A
+      # StandardError from the new parser (ParseError included) already
+      # reports refusal; there is no longer a silent-junk case for the
+      # declared path to catch. The SNIFFED path keeps its own guard,
+      # `childless?` below -- that one is about a graph legitimately parsing
+      # to nothing when nothing declared it to be ELKT in the first place,
+      # which strict grammar does not change.
       def parse_elkt!(content)
         require_relative "parsers/elkt_parser"
         Elkrb::Parsers::ElktParser.parse(content)
       rescue StandardError
         raise ArgumentError, UNPARSEABLE
-      end
-
-      # Only parse_elkt consults this, and the scope matters. There the
-      # extension declares the format, so an empty or comment-only file is a
-      # valid empty graph and the hollow guard must not reject it. A file
-      # that DOES carry declarations and still parses to nothing is
-      # unrecognized content — the parser skips lines it does not
-      # understand, so without this it exits 0 on junk.
-      #
-      # The sniffed path rejects both, because nothing there declares the
-      # file to be ELKT in the first place. That is the same "two paths
-      # raise differently, by design" rule #read states.
-      def declarations?(text)
-        text.gsub(%r{/\*.*?\*/}m, "")
-          .each_line
-          .any? { |line| !line.sub(%r{//.*$}, "").strip.empty? }
-      end
-
-      # An ELKT graph is itself a node and may carry only its own position or
-      # size (`layout [ size: 30, 40 ]`), a root label, a root port, or an
-      # explicit id from a `graph <id>` header -- ElkGraph.xtext allows a
-      # bare graph header with nothing else. Each is meaningful content, so
-      # they count alongside children, edges and options.
-      #
-      # This blank-checks the collections where hollow_model? nil-checks
-      # them, and the difference is forced rather than an oversight. The ELKT
-      # parser always fills children, edges and layoutOptions -- `foo: 1`
-      # comes back as `children: [], edges: [], layoutOptions: {...}` -- so
-      # nothing here is ever nil and emptiness is the only signal there is.
-      # On the model path absence and emptiness are distinguishable, so an
-      # empty collection means the document was understood.
-      #
-      # "root" is the parser's own default id (empty.json pins it), so an id
-      # that differs is itself evidence of a `graph <id>` declaration -- the
-      # one case here with no collection to check at all.
-      def hollow_hash?(graph)
-        blank_fields?(graph) && default_id?(graph[:id]) &&
-          graph.values_at(:x, :y, :width, :height).all?(&:nil?)
-      end
-
-      def blank_fields?(graph)
-        %i[children edges layoutOptions labels ports]
-          .all? { |field| blank?(graph[field]) }
-      end
-
-      def default_id?(id)
-        id.nil? || id == "root"
       end
 
       def blank?(collection)
