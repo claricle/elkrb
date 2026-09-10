@@ -28,6 +28,46 @@ RSpec.describe "elkrb CLI" do
   end
 
   describe "layout" do
+    # A reader hanging up ends a SUCCESSFUL run, so the status must stay 0.
+    # Keep this: it is the only thing holding fail_command's
+    # `raise error if error.is_a?(Errno::EPIPE)` in place. Drop that line and
+    # the EPIPE is wrapped into CommandFailed instead, which exe/elkrb turns
+    # into exit 1 -- a working pipeline starts failing.
+    #
+    # The reader takes ONE byte and closes, rather than shelling out to
+    # `head`, whose own buffering can drain the pipe fast enough that the
+    # child finishes writing and never sees EPIPE at all.
+    it "exits 0 when the reader closes the pipe early" do
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, "wide.json")
+        pad = "p" * 2000
+        payload = JSON.dump(
+          id: "root", edges: [],
+          children: (1..100).map do |i|
+            { id: "n#{i}-#{pad}", width: 40, height: 20 }
+          end
+        )
+        File.write(path, payload)
+
+        # Guard the guard. Long ids inflate the payload without inflating the
+        # layout work, and the laid-out JSON is at least this large. Under the
+        # 64 KiB pipe buffer the child would finish writing before the reader
+        # hung up, and this example would pass having exercised nothing.
+        expect(payload.bytesize).to be > 65_536
+
+        reader, writer = IO.pipe
+        pid = Process.spawn(RbConfig.ruby, "-I#{CliRunner::LIB}",
+                            CliRunner::EXE, "layout", path,
+                            out: writer, err: File::NULL)
+        writer.close
+        reader.readpartial(1)
+        reader.close
+        _pid, status = Process.wait2(pid)
+
+        expect(status.exitstatus).to eq(0)
+      end
+    end
+
     it "exits 0 and prints JSON to stdout" do
       stdout, _stderr, status = run_elkrb(
         "layout", File.join(CliRunner::ROOT, "spec/fixtures/simple_graph.json")
@@ -110,6 +150,89 @@ RSpec.describe "elkrb CLI" do
     end
   end
 
+  describe "validate" do
+    let(:invalid_graph) do
+      { id: "root", children: [{ width: 10, height: 10 }], edges: [] }
+    end
+    let(:valid_graph) do
+      { id: "root", children: [{ id: "n1", width: 10, height: 10 }], edges: [] }
+    end
+
+    it "exits 1 and reports an invalid graph's errors exactly once, " \
+       "with no backtrace" do
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, "invalid.json")
+        File.write(path, invalid_graph.to_json)
+
+        stdout, stderr, status = run_elkrb("validate", path)
+
+        expect(status.exitstatus).to eq(1)
+        # Which stream carries the report is card 26's business; that it is
+        # reported at all, and reported ONCE, is this example's. Count rather
+        # than `include`: `include` passes just as happily on a report printed
+        # twice, which is the regression the name promises to catch.
+        #
+        # Both LINES are counted. The summary alone would leave a mutation
+        # that repeats only the bullet list undetected, and "errors exactly
+        # once" is a claim about the errors, not just the headline.
+        report = stdout + stderr
+        expect(report.scan("has 1 error(s)").length).to eq(1)
+        expect(report.scan("  • ").length).to eq(1)
+        expect(stdout + stderr).not_to include("Error:")
+        expect(stderr).not_to match(/\.rb:\d+:in /)
+      end
+    end
+
+    # Regression cover, not cover of this change: exit 0 here is identical
+    # before and after. It is the positive control that stops a later change
+    # failing what used to succeed.
+    it "exits 0 for a valid graph" do
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, "valid.json")
+        File.write(path, valid_graph.to_json)
+
+        _stdout, _stderr, status = run_elkrb("validate", path)
+
+        expect(status.exitstatus).to eq(0)
+      end
+    end
+
+    # The counterpart to layout's early-hangup example, and it goes the OTHER
+    # way on purpose. There, the reader hanging up ends a run that SUCCEEDED,
+    # so the status stays 0. Here the validation genuinely failed, and the
+    # status must stay 1 whether or not anyone read the report.
+    #
+    # This used to depend on the size of the error list: below the 64 KiB pipe
+    # buffer `elkrb validate bad.json | head` exited 1, and above it the EPIPE
+    # escaped to Thor and it exited 0. Same failing graph, two statuses.
+    #
+    # 4000 invalid children report ~183 KB, so the write blocks and the hangup
+    # is reached. Under the buffer this example would exit 1 without touching
+    # the EPIPE path at all -- reverting BestEffortWrite.attempt in
+    # ValidateCommand is what proves it is live rather than merely green.
+    it "exits 1 when the reader closes the pipe on a failing validation" do
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, "many-errors.json")
+        payload = JSON.dump(
+          id: "root", edges: [],
+          children: Array.new(4000) { { width: 10, height: 10 } }
+        )
+        File.write(path, payload)
+
+        reader, writer = IO.pipe
+        pid = Process.spawn(RbConfig.ruby, "-I#{CliRunner::LIB}",
+                            CliRunner::EXE, "validate", path,
+                            out: writer, err: File::NULL)
+        writer.close
+        reader.readpartial(1)
+        reader.close
+        _pid, status = Process.wait2(pid)
+
+        expect(status.exitstatus).to eq(1)
+      end
+    end
+  end
+
   # bom.elkt and garbage.txt sit in spec/fixtures/corpus/ but are excluded
   # from the layout corpus by its JSON-only glob. The CLI's format
   # detection is the only thing that reads them, so this is where they earn
@@ -129,6 +252,21 @@ RSpec.describe "elkrb CLI" do
       # all is this example's, so an unrelated crash cannot pass for a
       # parse refusal.
       expect(stdout + stderr).to include("input format")
+      # Keep this: of the two backtrace assertions in this file, it is the
+      # one that runs the real `exe/elkrb` through fail_command's
+      # PRINT-AND-WRAP arm, and so the only one proving the entry point
+      # rescues what that arm raises -- the other goes through the RE-RAISE
+      # arm. The exit status is 1 either way, so nothing else here can tell a
+      # clean refusal from an escaped backtrace.
+      #
+      # `not_to match` rather than `eq("")` because the gemspec shells out
+      # to `git ls-files`, so a checkout with no .git writes unrelated noise
+      # here. The regex keys on `.rb` frames, which a real CLI backtrace
+      # always carries. Probing it with a BARE `ruby -e 'raise'` reads false
+      # -- that backtrace is a single `-e:1:in '<main>'` frame naming no .rb
+      # file. A `ruby -e` that drives the CLI and lets the error escape does
+      # produce lib/elkrb/*.rb frames, and does match.
+      expect(stderr).not_to match(/\.rb:\d+:in /)
     end
 
     # A UTF-8 BOM used to make the ELKT parser drop a file's first declaration

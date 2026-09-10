@@ -25,6 +25,21 @@ RSpec.describe Elkrb::Commands::ConvertCommand do
   end
 
   describe "#run" do
+    # Mutant found this gap: every other example here checks the OUTPUT
+    # FILE, so `report_success` (the confirmation write) could be replaced
+    # wholesale with `nil` and nothing noticed. This is the only example
+    # that would catch that.
+    it "confirms the conversion on stdout" do
+      input_file = File.join(temp_dir, "input.json")
+      output_file = File.join(temp_dir, "output.yml")
+
+      File.write(input_file, graph_data.to_json)
+
+      command = described_class.new(input_file, { output: output_file })
+
+      expect { command.run }.to output(/Converted/).to_stdout
+    end
+
     it "converts JSON to YAML" do
       input_file = File.join(temp_dir, "input.json")
       output_file = File.join(temp_dir, "output.yml")

@@ -25,6 +25,21 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
   end
 
   describe "#run" do
+    # Mutant found this gap: every other example here checks the OUTPUT
+    # FILE, so the confirmation write at the end of #run could be replaced
+    # wholesale with `nil` and nothing noticed. This is the only example
+    # that would catch that.
+    it "confirms the diagram on stdout" do
+      input_file = File.join(temp_dir, "graph.json")
+      output_file = File.join(temp_dir, "output.dot")
+
+      File.write(input_file, graph_data.to_json)
+
+      command = described_class.new(input_file, { output: output_file })
+
+      expect { command.run }.to output(/Diagram created/).to_stdout
+    end
+
     it "creates diagram from JSON file" do
       input_file = File.join(temp_dir, "graph.json")
       output_file = File.join(temp_dir, "output.dot")

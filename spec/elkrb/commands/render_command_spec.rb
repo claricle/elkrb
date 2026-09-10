@@ -25,6 +25,21 @@ RSpec.describe Elkrb::Commands::RenderCommand do
       allow_any_instance_of(Elkrb::GraphvizWrapper).to receive(:render)
     end
 
+    # Mutant found this gap: every other example here checks the mocked
+    # `#render` call, so the confirmation write at the end of #run could be
+    # replaced wholesale with `nil` and nothing noticed. This is the only
+    # example that would catch that.
+    it "confirms the render on stdout" do
+      dot_file = File.join(temp_dir, "input.dot")
+      output_file = File.join(temp_dir, "output.png")
+
+      File.write(dot_file, dot_content)
+
+      command = described_class.new(dot_file, { output: output_file })
+
+      expect { command.run }.to output(/Rendered/).to_stdout
+    end
+
     it "renders DOT to PNG" do
       dot_file = File.join(temp_dir, "input.dot")
       output_file = File.join(temp_dir, "output.png")
