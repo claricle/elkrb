@@ -1,0 +1,91 @@
+{
+  "id": "flowchart",
+  "children": [
+    {
+      "id": "Input",
+      "width": 65.0,
+      "height": 34.0,
+      "labels": [
+        {
+          "text": "Input",
+          "width": 35.0,
+          "height": 14.0
+        }
+      ],
+      "metadata": {
+        "shape": "rect",
+        "classes": null
+      }
+    },
+    {
+      "id": "Filter",
+      "width": 72.0,
+      "height": 34.0,
+      "labels": [
+        {
+          "text": "Filter",
+          "width": 42.0,
+          "height": 14.0
+        }
+      ],
+      "metadata": {
+        "shape": "rect",
+        "classes": null
+      }
+    },
+    {
+      "id": "Output",
+      "width": 72.0,
+      "height": 34.0,
+      "labels": [
+        {
+          "text": "Output",
+          "width": 42.0,
+          "height": 14.0
+        }
+      ],
+      "metadata": {
+        "shape": "rect",
+        "classes": null
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "Input_to_Filter",
+      "sources": [
+        "Input"
+      ],
+      "targets": [
+        "Filter"
+      ],
+      "labels": [],
+      "metadata": {
+        "arrow_type": "arrow"
+      }
+    },
+    {
+      "id": "Filter_to_Output",
+      "sources": [
+        "Filter"
+      ],
+      "targets": [
+        "Output"
+      ],
+      "labels": [],
+      "metadata": {
+        "arrow_type": "arrow"
+      }
+    }
+  ],
+  "layoutOptions": {
+    "algorithm": "layered",
+    "elk.direction": "RIGHT",
+    "elk.spacing.nodeNode": 50,
+    "elk.spacing.edgeNode": 30,
+    "elk.spacing.edgeEdge": 20,
+    "elk.layered.spacing.nodeNodeBetweenLayers": 50,
+    "elk.layered.nodePlacement.strategy": "SIMPLE",
+    "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES"
+  }
+}

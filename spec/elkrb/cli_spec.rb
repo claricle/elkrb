@@ -131,13 +131,15 @@ RSpec.describe "elkrb CLI" do
       expect(stdout + stderr).to include("input format")
     end
 
-    # A UTF-8 BOM makes the ELKT parser drop the file's first declaration,
-    # so `node a` disappears and edge e0 is left pointing at a node that is
-    # no longer in the graph. Tracked as gap1-10; the ELKT parser rewrite
-    # owns the fix and un-pends this.
+    # A UTF-8 BOM used to make the ELKT parser drop a file's first declaration
+    # (gap1-10), so `node a` vanished and edge e0 pointed at a node that was
+    # gone. Converting spec/fixtures/corpus/bom.elkt gave child ids ["b"] at
+    # 34d339b and ["a", "b"] at 9ed11d0.
+    #
+    # Assert the edge as well as the children: that fixture declares three
+    # things, and a parser that kept both nodes while dropping e0 would pass a
+    # children-only check.
     it "keeps every declaration of a BOM-prefixed ELKT file" do
-      pending("gap1-10")
-
       Dir.mktmpdir do |dir|
         output = File.join(dir, "bom.json")
 
@@ -149,6 +151,8 @@ RSpec.describe "elkrb CLI" do
         graph = JSON.parse(File.read(output))
         ids = graph["children"].map { |child| child["id"] }
         expect(ids).to contain_exactly("a", "b")
+        expect(graph["edges"].map { |e| [e["id"], e["sources"], e["targets"]] })
+          .to eq([["e0", ["a"], ["b"]]])
       end
     end
   end
