@@ -43,7 +43,7 @@ Radial:: circular/radial node arrangement
 RectPacking:: efficient rectangle packing
 TopdownPacking:: grid-based treemap layout
 Libavoid:: "A*" pathfinding connector routing
-VertiFlex:: vertical flexible column layout
+VertiFlex:: column-grid arrangement that ignores edges
 DISCO:: disconnected component layout
 SPOrE Overlap:: overlap removal optimization
 SPOrE Compaction:: whitespace compaction

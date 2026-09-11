@@ -7,15 +7,12 @@ module Elkrb
     module Algorithms
       # VertiFlex layout algorithm
       #
-      # A vertical flexible layout algorithm that arranges nodes in vertical
-      # columns with optimized spacing. Ideal for timeline-style layouts,
-      # Kanban boards, and vertical flowcharts.
+      # Approximates a column-grid layout: it distributes nodes into a fixed
+      # number of vertical columns (round-robin or sequential) and stacks
+      # each column top to bottom, sizing each column to its widest node.
       #
-      # The algorithm distributes nodes into vertical columns and positions
-      # them with flexible column widths based on the widest node in each
-      # column.
-      #
-      # This is an experimental algorithm matching the Java ELK implementation.
+      # It never reads the graph's edges -- node positions are identical
+      # whether edges are present or not.
       class VertiFlex < BaseAlgorithm
         def initialize(options = {})
           super
