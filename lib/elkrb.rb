@@ -244,7 +244,9 @@ module Elkrb
     Layout::Algorithms::Libavoid,
     {
       name: "Libavoid",
-      description: "Orthogonal connector routing with obstacle avoidance",
+      description: "Orthogonal connector routing with bounded A* obstacle " \
+                   "avoidance (falls back to a direct connector if no path " \
+                   "is found within the search limit)",
       category: "routing",
       supports_hierarchy: false,
     },
