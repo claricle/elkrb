@@ -26,6 +26,21 @@ module Elkrb
           @options = options
         end
 
+        # Default a node's unset x/y to 0.0, matching Java ELK's treatment
+        # of an unset position. Shared by algorithms (currently SporeOverlap
+        # and SporeCompaction) that read node.x/node.y arithmetically before
+        # any other pass has had a chance to assign them. A class method
+        # because it depends only on its argument, never on an instance's
+        # state (reek: UtilityFunction fires on the instance-method form).
+        #
+        # @param nodes [Array<Elkrb::Graph::Node>] The nodes to normalize
+        def self.normalize_nil_positions(nodes)
+          nodes.each do |node|
+            node.x ||= 0.0
+            node.y ||= 0.0
+          end
+        end
+
         # Main layout method - automatically handles hierarchical graphs and labels
         #
         # Subclasses should implement #layout_flat for their specific
