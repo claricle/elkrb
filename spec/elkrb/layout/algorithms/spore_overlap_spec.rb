@@ -128,6 +128,64 @@ RSpec.describe Elkrb::Layout::Algorithms::SporeOverlap do
         # Should complete without infinite loop
         expect { algorithm.layout(graph) }.not_to raise_error
       end
+
+      it "warns when the cap is exhausted with overlaps still remaining" do
+        graph = Elkrb::Graph::Graph.new
+        graph.layout_options = { "spore.maxIterations" => 1 }
+
+        # 20 nodes stacked at the same point: one pairwise half-push pass
+        # cannot separate them all, so the cap is exhausted with overlaps
+        # left -- this must not fail silently.
+        nodes = Array.new(20) do |i|
+          Elkrb::Graph::Node.new(id: "n#{i}", x: 0, y: 0, width: 50, height: 30)
+        end
+
+        graph.children = nodes
+        graph.edges = []
+
+        expect { algorithm.layout(graph) }.to output(
+          /SporeOverlap.*max_iterations \(1\) exhausted.*overlap/i,
+        ).to_stderr
+      end
+
+      # Keep this test even though a whole-file revert can't distinguish it
+      # from doing nothing: it is the sole detector for the guard's other
+      # direction (warning when nothing needs it), paired with the "warns
+      # when the cap is exhausted" example above for the direction that does.
+      it "does not warn when overlaps are fully resolved before the cap" do
+        graph = Elkrb::Graph::Graph.new
+
+        node1 = Elkrb::Graph::Node.new(id: "n1", x: 0, y: 0, width: 50,
+                                       height: 30)
+        node2 = Elkrb::Graph::Node.new(id: "n2", x: 25, y: 0, width: 50,
+                                       height: 30)
+
+        graph.children = [node1, node2]
+        graph.edges = []
+
+        expect { algorithm.layout(graph) }.not_to output.to_stderr
+      end
+    end
+
+    context "with nil positions" do
+      it "does not crash on nil x/y and lays out with finite coordinates" do
+        result = Elkrb.layout(
+          {
+            id: "root",
+            children: [
+              { id: "n1", width: 100, height: 60 },
+              { id: "n2", width: 100, height: 60 },
+            ],
+          },
+          algorithm: "spore_overlap",
+        )
+
+        expect(result.children.size).to eq(2)
+        result.children.each do |node|
+          expect(node.x).to be_finite
+          expect(node.y).to be_finite
+        end
+      end
     end
 
     context "with non-overlapping nodes" do

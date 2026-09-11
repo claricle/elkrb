@@ -11,6 +11,8 @@ module Elkrb
         def layout_flat(graph, _options = {})
           return graph if graph.children.empty?
 
+          self.class.normalize_nil_positions(graph.children)
+
           # Compact in both directions
           direction = graph.layout_options&.[]("spore.compactionDirection") || "both"
           min_spacing = graph.layout_options&.[]("spore.nodeSpacing") || 10.0

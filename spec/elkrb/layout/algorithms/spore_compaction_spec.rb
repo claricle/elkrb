@@ -240,5 +240,26 @@ RSpec.describe Elkrb::Layout::Algorithms::SporeCompaction do
         expect(col2_nodes.all? { |n| n.x == col2_x }).to be true
       end
     end
+
+    context "with nil positions" do
+      it "does not crash on nil x/y and lays out with finite coordinates" do
+        result = Elkrb.layout(
+          {
+            id: "root",
+            children: [
+              { id: "n1", width: 100, height: 60 },
+              { id: "n2", width: 100, height: 60 },
+            ],
+          },
+          algorithm: "spore_compaction",
+        )
+
+        expect(result.children.size).to eq(2)
+        result.children.each do |node|
+          expect(node.x).to be_finite
+          expect(node.y).to be_finite
+        end
+      end
+    end
   end
 end
