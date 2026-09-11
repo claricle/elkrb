@@ -10,12 +10,16 @@ module Elkrb
   # Provides commands for laying out graphs from the command line.
   # Supports JSON and YAML input/output formats.
   class Cli < Thor
+    # No Thor default: an absent --algorithm must stay nil so the graph's own
+    # elk.algorithm can be read before falling back to layered.
+    ALGORITHM_OPTION_DESC = "Layout algorithm to use (default: the graph's " \
+                            "own elk.algorithm, else layered)"
+
     class_option :verbose, type: :boolean, default: false,
                            desc: "Enable verbose output"
 
     desc "layout FILE", "Layout a graph from a JSON or YAML file"
-    option :algorithm, type: :string, default: "layered",
-                       desc: "Layout algorithm to use"
+    option :algorithm, type: :string, desc: ALGORITHM_OPTION_DESC
     option :output, type: :string, aliases: "-o",
                     desc: "Output file (default: stdout)"
     option :format, type: :string, default: "json",
@@ -42,7 +46,9 @@ module Elkrb
       # Build layout options
       layout_options = build_layout_options
 
-      verbose_output "Using algorithm: #{layout_options[:algorithm]}"
+      algorithm_display = layout_options[:algorithm] ||
+        "the graph's own, else layered"
+      verbose_output "Using algorithm: #{algorithm_display}"
 
       # Perform layout
       result = Layout::LayoutEngine.layout(graph_data, layout_options)
@@ -74,8 +80,7 @@ module Elkrb
     end
 
     desc "diagram FILE", "Create diagram from ELK graph file"
-    option :algorithm, type: :string, default: "layered",
-                       desc: "Layout algorithm to use"
+    option :algorithm, type: :string, desc: ALGORITHM_OPTION_DESC
     option :direction, type: :string,
                        desc: "Layout direction (e.g., DOWN, RIGHT)"
     option :spacing, type: :numeric,
@@ -140,8 +145,7 @@ module Elkrb
                         desc: "Output directory for generated files"
     option :format, type: :string, default: "svg",
                     desc: "Output format for all files"
-    option :algorithm, type: :string, default: "layered",
-                       desc: "Layout algorithm to use"
+    option :algorithm, type: :string, desc: ALGORITHM_OPTION_DESC
     def batch(directory)
       require_relative "commands/batch_command"
       Commands::BatchCommand.new(directory, options).run

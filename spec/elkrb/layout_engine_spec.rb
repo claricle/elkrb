@@ -133,10 +133,105 @@ RSpec.describe Elkrb::Layout::LayoutEngine do
     end
 
     context "with invalid algorithm" do
-      it "raises an error" do
+      it "raises an error naming the algorithm that was not found" do
         expect do
           described_class.layout(simple_graph_json, algorithm: "nonexistent")
-        end.to raise_error(Elkrb::Error, /Unknown layout algorithm/)
+        end.to raise_error(Elkrb::Error, /Unknown layout algorithm: nonexistent/)
+      end
+    end
+
+    context "with a graph-carried algorithm" do
+      def resolved_algorithm(graph, options = {})
+        registry = Elkrb::Layout::AlgorithmRegistry
+        allow(registry).to receive(:get).and_call_original
+        described_class.layout(graph, options)
+        registry
+      end
+
+      it "reads the canonical elk.algorithm key when no call-level algorithm is given" do
+        graph = { id: "r", layoutOptions: { "elk.algorithm" => "force" } }
+        expect(resolved_algorithm(graph)).to have_received(:get).with("force")
+      end
+
+      it "reads the algorithm alias when no call-level algorithm is given" do
+        graph = { id: "r", layoutOptions: { "algorithm" => "force" } }
+        expect(resolved_algorithm(graph)).to have_received(:get).with("force")
+      end
+
+      it "reads the org.eclipse.elk. long form when no call-level algorithm is given" do
+        graph = { id: "r", layoutOptions: { "org.eclipse.elk.algorithm" => "force" } }
+        expect(resolved_algorithm(graph)).to have_received(:get).with("force")
+      end
+
+      it "prefers the call-level algorithm over a conflicting graph-carried one" do
+        graph = { id: "r", layoutOptions: { "elk.algorithm" => "force" } }
+        expect(resolved_algorithm(graph, algorithm: "box"))
+          .to have_received(:get).with("box")
+      end
+
+      it "still defaults to layered with no algorithm key anywhere" do
+        expect(resolved_algorithm({ id: "r" })).to have_received(:get).with("layered")
+      end
+
+      it "prefers the canonical key over a conflicting alias, canonical first" do
+        graph = {
+          id: "r",
+          layoutOptions: { "elk.algorithm" => "force", "algorithm" => "box" },
+        }
+        expect(resolved_algorithm(graph)).to have_received(:get).with("force")
+      end
+
+      it "prefers the canonical key over a conflicting alias, alias first" do
+        graph = {
+          id: "r",
+          layoutOptions: { "algorithm" => "box", "elk.algorithm" => "force" },
+        }
+        expect(resolved_algorithm(graph)).to have_received(:get).with("force")
+      end
+
+      it "reads a call-level algorithm given only under the string key" do
+        graph = { id: "r" }
+        expect(resolved_algorithm(graph, "algorithm" => "force"))
+          .to have_received(:get).with("force")
+      end
+
+      it "scans past an earlier, unrelated recognized key for the alias" do
+        # A layout_options Hash where the algorithm selector is NOT the
+        # first entry. Guards aliased_graph_algorithm's actual scan: a
+        # predicate that matched anything Options::Registry recognizes
+        # (rather than specifically "elk.algorithm"), or ignored the block
+        # entirely (Hash#first ignores a block without raising), would both
+        # return "DOWN" here instead of "force".
+        graph = {
+          id: "r",
+          layoutOptions: { "elk.direction" => "DOWN", "algorithm" => "force" },
+        }
+        expect(resolved_algorithm(graph)).to have_received(:get).with("force")
+      end
+
+      it "resolves the default when options is omitted entirely" do
+        # Distinct from every row above: resolved_algorithm's own `options =
+        # {}` default means the helper always passes options EXPLICITLY,
+        # never exercising layout's OWN default argument. A single
+        # positional call is the common real form (Elkrb.layout(json)) and
+        # is the only thing that reaches layout's `options = {}` default
+        # rather than a caller-supplied one.
+        registry = Elkrb::Layout::AlgorithmRegistry
+        allow(registry).to receive(:get).and_call_original
+        described_class.layout({ id: "r" })
+        expect(registry).to have_received(:get).with("layered")
+      end
+
+      it "does not raise when layoutOptions carries no algorithm key at all" do
+        # Distinct from "no algorithm key anywhere" above: that graph has NO
+        # layoutOptions attribute at all (Graph.from_hash gives it a nil
+        # layout_options, caught by graph_algorithm's own nil guard
+        # before aliased_graph_algorithm is ever called). This graph HAS a
+        # layoutOptions Hash, just with nothing that resolves to
+        # elk.algorithm, so it is aliased_graph_algorithm's #find that comes
+        # back empty -- guarding the &.last against a bare .last on nil.
+        graph = { id: "r", layoutOptions: { "elk.direction" => "DOWN" } }
+        expect(resolved_algorithm(graph)).to have_received(:get).with("layered")
       end
     end
 
