@@ -131,6 +131,18 @@ RSpec.describe "elkrb CLI" do
       expect(stdout + stderr).to include("input format")
     end
 
+    # yaml_no_extension.txt holds the same graph as simple_graph.json,
+    # reserialized to YAML.
+    it "falls back to YAML for a file with no JSON or YAML extension" do
+      stdout, _stderr, status = run_elkrb(
+        "layout", corpus_fixture("yaml_no_extension.txt")
+      )
+
+      expect(status.exitstatus).to eq(0)
+      result = JSON.parse(stdout)
+      expect(result["children"].map { |c| c["id"] }).to eq(%w[n1 n2 n3])
+    end
+
     # A UTF-8 BOM used to make the ELKT parser drop a file's first declaration
     # (gap1-10), so `node a` vanished and edge e0 pointed at a node that was
     # gone. Converting spec/fixtures/corpus/bom.elkt gave child ids ["b"] at

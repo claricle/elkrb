@@ -8,3 +8,14 @@ includes:
   - lib
 requires:
   - elkrb
+  # `require "elkrb"` does not load the files below: the CLI is loaded by
+  # exe/elkrb, and each command lazily by the CLI. Without them mutant finds
+  # no subjects in these files and still reports 100% coverage.
+  # spec/mutant_yml_spec.rb keeps this list complete.
+  - elkrb/cli
+  - elkrb/graphviz_wrapper
+  - elkrb/commands/batch_command
+  - elkrb/commands/convert_command
+  - elkrb/commands/diagram_command
+  - elkrb/commands/render_command
+  - elkrb/commands/validate_command
