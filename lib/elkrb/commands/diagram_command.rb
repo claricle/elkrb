@@ -9,6 +9,9 @@ module Elkrb
     # Command for creating diagrams from ELK graph files
     # Supports multiple input formats (JSON, YAML, ELKT) and output formats (DOT, PNG, SVG, PDF)
     class DiagramCommand
+      require_relative "format_auto_detection"
+      include FormatAutoDetection
+
       def initialize(file, options)
         @file = file
         @options = options
@@ -62,33 +65,6 @@ module Elkrb
           Elkrb::Parsers::ElktParser.parse(content)
         else
           detect_and_parse(content)
-        end
-      end
-
-      def detect_and_parse(content)
-        require_relative "../graph/graph"
-
-        # Try JSON first
-        begin
-          return Elkrb::Graph::Graph.from_json(content)
-        rescue JSON::ParserError
-          # Not JSON
-        end
-
-        # Try YAML
-        begin
-          return Elkrb::Graph::Graph.from_yaml(content)
-        rescue Psych::SyntaxError
-          # Not YAML
-        end
-
-        # Try ELKT
-        begin
-          require_relative "../parsers/elkt_parser"
-          Elkrb::Parsers::ElktParser.parse(content)
-        rescue StandardError
-          raise ArgumentError,
-                "Unable to parse input file. Supported formats: JSON, YAML, ELKT"
         end
       end
 

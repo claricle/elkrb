@@ -124,6 +124,75 @@ RSpec.describe Elkrb::Commands::ConvertCommand do
       expect(content).to include("digraph")
     end
 
+    # Every input file above has a recognized extension, so #load_any_format
+    # never falls through to #detect_and_parse. These pin that an
+    # unrecognized extension still reaches YAML and ELKT, not just JSON.
+    it "auto-detects YAML when the extension is unrecognized" do
+      input_file = File.join(temp_dir, "input.graph")
+      output_file = File.join(temp_dir, "output.json")
+
+      File.write(input_file, graph_data.to_yaml)
+
+      command = described_class.new(input_file, { output: output_file })
+      command.run
+
+      result = JSON.parse(File.read(output_file))
+      expect(result["children"].map { |c| c["id"] }).to eq(%w[n1 n2])
+    end
+
+    it "auto-detects ELKT when the extension is unrecognized" do
+      input_file = File.join(temp_dir, "input.graph")
+      output_file = File.join(temp_dir, "output.json")
+
+      File.write(input_file, "node n1\nnode n2\nedge n1 -> n2")
+
+      command = described_class.new(input_file, { output: output_file })
+      command.run
+
+      result = JSON.parse(File.read(output_file))
+      expect(result["children"].map { |c| c["id"] }).to eq(%w[n1 n2])
+    end
+
+    # A file of bare `key: value` lines is valid YAML as well as valid ELKT.
+    it "reads a property-only ELKT file the same with or without .elkt" do
+      source = File.expand_path("../../fixtures/elkt/option_keys.elkt", __dir__)
+      unrecognized = File.join(temp_dir, "input.graph")
+      FileUtils.cp(source, unrecognized)
+      outputs = [source, unrecognized].map.with_index do |input, i|
+        output = File.join(temp_dir, "output#{i}.json")
+        described_class.new(input, { output: output }).run
+        JSON.parse(File.read(output))
+      end
+
+      expect(outputs.last).to eq(outputs.first)
+    end
+
+    it "keeps the auto-detect helper private on every command that shares it" do
+      require "elkrb/commands/diagram_command"
+      require "elkrb/commands/validate_command"
+      commands = [described_class, Elkrb::Commands::DiagramCommand,
+                  Elkrb::Commands::ValidateCommand]
+
+      expect(commands.map { |c| c.private_method_defined?(:detect_and_parse) })
+        .to eq([true, true, true])
+    end
+
+    it "raises a clear error when nothing can parse the content" do
+      input_file = File.join(temp_dir, "input.graph")
+      output_file = File.join(temp_dir, "output.json")
+
+      # A lone ")" is invalid JSON, invalid ELKT, and -- unlike most garbage
+      # strings -- also invalid YAML (a bare flow-mapping close character),
+      # so it actually reaches the final branch instead of being silently
+      # accepted as a YAML scalar.
+      File.write(input_file, ")")
+
+      command = described_class.new(input_file, { output: output_file })
+
+      expect { command.run }.to raise_error(ArgumentError,
+                                            /Unable to parse input file/)
+    end
+
     it "creates output directory if needed" do
       input_file = File.join(temp_dir, "input.json")
       output_file = File.join(temp_dir, "subdir", "output.yml")
