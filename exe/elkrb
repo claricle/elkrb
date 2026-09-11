@@ -1,7 +1,12 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-require "bundler/setup"
+# Run from a source checkout, load THIS checkout. Without bundler/setup on the
+# path there is nothing else pointing at ../lib, so `require "elkrb"` would
+# quietly pick up an installed gem instead, or fail outright.
+lib = File.expand_path("../lib", __dir__)
+$LOAD_PATH.unshift(lib) if File.directory?(lib) && !$LOAD_PATH.include?(lib)
+
 require "elkrb"
 require "elkrb/cli"
 

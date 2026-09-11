@@ -32,55 +32,12 @@ module Elkrb
       def load_any_format(file)
         raise ArgumentError, "File not found: #{file}" unless File.exist?(file)
 
-        require_relative "../graph/graph"
-        content = File.read(file)
-        ext = File.extname(file).downcase
+        require_relative "../format_sniffer"
+        graph = Elkrb::FormatSniffer.read(File.read(file), File.extname(file).downcase)
 
-        graph = case ext
-                when ".json"
-                  Elkrb::Graph::Graph.from_json(content)
-                when ".yml", ".yaml"
-                  Elkrb::Graph::Graph.from_yaml(content)
-                when ".elkt"
-                  require_relative "../parsers/elkt_parser"
-                  Elkrb::Parsers::ElktParser.parse(content)
-                else
-                  detect_and_parse(content)
-                end
+        return graph if graph.is_a?(Hash)
 
-        # Convert to hash for validation
-        if graph.is_a?(Hash)
-          graph
-        else
-          JSON.parse(graph.to_json,
-                     symbolize_names: true)
-        end
-      end
-
-      def detect_and_parse(content)
-        require_relative "../graph/graph"
-
-        # Try JSON first
-        begin
-          return Elkrb::Graph::Graph.from_json(content)
-        rescue JSON::ParserError
-          # Not JSON
-        end
-
-        # Try YAML
-        begin
-          return Elkrb::Graph::Graph.from_yaml(content)
-        rescue Psych::SyntaxError
-          # Not YAML
-        end
-
-        # Try ELKT
-        begin
-          require_relative "../parsers/elkt_parser"
-          Elkrb::Parsers::ElktParser.parse(content)
-        rescue StandardError
-          raise ArgumentError, "Unable to parse input file"
-        end
+        JSON.parse(graph.to_json, symbolize_names: true)
       end
 
       def validate_graph(graph)
