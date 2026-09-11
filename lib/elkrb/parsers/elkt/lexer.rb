@@ -67,14 +67,51 @@ module Elkrb
         # marker, so the first real character is still at column 1. Routing it
         # through `advance` shifted every first-line column by one.
         #
-        # ELKT is UTF-8. A caller handing us bytes read in binary mode, or text
-        # that is not valid UTF-8, would otherwise escape the facade's
-        # documented ParseError boundary as an Encoding::CompatibilityError or
-        # a bare ArgumentError from the first regexp match.
+        # ELKT is UTF-8 internally, but a caller may legitimately hand us
+        # text tagged with a real, named source encoding (a file read with
+        # `File.read(path, encoding: "ISO-8859-1")`, say). That tag carries
+        # meaning -- byte 0xE9 in Latin-1 IS "e" with an acute accent -- so
+        # it is transcoded via String#encode, not blindly reinterpreted.
+        # ASCII-8BIT/BINARY is different: it is Ruby's "no real encoding is
+        # known" tag (`File.read(path, "rb")`, or bytes assembled by hand),
+        # so there is nothing to transcode FROM -- the historical behavior
+        # of reinterpreting those bytes as UTF-8 is kept. A caller handing
+        # us bytes read in binary mode, or text that is not valid UTF-8 in
+        # whichever of these two ways applies, would otherwise escape the
+        # facade's documented ParseError boundary as an
+        # Encoding::CompatibilityError or a bare ArgumentError from the
+        # first regexp match.
+        # UTF-8 and ASCII-8BIT carry no real source encoding to transcode
+        # from -- UTF-8 is already the target, and ASCII-8BIT is Ruby's "no
+        # encoding is known" tag -- so both are reinterpreted in place.
+        # Anything else is a real, named encoding and is converted with
+        # String#encode instead, which is what turns a Latin-1 0xE9 into the
+        # accented character it actually names rather than a byte sequence
+        # that merely happens to be invalid UTF-8.
+        NO_SOURCE_ENCODING_TO_TRANSCODE_FROM =
+          [Encoding::UTF_8, Encoding::ASCII_8BIT].freeze
+        private_constant :NO_SOURCE_ENCODING_TO_TRANSCODE_FROM
+
         def normalize(text)
-          unless text.encoding == Encoding::UTF_8
-            text = text.dup.force_encoding(Encoding::UTF_8)
+          if NO_SOURCE_ENCODING_TO_TRANSCODE_FROM.include?(text.encoding)
+            reinterpret(text)
+          else
+            transcode(text)
           end
+        end
+
+        # @return [String] transcoded to UTF-8, or reinterpreted as UTF-8
+        #   when the source is invalid in its own declared encoding.
+        def transcode(text)
+          text.encode(Encoding::UTF_8)
+        rescue EncodingError
+          reinterpret(text)
+        end
+
+        # @return [String] the same bytes, tagged UTF-8.
+        # @raise [Elkrb::ParseError] when those bytes are not valid UTF-8.
+        def reinterpret(text)
+          text = text.dup.force_encoding(Encoding::UTF_8)
           return text if text.valid_encoding?
 
           line, col = first_invalid_location(text)
