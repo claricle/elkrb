@@ -11,6 +11,8 @@ module Elkrb
         def layout_flat(graph, _options = {})
           return graph if graph.children.empty?
 
+          self.class.normalize_nil_positions(graph.children)
+
           # Iteratively remove overlaps
           max_iterations = graph.layout_options&.[]("spore.maxIterations") || 50
           min_spacing = graph.layout_options&.[]("spore.nodeSpacing") || 10.0
@@ -22,6 +24,8 @@ module Elkrb
             resolve_overlaps(overlaps, min_spacing)
           end
 
+          warn_if_overlaps_remain(graph.children, min_spacing, max_iterations)
+
           # Apply padding
           apply_padding(graph)
 
@@ -29,6 +33,14 @@ module Elkrb
         end
 
         private
+
+        def warn_if_overlaps_remain(nodes, min_spacing, max_iterations)
+          remaining = find_overlaps(nodes, min_spacing)
+          return if remaining.empty?
+
+          warn "SporeOverlap: max_iterations (#{max_iterations}) exhausted " \
+               "with #{remaining.size} overlap(s) still remaining"
+        end
 
         def find_overlaps(nodes, min_spacing)
           overlaps = []

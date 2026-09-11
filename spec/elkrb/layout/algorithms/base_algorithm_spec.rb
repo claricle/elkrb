@@ -50,4 +50,35 @@ RSpec.describe Elkrb::Layout::Algorithms::BaseAlgorithm do
       expect(described_class.new.send(:get_edge_routing_style, graph)).to eq("POLYLINE")
     end
   end
+
+  describe ".normalize_nil_positions" do
+    # Shared by SporeOverlap and SporeCompaction, both of which read
+    # node.x/node.y arithmetically before any other pass assigns them.
+    # Java ELK treats an unset position as 0.0 rather than raising.
+    # Defined once here rather than duplicated per subclass; a subclass
+    # calls it as `self.class.normalize_nil_positions`, which resolves
+    # here through ordinary class-method inheritance.
+    it "defaults a nil x or y to 0.0 independently, leaving a set value " \
+       "alone" do
+      both_nil = Elkrb::Graph::Node.new(id: "a", width: 10, height: 10)
+      x_set = Elkrb::Graph::Node.new(id: "b", x: 5.0, width: 10, height: 10)
+      y_set = Elkrb::Graph::Node.new(id: "c", y: 7.0, width: 10, height: 10)
+
+      described_class.normalize_nil_positions([both_nil, x_set, y_set])
+
+      expect(both_nil.x).to eq(0.0)
+      expect(both_nil.y).to eq(0.0)
+      expect(x_set.x).to eq(5.0)
+      expect(x_set.y).to eq(0.0)
+      expect(y_set.x).to eq(0.0)
+      expect(y_set.y).to eq(7.0)
+    end
+
+    it "is inherited by subclasses as a class method, not duplicated" do
+      expect(Elkrb::Layout::Algorithms::SporeOverlap.singleton_class.instance_method(:normalize_nil_positions).owner)
+        .to eq(described_class.singleton_class)
+      expect(Elkrb::Layout::Algorithms::SporeCompaction.singleton_class.instance_method(:normalize_nil_positions).owner)
+        .to eq(described_class.singleton_class)
+    end
+  end
 end
