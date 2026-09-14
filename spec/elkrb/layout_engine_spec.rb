@@ -140,6 +140,95 @@ RSpec.describe Elkrb::Layout::LayoutEngine do
       end
     end
 
+    context "with a nested graph naming its own algorithm" do
+      # A child node that is itself a hierarchical graph with its own
+      # layoutOptions was laid out by whichever algorithm was already
+      # recursing through the hierarchy, never its own elk.algorithm
+      # selector. Root-level graph-carried algorithm selection is a
+      # separate, not-yet-merged change (PR #38); these specs pin the fix
+      # at the recursion boundary in HierarchicalProcessor only, and so
+      # deliberately give the root algorithm through options[:algorithm]
+      # or a layoutOptions value that already matches today's "layered"
+      # default, so they exercise only the nested selector.
+      def algorithm_used_for(_node_id)
+        registry = Elkrb::Layout::AlgorithmRegistry
+        seen = {}
+        allow(registry).to receive(:get).and_wrap_original do |original, name|
+          seen[name] = true
+          original.call(name)
+        end
+        yield
+        seen
+      end
+
+      it "lays out a nested graph's children with the algorithm the nested graph names" do
+        graph = {
+          id: "root",
+          layoutOptions: { "elk.algorithm" => "layered" },
+          children: [
+            {
+              id: "child_graph",
+              layoutOptions: { "elk.algorithm" => "box" },
+              children: [
+                { id: "n1", width: 10.0, height: 10.0 },
+                { id: "n2", width: 10.0, height: 10.0 },
+              ],
+            },
+          ],
+        }
+
+        used = algorithm_used_for("box") { described_class.layout(graph) }
+
+        expect(used).to have_key("box")
+      end
+
+      it "still uses the recursing algorithm when the nested graph names none" do
+        graph = {
+          id: "root",
+          layoutOptions: { "elk.algorithm" => "box" },
+          children: [
+            {
+              id: "child_graph",
+              children: [
+                { id: "n1", width: 10.0, height: 10.0 },
+                { id: "n2", width: 10.0, height: 10.0 },
+              ],
+            },
+          ],
+        }
+
+        result = described_class.layout(graph)
+        child_node = result.children.first
+
+        # Box arranges children in a grid starting at the origin; both
+        # inherited-box positions land on that grid.
+        expect(child_node.children.map(&:x)).to all(be >= 0)
+      end
+
+      it "resolves the nested alias and long-form spellings the same as the root" do
+        %w[algorithm org.eclipse.elk.algorithm].each do |key|
+          graph = {
+            id: "root",
+            layoutOptions: { "elk.algorithm" => "layered" },
+            children: [
+              {
+                id: "child_graph",
+                layoutOptions: { key => "box" },
+                children: [
+                  { id: "n1", width: 10.0, height: 10.0 },
+                  { id: "n2", width: 10.0, height: 10.0 },
+                ],
+              },
+            ],
+          }
+
+          used = algorithm_used_for("box") { described_class.layout(graph) }
+
+          expect(used).to have_key("box"), "expected \"box\" via #{key.inspect} to run"
+        end
+      end
+    end
+
     context "with invalid graph input" do
       # A Node is in the Elkrb::Graph:: namespace and is not a Graph, so it
       # separates a class check from a namespace check. Six siblings do that

@@ -121,6 +121,23 @@ module Elkrb
           suffix_match(key_str)
         end
 
+        # Scans a layoutOptions map for whatever spelling it carries of the
+        # algorithm selector -- the canonical "elk.algorithm" key, its
+        # "algorithm" alias, or the "org.eclipse.elk.algorithm" long form --
+        # and returns the value under the canonical key when one is
+        # present. When a map carries more than one spelling, the
+        # canonical key wins, so the result never depends on Hash
+        # insertion order.
+        #
+        # @param layout_options [Hash, nil]
+        # @return [String, nil] the algorithm name the map names, or nil
+        def algorithm_selector(layout_options)
+          return nil unless layout_options
+
+          layout_options["elk.algorithm"] ||
+            layout_options.find { |key, _value| canonical(key) == "elk.algorithm" }&.last
+        end
+
         # @param id [String, Symbol] any id or alias
         # @param value [Object] the raw value to coerce
         # @return [Object] value coerced to the id's registered type
