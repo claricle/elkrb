@@ -86,6 +86,13 @@ RSpec.describe ".reek.yml" do
   # `#initialize_positions`. Nothing may be ADDED here without saying why;
   # shrinking it is the point.
   #
+  # Added 2026-09-14: `#executable_candidate?`, `#executable_file?`,
+  # `#positional_path` are new `GraphvizWrapper` helpers from the shell-free
+  # dot-argument rework. They fall under the same pre-existing accidental
+  # containment as their siblings above (`Elkrb::Graph` is a substring of
+  # `Elkrb::GraphvizWrapper`) -- not a new exemption, just a new declaration
+  # under an exemption that already swallows the rest of this class.
+  #
   # A `let` and not a constant: RuboCop's Lint/ConstantDefinitionInBlock fires
   # on a constant here, and its autocorrect turns one into a block-local, which
   # is a documented way to make a spec quietly stop asserting what it says.
@@ -103,9 +110,12 @@ RSpec.describe ".reek.yml" do
       "Elkrb::GraphvizWrapper#available?",
       "Elkrb::GraphvizWrapper#build_command",
       "Elkrb::GraphvizWrapper#execute_command",
+      "Elkrb::GraphvizWrapper#executable_candidate?",
+      "Elkrb::GraphvizWrapper#executable_file?",
       "Elkrb::GraphvizWrapper#find_graphviz",
       "Elkrb::GraphvizWrapper#initialize",
       "Elkrb::GraphvizWrapper#installation_message",
+      "Elkrb::GraphvizWrapper#positional_path",
       "Elkrb::GraphvizWrapper#render",
       "Elkrb::GraphvizWrapper#supported_engines",
       "Elkrb::GraphvizWrapper#supported_formats",

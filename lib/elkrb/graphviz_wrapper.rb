@@ -35,8 +35,15 @@ module Elkrb
     def version
       return nil unless available?
 
-      output = `#{@dot_path} -V 2>&1`
+      output = IO.popen([@dot_path, "-V"], err: %i[child out], &:read)
       output.match(/version\s+([\d.]+)/i)&.captures&.first
+    rescue SystemCallError
+      # `available?` only proves that a path looked executable once. Exec can
+      # still fail -- a stale entry, a directory, a file this process may not
+      # run. The backticks this replaced never surfaced that, because /bin/sh
+      # absorbed the failure and handed back its own error text, so returning
+      # nil is what keeps the documented nil-or-String contract.
+      nil
     end
 
     def supported_formats
@@ -59,17 +66,55 @@ module Elkrb
         "/opt/local/bin/dot",
       ]
 
-      candidates.each do |path|
-        if File.executable?(path)
-          return path
-        elsif system("which #{path} > /dev/null 2>&1")
-          return path
-        end
-      end
-
-      nil
+      candidates.find { |path| executable_candidate?(path) }
     end
 
+    # A shell-free replacement for `which`. Nothing here interpolates into a
+    # command string, which is what the old `system("which #{path} ...")` did.
+    #
+    # This is NOT execvp parity and does not claim to be. It is deliberately
+    # wider in one direction and narrower in another, both inherited from the
+    # `File.executable?` probe that has always been the first check here:
+    #   wider  -- a bare name is resolved against the working directory too,
+    #             where execvp searches it only for an empty PATH element;
+    #   narrower -- an empty PATH element is dropped rather than walked,
+    #             because `File.join("", "dot")` is "/dot", so walking it would
+    #             probe the ROOT directory, which is what neither party wants.
+    # A candidate that already contains a separator is not PATH-searched at
+    # all; that part does match execvp, and it avoids the nonsense
+    # `File.join("/opt/bin", "/usr/bin/dot")` -> "/opt/bin/usr/bin/dot".
+    # `File::SEPARATOR` is "/" on every platform Ruby runs on, Windows
+    # included -- `File::ALT_SEPARATOR` is the "\\" one, and Ruby's own
+    # stdlib normalises INTO SEPARATOR, never the other way. Reproduce with
+    # `grep -rn 'ALT_SEPARATOR, File::SEPARATOR' "$(ruby -e 'print
+    # RbConfig::CONFIG[%q(rubylibdir)]')"`: pathname.rb uses `tr!` and
+    # rubygems/installer.rb uses `tr`, both in that direction. Line numbers
+    # move between Ruby versions, so they are deliberately not quoted here.
+    # Every candidate above is written with "/", so one test covers them all.
+    def executable_candidate?(path)
+      return true if executable_file?(path)
+      return false if path.include?(File::SEPARATOR)
+
+      dirs = ENV.fetch("PATH", "").split(File::PATH_SEPARATOR)
+      dirs.reject(&:empty?).any? do |dir|
+        executable_file?(File.join(dir, path))
+      end
+    end
+
+    # `File.executable?` alone is true for a DIRECTORY, and exec is not. Both
+    # arms above ask the same question so the fast path cannot be laxer than
+    # the walk.
+    def executable_file?(path)
+      File.file?(path) && File.executable?(path)
+    end
+
+    # Both paths go through `File.path`, which is the conversion
+    # `validate_file_exists!` already accepts -- a String, or anything carrying
+    # `#to_path` -- and the one `system(*argv)` will not do for us, since argv
+    # converts through `#to_str` and Pathname does not define it. Interpolation
+    # is NOT interchangeable with it: `#to_s` on a `#to_path` object that is not
+    # a Pathname yields "#<Object:0x...>", and dot then writes a file by that
+    # name and reports success.
     def build_command(engine, format, input_file, output_file, dpi)
       cmd_parts = [
         @dot_path,
@@ -78,17 +123,29 @@ module Elkrb
         "-Gdpi=#{dpi}",
       ]
 
-      cmd_parts << "-o#{output_file}" if output_file
-      cmd_parts << input_file
+      cmd_parts << "-o#{File.path(output_file)}" if output_file
+      cmd_parts << positional_path(File.path(input_file))
 
-      cmd_parts.join(" ")
+      cmd_parts
+    end
+
+    # Removing the shell closes command injection but not ARGUMENT injection.
+    # `validate_file_exists!` only asks whether the path exists, so a file
+    # genuinely named "-ovictim.txt" passes and then reaches dot as a bare
+    # positional, where its option parser reads it as a second -o and writes a
+    # file the caller never named -- exit 0, success reported. Measured against
+    # graphviz 15.1.1: dot rejects the usual end-of-options marker
+    # ("dot: option -- unrecognized", rc=1), so "--" is not available. "./"
+    # names the same file and dot accepts it.
+    def positional_path(path)
+      path.start_with?("-") ? File.join(".", path) : path
     end
 
     def execute_command(cmd)
-      success = system(cmd)
+      success = system(*cmd)
       unless success
         raise GraphvizNotFoundError,
-              "Graphviz command failed: #{cmd}"
+              "Graphviz command failed: #{cmd.inspect}"
       end
 
       success
