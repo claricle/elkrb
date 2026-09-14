@@ -17,9 +17,11 @@ RuboCop::RakeTask.new do |task|
 end
 
 # DO NOT DELETE. This is the only thing that arms the SimpleCov floors in
-# spec/spec_helper.rb. Remove it and coverage silently stops being enforced
-# anywhere, with every run still green. CI runs `bundle exec rake`, so the
-# default task is where the floor has to be armed.
+# spec/spec_helper.rb. Remove it and the failure is LOUD, not silent: the
+# :coverage_enforced task below finds no receipt and `rake` aborts with
+# "the spec step finished without arming the coverage floors, so this run
+# enforced nothing...". CI runs `bundle exec rake`, so the default task is
+# where the floor has to be armed.
 #
 # The value is load-bearing, but note what it does and does not buy. Under
 # `rake` the floor is ALWAYS armed -- this line overwrites whatever the caller
