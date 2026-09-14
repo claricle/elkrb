@@ -852,6 +852,17 @@ RSpec.describe "input shape validation at the CLI boundary" do
         '{"id":"r","children":[],"edges":[{"id":"e","sources":["a"],' \
         '"targets":["b"],"sections":[{"id":"s",' \
         '"bendPoints":{"bad":1}}]}]}',
+      "object-valued section incoming sections" =>
+        '{"id":"r","children":[],"edges":[{"id":"e","sources":["a"],' \
+        '"targets":["b"],"sections":[{"id":"s",' \
+        '"incomingSections":{"bad":1}}]}]}',
+      "object-valued section outgoing sections" =>
+        '{"id":"r","children":[],"edges":[{"id":"e","sources":["a"],' \
+        '"targets":["b"],"sections":[{"id":"s",' \
+        '"outgoingSections":{"bad":1}}]}]}',
+      "object-valued edge junction points" =>
+        '{"id":"r","children":[],"edges":[{"id":"e","sources":["a"],' \
+        '"targets":["b"],"junctionPoints":{"bad":1}}]}',
     }.each do |name, json|
       it "rejects #{name}" do
         expect { Elkrb::FormatSniffer.read(json, ".json") }

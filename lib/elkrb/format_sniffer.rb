@@ -224,6 +224,7 @@ module Elkrb
       # The field list is every `collection: true` attribute in graph/.
       COLLECTIONS = %i[
         children edges labels ports sections sources targets bend_points
+        incoming_sections outgoing_sections junction_points
       ].freeze
       private_constant :COLLECTIONS
 
