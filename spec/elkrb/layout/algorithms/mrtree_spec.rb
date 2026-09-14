@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "timeout"
+
 require "spec_helper"
 
 RSpec.describe Elkrb::Layout::Algorithms::MRTree do
@@ -378,5 +380,1031 @@ RSpec.describe Elkrb::Layout::Algorithms::MRTree do
         expect(b.y).to be > a.y
       end
     end
+
+    # Every guard above asserts y only, and y comes from the relaxed
+    # levels, which stay right even when root finding gets a node wrong.
+    # What root finding really decides is which nodes START a tree, and
+    # each tree begins at its own x offset. That only shows when a child
+    # is listed BEFORE its own parent -- with the parent first it keeps
+    # x = 0 either way. So the contexts below all list b first and assert
+    # x as well as y.
+    context "with an edge onto a child's port, the child listed first" do
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "root",
+          layout_options: { "algorithm" => "mrtree" },
+        )
+      end
+
+      before do
+        a = Elkrb::Graph::Node.new(id: "a", width: 10, height: 10)
+        b = Elkrb::Graph::Node.new(
+          id: "b",
+          width: 10,
+          height: 10,
+          ports: [Elkrb::Graph::Port.new(id: "bp")],
+        )
+
+        graph.children = [b, a]
+        graph.edges = [
+          Elkrb::Graph::Edge.new(id: "e", sources: ["a"], targets: ["bp"]),
+        ]
+      end
+
+      it "keeps b under a instead of starting a tree of its own" do
+        algorithm.layout(graph)
+
+        a = graph.children.find { |n| n.id == "a" }
+        b = graph.children.find { |n| n.id == "b" }
+
+        expect(b.x).to eq(a.x)
+        expect(b.y).to be > a.y
+      end
+    end
+
+    context "with a hyperedge onto its own port, the child listed first" do
+      # Reading only the first source and the first target makes this whole
+      # edge look like a self-loop, which hides a -> b entirely.
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "root",
+          layout_options: { "algorithm" => "mrtree" },
+        )
+      end
+
+      before do
+        a = Elkrb::Graph::Node.new(
+          id: "a",
+          width: 10,
+          height: 10,
+          ports: [Elkrb::Graph::Port.new(id: "ap")],
+        )
+        b = Elkrb::Graph::Node.new(id: "b", width: 10, height: 10)
+
+        graph.children = [b, a]
+        graph.edges = [
+          Elkrb::Graph::Edge.new(id: "e", sources: ["a"], targets: %w[ap b]),
+        ]
+      end
+
+      it "keeps b under a instead of starting a tree of its own" do
+        algorithm.layout(graph)
+
+        a = graph.children.find { |n| n.id == "a" }
+        b = graph.children.find { |n| n.id == "b" }
+
+        expect(b.x).to eq(a.x)
+        expect(b.y).to be > a.y
+      end
+    end
+
+    context "with a multi-source edge onto a target listed first" do
+      # b is one of its own sources, with a as the other. Asking whether
+      # the sources merely `include?` the target calls that a self-loop and
+      # hands b a tree of its own; asking whether any source is a DIFFERENT
+      # node keeps it as a's child.
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "root",
+          layout_options: { "algorithm" => "mrtree" },
+        )
+      end
+
+      before do
+        graph.children = [
+          Elkrb::Graph::Node.new(id: "b", width: 10, height: 10),
+          Elkrb::Graph::Node.new(id: "a", width: 10, height: 10),
+        ]
+        graph.edges = [
+          Elkrb::Graph::Edge.new(id: "e", sources: %w[a b], targets: ["b"]),
+        ]
+      end
+
+      it "keeps b under a instead of starting a tree of its own" do
+        algorithm.layout(graph)
+
+        a = graph.children.find { |n| n.id == "a" }
+        b = graph.children.find { |n| n.id == "b" }
+
+        expect(b.x).to eq(a.x)
+        expect(b.y).to be > a.y
+      end
+    end
+
+    context "with a port-sourced hyperedge onto its own node and a child" do
+      # The source is a's port, never a itself. Resolving targets but not
+      # sources leaves this edge with no source at all, so nothing marks b
+      # as having incoming traffic and b becomes a root.
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "root",
+          layout_options: { "algorithm" => "mrtree" },
+        )
+      end
+
+      before do
+        a = Elkrb::Graph::Node.new(
+          id: "a",
+          width: 10,
+          height: 10,
+          ports: [
+            Elkrb::Graph::Port.new(id: "p1"),
+            Elkrb::Graph::Port.new(id: "p2"),
+          ],
+        )
+        b = Elkrb::Graph::Node.new(id: "b", width: 10, height: 10)
+
+        graph.children = [b, a]
+        graph.edges = [
+          Elkrb::Graph::Edge.new(id: "e", sources: ["p1"], targets: %w[p2 b]),
+        ]
+      end
+
+      it "keeps b under a instead of starting a tree of its own" do
+        algorithm.layout(graph)
+
+        a = graph.children.find { |n| n.id == "a" }
+        b = graph.children.find { |n| n.id == "b" }
+
+        expect(b.x).to eq(a.x)
+        expect(b.y).to be > a.y
+      end
+    end
+
+    context "with two edges onto two ports of the same child" do
+      # "bp1" and "bp2" are different ids that resolve to the same node, so
+      # de-duplicating the raw ids instead of the resolved nodes leaves b in
+      # a's child list twice.
+      #
+      # `anchor` is what makes the duplicate VISIBLE, and the example is
+      # worthless without it. Measured 2026-09-07 on the three-node version
+      # of this fixture: deleting `map.each_value { |c| c.uniq!(&:id) }`
+      # left z.x=42.0 and graph.width=64.0 completely unchanged. b really
+      # was laid out twice -- once at the left of a's tree and again 30.0
+      # further right -- but the abandoned first placement sat at the
+      # LEFTMOST edge, and `apply_padding` normalises the whole graph to its
+      # leftmost node, so the wasted column was folded away before any
+      # coordinate could see it.
+      #
+      # `anchor` is a root of its own with no edges, so it is laid out FIRST
+      # and owns the left edge. The duplicate's wasted column now sits
+      # between anchor and z instead of at the boundary, and both z.x and
+      # the graph width move by exactly the 30.0 a second b column costs.
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "root",
+          layout_options: { "algorithm" => "mrtree" },
+        )
+      end
+
+      before do
+        a = Elkrb::Graph::Node.new(id: "a", width: 10, height: 10)
+        b = Elkrb::Graph::Node.new(
+          id: "b",
+          width: 10,
+          height: 10,
+          ports: [
+            Elkrb::Graph::Port.new(id: "bp1"),
+            Elkrb::Graph::Port.new(id: "bp2"),
+          ],
+        )
+
+        anchor = Elkrb::Graph::Node.new(id: "anchor", width: 10, height: 10)
+        z = Elkrb::Graph::Node.new(id: "z", width: 10, height: 10)
+
+        graph.children = [b, anchor, a, z]
+        graph.edges = [
+          Elkrb::Graph::Edge.new(id: "e1", sources: ["a"], targets: ["bp1"]),
+          Elkrb::Graph::Edge.new(id: "e2", sources: ["a"], targets: ["bp2"]),
+        ]
+      end
+
+      it "gives a one child, not the same node twice" do
+        algorithm.layout(graph)
+
+        z = graph.children.find { |n| n.id == "z" }
+
+        # Three trees in a row, each one 10-wide column with 20.0 of node
+        # spacing after it, inside 12.0 of padding: anchor at 12.0, a's
+        # tree at 42.0, z at 72.0. A duplicated b gives a's tree a SECOND
+        # column, which pushes z to 102.0 and the graph to 124.0.
+        expect(z.x).to eq(72.0)
+        expect(graph.width).to eq(94.0)
+      end
+    end
+
+    context "with children that carry no size" do
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "root",
+          children: [
+            Elkrb::Graph::Node.new(id: "a"),
+            Elkrb::Graph::Node.new(id: "b"),
+            Elkrb::Graph::Node.new(id: "c"),
+          ],
+          edges: [
+            Elkrb::Graph::Edge.new(id: "e1", sources: ["a"], targets: ["b"]),
+            Elkrb::Graph::Edge.new(id: "e2", sources: ["b"], targets: ["c"]),
+          ],
+        )
+      end
+
+      it "treats the missing width as zero instead of crashing" do
+        expect { algorithm.layout(graph) }.not_to raise_error
+      end
+
+      it "still positions every node" do
+        algorithm.layout(graph)
+
+        expect(graph.children.map(&:x)).to all(be_a(Numeric))
+        expect(graph.children.map(&:y)).to all(be_a(Numeric))
+      end
+
+      it "leaves the width unset, since the node never had one" do
+        algorithm.layout(graph)
+
+        expect(graph.children.map(&:width)).to all(be_nil)
+        # Nil widths alone are also what a layout that did nothing at all
+        # would leave behind. The missing width has to be READ as zero:
+        # the chain stacks into one zero-wide column at the left padding.
+        expect(graph.children.map(&:x)).to all(eq(12.0))
+        expect(graph.children.map(&:y)).to eq([12.0, 92.0, 172.0])
+        expect(graph.width).to eq(24.0)
+      end
+    end
+  end
+end
+
+RSpec.describe "MRTree with a component that has no root of its own" do
+  # a -> b -> a is wholly cyclic, so it contains no root. c is isolated and
+  # is the graph's only root, which used to mean a and b were never reached
+  # and kept nil coordinates until padding tripped over them.
+  let(:graph) do
+    {
+      "id" => "r",
+      "children" => %w[a b c].map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => [
+        { "id" => "e1", "sources" => ["a"], "targets" => ["b"] },
+        { "id" => "e2", "sources" => ["b"], "targets" => ["a"] },
+      ],
+    }
+  end
+
+  it "lays out without tripping over a nil coordinate" do
+    expect { Elkrb.layout(graph, algorithm: "mrtree") }.not_to raise_error
+  end
+
+  it "gives every node real coordinates, cyclic component included" do
+    result = Elkrb.layout(graph, algorithm: "mrtree")
+
+    expect(result.children.map(&:x)).to all(be_a(Float))
+    expect(result.children.map(&:y)).to all(be_a(Float))
+  end
+end
+
+RSpec.describe "MRTree fallback trees must stay disjoint" do
+  # r -> u -> v -> c is a rooted chain. a <-> b is a cyclic component with no
+  # root of its own, and a also points at c. Seeding a as a fallback root must
+  # not let its tree reach back into c, which r's tree already owns — placing
+  # c twice drags it above its own parent.
+  let(:graph) do
+    {
+      "id" => "root",
+      "children" => %w[r u v c a b].map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => [
+        { "id" => "e1", "sources" => ["r"], "targets" => ["u"] },
+        { "id" => "e2", "sources" => ["u"], "targets" => ["v"] },
+        { "id" => "e3", "sources" => ["v"], "targets" => ["c"] },
+        { "id" => "e4", "sources" => ["a"], "targets" => ["b"] },
+        { "id" => "e5", "sources" => ["b"], "targets" => ["a"] },
+        { "id" => "e6", "sources" => ["a"], "targets" => ["c"] },
+      ],
+    }
+  end
+
+  it "keeps a shared child below its own parent" do
+    by_id = Elkrb.layout(graph, algorithm: "mrtree")
+      .children.to_h { |node| [node.id, node] }
+
+    expect(by_id["c"].y).to be > by_id["v"].y
+    # v owns c and is its only parent in the forest, so they share a
+    # column. Let a's fallback tree place c a second time and c moves to
+    # (72.0, 572.0) from (12.0, 412.0) -- measured by giving each seed its
+    # own visited set. Both assertions catch that; the x one is the sharper
+    # of the two, because c stays below v either way.
+    expect(by_id["c"].x).to eq(by_id["v"].x)
+  end
+
+  it "still places every node" do
+    result = Elkrb.layout(graph, algorithm: "mrtree")
+
+    expect(result.children.map(&:y)).to all(be_a(Float))
+  end
+end
+
+RSpec.describe "MRTree claims every sibling before expanding any of them" do
+  # a's children are b and c, and c is reachable from b as well. The child
+  # list is settled before any of it is recursed into, so c has to be
+  # claimed as a's child straight away -- otherwise b's subtree reaches c
+  # and places it a second time, and the later placement wins. Only c is
+  # placed twice: measured with the pre-claim removed, c takes three
+  # coordinate writes and b, c's own child d, and a take two each.
+  let(:graph) do
+    {
+      "id" => "root",
+      "children" => %w[a b c d].map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => [
+        { "id" => "e1", "sources" => ["a"], "targets" => ["b"] },
+        { "id" => "e2", "sources" => ["a"], "targets" => ["c"] },
+        { "id" => "e3", "sources" => ["b"], "targets" => ["c"] },
+        { "id" => "e4", "sources" => ["c"], "targets" => ["d"] },
+      ],
+    }
+  end
+
+  it "leaves d under the c that a owns" do
+    by_id = Elkrb.layout(graph, algorithm: "mrtree")
+      .children.to_h { |node| [node.id, node] }
+
+    expect(by_id["d"].x).to eq(by_id["c"].x)
+  end
+end
+
+RSpec.describe "MRTree with a node reachable by two paths of different depth" do
+  # r -> c is one hop. a -> b -> d -> c is three. c belongs at the deeper
+  # level, or it lands above d, its own parent.
+  let(:graph) do
+    {
+      "id" => "root",
+      "children" => %w[r a b d c].map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => [
+        { "id" => "e1", "sources" => ["r"], "targets" => ["c"] },
+        { "id" => "e2", "sources" => ["a"], "targets" => ["b"] },
+        { "id" => "e3", "sources" => ["b"], "targets" => ["d"] },
+        { "id" => "e4", "sources" => ["d"], "targets" => ["c"] },
+      ],
+    }
+  end
+
+  it "places the shared node below its deepest parent" do
+    by_id = Elkrb.layout(graph, algorithm: "mrtree")
+      .children.to_h { |node| [node.id, node] }
+
+    expect(by_id["c"].y).to be > by_id["d"].y
+  end
+
+  it "places every node exactly once" do
+    # COUNT the placements. Distinct final coordinates do not prove this
+    # and never did: a node built into two trees is simply positioned
+    # twice and the second write wins, so the finished positions stay
+    # distinct. Measured 2026-09-07 by giving each seed its own visited
+    # set instead of sharing `placed` -- c was positioned twice, all five
+    # positions came out distinct, and a uniqueness assertion stayed
+    # green while c had moved from x=12.0 to x=42.0.
+    #
+    # Two writes per node IS the whole layout: one when the forest walk
+    # positions the node, one when `apply_padding` normalises the graph to
+    # its leftmost and topmost node. That mutation reads c as three.
+    model = Elkrb::Graph::Graph.from_hash(graph)
+    placements = Hash.new(0)
+    model.children.each do |node|
+      allow(node).to receive(:y=).and_wrap_original do |original, value|
+        placements[node.id] += 1
+        original.call(value)
+      end
+    end
+
+    Elkrb::Layout::Algorithms::MRTree.new.layout(model)
+
+    expect(placements).to eq(%w[r a b d c].to_h { |id| [id, 2] })
+  end
+end
+
+RSpec.describe "MRTree on a densely cyclic graph" do
+  # A COMPLETE DIGRAPH on the s-nodes -- every s-node points at every other
+  # s-node -- plus a `root` that seeds it. Not a cycle, and not "every node
+  # reachable from every other": nothing points AT root, which is the whole
+  # point of having it. Enumerating simple paths across that digraph is
+  # factorial: 8 s-nodes took 2.5s and each further node cost roughly ten
+  # times more. The bound is deliberately loose — it guards against a return
+  # to factorial growth, not throughput.
+  def complete_digraph(size)
+    ids = (1..size).map { |i| "s#{i}" }
+    edges = [{ "id" => "seed", "sources" => ["root"],
+               "targets" => [ids.first] }]
+    ids.each_with_index do |from, i|
+      ids.each_with_index do |to, j|
+        next if i == j
+
+        edges << { "id" => "e#{i}_#{j}", "sources" => [from],
+                   "targets" => [to] }
+      end
+    end
+    {
+      "id" => "r",
+      "children" => (["root"] + ids).map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => edges,
+    }
+  end
+
+  it "lays out a 20-node complete digraph inside five seconds" do
+    # The bound has to interrupt the call, not be read after it returns. A
+    # regression to unbounded growth never reaches the assertion, so the old
+    # form stalled the whole suite instead of failing this one example.
+    expect do
+      Timeout.timeout(5.0) do
+        Elkrb.layout(complete_digraph(20), algorithm: "mrtree")
+      end
+    end.not_to raise_error
+  end
+
+  it "keeps the seed root above every node of the digraph" do
+    result = Elkrb.layout(complete_digraph(12), algorithm: "mrtree")
+
+    ids = result.children.map(&:id)
+    expect(ids.uniq.size).to eq(ids.size)
+    expect(result.children.map(&:y)).to all(be_a(Float))
+
+    # "root" is the one node outside the digraph and the only one with no
+    # incoming edge, so it is the sole real root. Every s-node has to be
+    # levelled from it and land below it.
+    by_id = result.children.to_h { |node| [node.id, node] }
+    root = by_id.delete("root")
+    expect(by_id.each_value.map(&:y)).to all(be > root.y)
+  end
+end
+
+RSpec.describe "MRTree on a cycle hanging off a real root" do
+  # r0 is the only root. a -> b -> c is the rest of the chain and c -> a
+  # closes the cycle, which is what pushes a's own level past b's: the
+  # back edge offers a a deeper candidate, the relaxation bound freezes
+  # it there, and a ends up drawn below the child it owns.
+  let(:graph) do
+    {
+      "id" => "root",
+      "children" => %w[r0 a b c].map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => [
+        { "id" => "e1", "sources" => ["r0"], "targets" => ["a"] },
+        { "id" => "e2", "sources" => ["a"], "targets" => ["b"] },
+        { "id" => "e3", "sources" => ["b"], "targets" => ["c"] },
+        { "id" => "e4", "sources" => ["c"], "targets" => ["a"] },
+      ],
+    }
+  end
+
+  it "keeps every parent strictly above its own child" do
+    by_id = Elkrb.layout(graph, algorithm: "mrtree")
+      .children.to_h { |node| [node.id, node] }
+
+    # r0 -> a -> b -> c is the chain the forest picks. c -> a is the edge
+    # that closes the cycle and stays an unavoidable violation -- no tree
+    # can honour it. Every edge the forest DID pick has to go downward.
+    %w[r0 a b c].each_cons(2) do |parent, child|
+      expect(by_id[child].y).to be > by_id[parent].y
+    end
+  end
+end
+
+RSpec.describe "MRTree relaxing a shared node listed above its own parents" do
+  # a -> b, a -> c and b -> c. Relaxation reaches c first through the short
+  # a -> c hop, which puts it level with b, its own parent. It only lands
+  # below b because b is RE-QUEUED when its own level moves and offers c the
+  # deeper route afterwards. A relaxation that levels each node once and
+  # never revisits it leaves c level with b. Measured: replacing the
+  # "only if this candidate is deeper" test with "only if unlevelled" reds
+  # this example and the two-route one above it, and nothing else in the
+  # file -- 44 examples, 2 failures.
+  let(:graph) do
+    {
+      "id" => "root",
+      "children" => %w[c b a].map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => [
+        { "id" => "e1", "sources" => ["a"], "targets" => ["b"] },
+        { "id" => "e2", "sources" => ["a"], "targets" => ["c"] },
+        { "id" => "e3", "sources" => ["b"], "targets" => ["c"] },
+      ],
+    }
+  end
+
+  it "keeps relaxing until the deeper route reaches c" do
+    by_id = Elkrb.layout(graph, algorithm: "mrtree")
+      .children.to_h { |node| [node.id, node] }
+
+    expect(by_id["c"].y).to be > by_id["b"].y
+    expect(by_id["b"].y).to be > by_id["a"].y
+  end
+end
+
+RSpec.describe "MRTree with more than one rootless component" do
+  # z is the graph's only root. a <-> b and c <-> d are two disjoint cyclic
+  # components, neither reachable from z and neither holding a root of its
+  # own. Seeding just one fallback root leaves the other component unlevelled
+  # and unplaced, and padding then trips over its nil coordinates.
+  let(:graph) do
+    {
+      "id" => "root",
+      "children" => %w[z a b c d].map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => [
+        { "id" => "e1", "sources" => ["a"], "targets" => ["b"] },
+        { "id" => "e2", "sources" => ["b"], "targets" => ["a"] },
+        { "id" => "e3", "sources" => ["c"], "targets" => ["d"] },
+        { "id" => "e4", "sources" => ["d"], "targets" => ["c"] },
+      ],
+    }
+  end
+
+  it "seeds a fallback root for every rootless component, not just one" do
+    result = Elkrb.layout(graph, algorithm: "mrtree")
+    by_id = result.children.to_h { |node| [node.id, node] }
+
+    expect(result.children.map(&:y)).to all(be_a(Float))
+    # z, a <-> b and c <-> d are three separate trees, so three columns.
+    expect(result.children.map(&:x).uniq.size).to eq(3)
+    expect(by_id["b"].y).to be > by_id["a"].y
+    expect(by_id["d"].y).to be > by_id["c"].y
+  end
+end
+
+RSpec.describe "MRTree with a multi-source edge led by its own target" do
+  # b heads its own source list, with the genuinely different source a
+  # second, and b is listed before a as a child. Reading only sources.first
+  # calls this a self-loop, so nothing marks b as having incoming traffic
+  # and b starts a tree of its own at its own x offset.
+  #
+  # The existing %w[a b] fixture cannot catch that: its first source already
+  # differs from the target, so the two readings agree there.
+  let(:graph) do
+    {
+      "id" => "root",
+      "children" => %w[b a].map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => [
+        { "id" => "e", "sources" => %w[b a], "targets" => ["b"] },
+      ],
+    }
+  end
+
+  it "keeps b under a instead of starting a tree of its own" do
+    by_id = Elkrb.layout(graph, algorithm: "mrtree")
+      .children.to_h { |node| [node.id, node] }
+
+    expect(by_id["b"].x).to eq(by_id["a"].x)
+    expect(by_id["b"].y).to be > by_id["a"].y
+  end
+end
+
+RSpec.describe "MRTree on a graph with no root anywhere" do
+  # A bare 2-cycle: every node has incoming traffic, so root finding comes
+  # back empty and every child has to be treated as a root. n1's tree then
+  # claims n0, and the n0 seed behind it has to be skipped -- handing it a
+  # tree of its own would place n0 twice, in a second column.
+  let(:graph) do
+    {
+      "id" => "root",
+      "children" => %w[n1 n0].map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => [
+        { "id" => "e1", "sources" => ["n0"], "targets" => ["n1"] },
+        { "id" => "e2", "sources" => ["n1"], "targets" => ["n0"] },
+      ],
+    }
+  end
+
+  it "places both nodes in one column, each exactly once" do
+    result = Elkrb.layout(graph, algorithm: "mrtree")
+    by_id = result.children.to_h { |node| [node.id, node] }
+
+    expect(result.children.map(&:y)).to all(be_a(Float))
+    expect(by_id["n0"].x).to eq(by_id["n1"].x)
+    expect(by_id["n0"].y).to be > by_id["n1"].y
+  end
+end
+
+RSpec.describe "MRTree with an edge declared on a childless sibling" do
+  # n owns the edge x -> y, so the node index folds it in and index.edges
+  # sees it while graph.edges does not. Root finding reads the narrower
+  # graph.edges, which makes y a root. Building the adjacency map from the
+  # wider set would make y x's child at the same time -- a root that is also
+  # somebody's child gets placed twice, once per view.
+  let(:graph) do
+    {
+      "id" => "root",
+      "children" => [
+        { "id" => "x", "width" => 10, "height" => 10 },
+        { "id" => "y", "width" => 10, "height" => 10 },
+        { "id" => "n", "width" => 10, "height" => 10,
+          "edges" => [
+            { "id" => "own", "sources" => ["x"], "targets" => ["y"] },
+          ] },
+      ],
+    }
+  end
+
+  it "keeps the child list and the root list reading the same edges" do
+    result = Elkrb.layout(graph, algorithm: "mrtree")
+    by_id = result.children.to_h { |node| [node.id, node] }
+
+    # y is a root by graph.edges, so it stays one: its own column, its own
+    # top row, not tucked under x.
+    expect(by_id["y"].y).to eq(by_id["x"].y)
+    expect(by_id["y"].x).not_to eq(by_id["x"].x)
+    expect(result.children.map(&:x).uniq.size).to eq(3)
+  end
+end
+
+RSpec.describe "MRTree on a hash that declares no edges at all" do
+  # Graph.from_hash bypasses Graph#initialize, so it leaves `edges` nil
+  # rather than filling in the empty default -- and that is the constructor
+  # LayoutEngine uses for Hash input. Reaching for `edges.each` here blows
+  # up on the real entry point while every Graph.new fixture stays green.
+  let(:graph) do
+    {
+      "id" => "root",
+      "children" => %w[a b].map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+    }
+  end
+
+  it "lays the children out as roots instead of tripping over nil edges" do
+    expect { Elkrb.layout(graph, algorithm: "mrtree") }.not_to raise_error
+
+    result = Elkrb.layout(graph, algorithm: "mrtree")
+    expect(result.children.map(&:x)).to all(be_a(Float))
+    expect(result.children.map(&:y)).to all(be_a(Float))
+    # No edges means no parents: two roots, side by side on one row.
+    expect(result.children.map(&:y).uniq.size).to eq(1)
+    expect(result.children.map(&:x).uniq.size).to eq(2)
+  end
+end
+
+RSpec.describe "MRTree on many disjoint cyclic components" do
+  # Two isolated roots plus a pile of 2-cycles. Nothing reaches the cycles
+  # from a root, so every one of them costs its own fallback seed and its
+  # own relaxation -- this is the shape that stresses build_forest's loop,
+  # where one dense component with a real root only ever seeds once.
+  #
+  # The bound is deliberately loose. It is here to catch a hang, not to
+  # certify a cost. Levelling this shape WAS superlinear -- relaxation ran
+  # graph-wide per seed against a graph-sized level bound. It is now scoped
+  # to each component, and the 480-node example below is what measures that.
+  def disjoint_cycles(size)
+    ids = (0...size).map { |i| "n#{i}" }
+    edges = ((size - 2) / 2).times.flat_map do |k|
+      a = ids[2 + (k * 2)]
+      b = ids[3 + (k * 2)]
+      [{ "id" => "f#{k}", "sources" => [a], "targets" => [b] },
+       { "id" => "r#{k}", "sources" => [b], "targets" => [a] }]
+    end
+    {
+      "id" => "r",
+      "children" => ids.map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => edges,
+    }
+  end
+
+  # `layout_flat` is public and every other algorithm guards nil children.
+  # Reached directly, not through `Elkrb.layout` -- `BaseAlgorithm#layout`
+  # guards its own dispatch, so the public path never exposed this and a
+  # spec written against `Elkrb.layout` would pass with the guard removed.
+  it "no-ops on a graph whose children key is nil, called directly" do
+    graph = Elkrb::Graph::Graph.new(id: "r")
+    graph.children = nil
+
+    algorithm = Elkrb::Layout::Algorithms::MRTree.new({})
+
+    expect(algorithm.layout_flat(graph)).to be(graph)
+  end
+
+  it "places every component without hanging" do
+    # Same reason as the 20-node complete digraph above: the bound has to
+    # INTERRUPT the call, not be read after it returns. Measuring elapsed
+    # time only reports a regression that finishes; one that does not stalls
+    # the whole suite. That is not hypothetical here -- reverting this
+    # branch's mrtree.rb and running its examples together ran for over
+    # thirteen minutes without a verdict.
+    result = Timeout.timeout(5.0) do
+      Elkrb.layout(disjoint_cycles(80), algorithm: "mrtree")
+    end
+
+    # The crash this branch is named for: a component left unseeded keeps
+    # nil coordinates, and apply_padding dies subtracting from them.
+    expect(result.children.map(&:x)).to all(be_a(Float))
+    expect(result.children.map(&:y)).to all(be_a(Float))
+  end
+end
+
+RSpec.describe "MRTree on rootless cycles that share ONE component" do
+  # The disjoint-cycle examples above put every cycle in a component of its
+  # own, so scoping relaxation to a component was enough to bound them. This
+  # shape defeats that: an isolated `root` plus a pile of two-cycles that all
+  # point at ONE shared `sink`, which joins every cycle into a single
+  # weakly connected component the size of the graph. Each cycle still costs
+  # its own fallback seed, and each seed used to re-sweep the WHOLE component
+  # -- so component scoping bought nothing and the cost stayed cubic.
+  #
+  # Measured on this shape with sweeps, at the tip this example was added to
+  # guard: 0.22s at 80 nodes, 1.09s at 160, 4.14s at 240 and 12.20s at 320.
+  # With the worklist: 0.01s, 0.13s, 0.07s, 0.09s.
+  def shared_sink_cycles(size)
+    pairs = (size - 2) / 2
+    ids = %w[root sink] + (0...pairs).flat_map { |i| ["a#{i}", "b#{i}"] }
+    edges = (0...pairs).flat_map do |i|
+      [{ "id" => "f#{i}", "sources" => ["a#{i}"], "targets" => ["b#{i}"] },
+       { "id" => "r#{i}", "sources" => ["b#{i}"], "targets" => ["a#{i}"] },
+       { "id" => "j#{i}", "sources" => ["a#{i}"], "targets" => ["sink"] }]
+    end
+    {
+      "id" => "g",
+      "children" => ids.map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => edges,
+    }
+  end
+
+  it "lays out 320 nodes of one shared-sink component inside five seconds" do
+    # The timeout INTERRUPTS the call rather than being read after it
+    # returns, for the same reason as the disjoint-cycle examples: a
+    # regression that never finishes would otherwise stall the whole suite
+    # instead of failing. 320 is the smallest size in the measurement above
+    # that the sweep implementation could not finish inside this bound.
+    #
+    # Asserting the placement in the same example keeps the bound honest: a
+    # layout that returned early having placed nothing would beat any time.
+    result = nil
+
+    expect do
+      result = Timeout.timeout(5.0) do
+        Elkrb.layout(shared_sink_cycles(320), algorithm: "mrtree")
+      end
+    end.not_to raise_error
+
+    expect(result.children.size).to eq(320)
+    expect(result.children.map(&:x)).to all(be_a(Numeric).and(be_finite))
+    expect(result.children.map(&:y)).to all(be_a(Numeric).and(be_finite))
+  end
+end
+
+RSpec.describe "MRTree on a chain deep enough to reach the stack limit" do
+  # `layout_tree` recurses once per LEVEL, so every Ruby frame standing
+  # between one level and the next is paid once per level. Putting the
+  # child loop in a `layout_children` helper added a third frame per level
+  # and cut the depth this algorithm can handle by a third: measured by
+  # bisection on ruby 3.4.8, ~2,042 against origin/v2's ~2,975.
+  #
+  # 2,500 is between those two numbers on purpose. A bound this example
+  # could satisfy from either side would not be a regression test, and a
+  # bound at the very edge would be flaky as ruby's own frame size moves,
+  # so it sits in the gap the regression actually opened.
+  def chain(size)
+    { "id" => "g",
+      "children" => Array.new(size) do |i|
+        { "id" => i.to_s, "width" => 10, "height" => 10 }
+      end,
+      "edges" => Array.new(size - 1) do |i|
+        { "id" => "e#{i}", "sources" => [i.to_s], "targets" => [(i + 1).to_s] }
+      end }
+  end
+
+  it "lays out a 2,500-node chain without exhausting the stack" do
+    result = Elkrb.layout(chain(2500), algorithm: "mrtree")
+
+    # Not `not_to raise_error`: that passes for any result at all, and what
+    # is being pinned is that every node was actually placed on its own row.
+    expect(result.children.size).to eq(2500)
+    expect(result.children.map(&:y).uniq.size).to eq(2500)
+  end
+end
+
+RSpec.describe "MRTree levelling a digraph it cannot find a path through" do
+  # Another complete digraph, not a cycle: root is the only real root and
+  # c1..c5 point at each other in every direction. Relaxation has no
+  # longest path to settle on here, so the cycle keeps handing each node
+  # back a deeper candidate and the levels climb until the ceiling stops
+  # them. Drop that ceiling and this graph does not lay out AT ALL: the
+  # worklist re-queues each node forever and a five-second bound expires
+  # -- measured, both with the guard (594.0 tall) and without it (timeout).
+  # It is not a quadratic-depth ceiling, which is what this said before and
+  # what the example at the bottom of this block has always said correctly.
+  let(:graph) do
+    ids = %w[c1 c2 c3 c4 c5]
+    edges = [{ "id" => "seed", "sources" => ["root"], "targets" => ["c1"] }]
+    ids.each_with_index do |from, i|
+      ids.each_with_index do |to, j|
+        next if i == j
+
+        edges << { "id" => "e#{i}_#{j}", "sources" => [from],
+                   "targets" => [to] }
+      end
+    end
+    {
+      "id" => "r",
+      "children" => (["root"] + ids).map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => edges,
+    }
+  end
+
+  it "keeps the digraph's depth proportional to the node count" do
+    result = Elkrb.layout(graph, algorithm: "mrtree")
+
+    # Rows are 80 apart. Relaxation cannot push a level past the node
+    # count, and the tree floor can add at most one row per node on top of
+    # that, so twice the node count is the honest ceiling -- six nodes here
+    # occupy seven rows (594.0 tall). Remove `max_level` and this graph does
+    # not lay out at all: the cycle re-queues each node forever and a
+    # five-second bound expires -- measured, and the reason that ceiling is
+    # described as load-bearing in mrtree.rb.
+    expect(result.height).to be < (2 * result.children.size * 80.0)
+  end
+
+  it "still puts the seed root above every node of the digraph" do
+    by_id = Elkrb.layout(graph, algorithm: "mrtree")
+      .children.to_h { |node| [node.id, node] }
+    root = by_id.delete("root")
+
+    expect(by_id.each_value.map(&:y)).to all(be > root.y)
+  end
+end
+
+RSpec.describe "MRTree forest spacing and component cost" do
+  let(:spacing) { 31.0 }
+
+  # r0 owns a, b and c; r1 ends up with only d. Both roots point at c (e3 and
+  # e4), and a node belongs to exactly ONE tree -- the first walk to reach it
+  # keeps it, and r0 is walked first. That is the point of the fixture: r1's
+  # tree is narrower than its edge list suggests.
+  # The forest offset used to come from a width that summed leaf widths and
+  # skipped the gaps between them, so the next tree started too far left and
+  # its nodes touched the previous tree's.
+  def two_trees
+    {
+      "id" => "r",
+      "children" => %w[r0 r1 a b c d].map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => [
+        { "id" => "e1", "sources" => ["r0"], "targets" => ["a"] },
+        { "id" => "e2", "sources" => ["r0"], "targets" => ["b"] },
+        { "id" => "e3", "sources" => ["r0"], "targets" => ["c"] },
+        { "id" => "e4", "sources" => ["r1"], "targets" => ["c"] },
+        { "id" => "e5", "sources" => ["r1"], "targets" => ["d"] },
+      ],
+    }
+  end
+
+  it "keeps the configured gap between nodes that share a row" do
+    # Passed as an option, not in the graph's layoutOptions: measured on this
+    # branch, a graph-level "elk.spacing.nodeNode" does not reach mrtree's
+    # node_spacing and the layout silently uses the 20.0 default. Using a
+    # non-default value is what stops this example passing on that default.
+    result = Elkrb.layout(two_trees, algorithm: "mrtree",
+                                     spacing_node_node: spacing)
+
+    by_row = result.children.group_by(&:y)
+    by_row.each_value do |row|
+      row.sort_by(&:x).each_cons(2) do |left, right|
+        gap = right.x - (left.x + (left.width || 0.0))
+        # Name the gap, not merely "they do not overlap": a zero gap is
+        # already the defect, and >= 0 would pass with it.
+        expect(gap).to be >= spacing
+      end
+    end
+  end
+
+  # Two isolated roots plus a pile of disjoint 2-cycles. The two roots are
+  # LOAD-BEARING, not an off-by-one: they are what makes this the cubic
+  # shape. Nothing reaches the cycles from a root, so each cycle costs its
+  # own fallback seed, and levelling used to run graph-wide per seed against
+  # a graph-sized bound.
+  #
+  # Pairing every node instead removes the roots, and the old code then
+  # seeded everything at once and relaxed once -- quadratic, fast enough to
+  # pass this example's bound with the defect still present. That was tried
+  # and reverted; a version of this fixture with no roots proves nothing.
+  #
+  # Measured against the old code on this shape: 120 nodes 0.24s, 240 nodes
+  # 1.61s -- doubling the size multiplies the time by 6.7.
+  def disjoint_two_cycles(size)
+    ids = (0...size).map { |i| "n#{i}" }
+    edges = ((size - 2) / 2).times.flat_map do |k|
+      a = ids[2 + (k * 2)]
+      b = ids[3 + (k * 2)]
+      [{ "id" => "f#{k}", "sources" => [a], "targets" => [b] },
+       { "id" => "r#{k}", "sources" => [b], "targets" => [a] }]
+    end
+    {
+      "id" => "r",
+      "children" => ids.map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => edges,
+    }
+  end
+
+  # A tree whose LAST child is narrow but has descendants reaching further
+  # right than itself. The consumed width used to be read off that last
+  # child's own edge, which sits left of its subtree's real extent, so the
+  # next tree started inside this one. Found by review with this exact shape.
+  def deep_then_wide
+    pairs = [%w[r0 deep1], %w[deep1 deep2], %w[deep2 deep3],
+             %w[r0 wide], %w[wide a], %w[wide b], %w[wide c],
+             %w[r1 q1], %w[q1 q2], %w[q2 q3]]
+    {
+      "id" => "r",
+      "children" => %w[r0 r1 deep1 deep2 deep3 wide a b c q1 q2 q3].map do |id|
+        { "id" => id, "width" => 10, "height" => 10 }
+      end,
+      "edges" => pairs.each_with_index.map do |(source, target), i|
+        { "id" => "e#{i}", "sources" => [source], "targets" => [target] }
+      end,
+    }
+  end
+
+  # A parent WIDER than all its children combined. Centring puts it either
+  # side of them, so the consumed width has to come from where the nodes
+  # actually landed, not from what the children were allotted. Found by
+  # review: a 200px parent over two 10px children reported 60 and the next
+  # tree began 60px inside it.
+  def wide_parent
+    {
+      "id" => "r",
+      "children" => [{ "id" => "big", "width" => 200, "height" => 10 },
+                     { "id" => "c1", "width" => 10, "height" => 10 },
+                     { "id" => "c2", "width" => 10, "height" => 10 },
+                     { "id" => "r2", "width" => 10, "height" => 10 },
+                     { "id" => "d1", "width" => 10, "height" => 10 }],
+      "edges" => [{ "id" => "e1", "sources" => ["big"], "targets" => ["c1"] },
+                  { "id" => "e2", "sources" => ["big"], "targets" => ["c2"] },
+                  { "id" => "e3", "sources" => ["r2"], "targets" => ["d1"] }],
+    }
+  end
+
+  it "counts a parent wider than its children as part of its tree's width" do
+    result = Elkrb.layout(wide_parent, algorithm: "mrtree",
+                                       spacing_node_node: 20)
+    by_id = result.children.to_h { |node| [node.id, node] }
+    big = by_id.fetch("big")
+    other = by_id.fetch("r2")
+
+    expect(big.y).to eq(other.y)
+    # Signed gap, so an overlap reads as negative rather than as a near miss.
+    expect(other.x - (big.x + big.width)).to be >= 20
+  end
+
+  it "separates trees by a last child's descendants, not the child itself" do
+    result = Elkrb.layout(deep_then_wide, algorithm: "mrtree",
+                                          spacing_node_node: 37)
+    by_id = result.children.to_h { |node| [node.id, node] }
+    left = by_id.fetch("c")
+    right = by_id.fetch("q2")
+
+    # These two land on the same row and belong to different trees. They
+    # used to OVERLAP by 10px, which is a signed gap of -10, so a `>= 0`
+    # assertion would have caught that too -- the earlier note here had
+    # that backwards. What `>= 37` adds is the other half: a gap that is
+    # positive but SMALLER than the spacing that was asked for, which `>= 0`
+    # cannot see and which is the same defect one step less severe.
+    expect(left.y).to eq(right.y)
+    expect(right.x - (left.x + left.width)).to be >= 37
+  end
+
+  it "lays out 480 disjoint-cycle nodes in the bound, placing them all" do
+    # The timeout interrupts the call rather than being read after it returns,
+    # for the same reason as the complete-cycle example above. Asserting the
+    # positions in the same example keeps the bound honest: a layout that
+    # returned early having placed nothing would beat any time bound.
+    result = nil
+
+    expect do
+      result = Timeout.timeout(5.0) do
+        Elkrb.layout(disjoint_two_cycles(480), algorithm: "mrtree")
+      end
+    end.not_to raise_error
+
+    expect(result.children.size).to eq(480)
+    expect(result.children.map(&:x)).to all(be_a(Numeric).and(be_finite))
   end
 end
