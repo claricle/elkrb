@@ -39,6 +39,26 @@ RSpec.describe "omit_size_for_unsized_input" do
     expect(result).to omit_size_for_unsized_input(input_hash)
   end
 
+  # `key?("children")` and a plain truthiness check on `input_node["children"]`
+  # only disagree on one input: an explicit `"children": null`. `[]` is
+  # truthy, so truthiness already treats a declared-but-empty compound the
+  # same way `key?` does -- this is the one case load-bearing for `key?`
+  # specifically, per the comment beside `check_dimensions`. Verified by
+  # changing `return if input_owner.key?("children")` to `return if
+  # input_owner["children"]` -- this example, and only this one, goes red.
+  it "exempts a node with an explicit null children key that gained a size" do
+    input_hash = { "id" => "root",
+                   "children" => [{ "id" => "p", "children" => nil }],
+                   "edges" => [] }
+    compound = Elkrb::Graph::Node.new(id: "p", width: 40.0, height: 40.0)
+    compound.children = []
+    result = Elkrb::Graph::Graph.new(id: "root")
+    result.children = [compound]
+    result.edges = []
+
+    expect(result).to omit_size_for_unsized_input(input_hash)
+  end
+
   it "still flags a node with no children key that gained a size" do
     input_hash = { "id" => "root", "children" => [{ "id" => "p" }],
                    "edges" => [] }
