@@ -4,6 +4,8 @@ require "json"
 require "yaml"
 require "fileutils"
 
+require_relative "../best_effort_write"
+
 module Elkrb
   module Commands
     # Command for creating diagrams from ELK graph files
@@ -39,7 +41,13 @@ module Elkrb
         # Preview if requested
         preview(@options[:output]) if @options[:preview]
 
-        puts "✓ Diagram created: #{@options[:output]}"
+        # Best-effort: the file above is already the result. This
+        # confirmation must not decide the exit status -- see
+        # Elkrb::BestEffortWrite. This also protects BatchCommand, which
+        # calls #run per file inside its own StandardError rescue: an
+        # unguarded EPIPE here used to be caught THERE and miscounted a
+        # successfully diagrammed file as a processing failure.
+        BestEffortWrite.attempt { puts "✓ Diagram created: #{@options[:output]}" }
       end
 
       private

@@ -4,6 +4,8 @@ require "json"
 require "yaml"
 require "fileutils"
 
+require_relative "../best_effort_write"
+
 module Elkrb
   module Commands
     # Command for converting between graph formats
@@ -24,13 +26,22 @@ module Elkrb
         # Convert
         content = export_to_format(graph, target_format)
 
-        # Write output
+        # Write output -- this is the result. Everything after it is best-effort.
         write_output(content, @options[:output])
 
-        puts "✓ Converted #{@file} → #{@options[:output]} (#{target_format})"
+        report_success(target_format)
       end
 
       private
+
+      # Best-effort: the file written above is already the result. This
+      # confirmation must not decide the exit status -- see
+      # Elkrb::BestEffortWrite.
+      def report_success(target_format)
+        BestEffortWrite.attempt do
+          puts "✓ Converted #{@file} → #{@options[:output]} (#{target_format})"
+        end
+      end
 
       def load_any_format(file)
         raise ArgumentError, "File not found: #{file}" unless File.exist?(file)
