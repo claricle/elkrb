@@ -103,7 +103,6 @@ RSpec.describe ".reek.yml" do
       "Elkrb::GraphvizWrapper#available?",
       "Elkrb::GraphvizWrapper#build_command",
       "Elkrb::GraphvizWrapper#execute_command",
-      "Elkrb::GraphvizWrapper#find_graphviz",
       "Elkrb::GraphvizWrapper#initialize",
       "Elkrb::GraphvizWrapper#installation_message",
       "Elkrb::GraphvizWrapper#render",
