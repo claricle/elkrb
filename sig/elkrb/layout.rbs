@@ -46,6 +46,8 @@ module Elkrb
       class BaseAlgorithm
         attr_reader options: Hash[String | Symbol, untyped]
 
+        def self.normalize_nil_positions: (Array[Graph::Node] nodes) -> void
+
         def initialize: (Hash[String | Symbol, untyped] options) -> void
         def layout: (Graph::Graph graph) -> Graph::Graph
 
