@@ -154,10 +154,16 @@ module GoldenComparator
     ["#{path}/side: expected #{e_side}, got #{a_side}"]
   end
 
+  # elkjs may omit `index` on a port entirely; elkrb's own port constraint
+  # processor always assigns one starting at 0. A missing `index` and an
+  # explicit `0` mean the same position and must not diff, matching the
+  # missing-as-zero convention `diff_port_offset` (above) already uses.
   def diff_port_index(expected, actual, path)
-    return [] if expected["index"] == actual["index"]
+    e_index = expected["index"] || 0
+    a_index = actual["index"] || 0
+    return [] if e_index == a_index
 
-    ["#{path}/index: expected #{expected['index']}, got #{actual['index']}"]
+    ["#{path}/index: expected #{e_index}, got #{a_index}"]
   end
 
   def diff_port_offset(expected, actual, path)
@@ -175,6 +181,7 @@ module GoldenComparator
       if fields.include?(:sections)
         diffs.concat(diff_sections(e_edge, a_edge,
                                    edge_path))
+        diffs.concat(diff_edge_routing(e_edge, a_edge, edge_path))
       end
       if fields.include?(:labels)
         diffs.concat(diff_labels(e_edge, a_edge,
@@ -182,6 +189,38 @@ module GoldenComparator
       end
       diffs
     end
+  end
+
+  # Edge-level routing facts (`lib/elkrb/graph/edge.rb`) that are neither
+  # section geometry (`diff_sections`) nor endpoints
+  # (`diff_edge_endpoints`) -- gated by `:sections` alongside
+  # `diff_sections` since both describe how the edge is actually routed.
+  def diff_edge_routing(expected_edge, actual_edge, path)
+    diff_junction_points(expected_edge["junctionPoints"],
+                         actual_edge["junctionPoints"],
+                         "#{path}/junctionPoints") +
+      diff_container(expected_edge["container"], actual_edge["container"],
+                     path)
+  end
+
+  def diff_junction_points(expected_points, actual_points, path)
+    expected_points ||= []
+    actual_points ||= []
+    if expected_points.size != actual_points.size
+      return ["#{path}: expected #{expected_points.size} junction points, " \
+              "got #{actual_points.size}"]
+    end
+
+    expected_points.each_with_index.flat_map do |point, i|
+      diff_point(point, actual_points[i], "#{path}[#{i}]")
+    end
+  end
+
+  def diff_container(expected_container, actual_container, path)
+    return [] if expected_container == actual_container
+
+    ["#{path}/container: expected #{expected_container.inspect}, got " \
+     "#{actual_container.inspect}"]
   end
 
   # Sections are matched POSITIONALLY within an edge (by index), never by
@@ -216,6 +255,30 @@ module GoldenComparator
     diffs.concat(diff_bend_points(expected_section["bendPoints"],
                                   actual_section["bendPoints"],
                                   "#{sec_path}/bendPoints"))
+    diffs.concat(diff_section_routing_refs(expected_section, actual_section,
+                                           sec_path))
+  end
+
+  def diff_section_routing_refs(expected_section, actual_section, sec_path)
+    diff_section_refs(expected_section["incomingSections"],
+                      actual_section["incomingSections"],
+                      "#{sec_path}/incomingSections") +
+      diff_section_refs(expected_section["outgoingSections"],
+                        actual_section["outgoingSections"],
+                        "#{sec_path}/outgoingSections")
+  end
+
+  # A multi-section edge's inner sections wire to each other by id through
+  # `incomingSections`/`outgoingSections` (`lib/elkrb/graph/edge.rb`) --
+  # which shape connects to which, distinct from the geometric join
+  # `check_edge_sections`/structural.rb verifies. Both sides default to
+  # `[]` when absent, matching `diff_bend_points`'s own nil-safe pattern.
+  def diff_section_refs(expected_refs, actual_refs, path)
+    expected_refs ||= []
+    actual_refs ||= []
+    return [] if expected_refs == actual_refs
+
+    ["#{path}: expected #{expected_refs.inspect}, got #{actual_refs.inspect}"]
   end
 
   def diff_bend_points(expected_points, actual_points, path)

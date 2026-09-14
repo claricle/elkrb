@@ -254,10 +254,20 @@ RSpec.describe "GoldenFixtures (Rakefile)" do
         golden = golden_dir_with(tmp, expected_body: "OLD",
                                       manifest_body: "OLD-MANIFEST")
         out, status = probe(root, <<~RUBY)
+          # Matches only the swap-IN of the new manifest: destination is the
+          # live MANIFEST.json path (not a `.previous` backup) AND source is
+          # NOT a `.previous` backup either -- the keep-aside rename (`to`
+          # ends in ".previous") and the RESTORE rename this failure itself
+          # triggers (`from` ends in ".previous", same `to`) both have to be
+          # excluded, or the mock also intercepts rollback's own attempt to
+          # put the backup back and the example proves nothing about the
+          # code it means to test.
           File.singleton_class.prepend(Module.new do
             define_method(:rename) do |from, to|
-              raise Errno::EXDEV, to if to.end_with?("/MANIFEST.json") &&
-                                        from.include?(".staged")
+              if to.end_with?("/MANIFEST.json") && !to.end_with?(".previous") &&
+                 !from.end_with?(".previous")
+                raise Errno::EXDEV, to
+              end
 
               super(from, to)
             end
@@ -296,10 +306,14 @@ RSpec.describe "GoldenFixtures (Rakefile)" do
         File.write(File.join(golden, "MANIFEST.json"), "OLD-MANIFEST")
 
         out, status = probe(root, <<~RUBY)
+          # Same "swap-IN, not keep-aside, not the rollback restore" match
+          # as the example above.
           File.singleton_class.prepend(Module.new do
             define_method(:rename) do |from, to|
-              raise Errno::EXDEV, to if to.end_with?("/MANIFEST.json") &&
-                                        from.include?(".staged")
+              if to.end_with?("/MANIFEST.json") && !to.end_with?(".previous") &&
+                 !from.end_with?(".previous")
+                raise Errno::EXDEV, to
+              end
 
               super(from, to)
             end
@@ -318,6 +332,97 @@ RSpec.describe "GoldenFixtures (Rakefile)" do
         expect(File.read(File.join(golden, "MANIFEST.json")))
           .to eq("OLD-MANIFEST")
         expect(Dir.children(golden)).to eq(%w[MANIFEST.json])
+      end
+    end
+
+    # The staging/backup names used to be predictable
+    # (`.expected.<pid>.staged`/`.previous`), sitting in `golden_dir` itself
+    # -- a directory this run does not own alone. A crashed earlier run at
+    # a since-reused pid could leave a file at exactly that path, and
+    # `cp_r`/`rename` would either collide with it or silently read it back
+    # as this run's own. `publish_into` itself runs in the PROBED CHILD
+    # process, not this example's own process, so the stale file has to be
+    # seeded using the CHILD's own `Process.pid` (written to a marker file
+    # first) -- seeding it with this example's pid would never collide
+    # with either the old or the new code, since the two processes' pids
+    # differ, and would make this example pass vacuously regardless of
+    # which naming scheme `publish_into` uses. Mutation-verified: reverting
+    # `publish_into`/`swap_into_place` to the pid-named scheme makes this
+    # example, and only this one, go red (the pre-seeded file is a plain
+    # FILE where `cp_r` expects to write a directory, so the old code
+    # raises `Errno::ENOTDIR` on the collision instead of publishing).
+    it "does not collide with a stale predictable-name file left by an " \
+       "earlier crashed run" do
+      Dir.mktmpdir do |tmp|
+        golden = golden_dir_with(tmp, expected_body: "OLD",
+                                      manifest_body: "OLD-MANIFEST")
+        marker = File.join(tmp, "child-pid")
+
+        out, status = probe(root, <<~RUBY)
+          File.write(#{marker.inspect}, Process.pid.to_s)
+          stale = File.join(#{golden.inspect},
+                             ".expected.\#{Process.pid}.staged")
+          File.write(stale, "STALE-COLLISION")
+          GoldenFixtures.publish_into(#{generated(tmp).inspect},
+                                      #{golden.inspect})
+        RUBY
+
+        expect([out, status]).to eq(["CALLER SURVIVED\n", 0])
+        stale = File.join(golden, ".expected.#{File.read(marker)}.staged")
+        expect(File.read(File.join(golden, "expected", "box3.json")))
+          .to eq("NEW")
+        expect(File.read(File.join(golden, "MANIFEST.json")))
+          .to eq("NEW-MANIFEST")
+        expect(File.read(stale)).to eq("STALE-COLLISION")
+      end
+    end
+
+    # `File.exist?` follows a symlink, so a dangling one at MANIFEST.json
+    # used to read as "nothing there": `keep_aside` left it untouched
+    # (believing there was nothing to move aside) and `restore`'s
+    # `aside.nil?` branch then deleted it outright on rollback, reading the
+    # untouched original link as if it were this run's own new content.
+    # Mutation-verified: reverting `present?`/`keep_aside`/`restore` to a
+    # plain `File.exist?` check makes this example, and only this one, go
+    # red (the dangling symlink comes back deleted instead of restored).
+    it "restores a dangling symlink at MANIFEST.json rather than " \
+       "deleting it on rollback" do
+      Dir.mktmpdir do |tmp|
+        golden = File.join(tmp, "golden")
+        Dir.mkdir(golden)
+        Dir.mkdir(File.join(golden, "expected"))
+        File.write(File.join(golden, "expected", "box3.json"), "OLD")
+        dangling_target = File.join(tmp, "nonexistent-target")
+        File.symlink(dangling_target, File.join(golden, "MANIFEST.json"))
+
+        out, status = probe(root, <<~RUBY)
+          File.singleton_class.prepend(Module.new do
+            define_method(:rename) do |from, to|
+              if to.end_with?("/MANIFEST.json") &&
+                 !to.end_with?(".previous") && !from.end_with?(".previous")
+                raise Errno::EXDEV, to
+              end
+
+              super(from, to)
+            end
+          end)
+          begin
+            GoldenFixtures.publish_into(#{generated(tmp).inspect},
+                                        #{golden.inspect})
+          rescue Errno::EXDEV
+            puts "RAISED EXDEV"
+          end
+        RUBY
+
+        expect(status).to eq(0)
+        expect(out).to include("RAISED EXDEV")
+        manifest_path = File.join(golden, "MANIFEST.json")
+        expect(File.symlink?(manifest_path)).to be(true)
+        expect(File.readlink(manifest_path)).to eq(dangling_target)
+        # The old tree survives untouched too -- this is a full rollback,
+        # not a partial one.
+        expect(File.read(File.join(golden, "expected", "box3.json")))
+          .to eq("OLD")
       end
     end
   end

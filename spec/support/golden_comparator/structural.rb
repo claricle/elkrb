@@ -265,6 +265,41 @@ module GoldenComparator
     return diffs << "#{edge_path}: no sections in actual" if sections.empty?
 
     diffs.concat(check_edge_ends(edge, actual_edge, rects, edge_path))
+    diffs.concat(check_section_continuity(sections, edge_path))
+  end
+
+  # `check_edge_ends` only anchors the FIRST section's start and the LAST
+  # section's end to a node/port border -- a multi-section edge's INTERNAL
+  # joints (section N's `endPoint` to section N+1's `startPoint`) are never
+  # otherwise checked, so a layout bug that disconnected two middle
+  # sections while leaving both outer anchors intact would pass silently.
+  # Same 1px tolerance as `diff_strict_dimension` (this tier's own
+  # coarseness), not `exact.rb`'s `diff_point` (1e-6, exact-tier strict and
+  # wrong for structural).
+  def check_section_continuity(sections, edge_path)
+    return [] if sections.size < 2
+
+    sections.each_cons(2).with_index.flat_map do |(from, to), i|
+      diff_strict_joint(from["endPoint"], to["startPoint"],
+                        "#{edge_path}/sections[#{i}->#{i + 1}]")
+    end
+  end
+
+  def diff_strict_joint(end_point, start_point, path)
+    return ["#{path}: missing"] unless end_point && start_point
+
+    %w[x y].flat_map do |key|
+      diff_joint_axis(end_point, start_point, path, key)
+    end
+  end
+
+  def diff_joint_axis(end_point, start_point, path, key)
+    e, e_error = strict_numeric(end_point, key, path, "endPoint")
+    a, a_error = strict_numeric(start_point, key, path, "startPoint")
+    return [e_error, a_error].compact if e_error || a_error
+    return [] if (e - a).abs <= 1
+
+    ["#{path}/#{key}: endPoint #{e}, next startPoint #{a} (>1px)"]
   end
 
   # Where `incomingShape`/`outgoingShape` are populated is stated once, in

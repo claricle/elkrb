@@ -96,6 +96,35 @@ RSpec.describe GoldenComparator do
     expect(diffs.join).to include("/index:")
   end
 
+  # elkjs may omit `index` on a port entirely; elkrb's port constraint
+  # processor always assigns one starting at 0, so a missing `index` and
+  # an explicit `0` must be treated as equal (the same missing-as-zero
+  # convention `diff_port_offset`, below, already uses) rather than
+  # flagged as a diff.
+  it "does not flag a port missing index against an explicit index of 0" do
+    expected = { "id" => "root",
+                 "children" => [{ "id" => "n1",
+                                  "ports" => [{ "id" => "p1", "x" => 0.0,
+                                                "y" => 0.0 }] }] }
+    actual = { "id" => "root",
+               "children" => [{ "id" => "n1",
+                                "ports" => [{ "id" => "p1", "x" => 0.0,
+                                              "y" => 0.0, "index" => 0 }] }] }
+    diffs = described_class.diff_exact(expected, actual, %i[ports])
+    expect(diffs).to be_empty
+  end
+
+  it "flags a port missing index against an explicit index of 1" do
+    expected = { "id" => "root",
+                 "children" => [{ "id" => "n1",
+                                  "ports" => [{ "id" => "p1" }] }] }
+    actual = { "id" => "root",
+               "children" => [{ "id" => "n1",
+                                "ports" => [{ "id" => "p1", "index" => 1 }] }] }
+    diffs = described_class.diff_exact(expected, actual, %i[ports])
+    expect(diffs.join).to include("/index:")
+  end
+
   it "flags a shifted port offset" do
     expected = { "id" => "root",
                  "children" => [{ "id" => "n1",
@@ -135,6 +164,44 @@ RSpec.describe GoldenComparator do
     diffs = described_class.diff_exact(expected, reversed,
                                        %i[nodes sections labels ports graph])
     expect(diffs.join).to include("endpoints changed")
+  end
+
+  it "flags a changed junctionPoints on an edge" do
+    expected = { "id" => "root", "children" => [],
+                 "edges" => [{ "id" => "e1",
+                               "junctionPoints" => [{ "x" => 1.0,
+                                                      "y" => 1.0 }] }] }
+    actual = Marshal.load(Marshal.dump(expected))
+    actual["edges"][0]["junctionPoints"][0]["x"] = 9.0
+
+    diffs = described_class.diff_exact(expected, actual, %i[sections])
+    expect(diffs.join).to include("/junctionPoints")
+  end
+
+  it "flags a changed container on an edge" do
+    expected = { "id" => "root", "children" => [],
+                 "edges" => [{ "id" => "e1", "container" => "n1" }] }
+    actual = { "id" => "root", "children" => [],
+               "edges" => [{ "id" => "e1", "container" => "n2" }] }
+
+    diffs = described_class.diff_exact(expected, actual, %i[sections])
+    expect(diffs.join).to include("/container:")
+  end
+
+  it "flags a changed incoming/outgoingSections on a multi-section edge" do
+    expected = { "id" => "root", "children" => [],
+                 "edges" => [{ "id" => "e1",
+                               "sections" => [
+                                 { "id" => "e1_s0",
+                                   "outgoingSections" => ["e1_s1"] },
+                                 { "id" => "e1_s1",
+                                   "incomingSections" => ["e1_s0"] },
+                               ] }] }
+    actual = Marshal.load(Marshal.dump(expected))
+    actual["edges"][0]["sections"][1]["incomingSections"] = ["e1_s2"]
+
+    diffs = described_class.diff_exact(expected, actual, %i[sections])
+    expect(diffs.join).to include("/incomingSections:")
   end
 
   it "detects a same-layer top/bottom swap that alphabetical id order would " \
@@ -310,6 +377,37 @@ RSpec.describe GoldenComparator do
 
     diffs = described_class.diff_structural(expected, rewired)
     expect(diffs.join).to include("endpoints changed")
+  end
+
+  # check_edge_ends only anchors the FIRST section's start and the LAST
+  # section's end to a node border -- the internal joint between two
+  # sections is never otherwise checked, so a mid-edge disconnect with
+  # both outer anchors intact used to pass silently. Both outer anchors
+  # here stay exactly where they were (10,5 on a's border, 20,5 on b's
+  # border); only the internal joint (section 0's endPoint vs section 1's
+  # startPoint) is moved apart.
+  it "flags a multi-section edge whose internal joint does not connect" do
+    a = { "id" => "a", "x" => 0.0, "y" => 0.0, "width" => 10.0,
+          "height" => 10.0 }
+    b = { "id" => "b", "x" => 20.0, "y" => 0.0, "width" => 10.0,
+          "height" => 10.0 }
+    expected = { "id" => "root", "children" => [a, b],
+                 "edges" => [{ "id" => "e1", "sources" => ["a"],
+                               "targets" => ["b"],
+                               "sections" => [
+                                 { "startPoint" => { "x" => 10.0, "y" => 5.0 },
+                                   "endPoint" => { "x" => 15.0, "y" => 5.0 },
+                                   "incomingShape" => "a" },
+                                 { "startPoint" => { "x" => 15.0, "y" => 5.0 },
+                                   "endPoint" => { "x" => 20.0, "y" => 5.0 },
+                                   "outgoingShape" => "b" },
+                               ] }] }
+    actual = Marshal.load(Marshal.dump(expected))
+    actual["edges"][0]["sections"][1]["startPoint"] =
+      { "x" => 30.0, "y" => 5.0 }
+
+    diffs = described_class.diff_structural(expected, actual)
+    expect(diffs.join).to include("sections[0->1]")
   end
 
   it "compares a port endpoint to its own border, like a node, not a centre " \

@@ -23,9 +23,11 @@ jobs:
           # want persisted across runs.
           bundler-cache: false
       - run: bundle install
-      # spec/cross_validation has no specs on this branch (S0b, which owns
-      # it, isn't merged yet), so running it here would prove nothing.
-      # Re-add it once S0b merges and it has specs of its own.
+      # spec/cross_validation (S0b) is merged into v2 as of this branch, so
+      # its own specs run alongside golden_spec.rb/spec/support below --
+      # none of them touch Node (confirmed: corpus_spec.rb's own invariant
+      # checks run against already-committed fixtures), so this job stays
+      # Node-free.
       #
       # golden_spec.rb IS run by the normal suite and CAN fail: `pending`
       # is called only after the layout and the matcher have both run
@@ -41,4 +43,4 @@ jobs:
       # no Node runs here: spec/support's "the committed golden fixture
       # set" fails if an input arrives without its expected file, its
       # MANIFEST.json entry, or its golden_spec example.
-      - run: bundle exec rspec spec/elkrb/golden_spec.rb spec/support
+      - run: bundle exec rspec spec/elkrb/golden_spec.rb spec/support spec/cross_validation
