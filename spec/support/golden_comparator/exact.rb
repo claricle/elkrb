@@ -109,8 +109,19 @@ module GoldenComparator
   def diff_labels(expected_owner, actual_owner, path)
     diff_by_id(expected_owner["labels"], actual_owner["labels"],
                "#{path}/labels") do |e, a, label_path|
-      diff_exact_geometry(e, a, label_path)
+      diff_exact_geometry(e, a, label_path) + diff_label_text(e, a, label_path)
     end
+  end
+
+  # Geometry alone lets a layout regression that corrupts label CONTENT
+  # (wrong text, truncation, a swapped label) through the exact tier
+  # unnoticed as long as position/size stay put — measured: changing an
+  # otherwise-identical label's text returned no differences before this.
+  def diff_label_text(expected, actual, path)
+    return [] if expected["text"] == actual["text"]
+
+    ["#{path}/text: expected #{expected['text'].inspect}, got " \
+     "#{actual['text'].inspect}"]
   end
 
   # Called whenever `:ports` OR `:labels` is selected (see

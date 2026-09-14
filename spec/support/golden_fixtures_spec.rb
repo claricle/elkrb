@@ -280,5 +280,77 @@ RSpec.describe "GoldenFixtures (Rakefile)" do
         expect(Dir.children(golden).sort).to eq(%w[MANIFEST.json expected])
       end
     end
+
+    # `restore`'s nil-aside branch used to do nothing at all, on the
+    # reasoning that nothing existed at `path` before so there was
+    # nothing to undo. That reasoning breaks the moment THIS run's own
+    # swap rename for `path` already succeeded before a LATER rename
+    # failed: something new (this run's own tree) is now at `path`, and
+    # true rollback means removing it, not leaving it -- measured with
+    # `expected/` absent beforehand.
+    it "removes the newly installed tree when it did not exist before " \
+       "and the manifest rename then fails" do
+      Dir.mktmpdir do |tmp|
+        golden = File.join(tmp, "golden")
+        Dir.mkdir(golden)
+        File.write(File.join(golden, "MANIFEST.json"), "OLD-MANIFEST")
+
+        out, status = probe(root, <<~RUBY)
+          File.singleton_class.prepend(Module.new do
+            define_method(:rename) do |from, to|
+              raise Errno::EXDEV, to if to.end_with?("/MANIFEST.json") &&
+                                        from.include?(".staged")
+
+              super(from, to)
+            end
+          end)
+          begin
+            GoldenFixtures.publish_into(#{generated(tmp).inspect},
+                                        #{golden.inspect})
+          rescue Errno::EXDEV
+            puts "RAISED EXDEV"
+          end
+        RUBY
+
+        expect(status).to eq(0)
+        expect(out).to include("RAISED EXDEV")
+        expect(File.exist?(File.join(golden, "expected"))).to be(false)
+        expect(File.read(File.join(golden, "MANIFEST.json")))
+          .to eq("OLD-MANIFEST")
+        expect(Dir.children(golden)).to eq(%w[MANIFEST.json])
+      end
+    end
+  end
+
+  describe ".with_directory_lock" do
+    # Two `rake golden:generate` runs pointed at one golden_dir used to
+    # interleave: one run's rollback silently undid the other's
+    # already-reported-successful publish -- measured with a two-process
+    # probe. Same assertion style as
+    # `spec/cross_validation/corpus_spec.rb`'s "holds an exclusive lock"
+    # example: flock on a second descriptor is refused even inside one
+    # process, so this proves the real lock rather than trusting that the
+    # code merely calls flock somewhere.
+    it "holds an exclusive lock on the golden directory while it works" do
+      Dir.mktmpdir do |golden|
+        out, status = probe(root, <<~RUBY)
+          inside = GoldenFixtures.send(:with_directory_lock,
+                                       #{golden.inspect}) do
+            File.open(#{golden.inspect}, File::RDONLY) do |f|
+              if f.flock(File::LOCK_EX | File::LOCK_NB)
+                f.flock(File::LOCK_UN)
+                true
+              else
+                false
+              end
+            end
+          end
+          puts "INSIDE=\#{inside}"
+        RUBY
+
+        expect(status).to eq(0)
+        expect(out).to include("INSIDE=false")
+      end
+    end
   end
 end

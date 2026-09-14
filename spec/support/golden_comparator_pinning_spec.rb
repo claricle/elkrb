@@ -39,6 +39,22 @@ RSpec.describe GoldenComparator do
     expect(diffs).not_to be_empty
   end
 
+  # diff_labels used to check only geometry, so a layout regression that
+  # corrupted label CONTENT while leaving position/size untouched passed
+  # the exact tier silently -- measured, changing only "text" returned no
+  # differences before this pin existed.
+  it "flags a label whose text differs even though its geometry matches" do
+    expected = { "id" => "root",
+                 "children" => [{ "id" => "a",
+                                  "labels" => [{ "id" => "l1", "text" => "hi",
+                                                 "x" => 0.0, "y" => 0.0 }] }] }
+    actual = Marshal.load(Marshal.dump(expected))
+    actual["children"][0]["labels"][0]["text"] = "bye"
+
+    diffs = described_class.diff_exact(expected, actual, %i[labels])
+    expect(diffs).not_to be_empty
+  end
+
   it "does not compare port labels when :ports is selected without :labels" do
     # The port carries x/y because exact tier requires a real position on
     # both sides for anything below the root; the label's own x is what
