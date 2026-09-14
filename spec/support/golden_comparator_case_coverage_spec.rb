@@ -54,7 +54,8 @@ RSpec.describe "every committed golden's perturbed copy is caught" do
       case tier
       when :exact
         mutated["children"].first["x"] =
-          numeric_or_zero(mutated["children"].first, "x") + 2.0
+          GoldenComparator.numeric_or_zero(mutated["children"].first,
+                                           "x") + 2.0
         diffs = GoldenComparator.diff_exact(expected, mutated,
                                             %i[nodes sections labels
                                                ports graph])
@@ -64,17 +65,13 @@ RSpec.describe "every committed golden's perturbed copy is caught" do
         else
           node = mutated["children"].first
           node["x"] =
-            numeric_or_zero(node,
-                            "x") + (numeric_or_zero(mutated, "width") * 0.5)
+            GoldenComparator.numeric_or_zero(node, "x") +
+            (GoldenComparator.numeric_or_zero(mutated, "width") * 0.5)
         end
         diffs = GoldenComparator.diff_structural(expected, mutated)
       end
 
       expect(diffs).not_to be_empty
     end
-  end
-
-  def numeric_or_zero(hash, key)
-    (hash[key] || 0.0).to_f
   end
 end

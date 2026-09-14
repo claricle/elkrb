@@ -1,23 +1,32 @@
 # frozen_string_literal: true
 
 RSpec.describe "elkjs golden parity" do
-  # One example per comparison case, generated from the shared table in
-  # spec/support/golden_cases.rb.
+  # Shared by both example bodies below: runs the matcher, then reports via
+  # `pending`/`expect` exactly like a normal example would if this were
+  # inlined. `result` is passed in rather than computed here because the two
+  # callers build it differently (a plain layout call vs. one that rescues
+  # into an error hash).
   #
   # The layout call and the matcher's own execution (reading
   # golden_expected, running GoldenComparator) are NOT inside pending --
   # both happen before pending is called, so a crash in EITHER is a real
   # failure.
+  def assert_golden_case(kase, result)
+    matcher = match_elkjs_golden(kase[:name], tier: kase[:tier])
+    matched = matcher.matches?(result)
+    message = matcher.failure_message unless matched
+
+    pending kase[:pending]
+    expect(matched).to be(true), message
+  end
+
+  # One example per comparison case, generated from the shared table in
+  # spec/support/golden_cases.rb.
   GoldenCases::COMPARISON_CASES.each do |kase|
     it kase[:name] do
       input = golden_input(kase[:name])
       result = Elkrb.layout(input[:graph], input[:options])
-      matcher = match_elkjs_golden(kase[:name], tier: kase[:tier])
-      matched = matcher.matches?(result)
-      message = matcher.failure_message unless matched
-
-      pending kase[:pending]
-      expect(matched).to be(true), message
+      assert_golden_case(kase, result)
     end
   end
 
@@ -33,11 +42,6 @@ RSpec.describe "elkjs golden parity" do
       rescue Elkrb::UnsupportedConfigurationException => e
         { "error" => e.message }
       end
-    matcher = match_elkjs_golden(kase[:name], tier: kase[:tier])
-    matched = matcher.matches?(result)
-    message = matcher.failure_message unless matched
-
-    pending kase[:pending]
-    expect(matched).to be(true), message
+    assert_golden_case(kase, result)
   end
 end
