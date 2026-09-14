@@ -242,12 +242,29 @@ module GoldenComparator
               "got #{actual_sections.size}"]
     end
 
+    expected_index = section_index_by_id(expected_sections)
+    actual_index = section_index_by_id(actual_sections)
     expected_sections.each_with_index.flat_map do |e_sec, i|
-      diff_section_geometry(e_sec, actual_sections[i], "#{path}/sections[#{i}]")
+      diff_section_geometry(e_sec, actual_sections[i], "#{path}/sections[#{i}]",
+                            expected_index, actual_index)
     end
   end
 
-  def diff_section_geometry(expected_section, actual_section, sec_path)
+  # elkjs and elkrb mint different id strings for the same POSITIONALLY
+  # matched section ("e_s0" vs "e_section_0" for one and the same section)
+  # -- measured by constructing a topologically identical two-section edge
+  # under each naming scheme and confirming the OLD raw-string comparison
+  # flagged it as changed. `diff_sections` above already pairs sections by
+  # array position, so every `incomingSections`/`outgoingSections`
+  # reference is translated through THIS SAME positional pairing, on each
+  # side independently, before the two lists are compared -- never by the
+  # id strings themselves.
+  def section_index_by_id(sections)
+    sections.each_with_index.to_h { |sec, i| [sec["id"], i] }
+  end
+
+  def diff_section_geometry(expected_section, actual_section, sec_path,
+                            expected_index, actual_index)
     diffs = diff_point(expected_section["startPoint"],
                        actual_section["startPoint"], "#{sec_path}/startPoint")
     diffs.concat(diff_point(expected_section["endPoint"],
@@ -256,16 +273,20 @@ module GoldenComparator
                                   actual_section["bendPoints"],
                                   "#{sec_path}/bendPoints"))
     diffs.concat(diff_section_routing_refs(expected_section, actual_section,
-                                           sec_path))
+                                           sec_path, expected_index,
+                                           actual_index))
   end
 
-  def diff_section_routing_refs(expected_section, actual_section, sec_path)
+  def diff_section_routing_refs(expected_section, actual_section, sec_path,
+                                expected_index, actual_index)
     diff_section_refs(expected_section["incomingSections"],
                       actual_section["incomingSections"],
-                      "#{sec_path}/incomingSections") +
+                      "#{sec_path}/incomingSections", expected_index,
+                      actual_index) +
       diff_section_refs(expected_section["outgoingSections"],
                         actual_section["outgoingSections"],
-                        "#{sec_path}/outgoingSections")
+                        "#{sec_path}/outgoingSections", expected_index,
+                        actual_index)
   end
 
   # A multi-section edge's inner sections wire to each other by id through
@@ -273,12 +294,23 @@ module GoldenComparator
   # which shape connects to which, distinct from the geometric join
   # `check_edge_sections`/structural.rb verifies. Both sides default to
   # `[]` when absent, matching `diff_bend_points`'s own nil-safe pattern.
-  def diff_section_refs(expected_refs, actual_refs, path)
-    expected_refs ||= []
-    actual_refs ||= []
-    return [] if expected_refs == actual_refs
+  # Compared as POSITIONS within each side's own `sections` array, not as
+  # raw id strings -- see `section_index_by_id`'s comment above.
+  def diff_section_refs(expected_refs, actual_refs, path, expected_index,
+                        actual_index)
+    expected_positions = refs_to_positions(expected_refs, expected_index)
+    actual_positions = refs_to_positions(actual_refs, actual_index)
+    return [] if expected_positions == actual_positions
 
-    ["#{path}: expected #{expected_refs.inspect}, got #{actual_refs.inspect}"]
+    ["#{path}: expected #{(expected_refs || []).inspect} (positions " \
+     "#{expected_positions.inspect}), got #{(actual_refs || []).inspect} " \
+     "(positions #{actual_positions.inspect})"]
+  end
+
+  # Both sides default to `[]` when absent -- see `diff_section_refs`'s own
+  # comment above for why an id maps to a POSITION here, not a raw string.
+  def refs_to_positions(refs, index)
+    (refs || []).map { |id| index[id] }
   end
 
   def diff_bend_points(expected_points, actual_points, path)

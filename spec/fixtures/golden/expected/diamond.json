@@ -63,7 +63,8 @@
           "incomingShape": "a",
           "outgoingShape": "b"
         }
-      ]
+      ],
+      "container": "root"
     },
     {
       "id": "e2",
@@ -87,7 +88,8 @@
           "incomingShape": "a",
           "outgoingShape": "c"
         }
-      ]
+      ],
+      "container": "root"
     },
     {
       "id": "e3",
@@ -121,7 +123,8 @@
           "incomingShape": "b",
           "outgoingShape": "d"
         }
-      ]
+      ],
+      "container": "root"
     },
     {
       "id": "e4",
@@ -145,7 +148,8 @@
           "incomingShape": "c",
           "outgoingShape": "d"
         }
-      ]
+      ],
+      "container": "root"
     }
   ],
   "x": 0,

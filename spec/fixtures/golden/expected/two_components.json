@@ -53,7 +53,8 @@
           "incomingShape": "a",
           "outgoingShape": "b"
         }
-      ]
+      ],
+      "container": "root"
     },
     {
       "id": "e2",
@@ -77,7 +78,8 @@
           "incomingShape": "c",
           "outgoingShape": "d"
         }
-      ]
+      ],
+      "container": "root"
     }
   ],
   "x": 0,

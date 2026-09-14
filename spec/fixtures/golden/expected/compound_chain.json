@@ -42,7 +42,8 @@
               "incomingShape": "c1",
               "outgoingShape": "c2"
             }
-          ]
+          ],
+          "container": "p"
         }
       ],
       "x": 12,
@@ -81,7 +82,8 @@
           "incomingShape": "p",
           "outgoingShape": "q"
         }
-      ]
+      ],
+      "container": "root"
     }
   ],
   "x": 0,

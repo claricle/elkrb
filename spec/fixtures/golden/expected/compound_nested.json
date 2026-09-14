@@ -45,7 +45,8 @@
                   "incomingShape": "d1",
                   "outgoingShape": "d2"
                 }
-              ]
+              ],
+              "container": "m"
             }
           ],
           "x": 12,
@@ -84,7 +85,8 @@
               "incomingShape": "m",
               "outgoingShape": "nn"
             }
-          ]
+          ],
+          "container": "p"
         }
       ],
       "x": 12,

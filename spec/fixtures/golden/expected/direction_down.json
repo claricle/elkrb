@@ -49,7 +49,8 @@
           "incomingShape": "n1",
           "outgoingShape": "n2"
         }
-      ]
+      ],
+      "container": "root"
     },
     {
       "id": "e2",
@@ -73,7 +74,8 @@
           "incomingShape": "n2",
           "outgoingShape": "n3"
         }
-      ]
+      ],
+      "container": "root"
     }
   ],
   "x": 0,

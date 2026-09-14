@@ -192,6 +192,50 @@ RSpec.describe "omit_size_for_unsized_input" do
     expect(result).not_to omit_size_for_unsized_input(input_hash)
   end
 
+  # `Elkrb.layout` documents and accepts a Symbol-keyed Hash directly (see
+  # its own @example in lib/elkrb.rb). Every lookup in this matcher used to
+  # be String-keyed, so `input_level["children"]` read nil for a
+  # Symbol-keyed input_hash and `check_child_levels` iterated zero
+  # children -- the matcher passed no matter what the actual result did.
+  it "passes a Symbol-keyed input_hash when an unsized leaf stays unsized" do
+    symbol_input = { id: "root", children: [{ id: "a" }], edges: [] }
+    graph = Elkrb::Graph::Graph.from_hash(symbol_input)
+    result = Elkrb.layout(graph, {})
+
+    expect(result).to omit_size_for_unsized_input(symbol_input)
+  end
+
+  # As above, but the actual result IS built by hand so the check is
+  # load-bearing: before normalizing keys, this went green whether or not
+  # `a` had gained a size, because the Symbol-keyed walk never reached it
+  # at all. Verified: reverting the `stringify_keys` call in this
+  # matcher's `match do` block turns only this example red.
+  it "finds a Symbol-keyed unsized leaf that gained a size" do
+    symbol_input = { id: "root", children: [{ id: "a" }], edges: [] }
+    leaf = Elkrb::Graph::Node.new(id: "a", width: 40.0, height: 40.0)
+    result = Elkrb::Graph::Graph.new(id: "root")
+    result.children = [leaf]
+    result.edges = []
+
+    expect(result).not_to omit_size_for_unsized_input(symbol_input)
+  end
+
+  # Proves the re-key preserves the declared-vs-absent distinction
+  # `check_dimensions` depends on, not just the lookup: a Symbol-keyed
+  # `children: []` must still count as a declared (if degenerate) compound
+  # and be exempt, exactly like its String-keyed counterpart above.
+  it "exempts a Symbol-keyed declared compound that gained a computed size" do
+    symbol_input = { id: "root", children: [{ id: "p", children: [] }],
+                     edges: [] }
+    compound = Elkrb::Graph::Node.new(id: "p", width: 40.0, height: 40.0)
+    compound.children = []
+    result = Elkrb::Graph::Graph.new(id: "root")
+    result.children = [compound]
+    result.edges = []
+
+    expect(result).to omit_size_for_unsized_input(symbol_input)
+  end
+
   # Positional matching is only sound when both sides have the same number
   # of id-less labels. With the count check gone, a result that dropped one
   # gets compared against the wrong label and reports nothing.

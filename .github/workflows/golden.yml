@@ -31,7 +31,8 @@ jobs:
       #
       # golden_spec.rb IS run by the normal suite and CAN fail: `pending`
       # is called only after the layout and the matcher have both run
-      # (golden_spec.rb:7-10), so a crash in either is a real failure,
+      # (golden_spec.rb:14-24's `assert_golden_case`), so a crash in
+      # either is a real failure,
       # and a pending example that starts passing fails as FIXED. This
       # job narrows to spec/support because that is where the
       # comparator's own specs live (golden_helper_spec.rb and its split

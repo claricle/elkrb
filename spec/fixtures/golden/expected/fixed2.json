@@ -27,7 +27,8 @@
       ],
       "targets": [
         "b"
-      ]
+      ],
+      "container": "root"
     }
   ],
   "x": 0,

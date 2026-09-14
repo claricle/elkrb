@@ -17,12 +17,21 @@ const EXPECTED_ERROR_CASES = new Set(["hyperedge"]);
 // were the documented hyperedge rejection.
 const HYPEREDGE_ERROR_PATTERN = /Passed edge is not 'simple'/;
 
+// `container` used to be stripped alongside `$H` because
+// `Elkrb::Graph::Edge` had no attribute for it -- that is no longer true
+// (`lib/elkrb/graph/edge.rb` declares and serializes `container`, and
+// `spec/support/golden_comparator/exact.rb#diff_container` already
+// compares it at the exact tier). Stripping it here left every golden
+// case's EXPECTED side with no `container` at all while a real elkjs
+// result can carry one, so a genuine actual/expected mismatch on that
+// field went uncaught -- only `$H` (elkjs's own internal bookkeeping key,
+// which the model still has no attribute for) is stripped now.
 function strip(value) {
   if (Array.isArray(value)) return value.map(strip);
   if (value && typeof value === "object") {
     const out = {};
     for (const [key, val] of Object.entries(value)) {
-      if (key === "$H" || key === "container") continue;
+      if (key === "$H") continue;
       out[key] = strip(val);
     }
     return out;

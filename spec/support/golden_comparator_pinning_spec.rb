@@ -188,7 +188,7 @@ RSpec.describe GoldenComparator do
     expect(diffs.join).to include("/container:")
   end
 
-  it "flags a changed incoming/outgoingSections on a multi-section edge" do
+  it "flags a changed incomingSections on a multi-section edge" do
     expected = { "id" => "root", "children" => [],
                  "edges" => [{ "id" => "e1",
                                "sections" => [
@@ -202,6 +202,60 @@ RSpec.describe GoldenComparator do
 
     diffs = described_class.diff_exact(expected, actual, %i[sections])
     expect(diffs.join).to include("/incomingSections:")
+  end
+
+  # The example above changes only `incomingSections` -- removing the
+  # separate `outgoingSections` comparison in `diff_section_routing_refs`
+  # would leave it green. Mirrors it exactly but on the OTHER field.
+  it "flags a changed outgoingSections on a multi-section edge" do
+    expected = { "id" => "root", "children" => [],
+                 "edges" => [{ "id" => "e1",
+                               "sections" => [
+                                 { "id" => "e1_s0",
+                                   "outgoingSections" => ["e1_s1"] },
+                                 { "id" => "e1_s1",
+                                   "incomingSections" => ["e1_s0"] },
+                               ] }] }
+    actual = Marshal.load(Marshal.dump(expected))
+    actual["edges"][0]["sections"][0]["outgoingSections"] = ["e1_s2"]
+
+    diffs = described_class.diff_exact(expected, actual, %i[sections])
+    expect(diffs.join).to include("/outgoingSections:")
+  end
+
+  # elkjs and elkrb mint different id strings for the same positionally
+  # matched section ("e_s0" vs "e_section_0") -- `diff_section_refs` used
+  # to compare `incomingSections`/`outgoingSections` as raw id strings, so
+  # a topologically identical two-section edge under the two naming
+  # schemes was flagged as changed even though position 0 feeds position 1
+  # on both sides. Refs are translated to their own side's POSITION before
+  # comparing, so this must report nothing.
+  it "does not flag equivalent incoming/outgoingSections that merely use " \
+     "different id schemes" do
+    point = { "x" => 0.0, "y" => 0.0 }
+    expected = { "id" => "root", "children" => [],
+                 "edges" => [{ "id" => "e1",
+                               "sections" => [
+                                 { "id" => "e_s0", "startPoint" => point,
+                                   "endPoint" => point,
+                                   "outgoingSections" => ["e_s1"] },
+                                 { "id" => "e_s1", "startPoint" => point,
+                                   "endPoint" => point,
+                                   "incomingSections" => ["e_s0"] },
+                               ] }] }
+    actual = { "id" => "root", "children" => [],
+               "edges" => [{ "id" => "e1",
+                             "sections" => [
+                               { "id" => "e_section_0", "startPoint" => point,
+                                 "endPoint" => point,
+                                 "outgoingSections" => ["e_section_1"] },
+                               { "id" => "e_section_1", "startPoint" => point,
+                                 "endPoint" => point,
+                                 "incomingSections" => ["e_section_0"] },
+                             ] }] }
+
+    diffs = described_class.diff_exact(expected, actual, %i[sections])
+    expect(diffs).to eq([])
   end
 
   it "detects a same-layer top/bottom swap that alphabetical id order would " \
@@ -408,6 +462,78 @@ RSpec.describe GoldenComparator do
 
     diffs = described_class.diff_structural(expected, actual)
     expect(diffs.join).to include("sections[0->1]")
+  end
+
+  # The example above separates only x -- y stays 5.0 on both sides of
+  # the mutation, so it says nothing about whether `diff_joint_axis`'s y
+  # check does anything at all. Mirrors it exactly but moves y instead,
+  # leaving x untouched.
+  it "flags a multi-section edge whose internal joint separates only " \
+     "on the y axis" do
+    a = { "id" => "a", "x" => 0.0, "y" => 0.0, "width" => 10.0,
+          "height" => 10.0 }
+    b = { "id" => "b", "x" => 20.0, "y" => 0.0, "width" => 10.0,
+          "height" => 10.0 }
+    expected = { "id" => "root", "children" => [a, b],
+                 "edges" => [{ "id" => "e1", "sources" => ["a"],
+                               "targets" => ["b"],
+                               "sections" => [
+                                 { "startPoint" => { "x" => 10.0, "y" => 5.0 },
+                                   "endPoint" => { "x" => 15.0, "y" => 5.0 },
+                                   "incomingShape" => "a" },
+                                 { "startPoint" => { "x" => 15.0, "y" => 5.0 },
+                                   "endPoint" => { "x" => 20.0, "y" => 5.0 },
+                                   "outgoingShape" => "b" },
+                               ] }] }
+    actual = Marshal.load(Marshal.dump(expected))
+    actual["edges"][0]["sections"][1]["startPoint"] =
+      { "x" => 15.0, "y" => 30.0 }
+
+    diffs = described_class.diff_structural(expected, actual)
+    expect(diffs.join).to include("sections[0->1]/y")
+  end
+
+  # A branched/rejoined edge's sections are not one linear chain -- array
+  # adjacency alone would compare two SIBLING branches that never connect
+  # (measured, see `continuity_joints`'s own comment). s1 and s2 are both
+  # fed by s0 via `outgoingSections`, so array position 1 and 2 are
+  # siblings of a split, not a chain: the real joints are (0,1) and (0,2),
+  # never (1,2). Unit-level on `continuity_joints` itself, not through
+  # `diff_structural`, so this pins the joint-selection property alone,
+  # without the unrelated edge-endpoint/shape-orientation checks
+  # `diff_structural` also runs.
+  it "builds continuity joints from outgoingSections once any section on " \
+     "the edge carries one, not from array adjacency" do
+    sections = [
+      { "id" => "e1_s0", "outgoingSections" => %w[e1_s1 e1_s2] },
+      { "id" => "e1_s1" },
+      { "id" => "e1_s2" },
+    ]
+
+    expect(described_class.continuity_joints(sections))
+      .to contain_exactly([0, 1], [0, 2])
+  end
+
+  # Proves the property both ways on the same split shape: a topologically
+  # valid split (both branches genuinely start where s0 ends) reports no
+  # break, but a REAL disconnect on the (0,2) joint -- one array adjacency
+  # would never even have checked, since 0 and 2 are not adjacent -- is
+  # still caught.
+  it "does not flag a valid split's real joints, but still flags a " \
+     "genuinely disconnected branch" do
+    sections = [
+      { "id" => "e1_s0", "endPoint" => { "x" => 15.0, "y" => 5.0 },
+        "outgoingSections" => %w[e1_s1 e1_s2] },
+      { "id" => "e1_s1", "startPoint" => { "x" => 15.0, "y" => 5.0 } },
+      { "id" => "e1_s2", "startPoint" => { "x" => 15.0, "y" => 5.0 } },
+    ]
+    expect(described_class.check_section_continuity(sections, "path"))
+      .to eq([])
+
+    broken = Marshal.load(Marshal.dump(sections))
+    broken[2]["startPoint"] = { "x" => 15.0, "y" => 40.0 }
+    expect(described_class.check_section_continuity(broken, "path").join)
+      .to include("sections[0->2]")
   end
 
   it "compares a port endpoint to its own border, like a node, not a centre " \

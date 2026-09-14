@@ -270,8 +270,8 @@ module GoldenComparator
 
   # `check_edge_ends` only anchors the FIRST section's start and the LAST
   # section's end to a node/port border -- a multi-section edge's INTERNAL
-  # joints (section N's `endPoint` to section N+1's `startPoint`) are never
-  # otherwise checked, so a layout bug that disconnected two middle
+  # joints (one section's `endPoint` to the NEXT section's `startPoint`)
+  # are never otherwise checked, so a layout bug that disconnected two
   # sections while leaving both outer anchors intact would pass silently.
   # Same 1px tolerance as `diff_strict_dimension` (this tier's own
   # coarseness), not `exact.rb`'s `diff_point` (1e-6, exact-tier strict and
@@ -279,10 +279,55 @@ module GoldenComparator
   def check_section_continuity(sections, edge_path)
     return [] if sections.size < 2
 
-    sections.each_cons(2).with_index.flat_map do |(from, to), i|
-      diff_strict_joint(from["endPoint"], to["startPoint"],
-                        "#{edge_path}/sections[#{i}->#{i + 1}]")
+    continuity_joints(sections).flat_map do |from_i, to_i|
+      diff_strict_joint(sections[from_i]["endPoint"],
+                        sections[to_i]["startPoint"],
+                        "#{edge_path}/sections[#{from_i}->#{to_i}]")
     end
+  end
+
+  # Plain array adjacency (`sections[i]` feeds `sections[i + 1]`) assumes
+  # every edge routes as ONE linear chain -- untrue the moment a section
+  # splits into two branches or two branches rejoin into one, where
+  # `sections[i + 1]` can be a sibling branch that never connects to
+  # `sections[i]` at all. Comparing a valid split/rejoin graph against
+  # itself under plain adjacency produced a false continuity break between
+  # two such siblings -- measured, including for the LEAF end of a branch
+  # (it carries no `outgoingSections` of its own, so falling back to
+  # adjacency section-by-section rather than edge-by-edge still wired it
+  # to its array neighbour). Once ANY section on this edge carries a
+  # routing ref, the WHOLE edge is treated as ref-described and joints
+  # come only from `outgoingSections`; plain adjacency is the fallback
+  # only when NO section anywhere on the edge carries either ref, which is
+  # exactly the single unbranched chain elkrb emits today (and is
+  # order-for-order identical to the old behaviour there).
+  def continuity_joints(sections)
+    return adjacency_joints(sections) unless any_routing_refs?(sections)
+
+    ref_joints(sections)
+  end
+
+  # The ref-described half of `continuity_joints` -- see its own comment
+  # above for why this only runs once ANY section on the edge carries a
+  # routing ref, and why it uses `outgoingSections` alone rather than both
+  # directions.
+  def ref_joints(sections)
+    index = sections.each_with_index.to_h { |sec, i| [sec["id"], i] }
+    sections.each_index.flat_map do |i|
+      (sections[i]["outgoingSections"] || [])
+        .filter_map { |id| index[id] }.map { |j| [i, j] }
+    end.uniq
+  end
+
+  def any_routing_refs?(sections)
+    sections.any? do |sec|
+      !(sec["outgoingSections"] || []).empty? ||
+        !(sec["incomingSections"] || []).empty?
+    end
+  end
+
+  def adjacency_joints(sections)
+    (0...(sections.size - 1)).map { |i| [i, i + 1] }
   end
 
   def diff_strict_joint(end_point, start_point, path)

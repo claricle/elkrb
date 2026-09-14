@@ -52,6 +52,66 @@ RSpec.describe "preserve_ids_and_endpoints" do
 
     expect(result).not_to preserve_ids_and_endpoints(input_hash)
   end
+
+  # `Elkrb.layout` documents and accepts a Symbol-keyed Hash directly (see
+  # its own @example in lib/elkrb.rb). Every String-keyed lookup in this
+  # matcher used to read nil from a Symbol-keyed input_hash, which is
+  # indistinguishable from "not declared" -- a genuinely preserved node
+  # then looked like one the layout added.
+  it "passes a Symbol-keyed input_hash, unchanged" do
+    symbol_input = { id: "root",
+                     children: [{ id: "n1", width: 40, height: 20 }],
+                     edges: [] }
+    graph = Elkrb::Graph::Graph.from_hash(symbol_input)
+    result = Elkrb.layout(graph, {})
+
+    expect(result).to preserve_ids_and_endpoints(symbol_input)
+  end
+
+  it "still fails a Symbol-keyed input_hash when a node genuinely vanished" do
+    symbol_input = { id: "root",
+                     children: [{ id: "n1", width: 40, height: 20 }],
+                     edges: [] }
+    result = Elkrb::Graph::Graph.new(id: "root", children: [], edges: [])
+
+    expect(result).not_to preserve_ids_and_endpoints(symbol_input)
+  end
+
+  # The legacy elkjs single-endpoint keys (edge.rb's `source`/`target`,
+  # read-only, merged into `sources`/`targets`). This matcher used to read
+  # `input_edge["sources"]` directly, which is nil for a legacy edge even
+  # though the layout genuinely preserved its endpoint.
+  it "passes an edge declared with legacy source/target keys" do
+    legacy_input = {
+      "id" => "root",
+      "children" => [
+        { "id" => "a", "width" => 30, "height" => 30 },
+        { "id" => "b", "width" => 30, "height" => 30 },
+      ],
+      "edges" => [{ "id" => "e1", "source" => "a", "target" => "b" }],
+    }
+    graph = Elkrb::Graph::Graph.from_hash(legacy_input)
+    result = Elkrb.layout(graph, {})
+
+    expect(result).to preserve_ids_and_endpoints(legacy_input)
+  end
+
+  it "still fails a legacy-keyed edge whose endpoint genuinely changed" do
+    legacy_input = {
+      "id" => "root",
+      "children" => [
+        { "id" => "a", "width" => 30, "height" => 30 },
+        { "id" => "b", "width" => 30, "height" => 30 },
+      ],
+      "edges" => [{ "id" => "e1", "source" => "a", "target" => "b" }],
+    }
+    graph = Elkrb::Graph::Graph.from_hash(legacy_input)
+    result = Elkrb.layout(graph, {})
+    result.edges.first.sources, result.edges.first.targets =
+      result.edges.first.targets, result.edges.first.sources
+
+    expect(result).not_to preserve_ids_and_endpoints(legacy_input)
+  end
 end
 
 RSpec.describe "preserve_ids_and_endpoints duplicate detection" do

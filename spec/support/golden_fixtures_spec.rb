@@ -350,7 +350,9 @@ RSpec.describe "GoldenFixtures (Rakefile)" do
     # `publish_into`/`swap_into_place` to the pid-named scheme makes this
     # example, and only this one, go red (the pre-seeded file is a plain
     # FILE where `cp_r` expects to write a directory, so the old code
-    # raises `Errno::ENOTDIR` on the collision instead of publishing).
+    # raises `Errno::EEXIST` on the collision instead of publishing --
+    # measured directly: `FileUtils.cp_r` into a path already occupied by
+    # a plain file raises "File exists @ dir_s_mkdir", not ENOTDIR).
     it "does not collide with a stale predictable-name file left by an " \
        "earlier crashed run" do
       Dir.mktmpdir do |tmp|
@@ -374,6 +376,63 @@ RSpec.describe "GoldenFixtures (Rakefile)" do
         expect(File.read(File.join(golden, "MANIFEST.json")))
           .to eq("NEW-MANIFEST")
         expect(File.read(stale)).to eq("STALE-COLLISION")
+      end
+    end
+
+    # `work` (the private staging/backup directory) used to be created with
+    # the BLOCK form of `Dir.mktmpdir`, which removes it on any exit from
+    # the block -- including one where rollback itself failed to restore
+    # a backup. That destroyed the only remaining copy of the original
+    # `expected/` tree instead of merely leaving it un-restored --
+    # measured by forcing BOTH the forward manifest rename (triggering
+    # rollback) AND the restore-side rename of `expected` to fail.
+    # `expected` itself ends up genuinely absent from `golden_dir` (its
+    # restore rename never succeeded), which is why the fix's job is only
+    # to keep `work` alive and name its path -- not to claim a full
+    # recovery it cannot make. Same fix as
+    # `spec/fixtures/consumers/sirena/capture.rb#settle`.
+    it "keeps the un-restorable backup instead of deleting it when " \
+       "rollback itself fails" do
+      Dir.mktmpdir do |tmp|
+        golden = golden_dir_with(tmp, expected_body: "OLD",
+                                      manifest_body: "OLD-MANIFEST")
+        out, status = probe(root, <<~RUBY)
+          File.singleton_class.prepend(Module.new do
+            define_method(:rename) do |from, to|
+              if to.end_with?("/MANIFEST.json") && !to.end_with?(".previous") &&
+                 !from.end_with?(".previous")
+                raise Errno::EXDEV, to
+              end
+              if to.end_with?("/expected") && !to.end_with?(".previous") &&
+                 from.end_with?("expected.previous")
+                raise Errno::EACCES, to
+              end
+
+              super(from, to)
+            end
+          end)
+          begin
+            GoldenFixtures.publish_into(#{generated(tmp).inspect},
+                                        #{golden.inspect})
+          rescue Errno::EXDEV
+            puts "RAISED EXDEV"
+          end
+        RUBY
+
+        expect(status).to eq(0)
+        expect(out).to include("RAISED EXDEV")
+        expect(out)
+          .to match(/could not restore .*expected.* -- the originals are in/)
+
+        work_dir = Dir.children(golden).find { |e| e.start_with?(".golden") }
+        expect(work_dir).not_to be_nil
+        backup = File.join(golden, work_dir, "expected.previous",
+                           "box3.json")
+        expect(File.read(backup)).to eq("OLD")
+        # The manifest's own restore was unaffected by `expected`'s
+        # failure -- each restoration is attempted independently.
+        expect(File.read(File.join(golden, "MANIFEST.json")))
+          .to eq("OLD-MANIFEST")
       end
     end
 
@@ -435,13 +494,16 @@ RSpec.describe "GoldenFixtures (Rakefile)" do
     # `spec/cross_validation/corpus_spec.rb`'s "holds an exclusive lock"
     # example: flock on a second descriptor is refused even inside one
     # process, so this proves the real lock rather than trusting that the
-    # code merely calls flock somewhere.
+    # code merely calls flock somewhere. Locks the SIBLING `lock_path`,
+    # not `golden` itself (see `with_directory_lock`'s comment for why:
+    # opening a directory read-only to lock it raises EISDIR on Windows).
     it "holds an exclusive lock on the golden directory while it works" do
       Dir.mktmpdir do |golden|
         out, status = probe(root, <<~RUBY)
+          lock_path = GoldenFixtures.send(:lock_path, #{golden.inspect})
           inside = GoldenFixtures.send(:with_directory_lock,
                                        #{golden.inspect}) do
-            File.open(#{golden.inspect}, File::RDONLY) do |f|
+            File.open(lock_path, File::RDWR | File::CREAT, 0o600) do |f|
               if f.flock(File::LOCK_EX | File::LOCK_NB)
                 f.flock(File::LOCK_UN)
                 true
@@ -456,6 +518,25 @@ RSpec.describe "GoldenFixtures (Rakefile)" do
         expect(status).to eq(0)
         expect(out).to include("INSIDE=false")
       end
+    end
+
+    # `lock_path` must never resolve to a path INSIDE `golden_dir` -- that
+    # would put an untracked file where `publish_into`/`check_against`
+    # only ever expect `expected/` and `MANIFEST.json`, and a trailing
+    # separator on `golden_dir` is exactly what turns naive concatenation
+    # into "golden/.lock" (`File.dirname`/`File.basename` avoid it; plain
+    # `+`/`File.join(golden_dir, ...)` would not). Covers both a bare path
+    # and one with a trailing "/".
+    it "builds the lock path beside golden_dir, never inside it" do
+      out, status = probe(root, <<~RUBY)
+        %w[/tmp/golden /tmp/golden/].each do |golden_dir|
+          puts GoldenFixtures.send(:lock_path, golden_dir)
+        end
+      RUBY
+
+      expect(status).to eq(0)
+      expect(out.lines.map(&:chomp).first(2))
+        .to eq(["/tmp/golden.lock", "/tmp/golden.lock"])
     end
   end
 end

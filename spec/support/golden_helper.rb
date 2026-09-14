@@ -17,6 +17,22 @@ module GoldenHelper
   def golden_expected(name, dir: DEFAULT_DIR)
     JSON.parse(File.read(File.join(dir, "expected", "#{name}.json")))
   end
+
+  # Builds the matcher's keyword arguments from one `GoldenCases` table
+  # entry -- `golden_spec.rb`'s per-case generator used to build `tier:`
+  # alone and never read `kase[:fields]` at all, so setting `fields:` on a
+  # case's table entry (as a future field-selective promotion needs, see
+  # `golden_comparator/exact.rb#diff_exact`'s own comment) silently did
+  # nothing. Pulled out here so that forwarding rule has something to
+  # unit-test on its own, without going through RSpec's per-case example
+  # generation. Omits the key entirely, rather than forwarding `nil`, so
+  # the matcher's own `fields:` default still applies for every case that
+  # does not set one.
+  def matcher_kwargs(kase)
+    kwargs = { tier: kase[:tier] }
+    kwargs[:fields] = kase[:fields] if kase[:fields]
+    kwargs
+  end
 end
 
 RSpec.configure { |c| c.include GoldenHelper }
@@ -44,6 +60,18 @@ RSpec::Matchers.define :match_elkjs_golden do |
         when :exact
           GoldenComparator.diff_exact(expected, comparable_actual, fields)
         when :structural
+          # `GoldenComparator.diff_structural` has no `fields` parameter at
+          # all -- a caller passing a non-default `fields:` here used to
+          # have it silently discarded rather than honoured or refused, so
+          # a future case built on the (still unimplemented) assumption
+          # that structural tier can be field-selective would look like it
+          # passed while comparing everything anyway. Loud refusal until
+          # that support actually exists.
+          if fields != GoldenHelper::DEFAULT_FIELDS
+            raise ArgumentError,
+                  "fields: is not supported for tier: :structural yet " \
+                  "(got #{fields.inspect} for #{name.inspect})"
+          end
           GoldenComparator.diff_structural(expected, comparable_actual)
         when :smoke
           GoldenComparator.diff_smoke(expected, comparable_actual)
