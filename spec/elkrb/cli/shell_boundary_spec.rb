@@ -883,5 +883,28 @@ RSpec.describe "input shape validation at the CLI boundary" do
       # examples above are what catch that.
       expect(graph.children.first.children.map(&:id)).to eq(["x"])
     end
+
+    it "still accepts genuine arrays for the 3 newest collection fields" do
+      # The rejects-table above proves an OBJECT-valued incomingSections /
+      # outgoingSections / junctionPoints is caught. Nothing proved the
+      # opposite direction: that a real ARRAY value for those same 3 fields
+      # still reaches the caller, rather than being over-rejected by a future
+      # change to the guard. `present_collections` checks each COLLECTIONS
+      # field independently (format_sniffer.rb), so the existing
+      # "genuinely nested child" example above -- which never sets any of
+      # these 3 fields -- does not exercise this.
+      graph = Elkrb::FormatSniffer.read(
+        '{"id":"r","children":[],"edges":[{"id":"e","sources":["a"],' \
+        '"targets":["b"],"junctionPoints":[{"x":1.0,"y":2.0}],' \
+        '"sections":[{"id":"s","incomingSections":["x"],' \
+        '"outgoingSections":["y"]}]}]}',
+        ".json",
+      )
+
+      edge = graph.edges.first
+      expect(edge.junction_points.map { |p| [p.x, p.y] }).to eq([[1.0, 2.0]])
+      expect(edge.sections.first.incoming_sections).to eq(["x"])
+      expect(edge.sections.first.outgoing_sections).to eq(["y"])
+    end
   end
 end
