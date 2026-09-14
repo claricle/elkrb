@@ -104,14 +104,17 @@ module SirenaCapture
 
   # Two runs pointed at one output directory used to interleave -- measured
   # in a two-process probe that committed a.json from one run beside b.json
-  # from the other, with both runs reporting success. The lock is taken on
-  # the output DIRECTORY itself: `flock` works on any descriptor, and a
-  # lock file would have to sit among the committed fixtures. Measured on
-  # macOS only. If a platform ever refuses to open a directory read-only
-  # the open RAISES here, before anything is staged, so the failure is
-  # loud and the fixtures are untouched.
+  # from the other, with both runs reporting success. The lock used to be
+  # taken on the output DIRECTORY itself, opened `File::RDONLY`, to avoid a
+  # lock file sitting among the committed fixtures. POSIX allows opening a
+  # directory read-only to lock it; Windows/NTFS does not, and raises
+  # EISDIR there -- measured against real CI (windows-latest). A regular
+  # file locks the same way on every platform Ruby supports, so the lock
+  # now lives at a path NEXT TO the output directory, never inside it, which
+  # keeps the original point (nothing named here is ever mistaken for a
+  # published fixture) without depending on directory-locking at all.
   def with_directory_lock(out_dir)
-    File.open(out_dir, File::RDONLY) do |lock|
+    File.open(lock_path(out_dir), File::RDWR | File::CREAT, 0o600) do |lock|
       lock.flock(File::LOCK_EX)
       begin
         yield
@@ -119,6 +122,14 @@ module SirenaCapture
         lock.flock(File::LOCK_UN)
       end
     end
+  end
+
+  # `out_dir` may be given with or without a trailing separator, so the
+  # sibling path is built from its parent and basename rather than simple
+  # string concatenation, which would turn "out/" into "out/.lock" --
+  # INSIDE the directory this is built to stay out of.
+  def lock_path(out_dir)
+    File.join(File.dirname(out_dir), "#{File.basename(out_dir)}.lock")
   end
 
   # Each row carries the path its target will be backed up to, so `commit`
