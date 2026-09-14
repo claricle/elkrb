@@ -115,6 +115,37 @@ RSpec.describe "GoldenFixtures (Rakefile)" do
     end
   end
 
+  describe ".check_manifest_drift" do
+    # The hash-driven examples above vary `elkjs` alone (with `cases` held
+    # identical on both sides as `[]`), so `%w[elkjs cases].reject { ... }`'s
+    # `cases` arm was never independently exercised -- a regression that
+    # broke case-list comparison specifically (a typo'd key, comparing the
+    # wrong field) would not have been caught. This holds `elkjs` IDENTICAL
+    # and varies only `cases`, and asserts the message names `cases` (not
+    # just "something drifted").
+    it "names cases specifically when only the case list drifted" do
+      Dir.mktmpdir do |tmp|
+        fresh = File.join(tmp, "fresh")
+        Dir.mkdir(fresh)
+        File.write(File.join(fresh, "MANIFEST.json"),
+                   JSON.generate("elkjs" => "0.11.0", "cases" => %w[a b]))
+        File.write(File.join(tmp, "MANIFEST.json"),
+                   JSON.generate("elkjs" => "0.11.0", "cases" => %w[a]))
+
+        out, status = probe(root, <<~RUBY)
+          begin
+            GoldenFixtures.check_against(#{fresh.inspect}, #{tmp.inspect})
+          rescue GoldenFixtures::Failed => e
+            puts "RAISED: \#{e.message}"
+          end
+        RUBY
+
+        expect(status).to eq(0)
+        expect(out).to include("RAISED: MANIFEST.json drift in cases")
+      end
+    end
+  end
+
   describe ".publish_into" do
     # The committed tree used to be deleted with `rm_rf` BEFORE its
     # replacement was copied in, so a copy that failed part-way -- a full
