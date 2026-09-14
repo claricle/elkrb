@@ -31,7 +31,7 @@ RSpec.describe FilenameProbe do
 
   # Deliberately NOT one of the five guarded names: those are skipped on the
   # Windows leg and this example has to run there.
-  let(:legal_name) { "probe[x]dir" }
+  let(:legal_name) { "probe-legal-dir" }
 
   # Refuse one basename and let every other mkdir through. An unconditional
   # stub breaks Dir.mktmpdir, which calls Dir.mkdir internally, so the errno
