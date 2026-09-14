@@ -32,9 +32,9 @@ jobs:
       # (golden_spec.rb:7-10), so a crash in either is a real failure,
       # and a pending example that starts passing fails as FIXED. This
       # job narrows to spec/support because that is where the
-      # comparator's own specs live (golden_helper_spec.rb, the invariant
-      # specs) and they exercise it directly rather than through a
-      # tolerance that is currently pending.
+      # comparator's own specs live (golden_helper_spec.rb and its split
+      # siblings, the invariant specs) and they exercise it directly
+      # rather than through a tolerance that is currently pending.
       #
       # Node-free on purpose, so `rake golden:check` (which regenerates
       # against a real elkjs) stays local. The half of that guard needing
