@@ -17,9 +17,11 @@ RuboCop::RakeTask.new do |task|
 end
 
 # DO NOT DELETE. This is the only thing that arms the SimpleCov floors in
-# spec/spec_helper.rb. Remove it and coverage silently stops being enforced
-# anywhere, with every run still green. CI runs `bundle exec rake`, so the
-# default task is where the floor has to be armed.
+# spec/spec_helper.rb. Remove it and the failure is LOUD, not silent: the
+# :coverage_enforced task below finds no receipt and `rake` aborts with
+# "the spec step finished without arming the coverage floors, so this run
+# enforced nothing...". CI runs `bundle exec rake`, so the default task is
+# where the floor has to be armed.
 #
 # The value is load-bearing, but note what it does and does not buy. Under
 # `rake` the floor is ALWAYS armed -- this line overwrites whatever the caller
@@ -221,10 +223,11 @@ end
 desc "Mutation-test subjects changed since BASE (default origin/v2)"
 task :mutant do
   # The Gemfile only installs mutant on 3.3+, so say why rather than letting
-  # bundler report a missing binary the Gemfile deliberately never asked for.
+  # bundler report a missing binary it deliberately never asked for. Keep it:
+  # it speaks again the moment either floor moves.
   if Gem::Version.new(RUBY_VERSION) < Gem::Version.new("3.3")
-    raise "mutant needs Ruby >= 3.3; this is #{RUBY_VERSION}. The gemspec " \
-          "floor is 3.2.0, so the Gemfile skips it here. Re-run on 3.3+."
+    raise "mutant needs Ruby >= 3.3; this is #{RUBY_VERSION}. The Gemfile " \
+          "skips it below that. Re-run on 3.3+."
   end
 
   # Array form, so `sh` runs the command directly instead of through a shell.
