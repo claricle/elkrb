@@ -4,8 +4,9 @@
 # The one place that says which elkjs golden cases exist, what tier each is
 # compared at, and why each is still pending. Every consumer derives from
 # this table rather than keeping a copy: golden_spec.rb generates its
-# examples from it, golden_helper_spec.rb drives its self-match and
-# perturbation blocks from it, and its fixture-coverage example asserts the
+# examples from it, golden_comparator_case_coverage_spec.rb drives its
+# self-match and perturbation blocks from it, and
+# golden_fixture_manifest_spec.rb's fixture-coverage example asserts the
 # table names exactly the committed inputs. A case added to one consumer and
 # not the others is therefore not expressible.
 #
