@@ -39,7 +39,8 @@
           "incomingShape": "n1",
           "outgoingShape": "n2"
         }
-      ]
+      ],
+      "container": "root"
     }
   ],
   "x": 0,

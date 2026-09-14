@@ -6,7 +6,11 @@ require_relative "../invariants"
 RSpec::Matchers.define :preserve_ids_and_endpoints do |input_hash|
   match do |graph|
     @violations = []
-    check_level(input_hash, graph)
+    # `Elkrb.layout` documents and accepts a Symbol-keyed Hash (see its own
+    # @example in lib/elkrb.rb); every lookup below is String-keyed, so
+    # normalize first -- see InvariantInputNormalizer for why this is a
+    # re-key, not a round-trip through the real model.
+    check_level(InvariantInputNormalizer.stringify_keys(input_hash), graph)
     @violations.empty?
   end
 
@@ -109,12 +113,18 @@ RSpec::Matchers.define :preserve_ids_and_endpoints do |input_hash|
     end
   end
 
+  # Delegates the legacy `source`/`target`/`sourcePort`/`targetPort` alias
+  # resolution to the real `Edge` model instead of re-deriving that
+  # precedence here -- see edge.rb's own comment above its `key_value`
+  # block for exactly what "do NOT simplify" protects and why a second,
+  # hand-written copy of that rule would risk drifting from it silently.
   define_method(:check_endpoints) do |input_edge, actual_edge|
-    input_endpoints = [input_edge["sources"], input_edge["targets"]]
+    normalized = Elkrb::Graph::Edge.from_hash(input_edge)
+    input_endpoints = [normalized.sources, normalized.targets]
     return if [actual_edge.sources, actual_edge.targets] == input_endpoints
 
     @violations << "#{input_edge['id']}: endpoints changed from " \
-                   "#{input_edge['sources']}->#{input_edge['targets']} to " \
+                   "#{normalized.sources}->#{normalized.targets} to " \
                    "#{actual_edge.sources}->#{actual_edge.targets}"
   end
 

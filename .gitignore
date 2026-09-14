@@ -63,3 +63,7 @@ Gemfile.lock
 *.swp
 *.tmp
 *.log
+
+# Sibling lock file taken by GoldenFixtures.with_directory_lock (Rakefile)
+# around `rake golden:generate`/`golden:check` -- never a fixture itself.
+/spec/fixtures/golden.lock

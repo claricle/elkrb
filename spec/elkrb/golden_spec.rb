@@ -12,12 +12,43 @@ RSpec.describe "elkjs golden parity" do
   # both happen before pending is called, so a crash in EITHER is a real
   # failure.
   def assert_golden_case(kase, result)
-    matcher = match_elkjs_golden(kase[:name], tier: kase[:tier])
+    matcher = match_elkjs_golden(kase[:name], **matcher_kwargs(kase))
     matched = matcher.matches?(result)
     message = matcher.failure_message unless matched
 
-    pending kase[:pending]
+    # Guard the call, not just the argument: RSpec's `pending(nil)` still
+    # marks the example pending, so a case whose `pending:` reason has been
+    # cleared to nil (the way this table is meant to "activate" a fixed
+    # case) would report a passing assertion as FIXED instead of passing.
+    pending kase[:pending] if kase[:pending]
     expect(matched).to be(true), message
+  end
+
+  describe "#assert_golden_case's pending guard" do
+    # Verified by hand (RSpec 3.13.6): `pending(nil)` still marks the
+    # example pending, so a PASSING assertion under it reports FIXED
+    # instead of passing. The table in golden_cases.rb is meant to
+    # "activate" a case by clearing its `pending:` reason to nil once the
+    # underlying bug is fixed -- that workflow only works if
+    # `assert_golden_case` skips calling `pending` at all in that case,
+    # rather than calling `pending(nil)`.
+    it "does not call pending when kase[:pending] is nil" do
+      matcher = double("matcher", matches?: true, failure_message: nil)
+      allow(self).to receive(:match_elkjs_golden).and_return(matcher)
+      expect(self).not_to receive(:pending)
+
+      assert_golden_case({ name: "probe", tier: :exact, pending: nil }, {})
+    end
+
+    it "calls pending with the reason when kase[:pending] is set" do
+      matcher = double("matcher", matches?: true, failure_message: nil)
+      allow(self).to receive(:match_elkjs_golden).and_return(matcher)
+      expect(self).to receive(:pending).with("still broken")
+
+      assert_golden_case(
+        { name: "probe", tier: :exact, pending: "still broken" }, {}
+      )
+    end
   end
 
   # One example per comparison case, generated from the shared table in

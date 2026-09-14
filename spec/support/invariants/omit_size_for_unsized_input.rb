@@ -6,7 +6,12 @@ require_relative "../invariants"
 RSpec::Matchers.define :omit_size_for_unsized_input do |input_hash|
   match do |graph|
     @violations = []
-    check_level(input_hash, graph)
+    # `Elkrb.layout` documents and accepts a Symbol-keyed Hash (see its own
+    # @example in lib/elkrb.rb); every lookup below is String-keyed, so
+    # normalize first -- see InvariantInputNormalizer for why this is a
+    # re-key, not a round-trip through the real model (the latter would
+    # silently defeat every `key?` check in `check_dimensions` below).
+    check_level(InvariantInputNormalizer.stringify_keys(input_hash), graph)
     @violations.empty?
   end
 

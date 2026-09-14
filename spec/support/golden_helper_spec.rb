@@ -45,6 +45,43 @@ RSpec.describe "match_elkjs_golden" do
                                               dir: @golden_dir)
     expect(matcher.matches?(actual)).to be true
   end
+
+  # `fields:` on the matcher must actually reach `GoldenComparator.
+  # diff_exact` -- excluding `:nodes` here means the 0.5px delta on `n1`
+  # (the only difference between `actual` and the committed golden) is
+  # never even checked, so a case that genuinely narrows its own fields
+  # must pass where the unrestricted default (the example above) fails.
+  it "honours a narrowed fields: at exact tier" do
+    matcher = match_elkjs_golden("synthetic", tier: :exact,
+                                              fields: %i[graph],
+                                              dir: @golden_dir)
+    expect(matcher.matches?(actual)).to be true
+  end
+
+  # `GoldenComparator.diff_structural` has no `fields` parameter at all --
+  # a non-default `fields:` at structural tier must be refused loudly
+  # rather than silently compared as if nothing had been restricted.
+  it "refuses a non-default fields: at structural tier rather than " \
+     "silently ignoring it" do
+    matcher = match_elkjs_golden("synthetic", tier: :structural,
+                                              fields: %i[nodes],
+                                              dir: @golden_dir)
+    expect { matcher.matches?(actual) }.to raise_error(ArgumentError, /fields:/)
+  end
+end
+
+RSpec.describe "GoldenHelper#matcher_kwargs" do
+  include GoldenHelper
+
+  it "omits fields: when the case table entry does not set one" do
+    expect(matcher_kwargs(name: "x", tier: :exact)).to eq(tier: :exact)
+  end
+
+  it "forwards fields: when the case table entry sets one" do
+    kase = { name: "x", tier: :structural, fields: %i[nodes graph] }
+    expect(matcher_kwargs(kase)).to eq(tier: :structural,
+                                       fields: %i[nodes graph])
+  end
 end
 
 RSpec.describe "match_elkjs_golden error matching" do

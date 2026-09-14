@@ -432,34 +432,72 @@ module GoldenFixtures
   # REUSED pid was picked up by `publish_into` and installed as if it
   # were this run's own, silently replacing current `expected/` with old
   # content. `Dir.mktmpdir` names are unique per call regardless of pid,
-  # and everything under it -- staging AND the backups `swap_into_place`
-  # makes -- is owned by this invocation alone and vanishes with the
-  # block, on success or failure, so nothing stale can ever be read back
-  # as this run's own. Same fix as
-  # `spec/fixtures/consumers/sirena/capture.rb#publish_locked`.
+  # so nothing stale can ever be read back as this run's own.
+  #
+  # `work` is created with the NON-block form on purpose: the block form
+  # removes `work` on any exit, which used to include a failed rollback --
+  # measured with fault injection, forcing both the forward rename AND
+  # the restore rename to fail left `work` (holding the only backups of
+  # `expected/` and `MANIFEST.json`) deleted by the block's own cleanup,
+  # with the live golden dir now EMPTY. `settle` below only removes `work`
+  # once every backup is confirmed back in place (or never needed);
+  # anything still stranded keeps `work` alive and names its path. Same
+  # fix as `spec/fixtures/consumers/sirena/capture.rb#publish_locked`/`#settle`.
   def publish_into(source, golden_dir)
-    Dir.mktmpdir(".golden", golden_dir) do |work|
-      staged = File.join(work, "expected")
-      FileUtils.cp_r(source, staged)
-      staged_manifest = File.join(work, "MANIFEST.json")
-      FileUtils.mv(File.join(staged, "MANIFEST.json"), staged_manifest)
-      with_directory_lock(golden_dir) do
-        swap_into_place(golden_dir, staged, staged_manifest, work)
-      end
+    work = Dir.mktmpdir(".golden", golden_dir)
+    stranded = []
+    staged, staged_manifest = stage_publish(source, work)
+    with_directory_lock(golden_dir) do
+      swap_into_place(golden_dir, staged, staged_manifest, work, stranded)
     end
+  ensure
+    settle(work, stranded)
+  end
+
+  # Copies the fresh tree into `work` and splits its MANIFEST.json out
+  # beside it, so `publish_into` itself never touches the golden dir until
+  # `swap_into_place` runs under the lock.
+  def stage_publish(source, work)
+    staged = File.join(work, "expected")
+    FileUtils.cp_r(source, staged)
+    staged_manifest = File.join(work, "MANIFEST.json")
+    FileUtils.mv(File.join(staged, "MANIFEST.json"), staged_manifest)
+    [staged, staged_manifest]
+  end
+
+  # Mirrors `spec/fixtures/consumers/sirena/capture.rb#settle`: only ever
+  # removes `work` once nothing is left stranded inside it. `work` is nil
+  # here precisely when `Dir.mktmpdir` itself never returned, so there is
+  # nothing to settle. `stranded` is nil under the same circumstance (the
+  # local exists from the parse but its assignment never ran).
+  def settle(work, stranded)
+    return if work.nil?
+    return FileUtils.remove_entry(work) if stranded.nil? || stranded.empty?
+
+    warn "golden publish could not restore #{stranded.join(', ')} -- " \
+         "the originals are in #{work}"
   end
 
   # Two `rake golden:generate` runs pointed at the same golden_dir used to
   # interleave: one's rollback (triggered by the other's still-in-flight
   # rename) silently undid the other's already-reported-successful publish
   # -- measured with a two-process probe, run B exited 0 while run A's own
-  # rollback restored the pre-B content underneath it. Same pattern as
-  # `spec/fixtures/consumers/sirena/capture.rb#with_directory_lock` and
-  # `spec/cross_validation/corpus_runner.rb#with_directory_lock`: lock the
-  # directory itself, not a side file, so nothing but this method's own
-  # writes can land inside the lock.
+  # rollback restored the pre-B content underneath it.
+  #
+  # The lock used to be taken on `golden_dir` itself, opened `File::RDONLY`
+  # -- POSIX allows opening a directory read-only to lock it, but
+  # Windows/NTFS does not and raises EISDIR there, exactly as measured
+  # against real windows-latest CI for
+  # `spec/fixtures/consumers/sirena/capture.rb#with_directory_lock` (fixed
+  # in 0f66dfa). A regular file locks the same way on every platform Ruby
+  # supports, so the lock now lives at a path NEXT TO `golden_dir`, never
+  # inside it -- nothing named here is ever mistaken for a committed
+  # golden fixture, matching the original point without depending on
+  # directory-locking. Same fix as
+  # `spec/fixtures/consumers/sirena/capture.rb#with_directory_lock`/
+  # `#lock_path`.
   def with_directory_lock(golden_dir)
-    File.open(golden_dir, File::RDONLY) do |lock|
+    File.open(lock_path(golden_dir), File::RDWR | File::CREAT, 0o600) do |lock|
       lock.flock(File::LOCK_EX)
       begin
         yield
@@ -467,6 +505,15 @@ module GoldenFixtures
         lock.flock(File::LOCK_UN)
       end
     end
+  end
+
+  # `golden_dir` may be given with or without a trailing separator, so the
+  # sibling path is built from its parent and basename rather than simple
+  # string concatenation, which would turn "golden/" into "golden/.lock" --
+  # INSIDE the directory this is built to stay out of. Same reasoning as
+  # `spec/fixtures/consumers/sirena/capture.rb#lock_path`.
+  def lock_path(golden_dir)
+    File.join(File.dirname(golden_dir), "#{File.basename(golden_dir)}.lock")
   end
 
   # FOUR renames, all under one undo. Two move the live tree aside and two
@@ -480,7 +527,7 @@ module GoldenFixtures
   # MANIFEST.json, with nothing to put it back -- measured. And `ensure`,
   # not `rescue SystemCallError`, because Ctrl-C raises Interrupt, which
   # that rescue never caught.
-  def swap_into_place(golden_dir, staged, staged_manifest, work)
+  def swap_into_place(golden_dir, staged, staged_manifest, work, stranded)
     live, backups = swap_paths(golden_dir, work)
     kept = []
     swapped = false
@@ -489,7 +536,7 @@ module GoldenFixtures
       .each { |from, to| File.rename(from, to) }
     swapped = true
   ensure
-    finish_swap(kept, live, swapped)
+    stranded.concat(finish_swap(kept, live, swapped))
   end
 
   def swap_paths(golden_dir, work)
@@ -516,9 +563,27 @@ module GoldenFixtures
   end
 
   def finish_swap(kept, live, swapped)
-    return if swapped
+    return [] if swapped
 
-    kept.zip(live).each { |aside, path| restore(aside, path) }
+    restore_all(kept, live)
+  end
+
+  # Attempts EVERY restoration whatever any one of them raises, and
+  # returns the live paths still not back in place. Stopping at the
+  # first failure left the rest of the original tree sitting in `kept`
+  # with nothing marking it stranded, so `publish_into`'s `settle` had no
+  # way to know `work` still held the only copies -- measured with fault
+  # injection on the SECOND restore. Interrupt is named beside
+  # StandardError because Ctrl-C is the interruption this exists for and
+  # is not one. Same fix as
+  # `spec/fixtures/consumers/sirena/capture.rb#restore_all`.
+  def restore_all(kept, live)
+    kept.zip(live).filter_map do |aside, path|
+      restore(aside, path)
+      nil
+    rescue StandardError, Interrupt
+      path
+    end
   end
 
   # `File.exist?` FOLLOWS a symlink, so a DANGLING link at `path` read as
