@@ -100,18 +100,32 @@ RSpec.describe ".reek.yml" do
       "Elkrb::Graph::NodeConstraints#align_direction=",
       "Elkrb::Graph::NodeConstraints#cast_legacy",
       "Elkrb::GraphvizWrapper",
+      # The next seven are PR #13's shell/path-hardening additions
+      # (anchoring a dash-leading path, resolving symlinked executables,
+      # rejecting an empty output path, and the ELKRB_DOT candidate walk).
+      # They pre-date this ratchet (added on `v2` by #28); merging the two
+      # branches surfaces them here for the first time. Same shape as this
+      # file's own NodeProbe example above: the class-level exclusion was
+      # never meant to reach them, it just does.
+      "Elkrb::GraphvizWrapper#anchor_bare_name",
       "Elkrb::GraphvizWrapper#available?",
       "Elkrb::GraphvizWrapper#build_command",
+      "Elkrb::GraphvizWrapper#dot_basenames",
       "Elkrb::GraphvizWrapper#execute_command",
       "Elkrb::GraphvizWrapper#find_graphviz",
       "Elkrb::GraphvizWrapper#initialize",
       "Elkrb::GraphvizWrapper#installation_message",
+      "Elkrb::GraphvizWrapper#option_safe_path",
+      "Elkrb::GraphvizWrapper#path_dot_candidates",
       "Elkrb::GraphvizWrapper#render",
+      "Elkrb::GraphvizWrapper#resolve_real",
       "Elkrb::GraphvizWrapper#supported_engines",
       "Elkrb::GraphvizWrapper#supported_formats",
+      "Elkrb::GraphvizWrapper#valid_executable?",
       "Elkrb::GraphvizWrapper#validate_engine!",
       "Elkrb::GraphvizWrapper#validate_file_exists!",
       "Elkrb::GraphvizWrapper#validate_format!",
+      "Elkrb::GraphvizWrapper#validate_output_file!",
       "Elkrb::GraphvizWrapper#version",
       "Elkrb::GraphvizWrapper::GraphvizNotFoundError",
       "Elkrb::Layout::Algorithms::BaseAlgorithm#layout_flat",

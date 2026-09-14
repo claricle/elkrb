@@ -46,13 +46,41 @@ RSpec.describe "ELKT loading" do
 
   it "exits 1 and reports the location for an unparseable .elkt file" do
     fixture = "#{ELKRB_ROOT}/spec/fixtures/elkt/invalid/garbage.elkt"
-    # error_output is Thor's `say`, so the CLI writes this to stdout.
-    stdout, _stderr, status = Open3.capture3(
+    # PR #13's own commit eefcfd1 ("exit non-zero on cli errors, route
+    # diagnostics to stderr") deliberately moved error_output off Thor's
+    # `say` and onto $stderr.puts -- keep asserting stderr, not stdout.
+    # What #13 used to lose on this exact path was the LOCATION: FormatSniffer
+    # flattened the parser's own located Elkrb::ParseError into a generic
+    # "Unable to parse input file" message. Fixed to keep both: the
+    # deliberate stream and the parser's own diagnostic. Pin the exact
+    # message, not just the pattern -- "line \d+, column \d+" alone would
+    # equally match a message with the wrong character or the wrong column.
+    stdout, stderr, status = Open3.capture3(
       "ruby", "-I#{ELKRB_ROOT}/lib", "#{ELKRB_ROOT}/exe/elkrb", "validate",
       fixture, chdir: ELKRB_ROOT
     )
 
     expect(status.exitstatus).to eq(1)
-    expect(stdout).to match(/line \d+, column \d+/)
+    expect(stdout).to eq("")
+    expect(stderr)
+      .to eq(%(Error: Unexpected character "!" at line 1, column 34\n))
+  end
+
+  it "exits 1 with the generic message for content with no location to give" do
+    # A non-String reaching the parser (Lexer::initialize's TypeError) has
+    # no line/column to preserve -- the generic fallback stays the correct
+    # shape for THAT case, so the two must not silently collapse into one.
+    stdout, _stderr, status = ruby(<<~RUBY)
+      require "elkrb/format_sniffer"
+      begin
+        Elkrb::FormatSniffer.send(:parse_elkt_declared!, nil)
+      rescue ArgumentError => e
+        print e.message
+      end
+    RUBY
+
+    expect(status).to be_success
+    expect(stdout)
+      .to eq("Unable to parse input file. Supported formats: JSON, YAML, ELKT")
   end
 end

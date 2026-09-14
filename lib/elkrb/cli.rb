@@ -8,12 +8,15 @@ module Elkrb
   # Command-line interface for elkrb
   #
   # Provides commands for laying out graphs from the command line.
-  # Supports JSON and YAML input/output formats.
+  # Supports JSON and YAML input/output formats, with an ELKT fallback
+  # for files whose extension isn't recognized.
   class Cli < Thor
+    def self.exit_on_failure? = true
+
     class_option :verbose, type: :boolean, default: false,
                            desc: "Enable verbose output"
 
-    desc "layout FILE", "Layout a graph from a JSON or YAML file"
+    desc "layout FILE", "Layout a graph from a JSON, YAML, or ELKT file"
     option :algorithm, type: :string, default: "layered",
                        desc: "Layout algorithm to use"
     option :output, type: :string, aliases: "-o",
@@ -158,22 +161,8 @@ module Elkrb
     private
 
     def read_input_file(file)
-      require_relative "graph/graph"
-      content = File.read(file)
-
-      case File.extname(file).downcase
-      when ".json"
-        Elkrb::Graph::Graph.from_json(content)
-      when ".yml", ".yaml"
-        Elkrb::Graph::Graph.from_yaml(content)
-      else
-        # Try JSON first, then YAML
-        begin
-          Elkrb::Graph::Graph.from_json(content)
-        rescue JSON::ParserError
-          Elkrb::Graph::Graph.from_yaml(content)
-        end
-      end
+      require_relative "format_sniffer"
+      Elkrb::FormatSniffer.read(File.read(file), File.extname(file).downcase)
     end
 
     def build_layout_options
@@ -211,14 +200,52 @@ module Elkrb
       else
         say output
       end
+    rescue Errno::EPIPE
+      # The reader went away. That is not an application failure, and the
+      # generic rescue below was turning it into one: a valid layout exited 1
+      # reporting "Broken pipe" where the base exits 0. Every other unix
+      # filter stops quietly here, so do that.
+      #
+      # `| head -1` is NOT how to reproduce it, though it reads like it should
+      # be: the JSON is compact and therefore one physical line, so `head`
+      # consumes all of it and both ends exit 0. The spec closes the stream
+      # before the child writes a byte, which is what a vanished reader
+      # actually looks like from in here.
+      #
+      # `exit` raises SystemExit, which is not a StandardError, so it passes
+      # through the command's rescue rather than being reported as an error.
+      exit 0
     end
 
+    # A consumer that stopped reading our DIAGNOSTICS must not change what the
+    # command does or what it reports. `layout` emits its first verbose line
+    # before it reads the input, so a closed stderr used to raise EPIPE, get
+    # caught by the generic rescue below, and abort the run before it wrote
+    # anything -- measured: `layout --verbose -o out.json` exited 0 with
+    # out.json never created.
     def verbose_output(message)
-      say message, :yellow if options[:verbose]
+      return unless options[:verbose]
+
+      say_error message, :yellow
+    rescue Errno::EPIPE
+      nil
     end
 
     def error_output(message)
-      say message, :red
+      # Kernel#warn is silent when warnings are off. Measured on ruby 3.4.8:
+      # `ruby -W0 -e 'warn "MSG"'` prints nothing, `ruby -W0 -e '$stderr.puts
+      # "MSG"'` prints MSG. Every command's rescue reports through here, so
+      # this is the one line that has to survive -W0; the cop's suggestion
+      # would take it away. It does not rescue the detail lines the commands
+      # emit with warn -- those already vanish under -W0.
+      # rubocop:disable Style/StderrPuts
+      $stderr.puts message
+      # rubocop:enable Style/StderrPuts
+    rescue Errno::EPIPE
+      # Same reason as verbose_output. A closed stderr must not turn a real
+      # failure into a different one, or mask the exit status the caller
+      # needs to see.
+      nil
     end
   end
 end

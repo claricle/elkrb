@@ -12,8 +12,8 @@ require_relative "../../lib/elkrb"
 # "layered"), every spec/fixtures/corpus/*.json (wrapper {"algorithm":,
 # "graph":}), and every entry of each spec/cross_validation/fixtures/*/
 # imported_tests.json file. The non-JSON fixtures bom.elkt and garbage.txt
-# belong to spec/elkrb/cli_spec.rb, which reads them through the CLI, so
-# they are not cases here. `.cases` is the single enumeration every later
+# belong to the CLI specs, which read them through the CLI, so they are
+# not cases here. `.cases` is the single enumeration every later
 # slice's execution-diff gate diffs against.
 #
 # Every case's file is always written, whatever the outcome. `run`'s exit

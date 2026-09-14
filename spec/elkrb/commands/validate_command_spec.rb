@@ -145,5 +145,24 @@ RSpec.describe Elkrb::Commands::ValidateCommand do
 
       expect { command.run }.to raise_error(ArgumentError, /File not found/)
     end
+
+    it "loads a YAML file with no recognized extension" do
+      input_file = File.join(temp_dir, "graph.noext")
+      File.write(input_file, valid_graph.to_yaml)
+
+      command = described_class.new(input_file, {})
+
+      expect { command.run }.to output(/✅.*valid/).to_stdout
+    end
+
+    it "raises for unparsable content with no recognized extension" do
+      input_file = File.join(temp_dir, "graph.noext")
+      File.write(input_file, "this is not a graph, just garbage!!! {{{ ]]] ###")
+
+      command = described_class.new(input_file, {})
+
+      expect { command.run }.to raise_error(ArgumentError,
+                                            /Unable to parse input file/)
+    end
   end
 end

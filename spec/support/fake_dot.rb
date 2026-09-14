@@ -7,9 +7,13 @@ require "fileutils"
 #
 # The fake script logs its argv (NUL-separated, one invocation per line) to
 # a log file and touches whatever file the real Graphviz `-o` flag would
-# have written, in both forms elkrb has used for it: a separate `-o path`
-# token pair, and the `-opath` suffix form. Specs read the log to assert
-# what argv the CLI actually built, without stubbing the method under test.
+# have written, in both forms real Graphviz accepts: a separate `-o path`
+# token pair, and the `-opath` suffix form. elkrb emits only the pair now,
+# and no example depends on the suffix branch -- it is kept so the fake
+# stays a faithful `dot`, not because it discriminates anything. Given
+# `-V`, it prints a canned version line, matching what `dot -V` actually
+# prints. Specs read the log to assert what argv the CLI actually built,
+# without stubbing the method under test.
 module FakeDot
   FAKE_DOT_SCRIPT = <<~'RUBY'
     #!/usr/bin/env ruby
@@ -17,6 +21,8 @@ module FakeDot
     require "fileutils"
 
     File.open(ENV.fetch("FAKE_DOT_LOG"), "a") { |f| f.write("#{ARGV.join("\0")}\n") }
+
+    warn "dot - graphviz version 2.44.1 (20200629.0846)" if ARGV == ["-V"]
 
     ARGV.each_with_index do |arg, i|
       if arg == "-o"
@@ -27,32 +33,40 @@ module FakeDot
     end
   RUBY
 
+  # Every variable install_fake_dot writes. Saved with ENV.fetch(key, nil)
+  # and restored by plain assignment, so a key that was UNSET going in is
+  # unset again coming out: `ENV[k] = nil` deletes the key rather than
+  # storing an empty string.
+  OVERRIDDEN_ENV = %w[PATH FAKE_DOT_LOG ELKRB_DOT].freeze
+
   def with_fake_dot
-    original_path = ENV.fetch("PATH", nil)
-    original_log = ENV.fetch("FAKE_DOT_LOG", nil)
+    saved = OVERRIDDEN_ENV.to_h { |key| [key, ENV.fetch(key, nil)] }
 
     Dir.mktmpdir("fake_dot") do |dir|
-      yield install_fake_dot(dir)
+      yield install_fake_dot(dir, saved["PATH"])
     ensure
-      ENV["PATH"] = original_path
-      ENV["FAKE_DOT_LOG"] = original_log
+      saved.each { |key, value| ENV[key] = value }
     end
   end
 
   private
 
-  # Writes the script into `dir`, puts `dir` first on PATH, and returns the
-  # log path the caller reads argv from. PATH is still the original here --
-  # with_fake_dot only restores it after the block.
-  def install_fake_dot(dir)
+  # Writes the script into `dir`, puts `dir` first on PATH, and clears any
+  # ELKRB_DOT override so the fake is found by a PATH search rather than
+  # bypassed. `original_path` is passed in rather than read from ENV
+  # because with_fake_dot already captured it into `saved`, and that copy
+  # is the one it will restore.
+  #
+  # @return [String] the log path the caller reads argv back from
+  def install_fake_dot(dir, original_path)
+    log_path = File.join(dir, "dot.log")
     script_path = File.join(dir, "dot")
     File.write(script_path, FAKE_DOT_SCRIPT)
     FileUtils.chmod(0o755, script_path)
 
-    log_path = File.join(dir, "dot.log")
-    search_path = [dir, ENV.fetch("PATH", nil)].compact
-    ENV["PATH"] = search_path.join(File::PATH_SEPARATOR)
+    ENV["PATH"] = [dir, original_path].compact.join(File::PATH_SEPARATOR)
     ENV["FAKE_DOT_LOG"] = log_path
+    ENV.delete("ELKRB_DOT")
     log_path
   end
 end
