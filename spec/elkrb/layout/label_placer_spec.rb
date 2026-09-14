@@ -49,7 +49,7 @@ RSpec.describe Elkrb::Layout::LabelPlacer do
         label1 = Elkrb::Graph::Label.new(text: "L1", width: 30, height: 20)
         label2 = Elkrb::Graph::Label.new(text: "L2", width: 30, height: 20)
 
-        layout_opts = Elkrb::Graph::LayoutOptions.new
+        layout_opts = {}
         layout_opts["node.label.placement"] = "INSIDE TOP"
 
         node = Elkrb::Graph::Node.new(
@@ -72,7 +72,7 @@ RSpec.describe Elkrb::Layout::LabelPlacer do
       it "places labels outside when specified" do
         label = Elkrb::Graph::Label.new(text: "Test", width: 30, height: 20)
 
-        layout_opts = Elkrb::Graph::LayoutOptions.new
+        layout_opts = {}
         layout_opts["node.label.placement"] = "OUTSIDE TOP"
 
         node = Elkrb::Graph::Node.new(
@@ -237,7 +237,7 @@ RSpec.describe Elkrb::Layout::LabelPlacer do
       it "respects label padding option" do
         label = Elkrb::Graph::Label.new(text: "Test", width: 30, height: 20)
 
-        layout_opts = Elkrb::Graph::LayoutOptions.new
+        layout_opts = {}
         layout_opts["node.label.placement"] = "INSIDE TOP"
         layout_opts["label.padding"] = 10
 
@@ -255,7 +255,7 @@ RSpec.describe Elkrb::Layout::LabelPlacer do
       end
 
       it "respects label margin option" do
-        layout_opts = Elkrb::Graph::LayoutOptions.new
+        layout_opts = {}
         layout_opts["label.margin"] = 8
 
         node = Elkrb::Graph::Node.new(
@@ -287,7 +287,7 @@ RSpec.describe Elkrb::Layout::LabelPlacer do
 
       it "treats missing label size as 0x0 in an INSIDE TOP placement" do
         label = Elkrb::Graph::Label.from_hash({ text: "A" })
-        layout_opts = Elkrb::Graph::LayoutOptions.new
+        layout_opts = {}
         layout_opts["node.label.placement"] = "INSIDE TOP"
         node = Elkrb::Graph::Node.new(
           id: "n1", x: 0, y: 0, width: 10, height: 10,
@@ -300,7 +300,7 @@ RSpec.describe Elkrb::Layout::LabelPlacer do
 
       it "treats missing label size as 0x0 in an INSIDE BOTTOM placement" do
         label = Elkrb::Graph::Label.from_hash({ text: "A" })
-        layout_opts = Elkrb::Graph::LayoutOptions.new
+        layout_opts = {}
         layout_opts["node.label.placement"] = "INSIDE BOTTOM"
         node = Elkrb::Graph::Node.new(
           id: "n1", x: 0, y: 0, width: 10, height: 10,
@@ -313,7 +313,7 @@ RSpec.describe Elkrb::Layout::LabelPlacer do
 
       it "treats missing label size as 0x0 in an INSIDE LEFT placement" do
         label = Elkrb::Graph::Label.from_hash({ text: "A" })
-        layout_opts = Elkrb::Graph::LayoutOptions.new
+        layout_opts = {}
         layout_opts["node.label.placement"] = "INSIDE LEFT"
         node = Elkrb::Graph::Node.new(
           id: "n1", x: 0, y: 0, width: 10, height: 10,
@@ -326,7 +326,7 @@ RSpec.describe Elkrb::Layout::LabelPlacer do
 
       it "treats missing label size as 0x0 in an INSIDE RIGHT placement" do
         label = Elkrb::Graph::Label.from_hash({ text: "A" })
-        layout_opts = Elkrb::Graph::LayoutOptions.new
+        layout_opts = {}
         layout_opts["node.label.placement"] = "INSIDE RIGHT"
         node = Elkrb::Graph::Node.new(
           id: "n1", x: 0, y: 0, width: 10, height: 10,
@@ -339,7 +339,7 @@ RSpec.describe Elkrb::Layout::LabelPlacer do
 
       it "treats missing label size as 0x0 in an OUTSIDE RIGHT placement" do
         label = Elkrb::Graph::Label.from_hash({ text: "A" })
-        layout_opts = Elkrb::Graph::LayoutOptions.new
+        layout_opts = {}
         layout_opts["node.label.placement"] = "OUTSIDE RIGHT"
         node = Elkrb::Graph::Node.new(
           id: "n1", x: 0, y: 0, width: 10, height: 10,
@@ -374,7 +374,7 @@ RSpec.describe Elkrb::Layout::LabelPlacer do
       it "treats missing label size as 0x0 in an INSIDE placement" do
         node_label = Elkrb::Graph::Label.new(text: "N", width: 5, height: 5)
         port_label = Elkrb::Graph::Label.from_hash({ text: "P" })
-        port_opts = Elkrb::Graph::LayoutOptions.new
+        port_opts = {}
         port_opts["port.label.placement"] = "INSIDE"
         port = Elkrb::Graph::Port.new(
           id: "p1", x: 0, y: 50, labels: [port_label], layout_options: port_opts,

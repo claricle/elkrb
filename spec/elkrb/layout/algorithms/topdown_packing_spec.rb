@@ -10,10 +10,10 @@ RSpec.describe Elkrb::Layout::Algorithms::TopdownPacking do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
+          layout_options: {
             "algorithm" => "topdownpacking",
             "elk.spacing.nodeNode" => 10.0,
-          ),
+          },
         )
       end
 
@@ -90,10 +90,10 @@ RSpec.describe Elkrb::Layout::Algorithms::TopdownPacking do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
+          layout_options: {
             "algorithm" => "topdownpacking",
             "elk.spacing.nodeNode" => 5.0,
-          ),
+          },
         )
       end
 
@@ -155,7 +155,7 @@ RSpec.describe Elkrb::Layout::Algorithms::TopdownPacking do
       let(:aspect_ratio) { 2.0 }
 
       let(:graph) do
-        opts = Elkrb::Graph::LayoutOptions.new
+        opts = {}
         opts["algorithm"] = "topdownpacking"
         opts["topdownpacking.aspectRatio"] = aspect_ratio
 
@@ -198,9 +198,7 @@ RSpec.describe Elkrb::Layout::Algorithms::TopdownPacking do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "topdownpacking",
-          ),
+          layout_options: { "algorithm" => "topdownpacking" },
         )
       end
 
@@ -239,9 +237,7 @@ RSpec.describe Elkrb::Layout::Algorithms::TopdownPacking do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "topdownpacking",
-          ),
+          layout_options: { "algorithm" => "topdownpacking" },
         )
       end
 
@@ -272,9 +268,7 @@ RSpec.describe Elkrb::Layout::Algorithms::TopdownPacking do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "topdownpacking",
-          ),
+          layout_options: { "algorithm" => "topdownpacking" },
         )
       end
 
@@ -292,7 +286,7 @@ RSpec.describe Elkrb::Layout::Algorithms::TopdownPacking do
 
     context "with custom node width option" do
       let(:graph) do
-        opts = Elkrb::Graph::LayoutOptions.new
+        opts = {}
         opts["algorithm"] = "topdownpacking"
         opts["topdownpacking.nodeWidth"] = 100.0
         opts["topdownpacking.aspectRatio"] = 1.5
@@ -335,9 +329,7 @@ RSpec.describe Elkrb::Layout::Algorithms::TopdownPacking do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "topdownpacking",
-          ),
+          layout_options: { "algorithm" => "topdownpacking" },
         )
       end
 

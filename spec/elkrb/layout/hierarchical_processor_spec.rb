@@ -66,7 +66,7 @@ RSpec.describe Elkrb::Layout::HierarchicalProcessor do
       end
 
       it "applies parent constraints with padding" do
-        layout_opts = Elkrb::Graph::LayoutOptions.new
+        layout_opts = {}
         layout_opts["padding"] = 10
 
         child_node = Elkrb::Graph::Node.new(
@@ -119,7 +119,7 @@ RSpec.describe Elkrb::Layout::HierarchicalProcessor do
 
   describe "#apply_parent_constraints" do
     it "adjusts children for padding" do
-      layout_opts = Elkrb::Graph::LayoutOptions.new
+      layout_opts = {}
       layout_opts["padding"] =
         { "left" => 15, "top" => 20, "right" => 10, "bottom" => 10 }
 
@@ -149,7 +149,7 @@ RSpec.describe Elkrb::Layout::HierarchicalProcessor do
     end
 
     it "parses hash padding" do
-      layout_opts = Elkrb::Graph::LayoutOptions.new
+      layout_opts = {}
       layout_opts["padding"] = { "left" => 5, "top" => 10 }
 
       node = Elkrb::Graph::Node.new(
@@ -165,7 +165,7 @@ RSpec.describe Elkrb::Layout::HierarchicalProcessor do
     end
 
     it "parses uniform numeric padding" do
-      layout_opts = Elkrb::Graph::LayoutOptions.new
+      layout_opts = {}
       layout_opts["padding"] = 20
 
       node = Elkrb::Graph::Node.new(

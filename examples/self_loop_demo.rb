@@ -24,9 +24,7 @@ graph1 = Elkrb::Graph::Graph.new(
       targets: ["state1"],
     ),
   ],
-  layout_options: Elkrb::Graph::LayoutOptions.new(
-    algorithm: "layered",
-  ),
+  layout_options: { "elk.algorithm" => "layered" },
 )
 
 result1 = Elkrb.layout(graph1)
@@ -58,14 +56,10 @@ puts "=" * 70
         id: "loop",
         sources: ["node"],
         targets: ["node"],
-        layout_options: Elkrb::Graph::LayoutOptions.new(
-          "elk.selfLoopSide" => side,
-        ),
+        layout_options: { "elk.selfLoopSide" => side },
       ),
     ],
-    layout_options: Elkrb::Graph::LayoutOptions.new(
-      algorithm: "layered",
-    ),
+    layout_options: { "elk.algorithm" => "layered" },
   )
 
   result = Elkrb.layout(graph)
@@ -107,9 +101,7 @@ graph3 = Elkrb::Graph::Graph.new(
       targets: ["state"],
     ),
   ],
-  layout_options: Elkrb::Graph::LayoutOptions.new(
-    algorithm: "layered",
-  ),
+  layout_options: { "elk.algorithm" => "layered" },
 )
 
 result3 = Elkrb.layout(graph3)
@@ -144,10 +136,10 @@ graph4 = Elkrb::Graph::Graph.new(
       targets: ["node"],
     ),
   ],
-  layout_options: Elkrb::Graph::LayoutOptions.new(
-    algorithm: "layered",
+  layout_options: {
+    "elk.algorithm" => "layered",
     "elk.edgeRouting" => "SPLINES",
-  ),
+  },
 )
 
 result4 = Elkrb.layout(graph4)
@@ -212,10 +204,7 @@ graph5 = Elkrb::Graph::Graph.new(
       targets: ["idle"],
     ),
   ],
-  layout_options: Elkrb::Graph::LayoutOptions.new(
-    algorithm: "layered",
-    direction: "RIGHT",
-  ),
+  layout_options: { "elk.algorithm" => "layered", "elk.direction" => "RIGHT" },
 )
 
 result5 = Elkrb.layout(graph5)
@@ -264,9 +253,7 @@ graph6 = Elkrb::Graph::Graph.new(
       targets: ["in1"],
     ),
   ],
-  layout_options: Elkrb::Graph::LayoutOptions.new(
-    algorithm: "layered",
-  ),
+  layout_options: { "elk.algorithm" => "layered" },
 )
 
 result6 = Elkrb.layout(graph6)
@@ -308,17 +295,13 @@ graph7 = Elkrb::Graph::Graph.new(
       id: "q0_0",
       sources: ["q0"],
       targets: ["q0"],
-      layout_options: Elkrb::Graph::LayoutOptions.new(
-        "elk.selfLoopSide" => "NORTH",
-      ),
+      layout_options: { "elk.selfLoopSide" => "NORTH" },
     ),
     Elkrb::Graph::Edge.new(
       id: "q1_1",
       sources: ["q1"],
       targets: ["q1"],
-      layout_options: Elkrb::Graph::LayoutOptions.new(
-        "elk.selfLoopSide" => "NORTH",
-      ),
+      layout_options: { "elk.selfLoopSide" => "NORTH" },
     ),
     # State transitions
     Elkrb::Graph::Edge.new(
@@ -332,10 +315,7 @@ graph7 = Elkrb::Graph::Graph.new(
       targets: ["q2"],
     ),
   ],
-  layout_options: Elkrb::Graph::LayoutOptions.new(
-    algorithm: "layered",
-    direction: "RIGHT",
-  ),
+  layout_options: { "elk.algorithm" => "layered", "elk.direction" => "RIGHT" },
 )
 
 result7 = Elkrb.layout(graph7)
@@ -373,10 +353,10 @@ puts "=" * 70
         targets: ["node"],
       ),
     ],
-    layout_options: Elkrb::Graph::LayoutOptions.new(
-      algorithm: "layered",
+    layout_options: {
+      "elk.algorithm" => "layered",
       "elk.edgeRouting" => style,
-    ),
+    },
   )
 
   result = Elkrb.layout(graph)

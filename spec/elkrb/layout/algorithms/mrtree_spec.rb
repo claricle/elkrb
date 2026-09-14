@@ -10,10 +10,10 @@ RSpec.describe Elkrb::Layout::Algorithms::MRTree do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
+          layout_options: {
             "algorithm" => "mrtree",
             "elk.spacing.nodeNode" => 20.0,
-          ),
+          },
         )
       end
 
@@ -92,9 +92,7 @@ RSpec.describe Elkrb::Layout::Algorithms::MRTree do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "mrtree",
-          ),
+          layout_options: { "algorithm" => "mrtree" },
         )
       end
 
@@ -156,9 +154,7 @@ RSpec.describe Elkrb::Layout::Algorithms::MRTree do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "mrtree",
-          ),
+          layout_options: { "algorithm" => "mrtree" },
         )
       end
 
@@ -185,9 +181,7 @@ RSpec.describe Elkrb::Layout::Algorithms::MRTree do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "mrtree",
-          ),
+          layout_options: { "algorithm" => "mrtree" },
         )
       end
 
@@ -212,9 +206,7 @@ RSpec.describe Elkrb::Layout::Algorithms::MRTree do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "mrtree",
-          ),
+          layout_options: { "algorithm" => "mrtree" },
         )
       end
 
@@ -243,9 +235,7 @@ RSpec.describe Elkrb::Layout::Algorithms::MRTree do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "mrtree",
-          ),
+          layout_options: { "algorithm" => "mrtree" },
         )
       end
 
@@ -278,9 +268,7 @@ RSpec.describe Elkrb::Layout::Algorithms::MRTree do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "mrtree",
-          ),
+          layout_options: { "algorithm" => "mrtree" },
         )
       end
 
@@ -328,9 +316,7 @@ RSpec.describe Elkrb::Layout::Algorithms::MRTree do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "mrtree",
-          ),
+          layout_options: { "algorithm" => "mrtree" },
         )
       end
 
@@ -369,9 +355,7 @@ RSpec.describe Elkrb::Layout::Algorithms::MRTree do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "mrtree",
-          ),
+          layout_options: { "algorithm" => "mrtree" },
         )
       end
 

@@ -1,0 +1,93 @@
+{
+  "id": "er_diagram",
+  "children": [
+    {
+      "id": "USER",
+      "width": 170,
+      "height": 80,
+      "labels": [
+        {
+          "text": "USER",
+          "width": 32.0,
+          "height": 16.0
+        }
+      ],
+      "metadata": {
+        "name": "USER",
+        "attributes": [
+          {
+            "name": "id",
+            "attribute_type": "int",
+            "key_type": "PK"
+          },
+          {
+            "name": "email",
+            "attribute_type": "string",
+            "key_type": "UK"
+          }
+        ]
+      }
+    },
+    {
+      "id": "POST",
+      "width": 170,
+      "height": 80,
+      "labels": [
+        {
+          "text": "POST",
+          "width": 32.0,
+          "height": 16.0
+        }
+      ],
+      "metadata": {
+        "name": "POST",
+        "attributes": [
+          {
+            "name": "id",
+            "attribute_type": "int",
+            "key_type": "PK"
+          },
+          {
+            "name": "user_id",
+            "attribute_type": "int",
+            "key_type": "FK"
+          }
+        ]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "USER_to_POST",
+      "sources": [
+        "USER"
+      ],
+      "targets": [
+        "POST"
+      ],
+      "labels": [
+        {
+          "text": "writes",
+          "width": 42.0,
+          "height": 14.0
+        }
+      ],
+      "metadata": {
+        "relationship_type": "non-identifying",
+        "cardinality_from": "one",
+        "cardinality_to": "zero_or_more"
+      }
+    }
+  ],
+  "layoutOptions": {
+    "algorithm": "layered",
+    "elk.direction": "RIGHT",
+    "elk.spacing.nodeNode": 100,
+    "elk.spacing.edgeNode": 50,
+    "elk.spacing.edgeEdge": 30,
+    "elk.layered.spacing.nodeNodeBetweenLayers": 100,
+    "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
+    "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
+    "elk.hierarchyHandling": "INCLUDE_CHILDREN"
+  }
+}

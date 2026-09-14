@@ -217,10 +217,11 @@ RSpec.describe Elkrb::Parsers::ElktParser do
       expect(graph[:children][1][:edges].first[:targets]).to eq(["p"])
     end
 
-    # The committed JSON CANNOT see this: EdgeSection has no
-    # outgoing_sections attribute, so Graph#to_json drops the links whether
-    # they are stored or discarded. Asserting at the Hash layer is the only
-    # way the fix is observable.
+    # Asserts at the Hash layer, BEFORE Graph.from_hash, so it pins what the
+    # PARSER emits; the committed golden checks the same links after the model
+    # round-trip. Keep both: if the parser moved to a snake_case key and the
+    # model grew a matching read alias, the golden would stay green and this
+    # example is the only thing left that fails.
     it "keeps the outgoing links of a named section" do
       sections = parse_fixture("edge_section_refs").dig(:edges, 0, :sections)
 

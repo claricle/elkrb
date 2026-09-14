@@ -11,8 +11,8 @@ require_relative "elkrb/geometry/vector"
 
 # Graph models
 require_relative "elkrb/graph/deep_stringify_keys"
+require_relative "elkrb/graph/normalize_option_keys"
 require_relative "elkrb/graph/read_only_mapping"
-require_relative "elkrb/graph/layout_options"
 require_relative "elkrb/graph/label"
 require_relative "elkrb/graph/port"
 require_relative "elkrb/graph/node_constraints"
@@ -64,7 +64,7 @@ require_relative "elkrb/layout/algorithms/vertiflex"
 # ElkRb - Pure Ruby implementation of the Eclipse Layout Kernel
 #
 # ElkRb provides automatic graph layout algorithms for node-link diagrams.
-# It implements 12 layout algorithms from the Eclipse Layout Kernel (ELK),
+# It implements the layout algorithms from the Eclipse Layout Kernel (ELK),
 # supporting hierarchical graphs, port-based connections, and automatic
 # label placement.
 #
@@ -369,7 +369,7 @@ module Elkrb
 
   # Returns metadata for all available layout algorithms.
   #
-  # This includes the 12 built-in algorithms plus any custom algorithms
+  # This includes the built-in algorithms plus any custom algorithms
   # registered via {register_algorithm}.
   #
   # @return [Array<Hash>] Array of algorithm metadata with keys:

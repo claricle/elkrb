@@ -134,7 +134,7 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
     end
 
     it "adds orthogonal bend points when configured" do
-      edge.layout_options = Elkrb::Graph::LayoutOptions.new
+      edge.layout_options = {}
       edge.layout_options["edge.routing"] = "orthogonal"
 
       router.route_edge(edge, node_map, graph)
@@ -341,7 +341,7 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
       end
 
       it "respects curvature setting" do
-        edge.layout_options = Elkrb::Graph::LayoutOptions.new
+        edge.layout_options = {}
         edge.layout_options["elk.spline.curvature"] = 0.8
 
         router.send(:route_spline_edge, edge, node_map, graph)
@@ -373,7 +373,7 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
           children: [node1, node2],
           edges: [edge],
         )
-        edge.layout_options = Elkrb::Graph::LayoutOptions.new
+        edge.layout_options = {}
         edge.layout_options["edge.routing"] = "orthogonal"
 
         router.route_edges(graph)
@@ -408,7 +408,7 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
       it "reads from elk.edgeRouting option" do
         graph = Elkrb::Graph::Graph.new(
           id: "g1",
-          layout_options: Elkrb::Graph::LayoutOptions.new,
+          layout_options: {},
         )
         graph.layout_options["elk.edgeRouting"] = "SPLINES"
 
@@ -429,7 +429,7 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
       it "converts to uppercase" do
         graph = Elkrb::Graph::Graph.new(
           id: "g1",
-          layout_options: Elkrb::Graph::LayoutOptions.new,
+          layout_options: {},
         )
         graph.layout_options["elk.edgeRouting"] = "splines"
 
@@ -467,7 +467,7 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
       end
 
       it "uses direction from edge options" do
-        edge.layout_options = Elkrb::Graph::LayoutOptions.new
+        edge.layout_options = {}
         edge.layout_options["elk.direction"] = "VERTICAL"
 
         controls = router.send(
@@ -624,7 +624,7 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
         expect(self_loop_edge.sections.first.bend_points.length).to eq(4)
 
         # Normal edge should have 2 bend points (orthogonal)
-        normal_edge.layout_options = Elkrb::Graph::LayoutOptions.new
+        normal_edge.layout_options = {}
         normal_edge.layout_options["edge.routing"] = "orthogonal"
         router.route_edge(normal_edge,
                           Elkrb::Layout::NodeIndex.build(mixed_graph),

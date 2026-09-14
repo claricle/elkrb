@@ -255,14 +255,13 @@ edge = Elkrb::Graph::Edge.new(
 graph.edges = [edge]
 
 # Set layout options
-graph.layout_options = Elkrb::Graph::LayoutOptions.new(
-  algorithm: "layered",
-  direction: "DOWN"
-)
+graph.layout_options = {
+  "elk.algorithm" => "layered",
+  "elk.direction" => "DOWN"
+}
 
 # Layout
-engine = Elkrb::LayoutEngine.new
-result = engine.layout(graph)
+result = Elkrb.layout(graph)
 
 # Serialize result
 puts result.to_yaml
@@ -747,11 +746,11 @@ Use smooth Bezier curves for aesthetically pleasing edge routing:
 
 [source,ruby]
 ----
-graph.layout_options = Elkrb::Graph::LayoutOptions.new(
-  algorithm: "layered",
-  edge_routing: "SPLINES",
-  spline_curvature: 0.5
-)
+graph.layout_options = {
+  "elk.algorithm" => "layered",
+  "elk.edgeRouting" => "SPLINES",
+  "elk.spline.curvature" => 0.5
+}
 ----
 
 // See link:SPLINE_ROUTING_GUIDE.md[Spline Routing Guide] for details.
@@ -846,7 +845,7 @@ The root container for nodes and edges.
 `width, height`:: Dimensions
 `children`:: Array of Node objects
 `edges`:: Array of Edge objects
-`layout_options`:: LayoutOptions object
+`layout_options`:: Hash of ELK option ids to values
 `properties`:: Custom properties hash
 
 === Node
@@ -894,16 +893,28 @@ Text labels for nodes, edges, or ports.
 `x, y`:: Position coordinates
 `width, height`:: Label dimensions
 
-=== LayoutOptions
+=== Layout options
 
-Configuration for layout algorithms.
+`layout_options` is an open Hash on every model (graph, node, edge, port,
+label). Keys are ELK option ids as strings; values are whatever that option
+takes. There is no fixed attribute list -- any id ELK understands can be set.
 
-`algorithm`:: Algorithm name (layered, force, stress, etc.)
-`direction`:: Layout direction (DOWN, UP, LEFT, RIGHT)
-`spacing_node_node`:: Node-to-node spacing
-`spacing_edge_node`:: Edge-to-node spacing
-`edge_routing`:: Edge routing style (ORTHOGONAL, POLYLINE, SPLINES)
-`properties`:: Additional algorithm-specific options
+[source,ruby]
+----
+graph.layout_options = {
+  "elk.algorithm" => "layered",              # layered, force, stress, ...
+  "elk.direction" => "DOWN",                 # DOWN, UP, LEFT, RIGHT
+  "elk.spacing.nodeNode" => 20.0
+}
+----
+
+Symbol keys are accepted and stringified on assignment, so
+`{ "elk.algorithm" => "layered" }` and `{ :"elk.algorithm" => "layered" }`
+are equivalent. Mutating the map in place after assignment does not
+stringify, so use string keys there.
+
+NOTE: `text` and `elements` are reserved by the serialization layer and
+cannot be used as option keys.
 
 == Command-Line Interface
 

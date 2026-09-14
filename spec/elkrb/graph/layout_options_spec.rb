@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-RSpec.describe Elkrb::Graph::LayoutOptions do
+RSpec.describe "layoutOptions on every model" do
   describe "graph/node/edge-level layoutOptions through the full pipeline" do
     it "graph-level layoutOptions from JSON does not raise" do
       graph = Elkrb::Graph::Graph.from_json(
@@ -199,16 +199,6 @@ RSpec.describe Elkrb::Graph::LayoutOptions do
       expect(graph.to_yaml).not_to include(":elk.x:")
     end
 
-    it "LayoutOptions.new accepts braceless string keys, explicit-brace hashes, and symbol kwargs" do
-      expect(Elkrb::Graph::LayoutOptions.new("elk.x" => 1)["elk.x"]).to eq(1)
-      expect(Elkrb::Graph::LayoutOptions.new({ "elk.x" => 1 })["elk.x"]).to eq(1)
-      expect(Elkrb::Graph::LayoutOptions.new(foo: "x")["foo"]).to eq("x")
-
-      graph = Elkrb::Graph::Graph.new(layout_options: Elkrb::Graph::LayoutOptions.new("a" => 1))
-      expect(graph.layout_options).to eq("a" => 1)
-      expect(graph.layout_options).to be_a(Hash)
-    end
-
     it "omits layoutOptions from to_json when absent or empty" do
       expect(Elkrb::Graph::Graph.new(id: "r").to_json).not_to include("layoutOptions")
       expect(Elkrb::Graph::Graph.from_json('{"id":"r","layoutOptions":{}}').to_json)
@@ -225,97 +215,32 @@ RSpec.describe Elkrb::Graph::LayoutOptions do
 
     it "mutation through the getter sticks" do
       edge = Elkrb::Graph::Edge.new(id: "e")
-      edge.layout_options = Elkrb::Graph::LayoutOptions.new
+      edge.layout_options = {}
       edge.layout_options["k"] = 1
       expect(edge.layout_options["k"]).to eq(1)
     end
 
-    it "normalizes a Symbol key written in place through the getter, on every model" do
-      %w[Graph Node Edge Port Label].each do |name|
-        model = Elkrb::Graph.const_get(name).new(id: "x")
-        model.layout_options = { "a" => 1 }
-        model.layout_options[:edgeRouting] = "SPLINES"
+    it "stores layoutOptions as a plain ::Hash, not a subclass" do
+      node = Elkrb::Graph::Node.new(id: "n")
+      node.layout_options = { "a" => 1 }
+      json = '{"id":"r","layoutOptions":{"a":1}}'
 
-        expect(model.layout_options["edgeRouting"]).to eq("SPLINES")
-        expect(model.layout_options.keys).to contain_exactly("a", "edgeRouting")
-      end
+      expect(Elkrb::Graph::Graph.new(layout_options: { "a" => 1 })
+               .layout_options.class).to eq(Hash)
+      expect(node.layout_options.class).to eq(Hash)
+      expect(Elkrb::Graph::Graph.from_json(json).layout_options.class)
+        .to eq(Hash)
+      expect(Elkrb::Graph::Graph.new(id: "r").layout_options.class)
+        .to eq(Hash)
     end
 
-    it "normalizes a Symbol key written in place on a freshly constructed graph" do
-      graph = Elkrb::Graph::Graph.new(id: "r")
-      graph.layout_options[:edgeRouting] = "SPLINES"
+    it "stringifies top-level keys when a to_h-able non-Hash is assigned" do
+      node = Elkrb::Graph::Node.new(id: "n")
+      node.layout_options = Struct.new(:padding, :direction).new(10, "RIGHT")
 
-      expect(graph.layout_options["edgeRouting"]).to eq("SPLINES")
-    end
-
-    it "normalizes through every ::Hash writer, not just #[]=" do
-      options = Elkrb::Graph::LayoutOptions.new
-      options.store(:stored, 1)
-      options.merge!(merged: 2)
-      options.update(updated: 3)
-
-      expect(options.keys).to contain_exactly("stored", "merged", "updated")
-
-      options.replace(replaced: 4)
-      expect(options.keys).to contain_exactly("replaced")
-
-      options.transform_keys!(&:to_sym)
-      expect(options.keys).to contain_exactly("replaced")
-      expect(options["replaced"]).to eq(4)
-    end
-
-    it "leaves the map alone when replaced by itself, like ::Hash does" do
-      options = Elkrb::Graph::LayoutOptions.new("elk.direction" => "DOWN")
-
-      options.replace(options)
-
-      expect(options).to eq("elk.direction" => "DOWN")
-    end
-
-    it "carries the source hash's default across a replace, like ::Hash does" do
-      source = Hash.new("FALLBACK")
-      source["elk.direction"] = "DOWN"
-      options = Elkrb::Graph::LayoutOptions.new
-
-      options.replace(source)
-
-      expect(options["elk.direction"]).to eq("DOWN")
-      expect(options["absent"]).to eq("FALLBACK")
-    end
-
-    it "keeps its own default across transform_keys!" do
-      options = Elkrb::Graph::LayoutOptions.new
-      options.default = "MINE"
-      options["elk.direction"] = "DOWN"
-
-      options.transform_keys!(&:to_s)
-
-      expect(options["absent"]).to eq("MINE")
-    end
-
-    it "answers an Enumerator and mutates nothing when transform_keys! gets no block" do
-      options = Elkrb::Graph::LayoutOptions.new("elk.direction" => "DOWN")
-
-      expect(options.transform_keys!).to be_a(Enumerator)
-      expect(options).to eq("elk.direction" => "DOWN")
-    end
-
-    it "normalizes keys built through the class-level ::Hash.[] constructor" do
-      options = Elkrb::Graph::LayoutOptions[edgeRouting: "SPLINES"]
-
-      expect(options.keys).to eq(["edgeRouting"])
-      expect(options[:edgeRouting]).to eq("SPLINES")
-      expect(options["edgeRouting"]).to eq("SPLINES")
-    end
-
-    it "lets a merge! conflict block pick the value, like ::Hash does" do
-      options = Elkrb::Graph::LayoutOptions.new("elk.spacing.nodeNode" => 10)
-
-      options.merge!("elk.spacing.nodeNode": 30) do |_key, old, new|
-        old + new
-      end
-
-      expect(options).to eq("elk.spacing.nodeNode" => 40)
+      expect(node.layout_options["padding"]).to eq(10)
+      expect(node.layout_options.keys)
+        .to contain_exactly("padding", "direction")
     end
 
     it "normalizes a Symbol key assigned directly via .new(layout_options:), on every model" do
@@ -380,89 +305,6 @@ RSpec.describe Elkrb::Graph::LayoutOptions do
       Elkrb.layout(graph, algorithm: "fixed")
 
       expect(graph.edges.first.sections.first.bend_points.size).to eq(2)
-    end
-  end
-
-  describe "legacy typed kwarg translation (temporary until S3b removes the shim)" do
-    it "translates known legacy attribute names to their ELK keys" do
-      opts = Elkrb::Graph::LayoutOptions.new(edge_routing: "SPLINES",
-                                             spacing_node_node: 40)
-
-      expect(opts).to eq("elk.edgeRouting" => "SPLINES",
-                         "elk.spacing.nodeNode" => 40)
-    end
-
-    it "flattens the 1.x properties: bag into the map itself" do
-      # The deprecation memo is process-wide, so another example in this file
-      # may already have spent the one warning for :properties.
-      Elkrb::Graph::LayoutOptions.instance_variable_set(:@warned_legacy_kwargs,
-                                                        nil)
-      options = nil
-
-      expect do
-        options = Elkrb::Graph::LayoutOptions.new(properties: { "padding" => 20 })
-      end.to output(/deprecated/).to_stderr
-
-      expect(options).to eq("padding" => 20)
-      expect(options["padding"]).to eq(20)
-    end
-
-    it "merges a properties: bag alongside its sibling kwargs" do
-      options = Elkrb::Graph::LayoutOptions.new(
-        properties: { "elk.padding" => 5 },
-        edge_routing: "SPLINES",
-      )
-
-      expect(options).to eq("elk.padding" => 5, "elk.edgeRouting" => "SPLINES")
-    end
-
-    it "leaves an unknown symbol kwarg as its bare key (no translation)" do
-      expect(Elkrb::Graph::LayoutOptions.new(foo: "x")).to eq("foo" => "x")
-    end
-
-    it "leaves the elkrb-private hierarchical kwarg untranslated (no ELK counterpart)" do
-      expect(Elkrb::Graph::LayoutOptions.new(hierarchical: true)).to eq("hierarchical" => true)
-    end
-
-    it "does not translate a positional Hash, braced or braceless (matches pre-S3 behaviour)" do
-      expect(Elkrb::Graph::LayoutOptions.new({ edge_routing: "X" })).to eq("edge_routing" => "X")
-      expect(Elkrb::Graph::LayoutOptions.new("edge_routing" => "Y")).to eq("edge_routing" => "Y")
-    end
-
-    it "warns once per key, not once per call" do
-      # Order-independent: the once-per-key memo is process-wide.
-      Elkrb::Graph::LayoutOptions.instance_variable_set(:@warned_legacy_kwargs,
-                                                        nil)
-
-      expect { Elkrb::Graph::LayoutOptions.new(cycle_breaking_strategy: "GREEDY") }
-        .to output(/cycle_breaking_strategy/).to_stderr
-
-      expect { Elkrb::Graph::LayoutOptions.new(cycle_breaking_strategy: "DEPTH_FIRST") }
-        .not_to output(/cycle_breaking_strategy/).to_stderr
-
-      # A second key still warns — the memo is per key, not one shot per process.
-      expect { Elkrb::Graph::LayoutOptions.new(edge_routing: "SPLINES") }
-        .to output(/edge_routing/).to_stderr
-    end
-
-    it "an explicit canonical key always wins over a same-call legacy alias (Gate B finding 2)" do
-      # positional Hash + separate kwarg
-      expect(
-        Elkrb::Graph::LayoutOptions.new({ "elk.edgeRouting" => "explicit" },
-                                        edge_routing: "legacy"),
-      ).to eq("elk.edgeRouting" => "explicit")
-
-      # braceless, canonical key written first
-      expect(
-        Elkrb::Graph::LayoutOptions.new("elk.edgeRouting" => "explicit",
-                                        edge_routing: "legacy"),
-      ).to eq("elk.edgeRouting" => "explicit")
-
-      # braceless, canonical key written last (order must not flip the winner)
-      expect(
-        Elkrb::Graph::LayoutOptions.new(edge_routing: "legacy",
-                                        "elk.edgeRouting" => "explicit"),
-      ).to eq("elk.edgeRouting" => "explicit")
     end
   end
 

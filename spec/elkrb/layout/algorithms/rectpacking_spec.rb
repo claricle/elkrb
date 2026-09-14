@@ -10,10 +10,10 @@ RSpec.describe Elkrb::Layout::Algorithms::RectPacking do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
+          layout_options: {
             "algorithm" => "rectpacking",
             "elk.spacing.nodeNode" => 10.0,
-          ),
+          },
         )
       end
 
@@ -87,9 +87,7 @@ RSpec.describe Elkrb::Layout::Algorithms::RectPacking do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "rectpacking",
-          ),
+          layout_options: { "algorithm" => "rectpacking" },
         )
       end
 
@@ -121,9 +119,7 @@ RSpec.describe Elkrb::Layout::Algorithms::RectPacking do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "rectpacking",
-          ),
+          layout_options: { "algorithm" => "rectpacking" },
         )
       end
 
@@ -147,10 +143,10 @@ RSpec.describe Elkrb::Layout::Algorithms::RectPacking do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
+          layout_options: {
             "algorithm" => "rectpacking",
             "elk.spacing.nodeNode" => 5.0,
-          ),
+          },
         )
       end
 
@@ -187,9 +183,7 @@ RSpec.describe Elkrb::Layout::Algorithms::RectPacking do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "rectpacking",
-          ),
+          layout_options: { "algorithm" => "rectpacking" },
         )
       end
 

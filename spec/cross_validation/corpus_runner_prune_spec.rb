@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "support/filename_probe"
 require "json"
 require "tmpdir"
 require_relative "corpus_runner"
@@ -24,6 +25,8 @@ require_relative "corpus_runner"
 # files; `[...]` and `{...}` do not match it, so the directory is never
 # listed at all.
 RSpec.describe CorpusRunner, ".prune_stale_dumps" do
+  include FilenameProbe
+
   # Each scenario gets its own parent. Sharing one would let the patterns
   # match each other's directories and manufacture findings that are not real.
   def in_isolated_parent(&)
@@ -69,14 +72,33 @@ RSpec.describe CorpusRunner, ".prune_stale_dumps" do
     end
   end
 
-  it "keeps a file the previous summary did not record" do
+  # `Dir.glob("*.json")` does not match a dot-prefixed name, so a recorded
+  # dump whose id begins with "." survived every prune and outlived the
+  # corpus that named it. Ids become filenames verbatim, and nothing
+  # forbids a leading dot.
+  it "removes a recorded dot-prefixed dump the corpus no longer names" do
     in_isolated_parent do |parent|
-      dir = previous_dump(parent, "dumps", %w[live stale],
-                          extra: %w[someones.json])
+      dir = previous_dump(parent, "dumps", %w[live .retired])
 
       prune(dir, ["live"])
 
-      expect(names_in(dir)).to eq(%w[live.json someones.json summary.json])
+      expect(names_in(dir)).to eq(%w[live.json summary.json])
+    end
+  end
+
+  # The dot-prefixed member is load-bearing: FNM_DOTMATCH is what pulls such
+  # names into the glob's scope at all, so without it here the "never a
+  # candidate" rule is pinned only on the arm that was already in scope. An
+  # unconditional `Dir.glob(".*.json")` sweep passes the whole suite otherwise.
+  it "keeps a file the previous summary did not record" do
+    in_isolated_parent do |parent|
+      dir = previous_dump(parent, "dumps", %w[live stale],
+                          extra: %w[someones.json .someones.json])
+
+      prune(dir, ["live"])
+
+      expect(names_in(dir))
+        .to eq(%w[.someones.json live.json someones.json summary.json])
     end
   end
 
@@ -129,8 +151,11 @@ RSpec.describe CorpusRunner, ".prune_stale_dumps" do
   # `*` matches its own directory, so a joined pattern pruned there AND
   # reached out.
   it "does not reach a sibling when the name holds a star" do
+    name = "dump*"
+    skip_unless_creatable(name)
+
     in_isolated_parent do |parent|
-      starred = previous_dump(parent, "dump*", %w[live stale])
+      starred = previous_dump(parent, name, %w[live stale])
       sibling = previous_dump(parent, "dumpster", %w[stale])
 
       prune(starred, ["live"])

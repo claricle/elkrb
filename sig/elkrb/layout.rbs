@@ -39,6 +39,7 @@ module Elkrb
       private
 
       def self.convert_to_graph: (Hash[String | Symbol, untyped] hash) -> Graph::Graph
+      def self.graph_argument: (untyped graph) -> Graph::Graph
     end
 
     module Algorithms

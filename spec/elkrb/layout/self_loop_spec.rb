@@ -79,7 +79,7 @@ RSpec.describe "Self-loop Support" do
 
     describe "orthogonal routing" do
       it "creates rectangular self-loop on EAST side" do
-        edge.layout_options = Elkrb::Graph::LayoutOptions.new
+        edge.layout_options = {}
         edge.layout_options["elk.selfLoopSide"] = "EAST"
 
         router.route_edges(graph, nil, "ORTHOGONAL")
@@ -95,7 +95,7 @@ RSpec.describe "Self-loop Support" do
       end
 
       it "creates rectangular self-loop on WEST side" do
-        edge.layout_options = Elkrb::Graph::LayoutOptions.new
+        edge.layout_options = {}
         edge.layout_options["elk.selfLoopSide"] = "WEST"
 
         router.route_edges(graph, nil, "ORTHOGONAL")
@@ -108,7 +108,7 @@ RSpec.describe "Self-loop Support" do
       end
 
       it "creates rectangular self-loop on NORTH side" do
-        edge.layout_options = Elkrb::Graph::LayoutOptions.new
+        edge.layout_options = {}
         edge.layout_options["elk.selfLoopSide"] = "NORTH"
 
         router.route_edges(graph, nil, "ORTHOGONAL")
@@ -121,7 +121,7 @@ RSpec.describe "Self-loop Support" do
       end
 
       it "creates rectangular self-loop on SOUTH side" do
-        edge.layout_options = Elkrb::Graph::LayoutOptions.new
+        edge.layout_options = {}
         edge.layout_options["elk.selfLoopSide"] = "SOUTH"
 
         router.route_edges(graph, nil, "ORTHOGONAL")
@@ -163,7 +163,7 @@ RSpec.describe "Self-loop Support" do
       end
 
       it "creates spline on EAST side" do
-        edge.layout_options = Elkrb::Graph::LayoutOptions.new
+        edge.layout_options = {}
         edge.layout_options["elk.selfLoopSide"] = "EAST"
 
         router.route_edges(graph, nil, "SPLINES")
@@ -176,7 +176,7 @@ RSpec.describe "Self-loop Support" do
       end
 
       it "creates spline on WEST side" do
-        edge.layout_options = Elkrb::Graph::LayoutOptions.new
+        edge.layout_options = {}
         edge.layout_options["elk.selfLoopSide"] = "WEST"
 
         router.route_edges(graph, nil, "SPLINES")
@@ -189,7 +189,7 @@ RSpec.describe "Self-loop Support" do
       end
 
       it "creates spline on NORTH side" do
-        edge.layout_options = Elkrb::Graph::LayoutOptions.new
+        edge.layout_options = {}
         edge.layout_options["elk.selfLoopSide"] = "NORTH"
 
         router.route_edges(graph, nil, "SPLINES")
@@ -202,7 +202,7 @@ RSpec.describe "Self-loop Support" do
       end
 
       it "creates spline on SOUTH side" do
-        edge.layout_options = Elkrb::Graph::LayoutOptions.new
+        edge.layout_options = {}
         edge.layout_options["elk.selfLoopSide"] = "SOUTH"
 
         router.route_edges(graph, nil, "SPLINES")
@@ -492,7 +492,7 @@ RSpec.describe "Self-loop Support" do
     let(:edge) { Elkrb::Graph::Edge.new(id: "e1") }
 
     it "uses edge layout option for side" do
-      edge.layout_options = Elkrb::Graph::LayoutOptions.new
+      edge.layout_options = {}
       edge.layout_options["elk.selfLoopSide"] = "WEST"
 
       side = router.send(:get_self_loop_side, edge, node)
@@ -500,7 +500,7 @@ RSpec.describe "Self-loop Support" do
     end
 
     it "uses shorthand option for side" do
-      edge.layout_options = Elkrb::Graph::LayoutOptions.new
+      edge.layout_options = {}
       edge.layout_options["selfLoopSide"] = "NORTH"
 
       side = router.send(:get_self_loop_side, edge, node)
@@ -508,7 +508,7 @@ RSpec.describe "Self-loop Support" do
     end
 
     it "uses node layout option when edge option not set" do
-      node.layout_options = Elkrb::Graph::LayoutOptions.new
+      node.layout_options = {}
       node.layout_options["elk.selfLoopSide"] = "SOUTH"
 
       side = router.send(:get_self_loop_side, edge, node)

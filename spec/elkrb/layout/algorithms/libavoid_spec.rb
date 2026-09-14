@@ -10,9 +10,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Libavoid do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "libavoid",
-          ),
+          layout_options: { "algorithm" => "libavoid" },
         )
       end
 
@@ -78,9 +76,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Libavoid do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "libavoid",
-          ),
+          layout_options: { "algorithm" => "libavoid" },
         )
       end
 
@@ -124,9 +120,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Libavoid do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "libavoid",
-          ),
+          layout_options: { "algorithm" => "libavoid" },
         )
       end
 
@@ -174,9 +168,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Libavoid do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "libavoid",
-          ),
+          layout_options: { "algorithm" => "libavoid" },
         )
       end
 
@@ -224,9 +216,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Libavoid do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "libavoid",
-          ),
+          layout_options: { "algorithm" => "libavoid" },
         )
       end
 
@@ -255,9 +245,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Libavoid do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "libavoid",
-          ),
+          layout_options: { "algorithm" => "libavoid" },
         )
       end
 
@@ -319,10 +307,10 @@ RSpec.describe Elkrb::Layout::Algorithms::Libavoid do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
+          layout_options: {
             "algorithm" => "libavoid",
             "elk.spacing.nodeNode" => 30.0,
-          ),
+          },
         )
       end
 
@@ -368,10 +356,10 @@ RSpec.describe Elkrb::Layout::Algorithms::Libavoid do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
+          layout_options: {
             "algorithm" => "libavoid",
             "libavoid.routingPadding" => padding,
-          ),
+          },
         )
       end
 
@@ -407,9 +395,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Libavoid do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "libavoid",
-          ),
+          layout_options: { "algorithm" => "libavoid" },
         )
       end
 
@@ -446,9 +432,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Libavoid do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "libavoid",
-          ),
+          layout_options: { "algorithm" => "libavoid" },
         )
       end
 
@@ -492,9 +476,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Libavoid do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "libavoid",
-          ),
+          layout_options: { "algorithm" => "libavoid" },
         )
       end
 
@@ -512,9 +494,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Libavoid do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "libavoid",
-          ),
+          layout_options: { "algorithm" => "libavoid" },
         )
       end
 
