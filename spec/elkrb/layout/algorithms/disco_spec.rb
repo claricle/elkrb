@@ -122,6 +122,27 @@ RSpec.describe Elkrb::Layout::Algorithms::Disco do
       end
     end
 
+    context "with the documented componentCompaction.strategy option" do
+      it "arranges components in a column, matching README.adoc's key name" do
+        graph = Elkrb::Graph::Graph.new
+        graph.layout_options = {
+          "disco.componentCompaction.strategy" => "COLUMN",
+        }
+
+        node1 = Elkrb::Graph::Node.new(id: "n1", width: 50, height: 30)
+        node2 = Elkrb::Graph::Node.new(id: "n2", width: 50, height: 30)
+        node3 = Elkrb::Graph::Node.new(id: "n3", width: 50, height: 30)
+
+        graph.children = [node1, node2, node3]
+        graph.edges = []
+
+        algorithm.layout(graph)
+
+        expect(node1.y).to be < node2.y
+        expect(node2.y).to be < node3.y
+      end
+    end
+
     context "with component spacing option" do
       it "respects custom component spacing" do
         graph = Elkrb::Graph::Graph.new
