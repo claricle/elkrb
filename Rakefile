@@ -421,9 +421,31 @@ module GoldenFixtures
     staged_manifest = File.join(golden_dir, ".MANIFEST.#{Process.pid}.staged")
     FileUtils.cp_r(source, staged)
     FileUtils.mv(File.join(staged, "MANIFEST.json"), staged_manifest)
-    swap_into_place(golden_dir, staged, staged_manifest)
+    with_directory_lock(golden_dir) do
+      swap_into_place(golden_dir, staged, staged_manifest)
+    end
   ensure
     FileUtils.rm_rf([staged, staged_manifest].compact)
+  end
+
+  # Two `rake golden:generate` runs pointed at the same golden_dir used to
+  # interleave: one's rollback (triggered by the other's still-in-flight
+  # rename) silently undid the other's already-reported-successful publish
+  # -- measured with a two-process probe, run B exited 0 while run A's own
+  # rollback restored the pre-B content underneath it. Same pattern as
+  # `spec/fixtures/consumers/sirena/capture.rb#with_directory_lock` and
+  # `spec/cross_validation/corpus_runner.rb#with_directory_lock`: lock the
+  # directory itself, not a side file, so nothing but this method's own
+  # writes can land inside the lock.
+  def with_directory_lock(golden_dir)
+    File.open(golden_dir, File::RDONLY) do |lock|
+      lock.flock(File::LOCK_EX)
+      begin
+        yield
+      ensure
+        lock.flock(File::LOCK_UN)
+      end
+    end
   end
 
   # FOUR renames, all under one undo. Two move the live tree aside and two
@@ -465,9 +487,19 @@ module GoldenFixtures
   # Asks the filesystem which side of the rename this entry stopped on
   # rather than assuming it ran. An aside that is NOT there means the
   # original never moved and is still at `path`, so removing `path` would
-  # destroy the very tree this exists to restore.
+  # destroy the very tree this exists to restore -- UNLESS `path` never
+  # had an original at all (`aside` is nil precisely when `keep_aside`
+  # found nothing there to move aside). In that case anything now at
+  # `path` can only be this run's own new tree, installed by the swap
+  # rename before a LATER rename failed -- measured with fault injection:
+  # `expected/` absent beforehand, its swap rename succeeds, the manifest
+  # rename then fails, and the old code left the new `expected/` sitting
+  # there instead of restoring true absence.
   def restore(aside, path)
-    return if aside.nil?
+    if aside.nil?
+      FileUtils.rm_rf(path)
+      return
+    end
     return unless File.exist?(aside)
 
     FileUtils.rm_rf(path)
