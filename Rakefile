@@ -2,6 +2,7 @@
 
 require "bundler/gem_tasks"
 require "fileutils"
+require "json"
 require "tmpdir"
 require "rspec/core/rake_task"
 require "rubocop/rake_task"
@@ -349,5 +350,351 @@ task "fixtures:sirena" do
       sh "bundle", "exec", "ruby",
          File.join(fixture_dir, "capture.rb"), fixture_dir, out_dir
     end
+  end
+end
+
+module GoldenFixtures
+  ELKJS_DIR = "spec/support/elkjs_golden"
+  ELKJS_NODE_MODULES = "#{ELKJS_DIR}/node_modules/elkjs".freeze
+  GOLDEN_DIR = "spec/fixtures/golden"
+
+  # Every USER-ACTIONABLE failure in this module and in the golden tasks
+  # (missing node, missing elkjs, generate.js failing, a missing or
+  # drifted MANIFEST.json) RAISES this. Nothing on this path calls
+  # `abort`. These are public module methods, and the tasks themselves are
+  # reachable as `Rake::Task["golden:generate"].invoke`, so an `abort`
+  # anywhere in the path took the CALLING process down with SystemExit 1
+  # -- measured, a probe's own "CALLER SURVIVED" line was never reached.
+  # Rake turns this exception into exit status 1 on its own, which is the
+  # CLI's job and nobody else's.
+  #
+  # `publish_into`/`swap_into_place` are the one deliberate exception: an
+  # OS-level failure there (`Errno::ENOSPC`, `Errno::EXDEV`, a permission
+  # error) propagates AS ITSELF, unwrapped, on purpose -- so a caller (and
+  # the specs below) can tell "your golden actually diverges" (`Failed`)
+  # apart from "the disk is full" (whatever the OS raised), which needs a
+  # different response.
+  class Failed < StandardError; end
+
+  module_function
+
+  # Runs generate.js into `dir` (all case files + MANIFEST.json, flat).
+  # generate.js verifies the pinned elkjs version up front and validates
+  # each case as it goes (only the allow-listed hyperedge case may
+  # reject), exiting non-zero the moment a case fails its check — `dir`
+  # itself CAN end up holding a partial set of case files at that point
+  # (every case before the failing one already got written), which is
+  # exactly the point: `dir`'s path is printed below so a failure's
+  # partial tree is there to inspect. What never happens is GOLDEN_DIR
+  # (the real committed destination) being touched — the caller only
+  # publishes out of `dir` after `generate_into` returns successfully.
+  def generate_into(dir)
+    run_generator(dir)
+  rescue Errno::ENOENT
+    raise Failed, "node not found on PATH (#{left_at(dir)})"
+  rescue RuntimeError => e
+    # `exception: true` raises plain RuntimeError on a non-zero exit --
+    # generate.js already printed its own specific reason to stderr above
+    # this, so the message just adds where to look, not a duplicate reason.
+    raise Failed, "generate.js failed (#{e.message}); see its output " \
+                  "above (#{left_at(dir)})"
+  end
+
+  def left_at(dir)
+    "generated tree, if any, left at #{dir}"
+  end
+
+  def run_generator(dir)
+    puts "Generating into #{dir}"
+    unless Dir.exist?(ELKJS_NODE_MODULES)
+      raise Failed, "elkjs not installed — run: npm ci --prefix #{ELKJS_DIR}"
+    end
+
+    system("node", "#{ELKJS_DIR}/generate.js", dir, exception: true)
+  end
+
+  # Replaces the committed expected tree and MANIFEST with freshly
+  # generated ones. The whole replacement is copied into a private staging
+  # directory FIRST, and the live paths are swapped only once that copy is
+  # complete.
+  #
+  # `rm_rf` then `cp_r` deleted the committed tree before it had a
+  # replacement: a `cp_r` forced to raise ENOSPC left `expected/` gone
+  # and the previous MANIFEST.json sitting beside nothing -- measured.
+  # Uncommitted fixtures were destroyed by a full disk.
+  #
+  # The staging (and backup) names used to be `.expected.<pid>.staged`,
+  # predictable names in a directory this run does not own alone --
+  # measured, two runs racing produced `Errno::EEXIST` on the collision,
+  # and worse, a STALE backup left behind by an earlier crashed run at a
+  # REUSED pid was picked up by `publish_into` and installed as if it
+  # were this run's own, silently replacing current `expected/` with old
+  # content. `Dir.mktmpdir` names are unique per call regardless of pid,
+  # so nothing stale can ever be read back as this run's own.
+  #
+  # `work` is created with the NON-block form on purpose: the block form
+  # removes `work` on any exit, which used to include a failed rollback --
+  # measured with fault injection, forcing both the forward rename AND
+  # the restore rename to fail left `work` (holding the only backups of
+  # `expected/` and `MANIFEST.json`) deleted by the block's own cleanup,
+  # with the live golden dir now EMPTY. `settle` below only removes `work`
+  # once every backup is confirmed back in place (or never needed);
+  # anything still stranded keeps `work` alive and names its path. Same
+  # fix as `spec/fixtures/consumers/sirena/capture.rb#publish_locked`/`#settle`.
+  def publish_into(source, golden_dir)
+    work = Dir.mktmpdir(".golden", golden_dir)
+    stranded = []
+    staged, staged_manifest = stage_publish(source, work)
+    with_directory_lock(golden_dir) do
+      swap_into_place(golden_dir, staged, staged_manifest, work, stranded)
+    end
+  ensure
+    settle(work, stranded)
+  end
+
+  # Copies the fresh tree into `work` and splits its MANIFEST.json out
+  # beside it, so `publish_into` itself never touches the golden dir until
+  # `swap_into_place` runs under the lock.
+  def stage_publish(source, work)
+    staged = File.join(work, "expected")
+    FileUtils.cp_r(source, staged)
+    staged_manifest = File.join(work, "MANIFEST.json")
+    FileUtils.mv(File.join(staged, "MANIFEST.json"), staged_manifest)
+    [staged, staged_manifest]
+  end
+
+  # Mirrors `spec/fixtures/consumers/sirena/capture.rb#settle`: only ever
+  # removes `work` once nothing is left stranded inside it. `work` is nil
+  # here precisely when `Dir.mktmpdir` itself never returned, so there is
+  # nothing to settle. `stranded` is nil under the same circumstance (the
+  # local exists from the parse but its assignment never ran).
+  def settle(work, stranded)
+    return if work.nil?
+    return FileUtils.remove_entry(work) if stranded.nil? || stranded.empty?
+
+    warn "golden publish could not restore #{stranded.join(', ')} -- " \
+         "the originals are in #{work}"
+  end
+
+  # Two `rake golden:generate` runs pointed at the same golden_dir used to
+  # interleave: one's rollback (triggered by the other's still-in-flight
+  # rename) silently undid the other's already-reported-successful publish
+  # -- measured with a two-process probe, run B exited 0 while run A's own
+  # rollback restored the pre-B content underneath it.
+  #
+  # The lock used to be taken on `golden_dir` itself, opened `File::RDONLY`
+  # -- POSIX allows opening a directory read-only to lock it, but
+  # Windows/NTFS does not and raises EISDIR there, exactly as measured
+  # against real windows-latest CI for
+  # `spec/fixtures/consumers/sirena/capture.rb#with_directory_lock` (fixed
+  # in 0f66dfa). A regular file locks the same way on every platform Ruby
+  # supports, so the lock now lives at a path NEXT TO `golden_dir`, never
+  # inside it -- nothing named here is ever mistaken for a committed
+  # golden fixture, matching the original point without depending on
+  # directory-locking. Same fix as
+  # `spec/fixtures/consumers/sirena/capture.rb#with_directory_lock`/
+  # `#lock_path`.
+  def with_directory_lock(golden_dir)
+    File.open(lock_path(golden_dir), File::RDWR | File::CREAT, 0o600) do |lock|
+      lock.flock(File::LOCK_EX)
+      begin
+        yield
+      ensure
+        lock.flock(File::LOCK_UN)
+      end
+    end
+  end
+
+  # `golden_dir` may be given with or without a trailing separator, so the
+  # sibling path is built from its parent and basename rather than simple
+  # string concatenation, which would turn "golden/" into "golden/.lock" --
+  # INSIDE the directory this is built to stay out of. Same reasoning as
+  # `spec/fixtures/consumers/sirena/capture.rb#lock_path`.
+  def lock_path(golden_dir)
+    File.join(File.dirname(golden_dir), "#{File.basename(golden_dir)}.lock")
+  end
+
+  # FOUR renames, all under one undo. Two move the live tree aside and two
+  # move the new one in, and any of the four can fail on its own. Backups
+  # land in `work` (this invocation's own `Dir.mktmpdir`, see
+  # `publish_into`), never beside the live path, so nothing here can
+  # collide with or be overwritten by another run.
+  #
+  # The undo used to cover only the last two: forcing ENOSPC on the SECOND
+  # keep-aside left `expected/` already moved aside beside the old
+  # MANIFEST.json, with nothing to put it back -- measured. And `ensure`,
+  # not `rescue SystemCallError`, because Ctrl-C raises Interrupt, which
+  # that rescue never caught.
+  def swap_into_place(golden_dir, staged, staged_manifest, work, stranded)
+    live, backups = swap_paths(golden_dir, work)
+    kept = []
+    swapped = false
+    keep_all_aside(live, backups, kept)
+    [staged, staged_manifest].zip(live)
+      .each { |from, to| File.rename(from, to) }
+    swapped = true
+  ensure
+    stranded.concat(finish_swap(kept, live, swapped))
+  end
+
+  def swap_paths(golden_dir, work)
+    live = [File.join(golden_dir, "expected"),
+            File.join(golden_dir, "MANIFEST.json")]
+    backups = [File.join(work, "expected.previous"),
+               File.join(work, "MANIFEST.json.previous")]
+    [live, backups]
+  end
+
+  # Mutates `kept` (the caller's array) IN PLACE rather than building and
+  # returning its own local, so a raise partway through this loop still
+  # leaves the caller's `kept` populated with whatever entries landed
+  # before the failure -- `ensure`/`finish_swap` needs those to undo a
+  # partial keep-aside. Returning a fresh array here left the caller's
+  # `kept` at its pre-call value (`nil`, since `kept = keep_all_aside(...)`
+  # never completes the assignment when the call raises) -- measured,
+  # `finish_swap` raised `NoMethodError` on `nil.zip` instead of rolling
+  # back.
+  def keep_all_aside(live, backups, kept)
+    live.zip(backups).each_with_index do |(path, backup), index|
+      keep_aside(path, backup, kept, index)
+    end
+  end
+
+  def finish_swap(kept, live, swapped)
+    return [] if swapped
+
+    restore_all(kept, live)
+  end
+
+  # Attempts EVERY restoration whatever any one of them raises, and
+  # returns the live paths still not back in place. Stopping at the
+  # first failure left the rest of the original tree sitting in `kept`
+  # with nothing marking it stranded, so `publish_into`'s `settle` had no
+  # way to know `work` still held the only copies -- measured with fault
+  # injection on the SECOND restore. Interrupt is named beside
+  # StandardError because Ctrl-C is the interruption this exists for and
+  # is not one. Same fix as
+  # `spec/fixtures/consumers/sirena/capture.rb#restore_all`.
+  def restore_all(kept, live)
+    kept.zip(live).filter_map do |aside, path|
+      restore(aside, path)
+      nil
+    rescue StandardError, Interrupt
+      path
+    end
+  end
+
+  # `File.exist?` FOLLOWS a symlink, so a DANGLING link at `path` read as
+  # "nothing here": `keep_aside` recorded `nil` (believing there was
+  # nothing to move aside) while the link itself was left sitting exactly
+  # where it was -- measured with `MANIFEST.json` a dangling symlink and
+  # the later manifest rename forced to fail. `restore`'s `aside.nil?`
+  # branch then read that untouched original link as "this run's own new
+  # content" and deleted it. What has to be restored is whatever
+  # DIRECTORY ENTRY was there, link or file, which is what `symlink?`
+  # adds. Same fix as
+  # `spec/fixtures/consumers/sirena/capture.rb#present?`.
+  def present?(path)
+    File.exist?(path) || File.symlink?(path)
+  end
+
+  # Records the aside path BEFORE the rename, and at a FIXED index, so an
+  # interruption between the two still leaves an entry naming where the
+  # original went and `kept` still lines up with `live`. Appending after
+  # the rename left a moved tree with no entry pointing at it.
+  def keep_aside(path, backup, kept, index)
+    kept[index] = present?(path) ? backup : nil
+    File.rename(path, kept[index]) if kept[index]
+  end
+
+  # Asks the filesystem which side of the rename this entry stopped on
+  # rather than assuming it ran. An aside that is NOT there means the
+  # original never moved and is still at `path`, so removing `path` would
+  # destroy the very tree this exists to restore -- UNLESS `path` never
+  # had an original at all (`aside` is nil precisely when `keep_aside`
+  # found nothing there to move aside, per `present?` above). In that
+  # case anything now at `path` can only be this run's own new tree,
+  # installed by the swap rename before a LATER rename failed -- measured
+  # with fault injection: `expected/` absent beforehand, its swap rename
+  # succeeds, the manifest rename then fails, and the old code left the
+  # new `expected/` sitting there instead of restoring true absence.
+  def restore(aside, path)
+    if aside.nil?
+      FileUtils.rm_rf(path)
+      return
+    end
+    return unless present?(aside)
+
+    FileUtils.rm_rf(path)
+    File.rename(aside, path)
+  end
+
+  # Compares a freshly generated tree against the committed one and
+  # raises on any drift. `source` is deliberately left where it is so a
+  # failure can be inspected, which is what every message promises.
+  def check_against(source, golden_dir)
+    manifest = File.join(golden_dir, "MANIFEST.json")
+    unless File.exist?(manifest)
+      raise Failed, "#{manifest} missing — run 'rake golden:generate' " \
+                    "first (generated tree left at #{source})"
+    end
+
+    check_manifest_drift(source, manifest)
+    check_tree_drift(source, File.join(golden_dir, "expected"))
+  end
+
+  def check_manifest_drift(source, committed_path)
+    fresh = JSON.parse(File.read(File.join(source, "MANIFEST.json")))
+    committed = JSON.parse(File.read(committed_path))
+    # "generated" is a timestamp and "node" is machine-specific — only the
+    # pinned elkjs version and the case list are required to match.
+    drifted = %w[elkjs cases].reject { |key| fresh[key] == committed[key] }
+    return if drifted.empty?
+
+    raise Failed, "MANIFEST.json drift in #{drifted.join(', ')} " \
+                  "(generated tree left at #{source})"
+  end
+
+  # spec/fixtures/golden/expected holds only case files (no MANIFEST --
+  # `publish_into` moves it up to GOLDEN_DIR), so it compares directly
+  # against `source` with no extra copy step. `-x` (rather than deleting
+  # MANIFEST.json from `source` first) keeps `source` genuinely intact
+  # for inspection, matching what the messages below claim — a real
+  # BSD/GNU `diff` flag, confirmed working on both during planning.
+  def check_tree_drift(source, expected)
+    ok = system("diff", "-r", "-x", "MANIFEST.json", expected, source)
+    return if ok
+
+    if ok.nil?
+      raise Failed, "'diff' not found on PATH (generated tree left at " \
+                    "#{source} for inspection)"
+    end
+
+    raise Failed, "golden drift detected (see diff above; generated tree " \
+                  "left at #{source} for inspection)"
+  end
+end
+
+namespace :golden do
+  desc "Regenerate the committed elkjs golden expected files"
+  task :generate do
+    golden_dir = GoldenFixtures::GOLDEN_DIR
+    # Non-block Dir.mktmpdir (not `do |tmp| ... end`): the block form
+    # removes the directory on ANY exit, including a raised failure,
+    # which would leave nothing to inspect. Removed explicitly below,
+    # only once the whole regeneration has actually succeeded.
+    tmp = Dir.mktmpdir
+    GoldenFixtures.generate_into(tmp)
+    GoldenFixtures.publish_into(tmp, golden_dir)
+    FileUtils.remove_entry(tmp)
+    puts "Golden expected files regenerated in #{golden_dir}/expected"
+  end
+
+  desc "Diff freshly generated goldens against the committed ones (no writes)"
+  task :check do
+    tmp = Dir.mktmpdir
+    GoldenFixtures.generate_into(tmp)
+    GoldenFixtures.check_against(tmp, GoldenFixtures::GOLDEN_DIR)
+    FileUtils.remove_entry(tmp)
   end
 end

@@ -1,0 +1,42 @@
+{
+  "options": {},
+  "graph": {
+    "id": "root",
+    "layoutOptions": {
+      "elk.algorithm": "rectpacking"
+    },
+    "children": [
+      {
+        "id": "a",
+        "width": 40,
+        "height": 20
+      },
+      {
+        "id": "b",
+        "width": 20,
+        "height": 40
+      },
+      {
+        "id": "c",
+        "width": 30,
+        "height": 30
+      },
+      {
+        "id": "d",
+        "width": 25,
+        "height": 25
+      },
+      {
+        "id": "e",
+        "width": 50,
+        "height": 15
+      },
+      {
+        "id": "f",
+        "width": 15,
+        "height": 50
+      }
+    ],
+    "edges": []
+  }
+}
