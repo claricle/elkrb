@@ -27,6 +27,60 @@ RSpec.describe GoldenComparator do
     expect(diffs).not_to be_empty
   end
 
+  # `diff_edge_endpoints` (sources/targets rewiring, section shape
+  # annotations) used to run unconditionally inside `diff_edges`, so a
+  # caller selecting `fields: %i[labels]` alone -- to check label content,
+  # nothing else -- still got a rewiring diff it never asked for. It is
+  # gated behind `:sections` now, the same selector `diff_sections`/
+  # `diff_edge_routing` already answer to.
+  it "does not report a rewired edge's endpoints when only :labels is " \
+     "selected" do
+    expected = { "id" => "root", "children" => [],
+                 "edges" => [{ "id" => "e1", "sources" => ["a"],
+                               "targets" => ["b"],
+                               "labels" => [{ "id" => "l1", "x" => 0.0,
+                                              "y" => 0.0 }] }] }
+    actual = Marshal.load(Marshal.dump(expected))
+    actual["edges"][0]["sources"] = ["c"]
+
+    diffs = described_class.diff_exact(expected, actual, %i[labels])
+    expect(diffs).to be_empty
+  end
+
+  it "still reports a rewired edge's endpoints when :sections is selected" do
+    expected = { "id" => "root", "children" => [],
+                 "edges" => [{ "id" => "e1", "sources" => ["a"],
+                               "targets" => ["b"] }] }
+    actual = Marshal.load(Marshal.dump(expected))
+    actual["edges"][0]["sources"] = ["c"]
+
+    diffs = described_class.diff_exact(expected, actual, %i[sections])
+    expect(diffs.join).to include("endpoints changed")
+  end
+
+  # `section_index_by_id` maps a section id to its array position for
+  # `incomingSections`/`outgoingSections` resolution; a plain `to_h` from
+  # an Array silently keeps only the LAST section with a repeated id, so a
+  # genuinely duplicated section id resolved every ref naming an earlier
+  # occurrence to the wrong position instead of being reported as the
+  # duplicate it is -- the same failure mode `duplicate_id_diffs` already
+  # guards everywhere else this comparator indexes an Array by id.
+  it "flags a duplicate section id instead of silently resolving refs to " \
+     "the wrong position" do
+    expected = { "id" => "root", "children" => [],
+                 "edges" => [{ "id" => "e1",
+                               "sections" => [
+                                 { "id" => "dup",
+                                   "startPoint" => { "x" => 0.0, "y" => 0.0 } },
+                                 { "id" => "dup",
+                                   "startPoint" => { "x" => 5.0, "y" => 0.0 } },
+                               ] }] }
+    actual = Marshal.load(Marshal.dump(expected))
+
+    diffs = described_class.diff_exact(expected, actual, %i[sections])
+    expect(diffs.join).to include('has 2 items with id "dup"')
+  end
+
   it "does not require :labels to also select :sections to reach an edge " \
      "label" do
     expected = { "id" => "root", "children" => [],
@@ -534,6 +588,43 @@ RSpec.describe GoldenComparator do
     broken[2]["startPoint"] = { "x" => 15.0, "y" => 40.0 }
     expect(described_class.check_section_continuity(broken, "path").join)
       .to include("sections[0->2]")
+  end
+
+  # Mirrors the outgoingSections example above, but every section names
+  # only its PREDECESSOR -- before this fix, `ref_joints` read
+  # `outgoingSections` alone, so a chain described entirely through
+  # `incomingSections` produced ZERO joints and this whole edge's
+  # continuity went unchecked, not merely under-checked.
+  it "builds continuity joints from incomingSections too, not only " \
+     "outgoingSections" do
+    sections = [
+      { "id" => "e1_s0" },
+      { "id" => "e1_s1", "incomingSections" => ["e1_s0"] },
+      { "id" => "e1_s2", "incomingSections" => ["e1_s0"] },
+    ]
+
+    expect(described_class.continuity_joints(sections))
+      .to contain_exactly([0, 1], [0, 2])
+  end
+
+  # `ref_joints` resolves every routing-ref id THROUGH an id => index Hash
+  # built from this same edge's own sections; an id naming no section on
+  # the edge (a dangling ref) used to be silently dropped by a bare
+  # `filter_map { index[id] }`, so the edge simply lost that joint's
+  # continuity check rather than failing loudly on the dangling reference
+  # itself.
+  it "flags a dangling outgoingSections/incomingSections reference " \
+     "instead of silently dropping it" do
+    sections = [
+      { "id" => "e1_s0", "outgoingSections" => ["does_not_exist"] },
+      { "id" => "e1_s1", "incomingSections" => ["also_missing"] },
+    ]
+
+    diffs = described_class.check_section_continuity(sections, "path")
+    expect(diffs.join).to include("outgoingSections: references unknown " \
+                                  'section id "does_not_exist"')
+    expect(diffs.join).to include("incomingSections: references unknown " \
+                                  'section id "also_missing"')
   end
 
   it "compares a port endpoint to its own border, like a node, not a centre " \
