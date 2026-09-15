@@ -627,6 +627,21 @@ RSpec.describe GoldenComparator do
                                   'section id "also_missing"')
   end
 
+  # `check_section_continuity` used to return `[]` for a single-section
+  # edge before ever reaching the dangling-ref check (the `size < 2` guard
+  # ran first), so a lone section naming a dangling routing ref passed
+  # silently. There is no second section to build a joint against, but the
+  # dangling reference itself is still a real defect that must be reported.
+  it "flags a dangling routing ref even on a single-section edge" do
+    sections = [
+      { "id" => "e1_s0", "outgoingSections" => ["does_not_exist"] },
+    ]
+
+    diffs = described_class.check_section_continuity(sections, "path")
+    expect(diffs.join).to include("outgoingSections: references unknown " \
+                                  'section id "does_not_exist"')
+  end
+
   it "compares a port endpoint to its own border, like a node, not a centre " \
      "point" do
     # Confirmed against the real committed `ports_simple` golden: elkjs
