@@ -32,32 +32,11 @@ module CorpusCatalogue
   # one branch and still-failing on the other for the same reason; kept
   # listed here so the guard measures it rather than assuming either.
   #
-  # S0a wired `INVARIANTS` into `assert_layout_invariants` below (previously
-  # dead code -- registered but never called). Measured against every
-  # corpus case with that wiring live:
-  # - sizeless_node, labelled_only_text, no_children_key, java_elk_ports:
-  #   all now PASS "invariants" (each was `pending` and RSpec's own "FIXED"
-  #   detection caught the unexpected pass) -- removed below. The first
-  #   three were D5 (a nil width/height on a genuinely unsized element is
-  #   no longer misread as a crash-shaped Float check failure now that
-  #   `omit_size_for_unsized_input`/`have_finite_coordinates` treat nil
-  #   as legitimate); java_elk_ports's RC4 (nil collections) was already
-  #   fixed by an earlier slice and nothing had re-run this check to notice.
-  # - `contain_children_within_bounds` and `have_no_overlapping_siblings`
-  #   are new checks with no prior coverage at all, and they found real,
-  #   already-scheduled gaps: `compound_unsized`/`java_elk_compound` escape
-  #   their parent's bounds (item 14/S10's own doc: "overlap because `p`
-  #   was placed at its pre-layout size" -- this item's `Done when` lists
-  #   "sibling compounds do not overlap" as still open). `force`/`stress`/
-  #   `random`/`radial`/`fixed` corpus cases have overlapping siblings on
-  #   both the elkjs and java ELK imports -- each algorithm's own item
-  #   already documents this as open and unfixed (item 21/S15: "18 of 435
-  #   pairs overlapping" for force; item 20/S14 owns stress and random;
-  #   item 23/S17 owns radial; item 22/S16 owns fixed).
-  # - `preserve_ids_and_endpoints` caught `cycle3`: the cycle breaker
-  #   permanently reverses `e3`'s direction and nothing restores it on the
-  #   way out -- item 12's own doc names this exact case and already has an
-  #   id for it, RC7.
+  # S0a wired `INVARIANTS` into `assert_layout_invariants` below. Every
+  # entry added since traces to an already-open TODO.remediation item or
+  # RC id cited alongside it in the ledger below -- check that citation
+  # before editing one. Full derivation:
+  # .claude/gate-runs/s0a-golden-harness@968d4b5.md.
   KNOWN_FAILURES = {
     ["duplicate_ids", "no_crash"] => "RC4",
     ["duplicate_ids", "invariants"] => "RC4",
@@ -85,29 +64,16 @@ module CorpusCatalogue
 end
 
 RSpec.describe "Elkrb layout corpus" do
-  # Every registered invariant matcher (one file per matcher under
-  # spec/support/invariants/, self-registering into INVARIANTS) runs
-  # against every corpus case -- this replaces the hand-rolled
-  # finite-number/structure-preservation walk that used to live here,
-  # which duplicated `have_finite_coordinates`/`preserve_ids_and_endpoints`
-  # and (via a bare `be_a(Float)` check) rejected a nil width/height on a
-  # genuinely unsized element, which is exactly the D5 case
-  # `omit_size_for_unsized_input` exists to allow. Most matchers take only
-  # the laid-out graph; `preserve_ids_and_endpoints` and
-  # `omit_size_for_unsized_input` also need the original input hash to
-  # compare against, hence `INVARIANT_ARGUMENTS`.
+  # Every registered invariant matcher (spec/support/invariants/, self-
+  # registering into INVARIANTS) runs against every corpus case.
+  # `preserve_ids_and_endpoints`/`omit_size_for_unsized_input` also need
+  # the original input hash, hence `invariant_arguments`.
   #
-  # `be_deterministic` is deliberately excluded: it re-runs the layout
-  # inside a block, and `force`/`random` call unseeded `Kernel#rand` --
-  # measured on this branch, `force_tri` and `random3` each disagree with
-  # themselves across two runs of the identical input when nothing reseeds
-  # between the calls (CorpusRunner reseeds per case for its own dumps;
-  # this spec never does). Wiring it in here would fail those two cases for
-  # a pre-existing property this slice does not touch. Its own spec
-  # (spec/support/invariants/be_deterministic_spec.rb) is the coverage.
-  # A bare constant assigned directly inside this `describe` block would
-  # land on Object regardless (see CorpusCatalogue's own comment above for
-  # the same gotcha) -- a method avoids it.
+  # `be_deterministic` stays excluded here: `force`/`random` call unseeded
+  # `Kernel#rand`, so wiring it in fails `force_tri`/`random3` for a
+  # pre-existing property this slice does not own (its own spec covers
+  # it). A bare constant inside this `describe` block lands on Object
+  # (see CorpusCatalogue's comment above) -- use a method, not a constant.
   def invariant_arguments
     %i[preserve_ids_and_endpoints omit_size_for_unsized_input].freeze
   end
