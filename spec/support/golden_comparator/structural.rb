@@ -300,7 +300,11 @@ module GoldenComparator
   # coarseness), not `exact.rb`'s `diff_point` (1e-6, exact-tier strict and
   # wrong for structural).
   def check_section_continuity(sections, edge_path)
-    diffs = any_routing_refs?(sections) ? dangling_ref_diffs(sections, edge_path) : []
+    diffs = if any_routing_refs?(sections)
+              dangling_ref_diffs(sections, edge_path)
+            else
+              []
+            end
     return diffs if sections.size < 2
 
     diffs + continuity_joints(sections).flat_map do |from_i, to_i|
