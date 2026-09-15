@@ -360,18 +360,12 @@ module GoldenComparator
 
   # The ref-described half of `continuity_joints` -- see its own comment
   # above for why this only runs once ANY section on the edge carries a
-  # routing ref. Reads BOTH `outgoingSections` and `incomingSections`: a
-  # section that names only its PREDECESSOR (never its successor) used to
-  # produce zero joints when only `outgoingSections` was read, silently
-  # skipping the continuity check for that whole edge rather than flagging
-  # a genuine break -- `any_routing_refs?` already treats either direction
-  # as "this edge is ref-described", so the joints this method builds must
-  # follow from either direction too, not just the one it happened to read.
-  # A section naming the SAME neighbour from both directions (the common
-  # case in real elkjs output, one edge's two adjacent sections cross-
-  # referencing each other) produces the identical [from, to] pair from
-  # each direction; `.uniq` collapses that back to one joint, exactly as it
-  # already did for a single direction naming a neighbour twice.
+  # routing ref. Reads BOTH `outgoingSections` and `incomingSections`:
+  # `any_routing_refs?` treats either direction as ref-described, so a
+  # section naming only its PREDECESSOR must still produce a joint --
+  # reading `outgoingSections` alone silently drops that edge's
+  # continuity check entirely. `.uniq` collapses a joint named from both
+  # directions (the common real-elkjs shape) back to one.
   def ref_joints(sections)
     index = sections.each_with_index.to_h { |sec, i| [sec["id"], i] }
     outgoing = direction_joints(sections, index, "outgoingSections") do |i, j|
