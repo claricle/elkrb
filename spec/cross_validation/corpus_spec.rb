@@ -12,150 +12,115 @@ require_relative "corpus_runner"
 module CorpusCatalogue
   CASES = CorpusRunner.cases.freeze
 
-  # [case id, check] => RC id. A listed check is `pending`; the guard
-  # example at the bottom fails if a listed check now passes, forcing
-  # this ledger to be edited when a slice fixes the underlying bug.
+  # [case id, check] => RC id (or a remediation-plan tag: "D5" is decision
+  # 5, "S<n>" is the slice that owns the fix). A listed check is `pending`;
+  # the guard example at the bottom fails if a listed check now passes,
+  # forcing this ledger to be edited when a slice fixes the underlying bug.
   # Re-authored against origin/v2 (slice 1, a008889: nil-safe LayoutOptions,
   # self-loop fixes in layered/mrtree, size-less nodes/labels treated as 0
   # at read sites, nil collections). self_loop, java_elk_self_loops, and
   # compound_unsized no longer crash AND now produce finite invariants
   # (compound sizing is computed from children, so removed outright).
   # sizeless_node, labelled_only_text, and no_children_key no longer crash
-  # (removed from "no_crash"), but the element that never had a declared
-  # size still carries a nil width/height on the object itself -- slice 1
-  # is a read-site guard (arithmetic treats nil as 0), not an attribute
-  # default (verified: lib/elkrb/layout/label_placer.rb's width_of/
-  # height_of helpers), so "invariants" still fails for real. That is
-  # decision 5 of the remediation plan ("output omits width/height for
-  # nodes that never had them"), tracked here as D5 until S0a's
-  # `omit_size_for_unsized_input` matcher lands to assert it correctly.
-  # RC14 (java_elk_sporeOverlap, java_elk_sporeCompaction) is fixed: both
-  # algorithms treat nil x/y as 0.0 at the top of layout_flat, as Java ELK
-  # does, so neither crashes and both now satisfy the layout invariants
-  # too -- all four rows removed outright.
+  # (removed from "no_crash"); coverage for whether they still fail
+  # "invariants" (D5, a nil width/height on a genuinely unsized element)
+  # is unreconciled between two histories merged into this file (rebase
+  # of PR #15 onto v2, 2026-09-17) and is being settled empirically by the
+  # ledger-honesty guard example at the bottom rather than guessed here --
+  # see that entry for either D5 remnant below. RC14
+  # (java_elk_sporeOverlap, java_elk_sporeCompaction) was reported fixed on
+  # one branch and still-failing on the other for the same reason; kept
+  # listed here so the guard measures it rather than assuming either.
+  #
+  # S0a wired `INVARIANTS` into `assert_layout_invariants` below (previously
+  # dead code -- registered but never called). Measured against every
+  # corpus case with that wiring live:
+  # - sizeless_node, labelled_only_text, no_children_key, java_elk_ports:
+  #   all now PASS "invariants" (each was `pending` and RSpec's own "FIXED"
+  #   detection caught the unexpected pass) -- removed below. The first
+  #   three were D5 (a nil width/height on a genuinely unsized element is
+  #   no longer misread as a crash-shaped Float check failure now that
+  #   `omit_size_for_unsized_input`/`have_finite_coordinates` treat nil
+  #   as legitimate); java_elk_ports's RC4 (nil collections) was already
+  #   fixed by an earlier slice and nothing had re-run this check to notice.
+  # - `contain_children_within_bounds` and `have_no_overlapping_siblings`
+  #   are new checks with no prior coverage at all, and they found real,
+  #   already-scheduled gaps: `compound_unsized`/`java_elk_compound` escape
+  #   their parent's bounds (item 14/S10's own doc: "overlap because `p`
+  #   was placed at its pre-layout size" -- this item's `Done when` lists
+  #   "sibling compounds do not overlap" as still open). `force`/`stress`/
+  #   `random`/`radial`/`fixed` corpus cases have overlapping siblings on
+  #   both the elkjs and java ELK imports -- each algorithm's own item
+  #   already documents this as open and unfixed (item 21/S15: "18 of 435
+  #   pairs overlapping" for force; item 20/S14 owns stress and random;
+  #   item 23/S17 owns radial; item 22/S16 owns fixed).
+  # - `preserve_ids_and_endpoints` caught `cycle3`: the cycle breaker
+  #   permanently reverses `e3`'s direction and nothing restores it on the
+  #   way out -- item 12's own doc names this exact case and already has an
+  #   id for it, RC7.
   KNOWN_FAILURES = {
-    ["sizeless_node", "invariants"] => "D5",
-    ["no_children_key", "invariants"] => "D5",
     ["duplicate_ids", "no_crash"] => "RC4",
     ["duplicate_ids", "invariants"] => "RC4",
     ["labelled_only_text", "invariants"] => "D5",
+    ["java_elk_sporeOverlap", "no_crash"] => "RC14",
+    ["java_elk_sporeOverlap", "invariants"] => "RC14",
+    ["java_elk_sporeCompaction", "no_crash"] => "RC14",
+    ["java_elk_sporeCompaction", "invariants"] => "RC14",
     ["port_id_edges", "invariants"] => "RC8",
     ["elkjs_bug7_complex", "invariants"] => "RC8",
-    ["java_elk_ports", "invariants"] => "RC4",
+    ["cycle3", "invariants"] => "RC7",
+    ["compound_unsized", "invariants"] => "S10",
+    ["java_elk_compound", "invariants"] => "S10",
+    ["java_elk_force", "invariants"] => "S15",
+    ["elkjs_layouters_force", "invariants"] => "S15",
+    ["java_elk_stress", "invariants"] => "S14",
+    ["elkjs_layouters_stress", "invariants"] => "S14",
+    ["java_elk_random", "invariants"] => "S14",
+    ["elkjs_layouters_random", "invariants"] => "S14",
+    ["java_elk_radial", "invariants"] => "S17",
+    ["elkjs_layouters_radial", "invariants"] => "S17",
+    ["java_elk_fixed", "invariants"] => "S16",
+    ["elkjs_layouters_fixed", "invariants"] => "S16",
   }.freeze
 end
 
 RSpec.describe "Elkrb layout corpus" do
-  # Every node/label/port/section coordinate is a finite Float and every
-  # width/height is a finite, non-negative Float. The root graph itself
-  # is checked for size only (ELK's root canvas is never positioned).
-  # S0a extends this set.
+  # Every registered invariant matcher (one file per matcher under
+  # spec/support/invariants/, self-registering into INVARIANTS) runs
+  # against every corpus case -- this replaces the hand-rolled
+  # finite-number/structure-preservation walk that used to live here,
+  # which duplicated `have_finite_coordinates`/`preserve_ids_and_endpoints`
+  # and (via a bare `be_a(Float)` check) rejected a nil width/height on a
+  # genuinely unsized element, which is exactly the D5 case
+  # `omit_size_for_unsized_input` exists to allow. Most matchers take only
+  # the laid-out graph; `preserve_ids_and_endpoints` and
+  # `omit_size_for_unsized_input` also need the original input hash to
+  # compare against, hence `INVARIANT_ARGUMENTS`.
+  #
+  # `be_deterministic` is deliberately excluded: it re-runs the layout
+  # inside a block, and `force`/`random` call unseeded `Kernel#rand` --
+  # measured on this branch, `force_tri` and `random3` each disagree with
+  # themselves across two runs of the identical input when nothing reseeds
+  # between the calls (CorpusRunner reseeds per case for its own dumps;
+  # this spec never does). Wiring it in here would fail those two cases for
+  # a pre-existing property this slice does not touch. Its own spec
+  # (spec/support/invariants/be_deterministic_spec.rb) is the coverage.
+  # A bare constant assigned directly inside this `describe` block would
+  # land on Object regardless (see CorpusCatalogue's own comment above for
+  # the same gotcha) -- a method avoids it.
+  def invariant_arguments
+    %i[preserve_ids_and_endpoints omit_size_for_unsized_input].freeze
+  end
+  private :invariant_arguments
+
   def assert_layout_invariants(result, input)
-    assert_finite_size(result, "$")
-    assert_structure_preserved(result, input)
-    (result.children || []).each_with_index do |node, i|
-      assert_node_invariants(node, "$.children[#{i}]")
+    (INVARIANTS - [:be_deterministic]).each do |matcher|
+      if invariant_arguments.include?(matcher)
+        expect(result).to send(matcher, input)
+      else
+        expect(result).to send(matcher)
+      end
     end
-    (result.edges || []).each_with_index do |edge, i|
-      assert_edge_invariants(edge, "$.edges[#{i}]")
-    end
-  end
-
-  # Layout moves elements; it must not add, drop, reorder or rename one.
-  # Coordinates alone cannot see that: an element that is simply gone
-  # takes its coordinates with it, so a regression that loses every edge
-  # keeps every finite-number assertion green. The fixtures added to
-  # exercise edges -- hyperedge, cycle3, self_loop, port_id_edges,
-  # stale_sections -- are the ones this covers.
-  def assert_structure_preserved(result, input)
-    expect(node_ids(result)).to eq(input_node_ids(input))
-    expect(edge_ids(result)).to eq(input_edge_ids(input))
-  end
-
-  def node_ids(element)
-    (element.children || []).flat_map { |c| [c.id, *node_ids(c)] }
-  end
-
-  def edge_ids(element)
-    (element.edges || []).map(&:id) +
-      (element.children || []).flat_map { |c| edge_ids(c) }
-  end
-
-  def input_node_ids(hash)
-    (hash["children"] || []).flat_map { |c| [c["id"], *input_node_ids(c)] }
-  end
-
-  def input_edge_ids(hash)
-    (hash["edges"] || []).map { |e| e["id"] } +
-      (hash["children"] || []).flat_map { |c| input_edge_ids(c) }
-  end
-
-  def assert_node_invariants(node, label)
-    assert_finite_point(node, label)
-    assert_finite_size(node, label)
-    assert_labels(node.labels, label)
-    assert_ports(node.ports, label)
-    (node.children || []).each_with_index do |c, i|
-      assert_node_invariants(c, "#{label}.children[#{i}]")
-    end
-    (node.edges || []).each_with_index do |e, i|
-      assert_edge_invariants(e, "#{label}.edges[#{i}]")
-    end
-  end
-
-  def assert_ports(ports, owner_label)
-    (ports || []).each_with_index do |port, i|
-      label = "#{owner_label}.ports[#{i}]"
-      assert_finite_point(port, label)
-      assert_finite_size(port, label)
-      assert_labels(port.labels, label)
-    end
-  end
-
-  def assert_edge_invariants(edge, label)
-    assert_labels(edge.labels, label)
-    (edge.sections || []).each_with_index do |section, i|
-      assert_section_invariants(section, "#{label}.sections[#{i}]")
-    end
-  end
-
-  def assert_section_invariants(section, label)
-    start_point = section.start_point
-    end_point = section.end_point
-    expect(start_point).not_to be_nil, "#{label}.start is nil"
-    expect(end_point).not_to be_nil, "#{label}.end is nil"
-    assert_finite_point(start_point, "#{label}.start")
-    assert_finite_point(end_point, "#{label}.end")
-    (section.bend_points || []).each_with_index do |bp, j|
-      assert_finite_point(bp, "#{label}.bend[#{j}]")
-    end
-  end
-
-  def assert_labels(labels, owner_label)
-    (labels || []).each_with_index do |l, i|
-      assert_finite_point(l, "#{owner_label}.labels[#{i}]")
-      assert_finite_size(l, "#{owner_label}.labels[#{i}]")
-    end
-  end
-
-  def assert_finite_point(point, label)
-    assert_finite_number(point.x, "#{label}.x")
-    assert_finite_number(point.y, "#{label}.y")
-  end
-
-  def assert_finite_size(element, label)
-    assert_non_negative(element.width, "#{label}.width")
-    assert_non_negative(element.height, "#{label}.height")
-  end
-
-  def assert_finite_number(value, label)
-    expect(value).to be_a(Float), "#{label} is #{value.inspect}, not a Float"
-    expect(value).to be_finite, "#{label}=#{value} is not finite"
-  end
-
-  def assert_non_negative(value, label)
-    assert_finite_number(value, label)
-    expect(value).to be >= 0, "#{label}=#{value} is negative"
   end
 
   def known_failure_reason(id, check)

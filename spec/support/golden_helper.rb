@@ -60,19 +60,12 @@ RSpec::Matchers.define :match_elkjs_golden do |
         when :exact
           GoldenComparator.diff_exact(expected, comparable_actual, fields)
         when :structural
-          # `GoldenComparator.diff_structural` has no `fields` parameter at
-          # all -- a caller passing a non-default `fields:` here used to
-          # have it silently discarded rather than honoured or refused, so
-          # a future case built on the (still unimplemented) assumption
-          # that structural tier can be field-selective would look like it
-          # passed while comparing everything anyway. Loud refusal until
-          # that support actually exists.
-          if fields != GoldenHelper::DEFAULT_FIELDS
-            raise ArgumentError,
-                  "fields: is not supported for tier: :structural yet " \
-                  "(got #{fields.inspect} for #{name.inspect})"
-          end
-          GoldenComparator.diff_structural(expected, comparable_actual)
+          # `GoldenComparator.diff_structural` honours `fields` the same
+          # way `diff_exact` does -- see its own comment for which of
+          # `:graph`/`:nodes`/`:sections` gate which check, and why
+          # `:labels`/`:ports` are accepted as a no-op rather than refused
+          # (structural tier has never checked either independently).
+          GoldenComparator.diff_structural(expected, comparable_actual, fields)
         when :smoke
           GoldenComparator.diff_smoke(expected, comparable_actual)
         else

@@ -174,11 +174,24 @@ module GoldenComparator
     ["#{path}/offset: expected #{e_offset}, got #{a_offset}"]
   end
 
+  # `diff_edge_endpoints` (sources/targets rewiring, and each section's
+  # shape annotations) is gated behind `:sections` alone, not run
+  # unconditionally the way it read before -- this file's own comment on
+  # `diff_owner_fields` states the invariant every call in THIS method
+  # already followed except this one: "each diff_edges/diff_ports call
+  # below receives fields and makes its own internal per-category
+  # decision". Endpoint identity and section shape annotations are both
+  # about where the edge physically connects/routes, the same ground
+  # `diff_sections`/`diff_edge_routing` cover, so it sits behind the same
+  # selector they do -- a caller selecting `fields: %i[labels]` alone (to
+  # check label content only) no longer also gets a structural-rewiring
+  # diff it never asked for.
   def diff_edges(expected_owner, actual_owner, fields, path)
     diff_by_id(expected_owner["edges"], actual_owner["edges"],
                "#{path}/edges") do |e_edge, a_edge, edge_path|
-      diffs = diff_edge_endpoints(e_edge, a_edge, edge_path)
+      diffs = []
       if fields.include?(:sections)
+        diffs.concat(diff_edge_endpoints(e_edge, a_edge, edge_path))
         diffs.concat(diff_sections(e_edge, a_edge,
                                    edge_path))
         diffs.concat(diff_edge_routing(e_edge, a_edge, edge_path))
@@ -236,18 +249,39 @@ module GoldenComparator
   def diff_sections(expected_edge, actual_edge, path)
     expected_sections = expected_edge["sections"] || []
     actual_sections = actual_edge["sections"] || []
+    diffs = section_id_duplicate_diffs(expected_sections, actual_sections, path)
 
     if expected_sections.size != actual_sections.size
-      return ["#{path}/sections: expected #{expected_sections.size}, " \
-              "got #{actual_sections.size}"]
+      return diffs << "#{path}/sections: expected #{expected_sections.size}, " \
+                      "got #{actual_sections.size}"
     end
 
+    diffs.concat(diff_section_geometries(expected_sections, actual_sections,
+                                         path))
+  end
+
+  def diff_section_geometries(expected_sections, actual_sections, path)
     expected_index = section_index_by_id(expected_sections)
     actual_index = section_index_by_id(actual_sections)
     expected_sections.each_with_index.flat_map do |e_sec, i|
       diff_section_geometry(e_sec, actual_sections[i], "#{path}/sections[#{i}]",
                             expected_index, actual_index)
     end
+  end
+
+  # Sections are matched POSITIONALLY (see `section_index_by_id`'s own
+  # comment), but `incomingSections`/`outgoingSections` still resolve
+  # THROUGH each side's id -- `duplicate_id_diffs` (shared.rb) is the
+  # existing, already-pinned guard this comparator uses everywhere else an
+  # Array gets indexed by id (`diff_named_items`, `check_level_sections` in
+  # structural.rb); a repeated section id got no such guard here, so
+  # `section_index_by_id`'s plain `to_h` silently kept only the LAST
+  # section with that id and resolved every ref naming an earlier one to
+  # the wrong position.
+  def section_id_duplicate_diffs(expected_sections, actual_sections, path)
+    diffs = duplicate_id_diffs(expected_sections, "#{path}/sections: expected")
+    diffs.concat(duplicate_id_diffs(actual_sections,
+                                    "#{path}/sections: actual"))
   end
 
   # elkjs and elkrb mint different id strings for the same POSITIONALLY

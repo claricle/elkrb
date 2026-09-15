@@ -58,15 +58,34 @@ RSpec.describe "match_elkjs_golden" do
     expect(matcher.matches?(actual)).to be true
   end
 
-  # `GoldenComparator.diff_structural` has no `fields` parameter at all --
-  # a non-default `fields:` at structural tier must be refused loudly
-  # rather than silently compared as if nothing had been restricted.
-  it "refuses a non-default fields: at structural tier rather than " \
-     "silently ignoring it" do
-    matcher = match_elkjs_golden("synthetic", tier: :structural,
-                                              fields: %i[nodes],
-                                              dir: @golden_dir)
-    expect { matcher.matches?(actual) }.to raise_error(ArgumentError, /fields:/)
+  # `GoldenComparator.diff_structural` honours `fields` now, mirroring
+  # exact tier: a root SIZE deviation is a `:graph`-tier fact
+  # (`diff_graph_size`), independent of `:nodes` (`diff_node_geometry`) --
+  # narrowing to `fields: %i[nodes]` must miss a root size deviation it
+  # deliberately excludes, and `fields: %i[graph]` alone must still catch
+  # that same deviation.
+  it "honours a narrowed fields: at structural tier" do
+    File.write(
+      File.join(@golden_dir, "expected", "structural_fields.json"),
+      JSON.generate({ "id" => "root", "width" => 100.0, "height" => 100.0,
+                      "children" => [{ "id" => "n1", "x" => 0.0, "y" => 0.0,
+                                       "width" => 10.0, "height" => 10.0 }] }),
+    )
+    oversized_root = { "id" => "root", "width" => 110.0, "height" => 100.0,
+                       "children" => [{ "id" => "n1", "x" => 0.0, "y" => 0.0,
+                                        "width" => 10.0, "height" => 10.0 }] }
+
+    narrowed_to_nodes = match_elkjs_golden("structural_fields",
+                                           tier: :structural,
+                                           fields: %i[nodes],
+                                           dir: @golden_dir)
+    expect(narrowed_to_nodes.matches?(oversized_root)).to be true
+
+    narrowed_to_graph = match_elkjs_golden("structural_fields",
+                                           tier: :structural,
+                                           fields: %i[graph],
+                                           dir: @golden_dir)
+    expect(narrowed_to_graph.matches?(oversized_root)).to be false
   end
 end
 

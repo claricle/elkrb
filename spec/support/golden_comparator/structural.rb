@@ -28,17 +28,40 @@ module GoldenComparator
   EDGE_ENDS = [["start", :first, "startPoint", "incomingShape"],
                ["end", :last, "endPoint", "outgoingShape"]].freeze
 
-  # Structural tier: graph size within 1px, every matched node's OWN
-  # size/position (`diff_node_geometry`), every edge section clipped to
-  # its endpoint node/port border within 1px, per-layer membership/order
-  # equal (grouped by rounded x for RIGHT/LEFT direction, y for UP/DOWN).
-  def diff_structural(expected, actual)
+  # The two directions a section can name a routing-ref neighbour through.
+  # Shared by `dangling_ref_diffs` and `ref_joints` so both read the exact
+  # same pair of keys.
+  ROUTING_REF_KEYS = %w[outgoingSections incomingSections].freeze
+
+  # The fields structural tier can independently select. `:labels` and
+  # `:ports` are accepted (`STRUCTURAL_FIELDS` matches `GoldenHelper::
+  # DEFAULT_FIELDS`'s membership so the default call below stays
+  # behaviour-identical to before `fields` existed here) but are always a
+  # no-op: structural tier has never checked either independently of
+  # `:nodes`/`:sections`, so selecting only one of them narrows nothing.
+  STRUCTURAL_FIELDS = %i[nodes sections labels ports graph].freeze
+
+  # Structural tier: graph size within 1px (`:graph`), every matched
+  # node's OWN size/position and per-layer membership/order (`:nodes` --
+  # layer membership is fundamentally about node arrangement, the same
+  # ground `diff_node_geometry` covers), every edge section clipped to its
+  # endpoint node/port border within 1px (`:sections`). `fields` defaults
+  # to every category, so an existing 2-arg call site runs every check
+  # exactly as it did before `fields` was a parameter here at all.
+  def diff_structural(expected, actual, fields = STRUCTURAL_FIELDS)
     diffs = []
-    diffs.concat(diff_root_id(expected, actual))
-    diffs.concat(diff_graph_size(expected, actual))
-    diffs.concat(diff_node_geometry(expected, actual, ""))
-    diffs.concat(diff_section_borders(expected, actual))
-    diffs.concat(diff_layer_membership(expected, actual))
+    if fields.include?(:graph)
+      diffs.concat(diff_root_id(expected, actual))
+      diffs.concat(diff_graph_size(expected, actual))
+    end
+    if fields.include?(:nodes)
+      diffs.concat(diff_node_geometry(expected, actual, ""))
+      diffs.concat(diff_layer_membership(expected, actual))
+    end
+    if fields.include?(:sections)
+      diffs.concat(diff_section_borders(expected,
+                                        actual))
+    end
     diffs
   end
 
@@ -279,10 +302,38 @@ module GoldenComparator
   def check_section_continuity(sections, edge_path)
     return [] if sections.size < 2
 
-    continuity_joints(sections).flat_map do |from_i, to_i|
+    diffs = if any_routing_refs?(sections)
+              dangling_ref_diffs(sections,
+                                 edge_path)
+            else
+              []
+            end
+    diffs + continuity_joints(sections).flat_map do |from_i, to_i|
       diff_strict_joint(sections[from_i]["endPoint"],
                         sections[to_i]["startPoint"],
                         "#{edge_path}/sections[#{from_i}->#{to_i}]")
+    end
+  end
+
+  # `ref_joints` resolves every id in `outgoingSections`/`incomingSections`
+  # THROUGH an id => index Hash, and a plain `filter_map { index[id] }`
+  # silently drops any id the Hash does not carry -- exactly the shape a
+  # dangling routing ref takes, so it vanished from both the joints list
+  # AND any diagnostic, rather than being reported. This is the check that
+  # keeps it from vanishing without a trace.
+  def dangling_ref_diffs(sections, edge_path)
+    index = sections.each_with_index.to_h { |sec, i| [sec["id"], i] }
+    sections.each_with_index.flat_map do |sec, idx|
+      ROUTING_REF_KEYS.flat_map do |ref_key|
+        dangling_refs(sec, ref_key, index, edge_path, idx)
+      end
+    end
+  end
+
+  def dangling_refs(sec, ref_key, index, edge_path, idx)
+    (sec[ref_key] || []).reject { |id| index.key?(id) }.map do |id|
+      "#{edge_path}/sections[#{idx}]/#{ref_key}: references unknown " \
+        "section id #{id.inspect}"
     end
   end
 
@@ -309,14 +360,40 @@ module GoldenComparator
 
   # The ref-described half of `continuity_joints` -- see its own comment
   # above for why this only runs once ANY section on the edge carries a
-  # routing ref, and why it uses `outgoingSections` alone rather than both
-  # directions.
+  # routing ref. Reads BOTH `outgoingSections` and `incomingSections`: a
+  # section that names only its PREDECESSOR (never its successor) used to
+  # produce zero joints when only `outgoingSections` was read, silently
+  # skipping the continuity check for that whole edge rather than flagging
+  # a genuine break -- `any_routing_refs?` already treats either direction
+  # as "this edge is ref-described", so the joints this method builds must
+  # follow from either direction too, not just the one it happened to read.
+  # A section naming the SAME neighbour from both directions (the common
+  # case in real elkjs output, one edge's two adjacent sections cross-
+  # referencing each other) produces the identical [from, to] pair from
+  # each direction; `.uniq` collapses that back to one joint, exactly as it
+  # already did for a single direction naming a neighbour twice.
   def ref_joints(sections)
     index = sections.each_with_index.to_h { |sec, i| [sec["id"], i] }
+    outgoing = direction_joints(sections, index, "outgoingSections") do |i, j|
+      [i, j]
+    end
+    incoming = direction_joints(sections, index, "incomingSections") do |i, j|
+      [j, i]
+    end
+    (outgoing + incoming).uniq
+  end
+
+  # One direction's half of `ref_joints`: every id `sections[i]` names
+  # under `ref_key`, resolved through `index` and dropped when it names no
+  # section on this edge (a dangling ref -- `dangling_ref_diffs`'s
+  # violation to report, not this method's to silently include or crash
+  # on). The block decides the joint's [from, to] order, since outgoing
+  # and incoming name the same neighbour in opposite roles.
+  def direction_joints(sections, index, ref_key)
     sections.each_index.flat_map do |i|
-      (sections[i]["outgoingSections"] || [])
-        .filter_map { |id| index[id] }.map { |j| [i, j] }
-    end.uniq
+      (sections[i][ref_key] || [])
+        .filter_map { |id| index[id] }.map { |j| yield(i, j) }
+    end
   end
 
   def any_routing_refs?(sections)
