@@ -300,14 +300,9 @@ module GoldenComparator
   # coarseness), not `exact.rb`'s `diff_point` (1e-6, exact-tier strict and
   # wrong for structural).
   def check_section_continuity(sections, edge_path)
-    return [] if sections.size < 2
+    diffs = any_routing_refs?(sections) ? dangling_ref_diffs(sections, edge_path) : []
+    return diffs if sections.size < 2
 
-    diffs = if any_routing_refs?(sections)
-              dangling_ref_diffs(sections,
-                                 edge_path)
-            else
-              []
-            end
     diffs + continuity_joints(sections).flat_map do |from_i, to_i|
       diff_strict_joint(sections[from_i]["endPoint"],
                         sections[to_i]["startPoint"],
@@ -348,8 +343,10 @@ module GoldenComparator
   # adjacency section-by-section rather than edge-by-edge still wired it
   # to its array neighbour). Once ANY section on this edge carries a
   # routing ref, the WHOLE edge is treated as ref-described and joints
-  # come only from `outgoingSections`; plain adjacency is the fallback
-  # only when NO section anywhere on the edge carries either ref, which is
+  # come from EITHER direction's refs (`outgoingSections` or
+  # `incomingSections` -- see `ref_joints`'s own comment); plain adjacency
+  # is the fallback only when NO section anywhere on the edge carries
+  # either ref, which is
   # exactly the single unbranched chain elkrb emits today (and is
   # order-for-order identical to the old behaviour there).
   def continuity_joints(sections)
