@@ -167,10 +167,12 @@ module Elkrb
       when ".yml", ".yaml"
         Elkrb::Graph::Graph.from_yaml(content)
       else
-        # Try JSON first, then YAML
+        # Try JSON first, then YAML. lutaml-model wraps a bad parse in
+        # Lutaml::Model::InvalidFormatError, so rescue that too or valid
+        # YAML never reaches the YAML attempt.
         begin
           Elkrb::Graph::Graph.from_json(content)
-        rescue JSON::ParserError
+        rescue JSON::ParserError, Lutaml::Model::InvalidFormatError
           Elkrb::Graph::Graph.from_yaml(content)
         end
       end
