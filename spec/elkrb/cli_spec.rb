@@ -68,6 +68,65 @@ RSpec.describe "elkrb CLI" do
       expect(stderr).not_to eq("")
       expect(status.exitstatus).to eq(1)
     end
+
+    it "resolves a graph-carried algorithm when --algorithm is not given" do
+      Dir.mktmpdir do |dir|
+        input_file = File.join(dir, "graph.json")
+        # Chained edges so box (ignores edges, packs into a row) and layered
+        # (ranks by edge direction, stacks into a column) are guaranteed to
+        # disagree. Disconnected nodes let both land on the same grid.
+        File.write(input_file, {
+          id: "root",
+          layoutOptions: { "elk.algorithm" => "box" },
+          children: [
+            { id: "n1", width: 30, height: 30 },
+            { id: "n2", width: 30, height: 30 },
+            { id: "n3", width: 30, height: 30 },
+          ],
+          edges: [
+            { id: "e1", sources: ["n1"], targets: ["n2"] },
+            { id: "e2", sources: ["n2"], targets: ["n3"] },
+          ],
+        }.to_json)
+
+        # Same file, same lack of an explicit flag on the graph-carried run --
+        # only the ELK-standard layoutOptions selects box. Asserting the
+        # PROPERTY (a different algorithm actually ran) rather than pinning
+        # exact positions: comparing against an explicit --algorithm layered
+        # run on the identical input is what distinguishes "the graph-carried
+        # selector was honoured" from "it silently ran layered either way".
+        graph_carried_stdout, _e1, graph_carried_status =
+          run_elkrb("layout", input_file)
+        layered_stdout, _e2, layered_status =
+          run_elkrb("layout", input_file, "--algorithm", "layered")
+
+        expect(graph_carried_status.exitstatus).to eq(0)
+        expect(layered_status.exitstatus).to eq(0)
+        expect(JSON.parse(graph_carried_stdout))
+          .not_to eq(JSON.parse(layered_stdout))
+      end
+    end
+
+    it "does not print a blank algorithm with --verbose and no --algorithm" do
+      stdout, _stderr, status = run_elkrb(
+        "layout", File.join(CliRunner::ROOT, "spec/fixtures/simple_graph.json"),
+        "--verbose"
+      )
+
+      expect(status.exitstatus).to eq(0)
+      expect(stdout)
+        .to include("Using algorithm: the graph's own, else layered")
+    end
+
+    # A Thor default would always beat the graph's own elk.algorithm.
+    %w[layout diagram batch].each do |command|
+      it "gives #{command}'s --algorithm no default" do
+        require "elkrb/cli"
+        option = Elkrb::Cli.commands[command].options[:algorithm]
+
+        expect(option.default).to be_nil
+      end
+    end
   end
 
   describe "render" do
