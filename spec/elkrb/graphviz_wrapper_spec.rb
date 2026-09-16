@@ -380,13 +380,33 @@ RSpec.describe Elkrb::GraphvizWrapper do
         end
       end
 
+      # Puts `dot` directly at HOME's root (not under a subdirectory named
+      # "someoneelse"), so a resolve HERE could only succeed by silently
+      # expanding "~someoneelse" to $HOME -- the exact wrong guess this
+      # method exists to avoid. A setup where `dot` sits under a real
+      # "someoneelse" directory could not tell "left unexpanded" apart from
+      # "wrongly expanded to HOME", since both would fail to resolve.
       it "leaves a ~user entry unexpanded rather than guessing" do
         in_sandbox do |dir|
-          write_executable(File.join(dir, "bin", "dot"))
+          write_executable(File.join(dir, "dot"))
           ENV["HOME"] = dir
           ENV["PATH"] = "~someoneelse"
 
           expect(resolver.resolve(["dot"])).to be_nil
+        end
+      end
+
+      # A single-byte PATH entry that is not "~" must be walked as a literal
+      # directory name, not treated as tilde-shaped. `field[1..]` on a
+      # one-byte field is `""`, the same value a bare `~` produces, so this
+      # is the case that distinguishes "starts with ~" from "empty rest".
+      it "walks a single-character non-~ PATH entry literally" do
+        in_sandbox do
+          write_executable(File.join("x", "dot"))
+          ENV["HOME"] = "/should-not-be-consulted"
+          ENV["PATH"] = "x"
+
+          expect(resolver.resolve(["dot"])).to eq("dot")
         end
       end
     end
