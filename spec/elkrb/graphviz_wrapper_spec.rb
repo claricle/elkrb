@@ -282,60 +282,125 @@ RSpec.describe Elkrb::GraphvizWrapper do
     end
   end
 
-  describe "#find_graphviz" do
-    # Both examples above stub File.executable? and #system unconditionally,
-    # so they only ever exercise the FIRST candidate -- the candidate list's
-    # content, its order, and the per-candidate `which` fallback are never
-    # actually reached. Mutant found this: every path in the list can be
-    # blanked, reordered, or dropped, and either branch of the if/else can be
-    # inverted or collapsed, with both #available? examples staying green.
-    it "checks every candidate in the declared order before giving up" do
-      checked_executable = []
-      checked_which = []
-      allow(File).to receive(:executable?) do |path|
-        checked_executable << path
-        false
-      end
-      allow_any_instance_of(described_class).to receive(:system) do |_, cmd|
-        checked_which << cmd
-        false
-      end
+  # CommandResolver's platform-conditional behaviour (PATHEXT/`dot.exe`
+  # fan-out, `~` expansion) does not depend on which OS the suite runs
+  # under -- it depends on what `Gem.win_platform?` and `ENV["HOME"]` say.
+  # Stubbing those lets these examples run, and assert something, on every
+  # CI platform, unlike the `#available?` group above which genuinely
+  # requires a real shebang-executable file and so cannot run on Windows.
+  describe "CommandResolver platform behaviour" do
+    let(:resolver) { Elkrb.const_get(:CommandResolver) }
 
-      test_wrapper = described_class.new
-
-      expect(checked_executable).to eq(
-        ["dot", "/usr/bin/dot", "/usr/local/bin/dot", "/opt/homebrew/bin/dot", "/opt/local/bin/dot"],
-      )
-      expect(checked_which).to eq(
-        [
-          "which dot > /dev/null 2>&1",
-          "which /usr/bin/dot > /dev/null 2>&1",
-          "which /usr/local/bin/dot > /dev/null 2>&1",
-          "which /opt/homebrew/bin/dot > /dev/null 2>&1",
-          "which /opt/local/bin/dot > /dev/null 2>&1",
-        ],
-      )
-      expect(test_wrapper.send(:find_graphviz)).to be_nil
+    around do |example|
+      original_path = ENV.fetch("PATH", nil)
+      original_home = ENV.fetch("HOME", nil) # rubocop:disable Style/EnvHome -- restoring the raw var, not reading a home dir
+      original_pathext = ENV.fetch("PATHEXT", nil)
+      example.run
+    ensure
+      ENV["PATH"] = original_path
+      ENV["HOME"] = original_home
+      ENV["PATHEXT"] = original_pathext
     end
 
-    it "returns the last candidate once it is found directly executable" do
-      allow(File).to receive(:executable?) { |path| path == "/opt/local/bin/dot" }
-      allow_any_instance_of(described_class).to receive(:system).and_return(false)
-
-      test_wrapper = described_class.new
-
-      expect(test_wrapper.send(:find_graphviz)).to eq("/opt/local/bin/dot")
+    def in_sandbox
+      Dir.mktmpdir do |dir|
+        Dir.chdir(dir) { yield dir }
+      end
     end
 
-    it "returns the candidate found via `which` when it is not directly executable" do
-      allow(File).to receive(:executable?).and_return(false)
-      allow_any_instance_of(described_class).to receive(:system) do |_, cmd|
-        cmd.include?("/opt/homebrew/bin/dot")
+    def write_executable(path)
+      FileUtils.mkdir_p(File.dirname(path))
+      File.write(path, "")
+      FileUtils.chmod(0o755, path)
+    end
+
+    context "on Windows (Gem.win_platform? stubbed true)" do
+      before { allow(Gem).to receive(:win_platform?).and_return(true) }
+
+      it "finds dot.exe via PATHEXT for a bare candidate name" do
+        in_sandbox do |dir|
+          write_executable(File.join(dir, "bin", "dot.exe"))
+          ENV["PATH"] = File.join(dir, "bin")
+          ENV["PATHEXT"] = ".COM;.EXE;.BAT;.CMD"
+
+          expect(resolver.resolve(["dot"])).to eq("dot")
+        end
       end
 
-      test_wrapper = described_class.new
+      it "does not find a bare candidate with no PATHEXT-listed extension present" do
+        in_sandbox do |dir|
+          FileUtils.mkdir_p(File.join(dir, "bin"))
+          ENV["PATH"] = File.join(dir, "bin")
+          ENV["PATHEXT"] = ".COM;.EXE;.BAT;.CMD"
 
-      expect(test_wrapper.send(:find_graphviz)).to eq("/opt/homebrew/bin/dot")
+          expect(resolver.resolve(["dot"])).to be_nil
+        end
+      end
+
+      it "uses an extensioned candidate as written, without PATHEXT fan-out" do
+        in_sandbox do |dir|
+          write_executable(File.join(dir, "bin", "dot.exe"))
+          ENV["PATH"] = File.join(dir, "bin")
+          ENV["PATHEXT"] = ".COM;.EXE;.BAT;.CMD"
+
+          expect(resolver.resolve(["dot.exe"])).to eq("dot.exe")
+        end
+      end
+    end
+
+    context "off Windows (Gem.win_platform? stubbed false)" do
+      before { allow(Gem).to receive(:win_platform?).and_return(false) }
+
+      it "does not apply PATHEXT fan-out to a bare candidate" do
+        in_sandbox do |dir|
+          write_executable(File.join(dir, "bin", "dot.exe"))
+          ENV["PATH"] = File.join(dir, "bin")
+          ENV["PATHEXT"] = ".COM;.EXE;.BAT;.CMD"
+
+          expect(resolver.resolve(["dot"])).to be_nil
+        end
+      end
+    end
+
+    describe "PATH entries starting with ~" do
+      it "expands a bare ~ PATH entry against HOME" do
+        in_sandbox do |dir|
+          write_executable(File.join(dir, "dot"))
+          ENV["HOME"] = dir
+          ENV["PATH"] = "~"
+
+          expect(resolver.resolve(["dot"])).to eq("dot")
+        end
+      end
+
+      it "expands a ~/subdir PATH entry against HOME" do
+        in_sandbox do |dir|
+          write_executable(File.join(dir, "bin", "dot"))
+          ENV["HOME"] = dir
+          ENV["PATH"] = "~/bin"
+
+          expect(resolver.resolve(["dot"])).to eq("dot")
+        end
+      end
+
+      it "refuses a ~ PATH entry when HOME does not contain the candidate" do
+        in_sandbox do |dir|
+          ENV["HOME"] = dir
+          ENV["PATH"] = "~/bin"
+
+          expect(resolver.resolve(["dot"])).to be_nil
+        end
+      end
+
+      it "leaves a ~user entry unexpanded rather than guessing" do
+        in_sandbox do |dir|
+          write_executable(File.join(dir, "bin", "dot"))
+          ENV["HOME"] = dir
+          ENV["PATH"] = "~someoneelse"
+
+          expect(resolver.resolve(["dot"])).to be_nil
+        end
+      end
     end
   end
 
