@@ -89,45 +89,24 @@ module Elkrb
       Gem.win_platform?
     end
 
-    # Split as BYTES, because that is what the OS searches. A PATH entry
-    # need not be valid UTF-8, and String#split raises ArgumentError on one
-    # rather than skipping it -- so a single stray byte anywhere in PATH
-    # would otherwise make resolution impossible while exec still finds a
-    # real command in a later, valid entry.
-    #
-    # An empty PATH field means the working directory, and PATH="" is one
-    # empty field. Ruby's split disagrees with that model twice, both
-    # measured: "/usr/bin:".split(":") drops the trailing field, and
-    # "".split(":", -1) yields no fields at all rather than one empty one.
-    # An unset PATH is treated as an empty one, which is a CONTAINMENT and
-    # not an equivalence. Both end in the working directory, but an unset
-    # PATH also searches libruby's compiled-in default, measured on this
-    # build as "/usr/local/bin:/usr/ucb:/usr/bin:/bin:." -- so the directories
-    # searched here are a strict subset of the ones exec searches.
-    #
-    # That bounds one thing only: this never matches in a directory exec would
-    # not look in. It does NOT promise exec runs the file matched here. The
-    # working directory is LAST in that default list, so for an unset PATH an
-    # installed command of the same bare name answers first.
+    # Keep the `.b` and `split(..., -1)`: a raw (non-UTF-8) PATH byte must not
+    # raise, and a trailing/empty field must not be dropped -- both silently
+    # break resolution for a later, valid PATH entry otherwise. This is a
+    # documented CONTAINMENT, not full parity with exec: an unset PATH here
+    # is treated as empty, while exec also searches libruby's compiled-in
+    # default list (see gate record for the measured value) -- so this can
+    # under-report but never over-report a directory exec would search.
     def path_directories
       fields = ENV.fetch("PATH", "").b.split(File::PATH_SEPARATOR, -1)
       fields = [""] if fields.empty?
       fields.map { |field| field.empty? ? "." : expand_tilde(field) }
     end
 
-    # A PATH entry is a literal string to Ruby's own PATH walk, but the shell
-    # that ultimately execs `dot` (`system`/backtick both go through `/bin/sh
-    # -c`) expands a leading `~` or `~/...` against `$HOME` before it ever
-    # reaches PATH-splitting. Left un-expanded here, `available?` under-reports
-    # relative to what `render` actually runs for any `~`-prefixed PATH entry.
-    #
-    # `~user` (a THIRD PARTY's home directory) is deliberately NOT expanded:
-    # resolving it means asking the OS user database, and getting that wrong
-    # would make this report a directory nothing will search. Left as
-    # written, `~user` still cannot match a literal path via `executable_file?`,
-    # which is the same CONTAINMENT already documented above for
-    # `path_directories` as a whole -- never a false positive, only a
-    # possible false negative.
+    # Expand only a bare `~` or `~/...` PATH entry against `$HOME`, matching
+    # what the shell does before `render`'s `system(cmd)` ever sees PATH.
+    # Leave `~user` (a third party's home directory) un-expanded rather than
+    # querying the OS user database -- it still cannot false-positive-match
+    # via `executable_file?`, only under-report, same as `path_directories`.
     def expand_tilde(field)
       return field unless field.start_with?("~")
 

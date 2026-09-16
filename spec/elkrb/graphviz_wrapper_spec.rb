@@ -154,26 +154,14 @@ RSpec.describe Elkrb::GraphvizWrapper do
       end
     end
 
-    # A PATH entry need not be valid UTF-8. Splitting as characters raises
-    # ArgumentError, so the constructor itself dies -- while exec walks past
-    # the malformed entry and runs the dot in the valid one after it.
-    #
-    # The process environment carries BYTES and `ENV.fetch` tags them with the
-    # locale encoding, so the ambient locale decides whether the hazard can
-    # exist at all: under a US-ASCII locale Ruby hands back ASCII-8BIT, which
-    # has no invalid sequences. Pin the encoding the code reads instead of
-    # inheriting it, so this example means the same thing in every locale.
-    # Real bytes still go into the real PATH, because exec resolves the fake
-    # `dot` from those. The `have_received` is load-bearing, not ceremony: it
-    # is what proves the pinned string is the one PRODUCTION read. Should the
-    # code stop calling `ENV.fetch("PATH", "")`, the stub would go unused and
-    # this example would quietly revert to inheriting the ambient locale, so
-    # that has to fail rather than pass.
-    #
-    # `raw` is assembled from BYTES rather than interpolated. Under a
-    # US-ASCII locale `Dir.mktmpdir` returns an ASCII-8BIT path while this
-    # file's literals are UTF-8, and joining those two raises
-    # Encoding::CompatibilityError whenever TMPDIR is not pure ASCII.
+    # A PATH entry need not be valid UTF-8; exec walks past a malformed entry
+    # rather than dying. Pin the encoding `ENV.fetch("PATH", "")` returns
+    # (rather than inheriting the ambient locale) so this means the same
+    # thing everywhere, and keep the `have_received` assertion -- it is what
+    # proves the pinned string is the one production code reads, not the
+    # real `ENV["PATH"]`. Build `raw` from bytes, not interpolation, so a
+    # non-ASCII TMPDIR under a US-ASCII locale cannot raise
+    # Encoding::CompatibilityError.
     it "walks past a PATH entry that is not valid UTF-8" do
       in_sandbox do |dir|
         stub_candidates(["dot"])
