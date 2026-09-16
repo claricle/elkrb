@@ -133,11 +133,13 @@ module Elkrb
     # `Dir.home` (not `ENV["HOME"]` directly) so this agrees with what the
     # shell itself consults for `~` expansion; it raises when no home
     # directory can be determined at all, rather than returning nil, so
-    # that is the one case caught here.
+    # that is the one case caught here. The rescue body is empty on
+    # purpose -- it already evaluates to `nil`, so an explicit `nil` line
+    # would be a no-op.
     def home_directory
       Dir.home
     rescue ArgumentError
-      nil
+      # empty on purpose -- already evaluates to nil
     end
 
     # `nil` means "not a `~` or `~/...` PATH entry" -- distinct from `""`,
