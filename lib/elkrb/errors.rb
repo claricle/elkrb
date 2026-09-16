@@ -39,4 +39,11 @@ module Elkrb
       super("Algorithm not found: #{algorithm_name}")
     end
   end
+
+  # Raised when a command has already ATTEMPTED to report its own failure and
+  # the only thing left to decide is the exit status. Reporting is best-effort:
+  # a dead stdout leaves nothing printed and this is still raised, so do not
+  # assume the user saw anything. `exe/elkrb` turns it into `exit 1`; a library
+  # caller rescues it and keeps its process.
+  class CommandFailed < Error; end
 end
