@@ -488,6 +488,39 @@ RSpec.describe Elkrb::GraphvizWrapper do
         end
       end
 
+      # `tilde_rest` itself, not through `resolve`: a `resolve`-level check
+      # of "~user" can pass for the WRONG reason (a smashed, still-missing
+      # path happens to resolve to nothing either way -- see the comment
+      # above), so this pins the return value directly. `nil` is the "not a
+      # `~`/`~/...` entry" signal `expand_tilde` relies on to skip
+      # expansion entirely.
+      it "returns nil from tilde_rest for a ~user entry, not the username" do
+        expect(resolver.send(:tilde_rest, "~someoneelse")).to be_nil
+      end
+
+      it "returns the empty string from tilde_rest for a bare ~" do
+        expect(resolver.send(:tilde_rest, "~")).to eq("")
+      end
+
+      # `home_directory` swallows only `Dir.home`'s ArgumentError (raised
+      # when no home directory can be determined), turning it into `nil` so
+      # `expand_tilde` falls back to leaving the field as written instead of
+      # raising out of PATH resolution entirely.
+      it "returns nil from home_directory when Dir.home has none to report" do
+        allow(Dir).to receive(:home).and_raise(ArgumentError)
+
+        expect(resolver.send(:home_directory)).to be_nil
+      end
+
+      # `tilde_expansion` must refuse to expand against a blank home rather
+      # than building a path from nothing (`""` plus the rest), which would
+      # look like a real, resolvable root-relative path.
+      it "does not expand when home_directory reports an empty string" do
+        allow(resolver).to receive(:home_directory).and_return("")
+
+        expect(resolver.send(:tilde_expansion, "~/bin")).to be_nil
+      end
+
       # A single-byte PATH entry that is not "~" must be walked as a literal
       # directory name, not treated as tilde-shaped. `field[1..]` on a
       # one-byte field is `""`, the same value a bare `~` produces, so this
