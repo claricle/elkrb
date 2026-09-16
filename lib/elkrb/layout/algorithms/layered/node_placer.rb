@@ -36,8 +36,17 @@ module Elkrb
           private
 
           def calculate_layer_widths
+            # One entry per layer: place_nodes indexes this by layer.
+            # `return` here hands back a bare Integer instead, and
+            # Integer#[] is bit reference, not element access -- the
+            # caller reads 0 for every layer rather than raising.
+            #
+            # place_layer discards the entry it is handed today, so a
+            # wrong value moves no node yet. It still has to be right
+            # and stay one-per-layer: cross-axis centring is the reader
+            # this array is waiting for.
             @layers.map do |layer_nodes|
-              return 0 if layer_nodes.empty?
+              next 0 if layer_nodes.empty?
 
               total_width = layer_nodes.sum { |n| n.width || 0 }
               total_spacing = (layer_nodes.length - 1) * @node_spacing
