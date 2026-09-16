@@ -270,12 +270,42 @@ RSpec.describe Elkrb::GraphvizWrapper do
     end
   end
 
+  # Every example above stubs CANDIDATES to isolate the resolution logic
+  # from whatever Graphviz install (if any) sits on this machine, so none
+  # of them ever reads the real list `.new` uses in production. Pin its
+  # content directly: a bare "dot" first (so a plain PATH hit wins) and the
+  # known package-manager install locations after it.
+  describe "::CANDIDATES" do
+    it "lists the bare command before its known absolute install paths" do
+      candidates = described_class.const_get(:CANDIDATES)
+
+      expect(candidates).to eq(
+        [
+          "dot",
+          "/usr/bin/dot",
+          "/usr/local/bin/dot",
+          "/opt/homebrew/bin/dot",
+          "/opt/local/bin/dot",
+        ],
+      )
+    end
+  end
+
   # CommandResolver's platform-conditional behaviour (PATHEXT/`dot.exe`
   # fan-out, `~` expansion) does not depend on which OS the suite runs
   # under -- it depends on what `Gem.win_platform?` and `ENV["HOME"]` say.
   # Stubbing those lets these examples run, and assert something, on every
   # CI platform, unlike the `#available?` group above which genuinely
   # requires a real shebang-executable file and so cannot run on Windows.
+  # `Elkrb.private_constant :CommandResolver` is the only line making this
+  # module internal; every other example reaches it via `Elkrb.const_get`
+  # specifically because plain constant lookup no longer works. Assert
+  # that directly, or a revert of the `private_constant` call would leave
+  # every other example green while re-exposing the module.
+  it "keeps CommandResolver off the public constant table" do
+    expect { Elkrb::CommandResolver }.to raise_error(NameError)
+  end
+
   describe "CommandResolver platform behaviour" do
     let(:resolver) { Elkrb.const_get(:CommandResolver) }
 
@@ -310,6 +340,68 @@ RSpec.describe Elkrb::GraphvizWrapper do
           write_executable(File.join(dir, "bin", "dot.exe"))
           ENV["PATH"] = File.join(dir, "bin")
           ENV["PATHEXT"] = ".COM;.EXE;.BAT;.CMD"
+
+          expect(resolver.resolve(["dot"])).to eq("dot")
+        end
+      end
+
+      # `File::ALT_SEPARATOR` is nil on POSIX, so a candidate containing only
+      # a backslash (no `File::SEPARATOR`) only counts as separator-bearing
+      # -- and so is used as written rather than walked along PATH -- once
+      # BOTH the platform and the constant agree it is a real separator.
+      # Stub the constant so this arm is reachable under this suite's
+      # stubbed `windows?` on any host, not only on a real Windows checkout.
+      # The file lives flat in the sandbox: on a POSIX filesystem a
+      # backslash is an ordinary filename character, not a path component,
+      # so "bin\\dot.exe" both is the literal filename AND is the only
+      # candidate string containing no `File::SEPARATOR`.
+      it "treats a backslash as a separator once File::ALT_SEPARATOR is set" do
+        in_sandbox do
+          stub_const("File::ALT_SEPARATOR", "\\")
+          candidate = "bin\\dot.exe"
+          File.write(candidate, "")
+          FileUtils.chmod(0o755, candidate)
+          ENV["PATH"] = "/nonexistent-bin"
+          ENV["PATHEXT"] = ".COM;.EXE;.BAT;.CMD"
+
+          expect(resolver.resolve([candidate])).to eq(candidate)
+        end
+      end
+
+      # A PATHEXT entry missing its leading dot (e.g. "EXE" instead of
+      # ".EXE") must still match, because `File.extname` always includes
+      # the dot -- without normalisation `pathext.include?(".EXE")` would
+      # be false for a "dot.exe" candidate and this would silently refuse
+      # to fan out at all, on a real filesystem, for that entry.
+      it "matches a PATHEXT entry that is missing its leading dot" do
+        in_sandbox do |dir|
+          write_executable(File.join(dir, "bin", "dot.exe"))
+          ENV["PATH"] = File.join(dir, "bin")
+          ENV["PATHEXT"] = "COM;EXE;BAT;CMD"
+
+          expect(resolver.resolve(["dot"])).to eq("dot")
+        end
+      end
+
+      # `pathext_candidates` returns the raw array (no filesystem involved),
+      # so this pins the case-fold property directly rather than through a
+      # macOS/Windows filesystem that resolves both cases to the same file
+      # regardless of what the code does.
+      it "returns both extension cases from pathext_candidates" do
+        candidates = resolver.send(:pathext_candidates, "dot")
+
+        expect(candidates).to include("dot.EXE", "dot.exe")
+      end
+
+      # A stray/duplicate separator in PATHEXT (plausible from hand-edited
+      # config) must not silently produce an empty-string extension: that
+      # would make `File.extname("dot") == ""` match `pathext.include?("")`
+      # and wrongly skip the fan-out for every extensionless candidate.
+      it "still fans out a bare candidate when PATHEXT has a stray separator" do
+        in_sandbox do |dir|
+          write_executable(File.join(dir, "bin", "dot.exe"))
+          ENV["PATH"] = File.join(dir, "bin")
+          ENV["PATHEXT"] = ".COM;.EXE;;.BAT"
 
           expect(resolver.resolve(["dot"])).to eq("dot")
         end

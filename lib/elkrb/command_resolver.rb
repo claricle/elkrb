@@ -81,8 +81,12 @@ module Elkrb
     # `File::PATH_SEPARATOR` -- which on a non-Windows host running under a
     # stubbed `windows?` (as the specs do, to test this logic on any CI
     # platform) is ":" and would silently produce one useless candidate.
+    # An entry missing its leading dot (a malformed but observed PATHEXT,
+    # e.g. "EXE" instead of ".EXE") is normalised here rather than left to
+    # silently never match `File.extname`, which always includes the dot.
     def pathext
-      ENV.fetch("PATHEXT", ".COM;.EXE;.BAT;.CMD").split(";")
+      ENV.fetch("PATHEXT", ".COM;.EXE;.BAT;.CMD").split(";").reject(&:empty?)
+        .map { |ext| ext.start_with?(".") ? ext : ".#{ext}" }
     end
 
     def windows?
