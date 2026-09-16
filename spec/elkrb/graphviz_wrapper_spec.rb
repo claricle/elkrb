@@ -407,6 +407,15 @@ RSpec.describe Elkrb::GraphvizWrapper do
         end
       end
 
+      # A whitespace-only PATHEXT entry (e.g. from "   ;.EXE") must not
+      # survive as a dotted blob of spaces (".   ") that can never match a
+      # real filename, and must not silently swallow the fan-out either.
+      it "drops a whitespace-only PATHEXT entry rather than dotting it" do
+        ENV["PATHEXT"] = "   ;.EXE"
+
+        expect(resolver.send(:pathext)).to eq([".EXE"])
+      end
+
       it "does not find a bare candidate with no PATHEXT-listed extension present" do
         in_sandbox do |dir|
           FileUtils.mkdir_p(File.join(dir, "bin"))

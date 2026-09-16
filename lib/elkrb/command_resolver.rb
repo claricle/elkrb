@@ -85,7 +85,8 @@ module Elkrb
     # e.g. "EXE" instead of ".EXE") is normalised here rather than left to
     # silently never match `File.extname`, which always includes the dot.
     def pathext
-      ENV.fetch("PATHEXT", ".COM;.EXE;.BAT;.CMD").split(";").reject(&:empty?)
+      raw = ENV.fetch("PATHEXT", ".COM;.EXE;.BAT;.CMD").split(";")
+      raw.map(&:strip).reject(&:empty?)
         .map { |ext| ext.start_with?(".") ? ext : ".#{ext}" }
     end
 
