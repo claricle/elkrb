@@ -29,16 +29,16 @@ module CorpusCatalogue
   # decision 5 of the remediation plan ("output omits width/height for
   # nodes that never had them"), tracked here as D5 until S0a's
   # `omit_size_for_unsized_input` matcher lands to assert it correctly.
+  # RC14 (java_elk_sporeOverlap, java_elk_sporeCompaction) is fixed: both
+  # algorithms treat nil x/y as 0.0 at the top of layout_flat, as Java ELK
+  # does, so neither crashes and both now satisfy the layout invariants
+  # too -- all four rows removed outright.
   KNOWN_FAILURES = {
     ["sizeless_node", "invariants"] => "D5",
     ["no_children_key", "invariants"] => "D5",
     ["duplicate_ids", "no_crash"] => "RC4",
     ["duplicate_ids", "invariants"] => "RC4",
     ["labelled_only_text", "invariants"] => "D5",
-    ["java_elk_sporeOverlap", "no_crash"] => "RC14",
-    ["java_elk_sporeOverlap", "invariants"] => "RC14",
-    ["java_elk_sporeCompaction", "no_crash"] => "RC14",
-    ["java_elk_sporeCompaction", "invariants"] => "RC14",
     ["port_id_edges", "invariants"] => "RC8",
     ["elkjs_bug7_complex", "invariants"] => "RC8",
     ["java_elk_ports", "invariants"] => "RC4",
