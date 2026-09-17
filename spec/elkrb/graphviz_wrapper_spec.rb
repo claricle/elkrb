@@ -729,8 +729,8 @@ RSpec.describe Elkrb::GraphvizWrapper do
     # tells them apart -- callers of this public method may reasonably pass
     # either.
     it "accepts a format given as a string by converting it with to_sym" do
-      expect(wrapper).to receive(:system) do |*args|
-        expect(args).to include("-Tpng")
+      expect(wrapper).to receive(:system) do |*command|
+        expect(command).to include("-Tpng")
         true
       end
 
@@ -841,7 +841,7 @@ RSpec.describe Elkrb::GraphvizWrapper do
       expect do
         wrapper.render("input.dot", "output.png", :png)
       end.to raise_error(Elkrb::GraphvizWrapper::GraphvizNotFoundError,
-                         /"-Tpng".*"-ooutput\.png".*"input\.dot"/)
+                         /-Tpng.*"-ooutput\.png", "input\.dot"/)
     end
 
     # "uses specified engine" and "raises error for unsupported engine" both
@@ -851,8 +851,8 @@ RSpec.describe Elkrb::GraphvizWrapper do
     # #to_s but not #to_str, and is never #== to the String elements
     # SUPPORTED_ENGINES actually holds.
     it "accepts an engine given as a symbol by converting it with to_s" do
-      expect(wrapper).to receive(:system) do |*args|
-        expect(args).to include("-Kdot")
+      expect(wrapper).to receive(:system) do |*command|
+        expect(command).to include("-Kdot")
         true
       end
 
