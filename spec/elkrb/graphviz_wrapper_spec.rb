@@ -278,7 +278,6 @@ RSpec.describe Elkrb::GraphvizWrapper do
         expect(File.read("out.png").strip).to eq("SECOND")
       end
     end
-
   end
 
   # Every example above stubs CANDIDATES to isolate the resolution logic
