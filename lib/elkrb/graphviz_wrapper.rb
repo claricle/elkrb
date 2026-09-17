@@ -67,8 +67,15 @@ module Elkrb
     def version
       return nil unless available?
 
-      output = `#{@dot_path} -V 2>&1`
+      output = IO.popen([@dot_path, "-V"], err: %i[child out], &:read)
       output.match(/version\s+([\d.]+)/i)&.captures&.first
+    rescue SystemCallError
+      # `available?` only proves that a path looked executable once. Exec can
+      # still fail -- a stale entry, a directory, a file this process may not
+      # run. The backticks this replaced never surfaced that, because /bin/sh
+      # absorbed the failure and handed back its own error text, so returning
+      # nil is what keeps the documented nil-or-String contract.
+      nil
     end
 
     def supported_formats
@@ -90,6 +97,13 @@ module Elkrb
     ].freeze
     private_constant :CANDIDATES
 
+    # Both paths go through `File.path`, which is the conversion
+    # `validate_file_exists!` already accepts -- a String, or anything carrying
+    # `#to_path` -- and the one `system(*argv)` will not do for us, since argv
+    # converts through `#to_str` and Pathname does not define it. Interpolation
+    # is NOT interchangeable with it: `#to_s` on a `#to_path` object that is not
+    # a Pathname yields "#<Object:0x...>", and dot then writes a file by that
+    # name and reports success.
     def build_command(engine, format, input_file, output_file, dpi)
       cmd_parts = [
         @dot_path,
@@ -98,17 +112,29 @@ module Elkrb
         "-Gdpi=#{dpi}",
       ]
 
-      cmd_parts << "-o#{output_file}" if output_file
-      cmd_parts << input_file
+      cmd_parts << "-o#{File.path(output_file)}" if output_file
+      cmd_parts << positional_path(File.path(input_file))
 
-      cmd_parts.join(" ")
+      cmd_parts
+    end
+
+    # Removing the shell closes command injection but not ARGUMENT injection.
+    # `validate_file_exists!` only asks whether the path exists, so a file
+    # genuinely named "-ovictim.txt" passes and then reaches dot as a bare
+    # positional, where its option parser reads it as a second -o and writes a
+    # file the caller never named -- exit 0, success reported. Measured against
+    # graphviz 15.1.1: dot rejects the usual end-of-options marker
+    # ("dot: option -- unrecognized", rc=1), so "--" is not available. "./"
+    # names the same file and dot accepts it.
+    def positional_path(path)
+      path.start_with?("-") ? File.join(".", path) : path
     end
 
     def execute_command(cmd)
-      success = system(cmd)
+      success = system(*cmd)
       unless success
         raise GraphvizNotFoundError,
-              "Graphviz command failed: #{cmd}"
+              "Graphviz command failed: #{cmd.inspect}"
       end
 
       success
