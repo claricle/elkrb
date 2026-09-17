@@ -146,20 +146,7 @@ RSpec.describe "sirena consumer capture fixtures" do
         fixture(dir, "flowchart_td").merge("layoutOptions" => options)
       end
 
-      # spore_overlap.rb assumes every node already carries x/y from a
-      # prior layout pass -- it removes overlaps, it does not place nodes
-      # -- and Graph::Node has no default for either, unlike Graph::Graph.
-      # flowchart_td.json is fresh input with no positions, so running
-      # sporeOverlap on it directly raises NoMethodError (undefined method
-      # `-' for nil). Remove the pending once spore_overlap.rb places
-      # unpositioned nodes.
-      known_crash_reason = if algorithm == "sporeOverlap"
-                             "spore_overlap.rb:49 raises NoMethodError on " \
-                               "a node with no pre-existing x/y; " \
-                               "flowchart_td.json never had one set"
-                           end
-
-      it_behaves_like "a graph elkrb echoes back", known_crash_reason
+      it_behaves_like "a graph elkrb echoes back"
     end
   end
 
