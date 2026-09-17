@@ -40,10 +40,7 @@ module CorpusCatalogue
   KNOWN_FAILURES = {
     ["duplicate_ids", "no_crash"] => "RC4",
     ["duplicate_ids", "invariants"] => "RC4",
-    ["labelled_only_text", "invariants"] => "D5",
-    ["java_elk_sporeOverlap", "no_crash"] => "RC14",
     ["java_elk_sporeOverlap", "invariants"] => "RC14",
-    ["java_elk_sporeCompaction", "no_crash"] => "RC14",
     ["java_elk_sporeCompaction", "invariants"] => "RC14",
     ["port_id_edges", "invariants"] => "RC8",
     ["elkjs_bug7_complex", "invariants"] => "RC8",
