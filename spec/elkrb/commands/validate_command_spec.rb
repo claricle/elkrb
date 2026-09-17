@@ -20,7 +20,7 @@ RSpec.describe Elkrb::Commands::ValidateCommand do
     $stdout = StringIO.new
     begin
       command.run
-    rescue SystemExit
+    rescue Elkrb::CommandFailed
       nil
     ensure
       output = $stdout.string
