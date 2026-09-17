@@ -568,6 +568,23 @@ RSpec.describe Elkrb::GraphvizWrapper do
       wrapper.render("input.dot", "output.png", :png)
     end
 
+    # `system(*argv)` falls back to SHELL semantics when argv has exactly one
+    # element, so the whole no-shell guarantee rests on this argv being long.
+    # Keep this: it is the only assertion on the command's overall shape.
+    it "passes dot a multi-element argv, never a single command string" do
+      wrapper.instance_variable_set(:@dot_path, "/usr/bin/dot")
+
+      expect(wrapper).to receive(:system) do |*command|
+        expect(command).to eq(
+          ["/usr/bin/dot", "-Kdot", "-Tpng", "-Gdpi=96", "-ooutput.png",
+           "input.dot"],
+        )
+        true
+      end
+
+      wrapper.render("input.dot", "output.png", :png)
+    end
+
     it "renders DOT file to SVG" do
       expect(wrapper).to receive(:system).and_return(true)
 
@@ -638,8 +655,25 @@ RSpec.describe Elkrb::GraphvizWrapper do
       )
     end
 
+    # This is the assertion that CARRIES the property, because it cannot skip
+    # and needs no binary: a metacharacter stays one argv element. The
+    # end-to-end example below is a supplement, and it is unavailable on
+    # Windows, where a chmod +x shebang script is not executable.
+    it "keeps a shell metacharacter in the output path as one argv element" do
+      malicious_output = "out.png; touch PWNED"
+
+      expect(wrapper).to receive(:system) do |*command|
+        expect(command.size).to be > 1
+        expect(command).to include("-o#{malicious_output}")
+        expect(command).to all(be_a(String))
+        true
+      end
+
+      wrapper.render("input.dot", malicious_output, :png)
+    end
+
     it "does not execute a shell metacharacter embedded in the output path" do
-      skip "no 'true' binary on PATH" unless true_binary
+      skip "a chmod +x shebang script is not executable" if Gem.win_platform?
 
       Dir.mktmpdir do |dir|
         marker = File.join(dir, "PWNED")
@@ -647,12 +681,20 @@ RSpec.describe Elkrb::GraphvizWrapper do
         File.write(dot_file, "digraph{a->b}")
         malicious_output = File.join(dir, "out.png; touch #{marker}")
 
+        # The stand-in for `dot` is WRITTEN here rather than looked up, so this
+        # example can never silently skip: a skipped example is invisible in a
+        # green run, and this is the only one that proves the fix.
+        no_op = File.join(dir, "no-op")
+        File.write(no_op, "#!#{RbConfig.ruby}\nexit 0\n")
+        File.chmod(0o755, no_op)
+
         # No system stub here: this runs the real execute_command against a
         # real (harmless, always-succeeding) command, so a shell would
-        # actually have to be invoked for the metacharacter to fire. The
-        # available?/File.exist? stubs below override the file-level `before`
-        # block's blanket stubs so this test hits the real filesystem too.
-        wrapper.instance_variable_set(:@dot_path, true_binary)
+        # actually have to be invoked for the metacharacter to fire. The two
+        # and_call_original lines below undo the file-level `before` block's
+        # blanket stubs so this example touches the real filesystem; measured,
+        # it passes without them, so they buy honesty here, not coverage.
+        wrapper.instance_variable_set(:@dot_path, no_op)
         allow(wrapper).to receive(:available?).and_call_original
         allow(File).to receive(:exist?).and_call_original
 
@@ -682,7 +724,10 @@ RSpec.describe Elkrb::GraphvizWrapper do
     # tells them apart -- callers of this public method may reasonably pass
     # either.
     it "accepts a format given as a string by converting it with to_sym" do
-      expect(wrapper).to receive(:system).with(/-Tpng/).and_return(true)
+      expect(wrapper).to receive(:system) do |*args|
+        expect(args).to include("-Tpng")
+        true
+      end
 
       wrapper.render("input.dot", "output.png", "png")
     end
@@ -711,8 +756,8 @@ RSpec.describe Elkrb::GraphvizWrapper do
 
     it "coerces a Pathname input file to a String" do
       expect(wrapper).to receive(:system) do |*command|
-        expect(command.last).to eq("input.dot")
-        expect(command.last).to be_a(String)
+        expect(command).to include("input.dot")
+        expect(command).to all(be_a(String))
         true
       end
 
@@ -729,8 +774,8 @@ RSpec.describe Elkrb::GraphvizWrapper do
       def custom_path.to_path = "input.dot"
 
       expect(wrapper).to receive(:system) do |*command|
-        expect(command.last).to eq("input.dot")
-        expect(command.last).to be_a(String)
+        expect(command).to include("input.dot")
+        expect(command).to all(be_a(String))
         true
       end
 
@@ -762,7 +807,7 @@ RSpec.describe Elkrb::GraphvizWrapper do
       expect do
         wrapper.render("input.dot", "output.png", :png)
       end.to raise_error(Elkrb::GraphvizWrapper::GraphvizNotFoundError,
-                         /-Tpng.*-ooutput\.png input\.dot/)
+                         /"-Tpng".*"-ooutput\.png".*"input\.dot"/)
     end
 
     # "uses specified engine" and "raises error for unsupported engine" both
@@ -772,7 +817,10 @@ RSpec.describe Elkrb::GraphvizWrapper do
     # #to_s but not #to_str, and is never #== to the String elements
     # SUPPORTED_ENGINES actually holds.
     it "accepts an engine given as a symbol by converting it with to_s" do
-      expect(wrapper).to receive(:system).with(/-Kdot/).and_return(true)
+      expect(wrapper).to receive(:system) do |*args|
+        expect(args).to include("-Kdot")
+        true
+      end
 
       wrapper.render("input.dot", "output.png", :png, engine: :dot)
     end
@@ -781,7 +829,11 @@ RSpec.describe Elkrb::GraphvizWrapper do
   describe "#version" do
     it "returns Graphviz version when available" do
       allow(wrapper).to receive(:available?).and_return(true)
-      allow(wrapper).to receive(:`).and_return("dot - graphviz version 2.44.1 (20200629.0846)")
+      wrapper.instance_variable_set(:@dot_path, "/usr/bin/dot")
+      # argv array, not a command string: `#version` must not shell out either.
+      expect(IO).to receive(:popen)
+        .with(["/usr/bin/dot", "-V"], err: %i[child out])
+        .and_return("dot - graphviz version 2.44.1 (20200629.0846)")
 
       expect(wrapper.version).to eq("2.44.1")
     end
@@ -794,31 +846,21 @@ RSpec.describe Elkrb::GraphvizWrapper do
 
     # The one example above uses a single space and lowercase "version", so
     # `\s+` can shrink to `\s` and the `i` flag can be dropped without
-    # anything noticing. And nothing ever shells out to the ACTUAL @dot_path
-    # -- `#{@dot_path}` in the backtick command can be replaced with `#{nil}`
-    # and every example stays green, since `allow(wrapper).to receive(:\`)`
-    # matches any argument.
-    it "shells out to the wrapper's own dot path, not a stale reference" do
-      allow(wrapper).to receive(:available?).and_return(true)
-      wrapper.instance_variable_set(:@dot_path, "/usr/bin/dot")
-
-      expect(wrapper).to receive(:`)
-        .with("/usr/bin/dot -V 2>&1")
-        .and_return("dot - graphviz version 2.44.1 (20200629.0846)")
-
-      expect(wrapper.version).to eq("2.44.1")
-    end
-
+    # anything noticing. Pinning the exact dot_path in the #popen expectation
+    # above already proves #version shells out to the wrapper's own
+    # @dot_path, not a stale reference.
     it "matches one-or-more whitespace characters, case-insensitively" do
       allow(wrapper).to receive(:available?).and_return(true)
-      allow(wrapper).to receive(:`).and_return("dot - graphviz VERSION  2.44.1 (2020)")
+      wrapper.instance_variable_set(:@dot_path, "/usr/bin/dot")
+      allow(IO).to receive(:popen).and_return("dot - graphviz VERSION  2.44.1 (2020)")
 
       expect(wrapper.version).to eq("2.44.1")
     end
 
     it "returns nil, rather than raising, when the output has no version to parse" do
       allow(wrapper).to receive(:available?).and_return(true)
-      allow(wrapper).to receive(:`).and_return("dot: command not found")
+      wrapper.instance_variable_set(:@dot_path, "/usr/bin/dot")
+      allow(IO).to receive(:popen).and_return("dot: command not found")
 
       expect(wrapper.version).to be_nil
     end

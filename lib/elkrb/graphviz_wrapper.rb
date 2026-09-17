@@ -67,7 +67,7 @@ module Elkrb
     def version
       return nil unless available?
 
-      output = `#{@dot_path} -V 2>&1`
+      output = IO.popen([@dot_path, "-V"], err: %i[child out], &:read)
       output.match(/version\s+([\d.]+)/i)&.captures&.first
     end
 
