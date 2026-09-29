@@ -26,6 +26,16 @@ module Elkrb
       # - Data flow diagrams
       # - Organization charts
       # - Any directed acyclic graph
+      #
+      # The four bang validators below (raise_hyperedge!,
+      # raise_missing_endpoint!, validate_simple_edge!,
+      # validate_unique_edge_id!) are argument validators, not the
+      # dangerous/safe pair MissingSafeMethod expects -- same reasoning as
+      # GraphvizWrapper's own exemption, see that file's comment. No nested
+      # class here to inherit this and need its own reset.
+      # rubocop:disable Layout/LineLength
+      # :reek:MissingSafeMethod { exclude: [ raise_hyperedge!, raise_missing_endpoint!, validate_simple_edge!, validate_unique_edge_id! ] }
+      # rubocop:enable Layout/LineLength
       class LayeredAlgorithm < BaseAlgorithm
         # BaseAlgorithm intentionally skips layout_flat when a deserialized
         # graph omits `children`. Validate that public entry point here so an
@@ -74,12 +84,13 @@ module Elkrb
         def validate_unique_edge_id!(seen_ids, edge)
           return if anonymous?(edge)
 
-          if seen_ids.key?(edge.id)
+          id = edge.id
+          if seen_ids.key?(id)
             raise Elkrb::ValidationError,
                   "duplicate edge id: #{edge_label(edge)}"
           end
 
-          seen_ids[edge.id] = true
+          seen_ids[id] = true
         end
 
         # An id is optional on an edge. An edge without one is ANONYMOUS: it

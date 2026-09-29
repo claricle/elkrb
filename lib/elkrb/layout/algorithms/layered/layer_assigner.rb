@@ -82,7 +82,8 @@ module Elkrb
           end
 
           def step_predecessor_stack(stack, predecessors, colors)
-            current_id, predecessor_index = stack[-1]
+            frame = stack[-1]
+            current_id, predecessor_index = frame
             incoming = predecessors[current_id]
 
             if predecessor_index >= incoming.length
@@ -91,7 +92,7 @@ module Elkrb
             end
 
             predecessor_id = incoming[predecessor_index]
-            stack[-1][1] = predecessor_index + 1
+            frame[1] = predecessor_index + 1
             return if predecessor_assigned?(predecessor_id, colors)
 
             colors[predecessor_id] = :active

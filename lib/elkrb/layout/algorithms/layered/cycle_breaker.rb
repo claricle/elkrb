@@ -63,7 +63,8 @@ module Elkrb
             stack = [[root_id, 0]]
 
             until stack.empty?
-              current_id, edge_index = stack[-1]
+              frame = stack[-1]
+              current_id, edge_index = frame
               edges = adjacency[current_id]
 
               if edge_index >= edges.length
@@ -73,7 +74,7 @@ module Elkrb
               end
 
               target_id, edge = edges[edge_index]
-              stack[-1][1] = edge_index + 1
+              frame[1] = edge_index + 1
               visit_target(target_id, edge, stack, colors, reversed)
             end
           end
