@@ -136,12 +136,9 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::CycleBreaker do
       end
     end
 
-    # Nothing outside this context distinguishes "collects every back edge"
-    # from "collects the first one and stops": measured 2026-09-07, a
-    # CycleBreaker mutated to `reversed << edge if reversed.empty?` reds
-    # three of these 32 examples and nothing anywhere else -- these two,
-    # plus the identical-back-edges one at the top of the file, which now
-    # expects both copies.
+    # This context, plus the identical-back-edges case at the top of the
+    # file, is what distinguishes "collects every back edge" from
+    # "collects only the first" -- nothing else in this file pins that.
     context "with two independent cycles" do
       let(:graph) do
         Elkrb::Graph::Graph.new(

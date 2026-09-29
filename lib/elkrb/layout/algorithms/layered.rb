@@ -89,16 +89,11 @@ module Elkrb
         #
         # `""` counts as no id, and this is the ONE place that decides it --
         # `edge_label` asks the same predicate, so the validator and the
-        # message can never disagree about which edges have a name. They did
-        # disagree once, in the other direction: nil and "" were two separate
-        # keys to the validator and one name, "(none)", to the reader.
+        # message can never disagree about which edges have a name.
         #
         # Anonymous edges are free to repeat because nothing downstream keys
-        # on an edge id any more. CycleBreaker hands LayerAssigner the edge
-        # OBJECTS it reversed, compared by identity. While it handed over
-        # ids, every anonymous edge shared one handle, and this validator
-        # refused the second anonymous edge to cover that -- which rejected
-        # `a -> b, b -> c` written without ids, a graph v2 lays out.
+        # on an edge id any more: CycleBreaker hands LayerAssigner the edge
+        # OBJECTS it reversed, compared by identity, not their ids.
         def anonymous?(edge)
           edge.id.to_s.empty?
         end

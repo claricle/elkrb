@@ -27,10 +27,6 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
     end
 
     it "does not stack-overflow on a two-port self-loop beside a real edge" do
-      # Regression guard, rewritten 2026-09-07: the methods it used to
-      # name (get_incoming_edges, self_loop_edge?, calculate_layer,
-      # incoming_to?) no longer exist anywhere in lib/.
-      #
       # "p1" and "p2" are two ports of ONE node, so this edge is a
       # self-loop on "a" however its endpoints are spelled. A layer pass
       # that compares RAW endpoint ids sees "p1" != "p2", treats the edge
