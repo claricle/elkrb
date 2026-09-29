@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "algorithm_registry"
+require_relative "../options/registry"
+
 module Elkrb
   module Layout
     # Module to add hierarchical graph layout support to algorithms.
@@ -43,9 +46,15 @@ module Elkrb
 
           # Create a temporary graph for the node's children
           child_graph = create_child_graph(node)
+          node_options = extract_node_options(node)
 
-          # Recursively layout the child graph
-          layout_hierarchical(child_graph, extract_node_options(node))
+          # Recursively layout the child graph, honouring the node's own
+          # elk.algorithm selector the same way LayoutEngine honours the
+          # root graph's -- a node that is itself a graph with a different
+          # elk.algorithm gets laid out by that algorithm, not whichever
+          # one is already recursing through the hierarchy.
+          processor = child_layout_processor(node_options)
+          processor.layout_hierarchical(child_graph, node_options)
 
           # Apply the layout back to the node
           apply_child_layout(node, child_graph)
@@ -72,6 +81,20 @@ module Elkrb
       # Extract layout options from a node.
       def extract_node_options(node)
         node.layout_options || {}
+      end
+
+      # Resolves and instantiates the algorithm named by a node's own
+      # layoutOptions (via AlgorithmRegistry.for_layout_options), so a
+      # nested graph's elk.algorithm selector is honoured instead of
+      # ignored. Falls back to the algorithm already recursing (self)
+      # when the node names none, names the algorithm already running,
+      # or names one that isn't registered.
+      def child_layout_processor(node_options)
+        algorithm_class = AlgorithmRegistry.for_layout_options(node_options)
+        different = algorithm_class && !algorithm_class.equal?(self.class)
+        return self unless different
+
+        algorithm_class.new(node_options)
       end
 
       # Apply the child graph layout back to the parent node.

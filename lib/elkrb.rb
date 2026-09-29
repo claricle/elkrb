@@ -255,8 +255,8 @@ module Elkrb
     Layout::Algorithms::VertiFlex,
     {
       name: "VertiFlex",
-      description: "Vertical flexible layout with column-based arrangement",
-      category: "layered",
+      description: "Column-grid arrangement that ignores edges",
+      category: "packing",
       supports_hierarchy: false,
       experimental: true,
     },

@@ -22,6 +22,20 @@ module Elkrb
           @algorithms[resolve_key(name)]
         end
 
+        # The algorithm class named by a layoutOptions map's own algorithm
+        # selector, resolved through Options::Registry.algorithm_selector
+        # -- nil when the map names none or names one that isn't
+        # registered. Used by HierarchicalProcessor so a nested graph's
+        # own elk.algorithm selector is honoured the same way
+        # LayoutEngine honours a root graph's.
+        #
+        # @param layout_options [Hash, nil]
+        # @return [Class, nil]
+        def for_layout_options(layout_options)
+          name = Options::Registry.algorithm_selector(layout_options)
+          name && get(name)
+        end
+
         def available_algorithms
           @algorithms.keys.sort
         end

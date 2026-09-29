@@ -58,27 +58,31 @@ RSpec.describe "sirena consumer capture fixtures" do
     end
   end
 
-  shared_examples "a graph elkrb echoes back" do
-    # A graph's own algorithm key is recorded, not obeyed -- both the
-    # canonical layoutOptions["elk.algorithm"] and the layoutOptions
-    # ["algorithm"] alias. c4_nested.json carries both SPELLINGS across the
-    # document, never in one hash: its root has only "algorithm", while each
-    # nested subgraph has only "elk.algorithm". The rest carry only the
-    # alias, at the root. Neither spelling is read.
-    # LayoutEngine.layout selects from options[:algorithm] or
-    # options["algorithm"] and otherwise defaults to "layered"; it never
-    # reads graph.layoutOptions. So every case sharing these examples lays
-    # out as layered, whatever algorithm its option map names -- including
-    # the synthetic mrtree/sporeOverlap/stress/force maps below.
-    #
-    # layout_engine.rb's own YARD still documents a three-step order whose
-    # step 2 reads graph.layoutOptions["elk.algorithm"]. The code does not do
-    # that; the doc is the stale one, tracked as the open dispatch defect.
-    # Trust this comment over that doc, and re-check both if either moves.
+  # known_crash_reason is a shared-example PARAMETER, not a `let` -- a
+  # `let(:known_crash_reason) { nil }` defined in this block would shadow
+  # an override set by the including `describe`, because `it_behaves_like`
+  # nests the shared group's own context closer to the example than the
+  # includer, and `let` resolution always prefers the closer definition.
+  shared_examples "a graph elkrb echoes back" do |known_crash_reason = nil|
+    # Every case sharing these examples, including the synthetic option
+    # maps below, runs the algorithm its own layoutOptions names.
+    before { pending(known_crash_reason) if known_crash_reason }
+
     let(:result) do
       Elkrb.layout(JSON.parse(JSON.generate(input), symbolize_names: true))
     end
     let(:output) { JSON.parse(result.to_json) }
+
+    it "runs the algorithm its own layoutOptions names" do
+      options = input["layoutOptions"] || {}
+      expected = options["elk.algorithm"] || options["algorithm"] || "layered"
+      registry = Elkrb::Layout::AlgorithmRegistry
+      allow(registry).to receive(:get).and_call_original
+
+      result
+
+      expect(registry).to have_received(:get).with(expected)
+    end
 
     it "echoes every layoutOptions map it was given" do
       given = option_maps(input)

@@ -25,6 +25,21 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
   end
 
   describe "#run" do
+    # Mutant found this gap: every other example here checks the OUTPUT
+    # FILE, so the confirmation write at the end of #run could be replaced
+    # wholesale with `nil` and nothing noticed. This is the only example
+    # that would catch that.
+    it "confirms the diagram on stdout" do
+      input_file = File.join(temp_dir, "graph.json")
+      output_file = File.join(temp_dir, "output.dot")
+
+      File.write(input_file, graph_data.to_json)
+
+      command = described_class.new(input_file, { output: output_file })
+
+      expect { command.run }.to output(/Diagram created/).to_stdout
+    end
+
     it "creates diagram from JSON file" do
       input_file = File.join(temp_dir, "graph.json")
       output_file = File.join(temp_dir, "output.dot")
@@ -47,6 +62,50 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
       command.run
 
       expect(File.exist?(output_file)).to be true
+    end
+
+    # #load_graph only reaches #detect_and_parse when the extension is
+    # unrecognized, and every example above uses .json/.yml/.elkt -- so this
+    # auto-detect chain had near-zero mutation coverage and hid a real
+    # defect (also fixed in ValidateCommand and ConvertCommand):
+    # Graph.from_json/.from_yaml raise Lutaml::Model::InvalidFormatError on
+    # bad content, not the stdlib JSON::ParserError / Psych::SyntaxError this
+    # rescued. It never fell through past JSON to try YAML or ELKT.
+    it "auto-detects YAML when the extension is unrecognized" do
+      input_file = File.join(temp_dir, "graph.diagram")
+      output_file = File.join(temp_dir, "output.dot")
+
+      File.write(input_file, graph_data.to_yaml)
+
+      command = described_class.new(input_file, { output: output_file })
+      command.run
+
+      expect(File.exist?(output_file)).to be true
+    end
+
+    it "auto-detects ELKT when the extension is unrecognized" do
+      input_file = File.join(temp_dir, "graph.diagram")
+      output_file = File.join(temp_dir, "output.dot")
+
+      File.write(input_file, "node n1\nnode n2\nedge n1 -> n2")
+
+      command = described_class.new(input_file, { output: output_file })
+      command.run
+
+      expect(File.exist?(output_file)).to be true
+    end
+
+    it "raises a clear error when nothing can parse the content" do
+      input_file = File.join(temp_dir, "graph.diagram")
+      output_file = File.join(temp_dir, "output.dot")
+      # A lone ")" is invalid JSON, invalid ELKT, and -- unlike most garbage
+      # strings -- also invalid YAML (a bare flow-mapping close character).
+      File.write(input_file, ")")
+
+      command = described_class.new(input_file, { output: output_file })
+
+      expect { command.run }.to raise_error(ArgumentError,
+                                            /Unable to parse input file/)
     end
 
     it "creates diagram from ELKT file" do

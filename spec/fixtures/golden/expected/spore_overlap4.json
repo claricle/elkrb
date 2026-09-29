@@ -1,0 +1,41 @@
+{
+  "id": "root",
+  "layoutOptions": {
+    "elk.algorithm": "sporeOverlap"
+  },
+  "children": [
+    {
+      "id": "a",
+      "width": 30,
+      "height": 30,
+      "x": 8,
+      "y": 46
+    },
+    {
+      "id": "b",
+      "width": 30,
+      "height": 30,
+      "x": 46,
+      "y": 84
+    },
+    {
+      "id": "c",
+      "width": 30,
+      "height": 30,
+      "x": 84,
+      "y": 46
+    },
+    {
+      "id": "d",
+      "width": 30,
+      "height": 30,
+      "x": 46,
+      "y": 8
+    }
+  ],
+  "edges": [],
+  "x": 0,
+  "y": 0,
+  "width": 122,
+  "height": 122
+}

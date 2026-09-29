@@ -395,6 +395,42 @@ RSpec.describe "spec/fixtures/consumers/sirena/capture.rb" do
       expect(who.uniq.length).to eq(1)
     end
 
+    # Windows/NTFS refuses to open a directory for reading at all -- opening
+    # the output directory that way used to be exactly how the lock was
+    # taken. Simulated here rather than run on real Windows CI (which this
+    # suite cannot reach): a prepended `File.open` that raises the error
+    # Windows raises, EISDIR, for that one path and mode, and passes
+    # everything else through untouched. Matches, verbatim, the exception
+    # from real windows-latest CI (PR #26, job 102922397491): "Is a
+    # directory @ rb_sysopen" from `with_directory_lock`. On the code this
+    # simulates, `publish` raises before anything is staged and this
+    # example goes red; the fix never opens the directory itself, so it
+    # stays green.
+    it "still locks when the platform refuses to open the directory itself" do
+      Dir.mkdir(@out_dir)
+      simulate_windows = File.join(@tmp, "simulate_windows.rb")
+      File.write(simulate_windows, <<~RUBY)
+        File.singleton_class.prepend(Module.new do
+          define_method(:open) do |path, *rest, &blk|
+            if path == #{@out_dir.inspect} && rest.first == File::RDONLY
+              raise Errno::EISDIR, path
+            end
+            super(path, *rest, &blk)
+          end
+        end)
+      RUBY
+
+      out, status = run_ruby(<<~RUBY)
+        load #{simulate_windows.inspect}
+        require #{script.inspect}
+        SirenaCapture.publish([["a", { "id" => "x" }]], #{@out_dir.inspect})
+      RUBY
+
+      expect(status).to eq(0)
+      expect(out).to include("wrote")
+      expect(written).to eq(["a.json"])
+    end
+
     it "restores the original when interrupted after the backup is made" do
       Dir.mkdir(@out_dir)
       File.write(File.join(@out_dir, "a.json"), "OLD-a")

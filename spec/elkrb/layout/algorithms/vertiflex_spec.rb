@@ -5,6 +5,25 @@ require "spec_helper"
 RSpec.describe Elkrb::Layout::Algorithms::VertiFlex do
   let(:algorithm) { described_class.new }
 
+  describe "#initialize" do
+    it "stores the given options, as BaseAlgorithm#initialize does" do
+      # An arbitrary hash, deliberately not a real vertiflex.* key: layout_flat
+      # ignores the options passed to .new and reads graph.layout_options
+      # instead, so this only pins storage, not configuration.
+      algorithm = described_class.new({ "unrelated.marker" => 4 })
+
+      expect(algorithm.options).to eq(
+        { "unrelated.marker" => 4 },
+      )
+    end
+
+    it "defaults options to an empty hash, never nil" do
+      algorithm = described_class.new
+
+      expect(algorithm.options).to eq({})
+    end
+  end
+
   describe "#layout" do
     context "with basic vertical layout (6 nodes, 3 columns)" do
       let(:graph) do
@@ -263,19 +282,59 @@ RSpec.describe Elkrb::Layout::Algorithms::VertiFlex do
         ]
       end
 
-      it "sets column width based on widest node in each column" do
+      it "advances the next column by the widest node's width plus spacing" do
         algorithm.layout(graph)
 
-        # Group by column
-        columns = graph.children.group_by { |n| n.x.round }
+        # Balanced round-robin with 2 columns: narrow1/narrow2 -> column 0
+        # (widest 40), wide1/wide2 -> column 1 (widest 100).
+        columns = graph.children.group_by { |n| n.x.round }.sort_by { |x, _| x }
         expect(columns.size).to eq(2)
 
-        columns.each_value do |column_nodes|
-          # All nodes in column should be positioned
-          column_nodes.each do |node|
-            expect(node.x).to be_a(Numeric)
-          end
+        col0_x, col0_nodes = columns[0]
+        col1_x = columns[1].first
+        col0_width = col0_nodes.map(&:width).max
+
+        expect(col1_x - col0_x).to eq(col0_width + 50.0)
+      end
+    end
+
+    context "with edges present" do
+      def build_graph(with_edges:)
+        opts = {}
+        opts["algorithm"] = "vertiflex"
+        opts["vertiflex.columnCount"] = 3
+
+        graph = Elkrb::Graph::Graph.new(id: "root", layout_options: opts)
+        graph.children = (1..6).map do |i|
+          Elkrb::Graph::Node.new(id: "node#{i}", width: 50, height: 40)
         end
+        graph.edges = if with_edges
+                        [
+                          Elkrb::Graph::Edge.new(
+                            id: "e1", sources: ["node1"], targets: ["node6"],
+                          ),
+                          Elkrb::Graph::Edge.new(
+                            id: "e2", sources: ["node2"], targets: ["node5"],
+                          ),
+                        ]
+                      else
+                        []
+                      end
+        graph
+      end
+
+      it "produces identical positions whether or not edges are present" do
+        with_edges = build_graph(with_edges: true)
+        without_edges = build_graph(with_edges: false)
+
+        described_class.new.layout(with_edges)
+        described_class.new.layout(without_edges)
+
+        positions = lambda do |g|
+          g.children.map { |n| [n.id, n.x, n.y] }
+        end
+
+        expect(positions.call(with_edges)).to eq(positions.call(without_edges))
       end
     end
 

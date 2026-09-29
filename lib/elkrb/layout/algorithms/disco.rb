@@ -34,6 +34,21 @@ module Elkrb
           graph
         end
 
+        # README.adoc (matching upstream ELK) documents this option as
+        # "disco.componentCompaction.strategy" with values NONE/ROW/COLUMN/GRID.
+        # "disco.componentArrangement" was never a real ELK key -- it was made
+        # up here and silently ignored anything set under the documented name.
+        # Read the documented key first, keep the made-up one as a fallback so
+        # existing callers using it do not break, and normalise case since ELK
+        # values are upper-case while this algorithm compares lower-case.
+        def self.component_arrangement(graph)
+          options = graph.layout_options
+          raw = options&.[]("disco.componentCompaction.strategy") ||
+            options&.[]("disco.componentArrangement") ||
+            "row"
+          raw.to_s.downcase
+        end
+
         private
 
         def find_connected_components(graph)
@@ -107,7 +122,7 @@ module Elkrb
         def arrange_components(components, graph, spacing)
           return if components.empty?
 
-          arrangement = graph.layout_options&.[]("disco.componentArrangement") || "row"
+          arrangement = self.class.component_arrangement(graph)
 
           case arrangement
           when "grid"

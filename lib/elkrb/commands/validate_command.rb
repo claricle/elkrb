@@ -3,11 +3,17 @@
 require "json"
 require "yaml"
 
+require_relative "../errors"
+require_relative "../best_effort_write"
+
 module Elkrb
   module Commands
     # Command for validating ELK graph structure
     # Checks for required fields, valid relationships, and structural integrity
     class ValidateCommand
+      require_relative "format_auto_detection"
+      include FormatAutoDetection
+
       def initialize(file, options)
         @file = file
         @options = options
@@ -21,9 +27,16 @@ module Elkrb
         if errors.empty?
           puts "✅ #{@file} is valid"
         else
-          puts "❌ #{@file} has #{errors.length} error(s):"
-          errors.each { |e| puts "  • #{e}" }
-          exit 1
+          # One summary, printed and raised, so the reported count and the
+          # raised count cannot drift apart. The printing is best-effort --
+          # see Elkrb::BestEffortWrite -- because this report goes out BEFORE
+          # the raise, so a dead stdout used to take the raise with it.
+          summary = "#{@file} has #{errors.length} error(s)"
+          BestEffortWrite.attempt do
+            puts "❌ #{summary}:"
+            errors.each { |e| puts "  • #{e}" }
+          end
+          raise Elkrb::CommandFailed, summary
         end
       end
 
@@ -54,32 +67,6 @@ module Elkrb
         else
           JSON.parse(graph.to_json,
                      symbolize_names: true)
-        end
-      end
-
-      def detect_and_parse(content)
-        require_relative "../graph/graph"
-
-        # Try JSON first
-        begin
-          return Elkrb::Graph::Graph.from_json(content)
-        rescue JSON::ParserError
-          # Not JSON
-        end
-
-        # Try YAML
-        begin
-          return Elkrb::Graph::Graph.from_yaml(content)
-        rescue Psych::SyntaxError
-          # Not YAML
-        end
-
-        # Try ELKT
-        begin
-          require_relative "../parsers/elkt_parser"
-          Elkrb::Parsers::ElktParser.parse(content)
-        rescue StandardError
-          raise ArgumentError, "Unable to parse input file"
         end
       end
 

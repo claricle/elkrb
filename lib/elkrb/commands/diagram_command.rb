@@ -4,11 +4,16 @@ require "json"
 require "yaml"
 require "fileutils"
 
+require_relative "../best_effort_write"
+
 module Elkrb
   module Commands
     # Command for creating diagrams from ELK graph files
     # Supports multiple input formats (JSON, YAML, ELKT) and output formats (DOT, PNG, SVG, PDF)
     class DiagramCommand
+      require_relative "format_auto_detection"
+      include FormatAutoDetection
+
       def initialize(file, options)
         @file = file
         @options = options
@@ -39,7 +44,13 @@ module Elkrb
         # Preview if requested
         preview(@options[:output]) if @options[:preview]
 
-        puts "✓ Diagram created: #{@options[:output]}"
+        # Best-effort: the file above is already the result. This
+        # confirmation must not decide the exit status -- see
+        # Elkrb::BestEffortWrite. This also protects BatchCommand, which
+        # calls #run per file inside its own StandardError rescue: an
+        # unguarded EPIPE here used to be caught THERE and miscounted a
+        # successfully diagrammed file as a processing failure.
+        BestEffortWrite.attempt { puts "✓ Diagram created: #{@options[:output]}" }
       end
 
       private
@@ -62,33 +73,6 @@ module Elkrb
           Elkrb::Parsers::ElktParser.parse(content)
         else
           detect_and_parse(content)
-        end
-      end
-
-      def detect_and_parse(content)
-        require_relative "../graph/graph"
-
-        # Try JSON first
-        begin
-          return Elkrb::Graph::Graph.from_json(content)
-        rescue JSON::ParserError
-          # Not JSON
-        end
-
-        # Try YAML
-        begin
-          return Elkrb::Graph::Graph.from_yaml(content)
-        rescue Psych::SyntaxError
-          # Not YAML
-        end
-
-        # Try ELKT
-        begin
-          require_relative "../parsers/elkt_parser"
-          Elkrb::Parsers::ElktParser.parse(content)
-        rescue StandardError
-          raise ArgumentError,
-                "Unable to parse input file. Supported formats: JSON, YAML, ELKT"
         end
       end
 

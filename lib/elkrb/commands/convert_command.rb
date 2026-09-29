@@ -4,11 +4,16 @@ require "json"
 require "yaml"
 require "fileutils"
 
+require_relative "../best_effort_write"
+
 module Elkrb
   module Commands
     # Command for converting between graph formats
     # Supports JSON, YAML, DOT, and ELKT formats
     class ConvertCommand
+      require_relative "format_auto_detection"
+      include FormatAutoDetection
+
       def initialize(file, options)
         @file = file
         @options = options
@@ -24,13 +29,22 @@ module Elkrb
         # Convert
         content = export_to_format(graph, target_format)
 
-        # Write output
+        # Write output -- this is the result. Everything after it is best-effort.
         write_output(content, @options[:output])
 
-        puts "✓ Converted #{@file} → #{@options[:output]} (#{target_format})"
+        report_success(target_format)
       end
 
       private
+
+      # Best-effort: the file written above is already the result. This
+      # confirmation must not decide the exit status -- see
+      # Elkrb::BestEffortWrite.
+      def report_success(target_format)
+        BestEffortWrite.attempt do
+          puts "✓ Converted #{@file} → #{@options[:output]} (#{target_format})"
+        end
+      end
 
       def load_any_format(file)
         raise ArgumentError, "File not found: #{file}" unless File.exist?(file)
@@ -53,33 +67,6 @@ module Elkrb
                 "DOT format input not yet supported. Use JSON, YAML, or ELKT."
         else
           detect_and_parse(content)
-        end
-      end
-
-      def detect_and_parse(content)
-        require_relative "../graph/graph"
-
-        # Try JSON first
-        begin
-          return Elkrb::Graph::Graph.from_json(content)
-        rescue JSON::ParserError
-          # Not JSON
-        end
-
-        # Try YAML
-        begin
-          return Elkrb::Graph::Graph.from_yaml(content)
-        rescue Psych::SyntaxError
-          # Not YAML
-        end
-
-        # Try ELKT
-        begin
-          require_relative "../parsers/elkt_parser"
-          Elkrb::Parsers::ElktParser.parse(content)
-        rescue StandardError
-          raise ArgumentError,
-                "Unable to parse input file. Supported formats: JSON, YAML, ELKT"
         end
       end
 

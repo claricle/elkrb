@@ -2,6 +2,8 @@
 
 require "fileutils"
 
+require_relative "../best_effort_write"
+
 module Elkrb
   module Commands
     # Command for processing multiple graph files in batch
@@ -23,7 +25,13 @@ module Elkrb
         files = Dir.glob(pattern, File::FNM_EXTGLOB)
 
         if files.empty?
-          puts "No graph files found in #{@directory}"
+          # Best-effort: this notice carries no result -- there is nothing
+          # left to do either way, so a dead stdout must not decide the
+          # exit status here any more than it does after real work below.
+          # See Elkrb::BestEffortWrite.
+          BestEffortWrite.attempt do
+            puts "No graph files found in #{@directory}"
+          end
           return
         end
 
@@ -42,10 +50,14 @@ module Elkrb
           warn "⚠ Error processing #{file}: #{e.message}"
         end
 
-        # Summary
-        puts ""
-        puts "✓ Processed #{success_count} file(s) → #{@options[:output_dir]}"
-        puts "⚠ #{error_count} error(s)" if error_count.positive?
+        # Best-effort: every file above is already written to output_dir.
+        # This summary must not decide the exit status -- see
+        # Elkrb::BestEffortWrite.
+        BestEffortWrite.attempt do
+          puts ""
+          puts "✓ Processed #{success_count} file(s) → #{@options[:output_dir]}"
+          puts "⚠ #{error_count} error(s)" if error_count.positive?
+        end
       end
 
       private
