@@ -35,9 +35,6 @@ module GoldenCases
   rc7_spacing_unread =
     "RC7: elk.spacing.nodeNode and " \
     "elk.layered.spacing.nodeNodeBetweenLayers are not read"
-  rc7_hyperedge_misrouted =
-    "RC7: layered silently mis-routes hyperedges instead of raising " \
-    "like elkjs"
   rc8_absolute_node_labels =
     "RC8: node labels are absolute, not owner-relative"
   rc8_label_placement_unread =
@@ -111,7 +108,7 @@ module GoldenCases
                  # deliberately narrow: a reworded message SHOULD fail here
                  # and be updated on purpose.
                  expect_error: /does not support hyperedge/i,
-                 pending: rc7_hyperedge_misrouted }.freeze
+                 pending: nil }.freeze
 
   TIER_BY_CASE = COMPARISON_CASES.to_h { |c| [c[:name], c[:tier]] }.freeze
 

@@ -59,6 +59,9 @@ detectors:
     - Elkrb::Parsers::Elkt::Parser#single_id
   ControlParameter:
     exclude:
+    - Elkrb::Layout::Algorithms::Layered::CycleBreaker#endpoint_owner_ids
+    - Elkrb::Layout::Algorithms::Layered::LayerAssigner#endpoint_owner_id
+    - Elkrb::Layout::Algorithms::LayeredAlgorithm#endpoint_list
     - Elkrb::Layout::Algorithms::VertiFlex#distribute_nodes
     - Elkrb::Layout::Constraints::AlignmentConstraint#align_nodes
     - Elkrb::Layout::Constraints::AlignmentConstraint#validate_group_alignment
@@ -132,10 +135,7 @@ detectors:
     - Elkrb::Layout::Algorithms::Force#initialize_positions
     - Elkrb::Layout::Algorithms::Force#layout_flat
     - Elkrb::Layout::Algorithms::Layered::CycleBreaker#break_cycles
-    - Elkrb::Layout::Algorithms::Layered::CycleBreaker#dfs
-    - Elkrb::Layout::Algorithms::Layered::CycleBreaker#reverse_edges
     - Elkrb::Layout::Algorithms::Layered::LayerAssigner#assign_layers
-    - Elkrb::Layout::Algorithms::Layered::LayerAssigner#calculate_layer
     - Elkrb::Layout::Algorithms::LayeredAlgorithm#layout_flat
     - Elkrb::Layout::Algorithms::Libavoid#build_obstacle_map
     - Elkrb::Layout::Algorithms::Libavoid#direction
@@ -293,9 +293,10 @@ detectors:
     - Elkrb::Layout::Algorithms::Force#apply_forces
     - Elkrb::Layout::Algorithms::Force#calculate_forces
     - Elkrb::Layout::Algorithms::Force#initialize_positions
-    - Elkrb::Layout::Algorithms::Layered::CycleBreaker#reverse_edges
+    - Elkrb::Layout::Algorithms::Layered::CycleBreaker#walk_from
     - Elkrb::Layout::Algorithms::Layered::NodePlacer#calculate_layer_widths
     - Elkrb::Layout::Algorithms::Layered::NodePlacer#place_layer
+    - Elkrb::Layout::Algorithms::LayeredAlgorithm#missing_endpoint?
     - Elkrb::Layout::Algorithms::Libavoid#build_obstacle_map
     - Elkrb::Layout::Algorithms::Libavoid#line_intersects_rectangle?
     - Elkrb::Layout::Algorithms::Libavoid#minimize_bends
@@ -390,6 +391,9 @@ detectors:
     - Elkrb::Layout::Algorithms::Force#apply_attractive_force
     - Elkrb::Layout::Algorithms::Force#apply_forces
     - Elkrb::Layout::Algorithms::Force#apply_repulsive_force
+    - Elkrb::Layout::Algorithms::Layered::CycleBreaker#visit_target
+    - Elkrb::Layout::Algorithms::Layered::CycleBreaker#walk_from
+    - Elkrb::Layout::Algorithms::Layered::LayerAssigner#finish_predecessor_frame
     - Elkrb::Layout::Algorithms::Layered::NodePlacer#place_layer
     - Elkrb::Layout::Algorithms::Libavoid#minimize_bends
     - Elkrb::Layout::Algorithms::Libavoid#segments_intersect?
@@ -441,7 +445,7 @@ detectors:
     - Elkrb::Layout::Algorithms::Disco#arrange_in_row
     - Elkrb::Layout::Algorithms::Disco#find_connected_components
     - Elkrb::Layout::Algorithms::Force#calculate_forces
-    - Elkrb::Layout::Algorithms::Layered::CycleBreaker#dfs
+    - Elkrb::Layout::Algorithms::Layered::CycleBreaker#outgoing_edges
     - Elkrb::Layout::Algorithms::Layered::NodePlacer#calculate_layer_widths
     - Elkrb::Layout::Algorithms::Layered::NodePlacer#calculate_layer_y_positions
     - Elkrb::Layout::Algorithms::Libavoid#find_path
@@ -469,6 +473,8 @@ detectors:
     - Elkrb::Layout::Algorithms::Box#layout_flat
     - Elkrb::Layout::Algorithms::Fixed#layout_flat
     - Elkrb::Layout::Algorithms::Force#layout_flat
+    - Elkrb::Layout::Algorithms::Layered::CycleBreaker#visit_target
+    - Elkrb::Layout::Algorithms::LayeredAlgorithm#endpoint_present?
     - Elkrb::Layout::Algorithms::LayeredAlgorithm#layout_flat
     - Elkrb::Layout::Algorithms::Libavoid#layout_flat
     - Elkrb::Layout::Algorithms::Random#layout_flat
@@ -563,9 +569,13 @@ detectors:
     - Elkrb::Layout::Algorithms::Force#initialize
     - Elkrb::Layout::Algorithms::Force#layout_flat
     - Elkrb::Layout::Algorithms::Force#resolve_edge_positions
-    - Elkrb::Layout::Algorithms::Layered::CycleBreaker#dfs
+    - Elkrb::Layout::Algorithms::Layered::CycleBreaker#break_cycles
+    - Elkrb::Layout::Algorithms::Layered::CycleBreaker#outgoing_edges
+    - Elkrb::Layout::Algorithms::Layered::CycleBreaker#walk_from
     - Elkrb::Layout::Algorithms::Layered::LayerAssigner#assign_layers
-    - Elkrb::Layout::Algorithms::Layered::LayerAssigner#calculate_layer
+    - Elkrb::Layout::Algorithms::Layered::LayerAssigner#build_layers
+    - Elkrb::Layout::Algorithms::Layered::LayerAssigner#build_predecessors
+    - Elkrb::Layout::Algorithms::Layered::LayerAssigner#step_predecessor_stack
     - Elkrb::Layout::Algorithms::Layered::NodePlacer#calculate_layer_widths
     - Elkrb::Layout::Algorithms::Layered::NodePlacer#calculate_layer_y_positions
     - Elkrb::Layout::Algorithms::Layered::NodePlacer#place_layer
@@ -790,6 +800,11 @@ detectors:
     - Elkrb::Layout::Algorithms::Force#apply_attractive_force
     - Elkrb::Layout::Algorithms::Force#apply_repulsive_force
     - Elkrb::Layout::Algorithms::Force#resolve_edge_positions
+    - Elkrb::Layout::Algorithms::Layered::CycleBreaker#visit_target
+    - Elkrb::Layout::Algorithms::Layered::LayerAssigner#usable_edge?
+    - Elkrb::Layout::Algorithms::LayeredAlgorithm#anonymous?
+    - Elkrb::Layout::Algorithms::LayeredAlgorithm#endpoint_list
+    - Elkrb::Layout::Algorithms::LayeredAlgorithm#endpoint_present?
     - Elkrb::Layout::Algorithms::Libavoid#build_node_map
     - Elkrb::Layout::Algorithms::Libavoid#create_orthogonal_segments
     - Elkrb::Layout::Algorithms::Libavoid#direction

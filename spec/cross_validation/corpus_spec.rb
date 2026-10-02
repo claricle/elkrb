@@ -40,11 +40,20 @@ module CorpusCatalogue
   KNOWN_FAILURES = {
     ["duplicate_ids", "no_crash"] => "RC4",
     ["duplicate_ids", "invariants"] => "RC4",
+    # layered's own validation (LayeredAlgorithm#raise_hyperedge!, added on
+    # this branch) now rejects any edge that isn't exactly one source and
+    # one target, matching Java ELK's real layered limitation and pinned
+    # directly in layered_spec.rb ("raises for a hyperedge with multiple
+    # sources/targets"). The fixture predates that validation and used to
+    # be laid out via CycleBreaker's source x target cross product; it is
+    # now an intentional "expect": "error" case, same pattern as
+    # duplicate_ids below.
+    ["hyperedge", "no_crash"] => "RC-hyperedge",
+    ["hyperedge", "invariants"] => "RC-hyperedge",
     ["java_elk_sporeOverlap", "invariants"] => "RC14",
     ["java_elk_sporeCompaction", "invariants"] => "RC14",
     ["port_id_edges", "invariants"] => "RC8",
     ["elkjs_bug7_complex", "invariants"] => "RC8",
-    ["cycle3", "invariants"] => "RC7",
     ["compound_unsized", "invariants"] => "S10",
     ["java_elk_compound", "invariants"] => "S10",
     ["java_elk_force", "invariants"] => "S15",
