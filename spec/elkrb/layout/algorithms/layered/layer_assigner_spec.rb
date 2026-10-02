@@ -38,5 +38,34 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::LayerAssigner do
 
       expect(layers.flatten.map(&:id)).to contain_exactly("a", "b", "c")
     end
+
+    # Every other example in this file declares `children` in an order that
+    # already matches the DFS topology, so a predecessor is always resolved
+    # (@node_layers.key?) before anything checks whether it's :active --
+    # the false branch of predecessor_assigned? (not yet visited by an
+    # earlier root) is exercised only by accident of declaration order,
+    # never pinned. Declaring the chain in reverse forces that branch: `d`
+    # walks into `c`, `b`, `a` -- none of which any earlier root has
+    # resolved yet -- before any of them is :active.
+    it "assigns an acyclic chain's layers correctly even when children are " \
+       "declared in reverse topological order" do
+      graph = Elkrb::Graph::Graph.new(
+        id: "r",
+        children: %w[d c b a].map { |id| Elkrb::Graph::Node.new(id: id) },
+        edges: [
+          Elkrb::Graph::Edge.new(id: "ab", sources: ["a"], targets: ["b"]),
+          Elkrb::Graph::Edge.new(id: "bc", sources: ["b"], targets: ["c"]),
+          Elkrb::Graph::Edge.new(id: "cd", sources: ["c"], targets: ["d"]),
+        ],
+      )
+
+      layers = described_class.new(
+        graph, Elkrb::Layout::NodeIndex.build(graph)
+      ).assign_layers
+
+      expect(layers.map { |layer| layer.map(&:id) }).to eq(
+        [["a"], ["b"], ["c"], ["d"]],
+      )
+    end
   end
 end

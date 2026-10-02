@@ -105,13 +105,16 @@ module Elkrb
             stack.pop
           end
 
+          # False here is the ordinary case: predecessor_id hasn't been
+          # visited by an earlier root yet, so the caller descends into it
+          # next. True from the :active check is the defensive case --
           # CycleBreaker orients every back edge away from the active DFS
-          # path, so through the real pipeline `colors[predecessor_id] ==
-          # :active` never fires -- it stays defensive for a direct caller of
-          # LayerAssigner that supplies an incomplete reversal set. Warn on
-          # that branch specifically (not the plain-revisit one above it):
-          # silently proceeding here is what dropped a diagnostic this class
-          # used to print for exactly this misuse.
+          # path, so through the real pipeline this branch never fires; it
+          # guards a direct caller of LayerAssigner that supplies an
+          # incomplete reversal set. Warn there specifically (not on the
+          # plain-revisit case above it): silently proceeding is what
+          # dropped a diagnostic this class used to print for exactly that
+          # misuse.
           def predecessor_assigned?(predecessor_id, colors)
             return true if @node_layers.key?(predecessor_id)
             return false unless colors[predecessor_id] == :active
