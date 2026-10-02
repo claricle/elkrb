@@ -111,6 +111,39 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::CycleBreaker do
       end
     end
 
+    context "with a node whose own two forward edges reach either side of " \
+            "a 2-cycle" do
+      # a's own adjacency is declared [a->b, a->c]. walk_from starts
+      # scanning a NODE's adjacency at its first entry -- nothing else in
+      # this file has a node with two outgoing edges feeding into the
+      # same later cycle, so starting that per-node scan at the wrong
+      # offset (found by comparing against a from-scratch reimplementation
+      # across 2000 random graphs; this is the smallest mismatching one)
+      # still finds *a* back edge, just the wrong one.
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "r",
+          children: %w[a b c].map do |id|
+            Elkrb::Graph::Node.new(id: id, width: 10, height: 10)
+          end,
+          edges: [
+            Elkrb::Graph::Edge.new(id: "ab", sources: ["a"], targets: ["b"]),
+            Elkrb::Graph::Edge.new(id: "ac", sources: ["a"], targets: ["c"]),
+            Elkrb::Graph::Edge.new(id: "bc", sources: ["b"], targets: ["c"]),
+            Elkrb::Graph::Edge.new(id: "cb", sources: ["c"], targets: ["b"]),
+          ],
+        )
+      end
+
+      it "reverses cb, not bc" do
+        reversed = described_class.new(
+          graph, Elkrb::Layout::NodeIndex.build(graph)
+        ).break_cycles
+
+        expect(reversed.map(&:id)).to contain_exactly("cb")
+      end
+    end
+
     context "with a cycle closing through a later source" do
       let(:graph) do
         Elkrb::Graph::Graph.new(
@@ -172,6 +205,66 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::CycleBreaker do
         y = laid_out.children.to_h { |node| [node.id, node.y] }
         expect(y["a"]).to be < y["b"]
         expect(y["c"]).to be < y["d"]
+      end
+    end
+
+    context "when constructed directly with a nil children list" do
+      # assign_layers goes through Algorithms::Layered#layout_flat first,
+      # which already returns early for a nil/empty `children` (layered.rb)
+      # -- CycleBreaker is never reached that way in the real pipeline. But
+      # nothing stops a direct caller (as every spec in this file already
+      # is one) from constructing it with `children` explicitly nil, and
+      # the class carries its own guard for exactly that. Without this
+      # example nothing ever drove @graph.children to nil, so the guard's
+      # branch was never taken either way.
+      let(:graph) do
+        Elkrb::Graph::Graph.new(id: "r").tap { |g| g.children = nil }
+      end
+
+      it "returns no reversals instead of raising" do
+        reversed = described_class.new(
+          graph, Elkrb::Layout::NodeIndex.build(graph)
+        ).break_cycles
+
+        expect(reversed).to be_empty
+      end
+    end
+
+    context "with a back edge expressed through ports" do
+      # Every other fixture in this file addresses nodes directly. This is
+      # the only one routed through a port id, which forces
+      # endpoint_owner_ids to resolve the port to its owning node before
+      # the adjacency is built -- skip that resolution and the port id
+      # never matches any node id walk_from colors, so the cycle goes
+      # undetected.
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "r",
+          children: [
+            Elkrb::Graph::Node.new(
+              id: "a", width: 10, height: 10,
+              ports: [Elkrb::Graph::Port.new(id: "a_in")]
+            ),
+            Elkrb::Graph::Node.new(
+              id: "b", width: 10, height: 10,
+              ports: [Elkrb::Graph::Port.new(id: "b_in")]
+            ),
+          ],
+          edges: [
+            Elkrb::Graph::Edge.new(id: "ab", sources: ["a"], targets: ["b_in"]),
+            Elkrb::Graph::Edge.new(
+              id: "back", sources: ["b"], targets: ["a_in"],
+            ),
+          ],
+        )
+      end
+
+      it "still finds the back edge by owning node, not by port id" do
+        reversed = described_class.new(
+          graph, Elkrb::Layout::NodeIndex.build(graph)
+        ).break_cycles
+
+        expect(reversed.map(&:id)).to contain_exactly("back")
       end
     end
 

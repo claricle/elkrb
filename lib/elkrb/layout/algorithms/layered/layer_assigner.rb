@@ -17,6 +17,15 @@ module Elkrb
           # `reversed_edges` holds the edge OBJECTS CycleBreaker decided to
           # orient backwards, compared by identity. See CycleBreaker for why
           # neither an id nor a plain Set can carry that decision.
+          #
+          # keep this `compare_by_identity` on the DEFAULT too, even though
+          # nothing in this codebase can observe it today: the default is
+          # only ever read via #include? and never added to, and an empty
+          # Set answers #include? identically whichever comparison strategy
+          # it uses -- so no spec can distinguish this from a plain
+          # `Set.new` (confirmed by mutating it by hand). It becomes the
+          # only thing standing between a dedup bug and a direct caller
+          # that relies on the default AND later mutates it in place.
           def initialize(graph, index,
                          reversed_edges = Set.new.compare_by_identity)
             @graph = graph
@@ -82,6 +91,10 @@ module Elkrb
           end
 
           def step_predecessor_stack(stack, predecessors, colors)
+            # `stack[-1]` and `stack.at(-1)` are the same Array call with a
+            # single integer index -- no spec can tell them apart, and
+            # mutant flags the swap as a surviving mutation every run.
+            # Equivalent mutant, not a coverage gap.
             frame = stack[-1]
             current_id, predecessor_index = frame
             incoming = predecessors[current_id]
@@ -101,6 +114,15 @@ module Elkrb
 
           def finish_predecessor_frame(stack, node_id, incoming, colors)
             assign_layer(node_id, incoming)
+            # keep this write even though `colors` is only ever read with
+            # `== :active` in predecessor_assigned?, which checks
+            # @node_layers.key?(node_id) FIRST and returns true before it
+            # would ever read :complete here -- assign_layer above always
+            # runs first, so by the time anything could read this node's
+            # color, the key-check has already short-circuited. Confirmed
+            # by hand: removing this line changes nothing observable. It
+            # becomes load-bearing only if that ordering, or the
+            # :active-only read in predecessor_assigned?, ever changes.
             colors[node_id] = :complete
             stack.pop
           end
