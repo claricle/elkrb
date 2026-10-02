@@ -120,20 +120,6 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
         .to raise_error(Elkrb::UnsupportedConfigurationException)
     end
 
-    it "raises for a duplicate edge id" do
-      graph = {
-        id: "r",
-        children: %w[a b c].map { |id| { id: id, width: 10, height: 10 } },
-        edges: [
-          { id: "e", sources: ["a"], targets: ["b"] },
-          { id: "e", sources: ["b"], targets: ["c"] },
-        ],
-      }
-
-      expect { Elkrb.layout(graph, algorithm: "layered") }
-        .to raise_error(Elkrb::ValidationError, /duplicate edge id: e/)
-    end
-
     # nil and "" are one name to the reader, so they are one thing to the
     # validator too: NEITHER is an id. An anonymous edge carries no handle,
     # so it has nothing to be a duplicate of, and a graph may hold as many

@@ -27,14 +27,13 @@ module Elkrb
       # - Organization charts
       # - Any directed acyclic graph
       #
-      # The four bang validators below (raise_hyperedge!,
-      # raise_missing_endpoint!, validate_simple_edge!,
-      # validate_unique_edge_id!) are argument validators, not the
-      # dangerous/safe pair MissingSafeMethod expects -- same reasoning as
-      # GraphvizWrapper's own exemption, see that file's comment. No nested
-      # class here to inherit this and need its own reset.
+      # The three bang validators below (raise_hyperedge!,
+      # raise_missing_endpoint!, validate_simple_edge!) are argument
+      # validators, not the dangerous/safe pair MissingSafeMethod expects --
+      # same reasoning as GraphvizWrapper's own exemption, see that file's
+      # comment. No nested class here to inherit this and need its own reset.
       # rubocop:disable Layout/LineLength
-      # :reek:MissingSafeMethod { exclude: [ raise_hyperedge!, raise_missing_endpoint!, validate_simple_edge!, validate_unique_edge_id! ] }
+      # :reek:MissingSafeMethod { exclude: [ raise_hyperedge!, raise_missing_endpoint!, validate_simple_edge! ] }
       # rubocop:enable Layout/LineLength
       class LayeredAlgorithm < BaseAlgorithm
         # BaseAlgorithm intentionally skips layout_flat when a deserialized
@@ -73,38 +72,14 @@ module Elkrb
         private
 
         def validate_edges(index)
-          seen_ids = {}
-
           index.edges.each do |edge|
-            validate_unique_edge_id!(seen_ids, edge)
             validate_simple_edge!(edge)
           end
         end
 
-        def validate_unique_edge_id!(seen_ids, edge)
-          return if anonymous?(edge)
-
-          id = edge.id
-          if seen_ids.key?(id)
-            raise Elkrb::ValidationError,
-                  "duplicate edge id: #{edge_label(edge)}"
-          end
-
-          seen_ids[id] = true
-        end
-
         # An id is optional on an edge. An edge without one is ANONYMOUS: it
-        # carries no handle, so there is nothing for it to be a duplicate of
-        # and uniqueness cannot apply to it. Only edges that actually carry
-        # an id are checked.
-        #
-        # `""` counts as no id, and this is the ONE place that decides it --
-        # `edge_label` asks the same predicate, so the validator and the
-        # message can never disagree about which edges have a name.
-        #
-        # Anonymous edges are free to repeat because nothing downstream keys
-        # on an edge id any more: CycleBreaker hands LayerAssigner the edge
-        # OBJECTS it reversed, compared by identity, not their ids.
+        # carries no handle, so `edge_label` falls back to its endpoints.
+        # `""` counts as no id, and this is the ONE place that decides it.
         def anonymous?(edge)
           edge.id.to_s.empty?
         end
@@ -141,7 +116,7 @@ module Elkrb
         def edge_label(edge)
           # `""` is truthy in Ruby, so a plain `if edge.id` here puts the
           # empty message straight back. `anonymous?` is the single
-          # definition of "no id"; the uniqueness validator asks it too.
+          # definition of "no id".
           return edge.id unless anonymous?(edge)
 
           "(none), #{endpoint_list(edge.sources)} -> " \
