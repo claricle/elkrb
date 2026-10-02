@@ -48,6 +48,13 @@ module Elkrb
             colors = {}
 
             @graph.children.each do |node|
+              # keep this `colors[node.id]` truthiness check, even though
+              # `colors.key?(node.id)` reads identically: every value ever
+              # stored in `colors` is `:active` or `:complete`, both
+              # truthy, and nothing ever stores a falsy value under a key
+              # -- so "has a value" and "has a truthy value" can never
+              # diverge for this hash. Confirmed by hand: swapping in
+              # `colors.key?(node.id)` leaves the whole suite green.
               next if colors[node.id]
 
               walk_from(node.id, adjacency, colors, reversed)
@@ -58,6 +65,25 @@ module Elkrb
 
           private
 
+          # Every mutant mutant finds in this method is equivalent, confirmed
+          # by hand (each one individually applied, whole suite still
+          # green) -- they all fall into two classes:
+          #   - `stack[-1]`, `edges[edge_index]`: `Array#[]` with a single
+          #     Integer index reads identically to `#at` and, since the
+          #     `if` just above always holds `edge_index` in bounds before
+          #     either line runs, identically to `#fetch` too.
+          #   - `edge_index >= edges.length`, `next`, and the exact
+          #     `:complete` symbol: `edge_index` only ever grows by
+          #     `frame[1] = edge_index + 1` and is re-checked every pass
+          #     before it can grow again, so it can equal `edges.length`
+          #     but never exceed it -- making `>=`, `==`, `eql?` and
+          #     `equal?` the same test here, and `colors` is a local
+          #     consumed only by `== :active` / nil checks (never a
+          #     specific "is it :complete" check, never read outside this
+          #     method), so renaming that value or falling through `next`
+          #     onto a redundant `edges[edge_index]` read changes nothing
+          #     reachable from `reversed`, the one value this method hands
+          #     back out.
           def walk_from(root_id, adjacency, colors, reversed)
             colors[root_id] = :active
             stack = [[root_id, 0]]
@@ -110,6 +136,14 @@ module Elkrb
 
           def endpoint_owner_ids(endpoints)
             (endpoints || []).filter_map do |id|
+              # keep the `if id` guard even though `@index.owner(nil)` is
+              # itself nil-safe (NodeIndex#owner is `node(id) ||
+              # @owners_by_descendant_id[id]`, and a Hash lookup of a nil
+              # key that was never stored just answers nil) -- so for the
+              # one falsy id this array can ever hold, skipping the call
+              # and calling it unconditionally land on the identical nil.
+              # Confirmed by hand: forcing this branch to always run
+              # leaves the whole suite green.
               owner = @index.owner(id) if id
               owner&.id
             end.uniq

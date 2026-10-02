@@ -196,6 +196,26 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::CycleBreaker do
         expect(reversed.map(&:id)).to contain_exactly("ba", "dc")
       end
 
+      # The guard distinguishes "walk each connected component once" from
+      # "walk it once per node in it" -- both give the SAME reversed set
+      # here, because re-walking an already-:complete node can only ever
+      # re-reach other already-:complete nodes (colors is never reset
+      # outside walk_from, and every edge target this component can reach
+      # was already visited in its first pass), so nothing about the
+      # mutations' end result (the reversed edges) can tell the two apart.
+      # Only a call count on the private per-root entry point can.
+      it "walks each connected component exactly once, not once per node " \
+         "in it" do
+        breaker = described_class.new(
+          graph, Elkrb::Layout::NodeIndex.build(graph)
+        )
+        allow(breaker).to receive(:walk_from).and_call_original
+
+        breaker.break_cycles
+
+        expect(breaker).to have_received(:walk_from).exactly(2).times
+      end
+
       it "lays both cycles out in edge order without warning" do
         laid_out = nil
         expect do
@@ -227,6 +247,80 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::CycleBreaker do
         ).break_cycles
 
         expect(reversed).to be_empty
+      end
+    end
+
+    context "with a cycle whose forward edge leaves through a source port" do
+      # The port-routed fixture below this one only resolves a port on the
+      # TARGET side. #outgoing_edges resolves sources through the exact
+      # same #endpoint_owner_ids call, but nothing else in this file ever
+      # gives it a source port to resolve -- skip that resolution and the
+      # adjacency entry lands under the port id instead of "a", which
+      # walk_from's root ids (plain node ids from @graph.children) can
+      # never match, so the cycle silently goes undetected.
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "r",
+          children: [
+            Elkrb::Graph::Node.new(
+              id: "a", width: 10, height: 10,
+              ports: [Elkrb::Graph::Port.new(id: "a_out")]
+            ),
+            Elkrb::Graph::Node.new(id: "b", width: 10, height: 10),
+          ],
+          edges: [
+            Elkrb::Graph::Edge.new(id: "ab", sources: ["a_out"],
+                                   targets: ["b"]),
+            Elkrb::Graph::Edge.new(id: "back", sources: ["b"], targets: ["a"]),
+          ],
+        )
+      end
+
+      it "still finds the back edge by the source's owning node, not by " \
+         "the port id" do
+        reversed = described_class.new(
+          graph, Elkrb::Layout::NodeIndex.build(graph)
+        ).break_cycles
+
+        expect(reversed.map(&:id)).to contain_exactly("back")
+      end
+    end
+
+    context "with a hyperedge whose first target is its own source" do
+      # #outgoing_edges skips a target that equals the source with `next`,
+      # which only drops THAT one target and keeps scanning the rest of
+      # `target_ids`. Every other hyperedge fixture in this file (the
+      # "closing through two targets at once" context above) has no
+      # self-matching target at all, so nothing else here can tell apart
+      # "skip just this target" from "stop scanning targets entirely" --
+      # the latter (`break` in place of `next`) would silently drop every
+      # target declared AFTER the self-match, including the one this
+      # cycle needs.
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "r",
+          children: [
+            Elkrb::Graph::Node.new(
+              id: "a", width: 10, height: 10,
+              ports: [Elkrb::Graph::Port.new(id: "a_self")]
+            ),
+            Elkrb::Graph::Node.new(id: "b", width: 10, height: 10),
+          ],
+          edges: [
+            Elkrb::Graph::Edge.new(
+              id: "ab", sources: ["a"], targets: %w[a_self b],
+            ),
+            Elkrb::Graph::Edge.new(id: "back", sources: ["b"], targets: ["a"]),
+          ],
+        )
+      end
+
+      it "still reaches the target declared after the self-matching one" do
+        reversed = described_class.new(
+          graph, Elkrb::Layout::NodeIndex.build(graph)
+        ).break_cycles
+
+        expect(reversed.map(&:id)).to contain_exactly("back")
       end
     end
 
@@ -288,6 +382,53 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::CycleBreaker do
 
         expect(reversed).to be_empty
         expect(graph.edges.first.targets).to eq(["a"])
+      end
+    end
+
+    describe "#endpoint_owner_ids (private contract)" do
+      # Every edge fixture elsewhere in this file addresses a node through
+      # at most one port, so the cross product in #outgoing_edges never
+      # sees the SAME owner twice for one edge side -- nothing else here
+      # can tell apart "dedupes owner ids" from "returns one entry per
+      # endpoint". Two ports on one node forces that duplication.
+      it "dedupes two endpoints that resolve to the same owning node" do
+        graph = Elkrb::Graph::Graph.new(
+          id: "r",
+          children: [
+            Elkrb::Graph::Node.new(
+              id: "a", width: 10, height: 10,
+              ports: [
+                Elkrb::Graph::Port.new(id: "a1"),
+                Elkrb::Graph::Port.new(id: "a2"),
+              ]
+            ),
+          ],
+        )
+        breaker = described_class.new(graph, Elkrb::Layout::NodeIndex.build(graph))
+
+        expect(breaker.send(:endpoint_owner_ids, %w[a1 a2])).to eq(["a"])
+      end
+
+      # An id with no owner in the index (not one of this level's nodes or
+      # ports) resolves to a nil owner. #filter_map drops it; plain #map
+      # would keep the nil and hand outgoing_edges a bogus adjacency
+      # target. Nothing else in this file passes an unresolvable id.
+      it "drops an id that resolves to no owner, instead of keeping a nil" do
+        graph = Elkrb::Graph::Graph.new(
+          id: "r",
+          children: [Elkrb::Graph::Node.new(id: "a", width: 10, height: 10)],
+        )
+        breaker = described_class.new(graph, Elkrb::Layout::NodeIndex.build(graph))
+
+        expect(breaker.send(:endpoint_owner_ids, ["ghost"])).to eq([])
+      end
+
+      it "returns an empty list for a nil endpoints argument, instead of " \
+         "raising" do
+        graph = Elkrb::Graph::Graph.new(id: "r", children: [])
+        breaker = described_class.new(graph, Elkrb::Layout::NodeIndex.build(graph))
+
+        expect(breaker.send(:endpoint_owner_ids, nil)).to eq([])
       end
     end
   end
