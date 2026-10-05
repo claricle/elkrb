@@ -29,7 +29,9 @@ module Elkrb
       # @param node [Elkrb::Graph::Node] The node to process
       def process_node_ports(node)
         return unless node.ports && !node.ports.empty?
-        return unless node.width && node.height && node.width.positive? && node.height.positive?
+        # Skip zero and non-finite dimensions: a zero axis has nothing to
+        # distribute along, and `[0, NaN].min` raises. Negative is fine.
+        return unless [node.width, node.height].all? { |dim| dim&.finite? && !dim.zero? }
 
         # Detect sides if not specified
         detect_port_sides(node)
@@ -100,40 +102,30 @@ module Elkrb
       # @param node [Elkrb::Graph::Node] The node containing the ports
       # @param ports_by_side [Hash<String, Array<Elkrb::Graph::Port>>] Ports grouped by side
       def position_ports_on_boundaries(node, ports_by_side)
+        # The real top/bottom and left/right local offsets -- for a negative
+        # height/width, local 0 is the real BOTTOM/RIGHT edge, so NORTH and
+        # SOUTH (and WEST/EAST) must pick whichever of 0/height (0/width) is
+        # actually the min/max, not always 0 for the "near" side.
+        top, bottom, left, right = [0, node.height].minmax + [0, node.width].minmax
+
         # NORTH: top edge, distributed horizontally
         if ports_by_side[Graph::Port::NORTH]
-          distribute_ports_horizontally(
-            node,
-            ports_by_side[Graph::Port::NORTH],
-            0,
-          )
+          distribute_ports_horizontally(node, ports_by_side[Graph::Port::NORTH], top)
         end
 
         # SOUTH: bottom edge, distributed horizontally
         if ports_by_side[Graph::Port::SOUTH]
-          distribute_ports_horizontally(
-            node,
-            ports_by_side[Graph::Port::SOUTH],
-            node.height,
-          )
+          distribute_ports_horizontally(node, ports_by_side[Graph::Port::SOUTH], bottom)
         end
 
         # WEST: left edge, distributed vertically
         if ports_by_side[Graph::Port::WEST]
-          distribute_ports_vertically(
-            node,
-            ports_by_side[Graph::Port::WEST],
-            0,
-          )
+          distribute_ports_vertically(node, ports_by_side[Graph::Port::WEST], left)
         end
 
         # EAST: right edge, distributed vertically
         if ports_by_side[Graph::Port::EAST]
-          distribute_ports_vertically(
-            node,
-            ports_by_side[Graph::Port::EAST],
-            node.width,
-          )
+          distribute_ports_vertically(node, ports_by_side[Graph::Port::EAST], right)
         end
       end
 
@@ -144,10 +136,15 @@ module Elkrb
       # @param y_pos [Float] The y position of the edge
       def distribute_ports_horizontally(node, ports, y_pos)
         count = ports.length
-        spacing = node.width / (count + 1).to_f
+        # Walk from the real left edge rightwards, so the ascending order
+        # #order_ports_on_side just sorted into is the order they land in --
+        # starting at local 0 reverses it when node.width is negative.
+        width = node.width
+        left = [0, width].min
+        spacing = (width.abs / (count + 1).to_f)
 
         ports.each_with_index do |port, idx|
-          port.x = spacing * (idx + 1)
+          port.x = left + (spacing * (idx + 1))
           port.y = y_pos
           port.offset = port.x
         end
@@ -160,11 +157,15 @@ module Elkrb
       # @param x_pos [Float] The x position of the edge
       def distribute_ports_vertically(node, ports, x_pos)
         count = ports.length
-        spacing = node.height / (count + 1).to_f
+        # Same reason as #distribute_ports_horizontally: start at the real
+        # top edge so a negative node.height does not reverse the order.
+        height = node.height
+        top = [0, height].min
+        spacing = (height.abs / (count + 1).to_f)
 
         ports.each_with_index do |port, idx|
           port.x = x_pos
-          port.y = spacing * (idx + 1)
+          port.y = top + (spacing * (idx + 1))
           port.offset = port.y
         end
       end

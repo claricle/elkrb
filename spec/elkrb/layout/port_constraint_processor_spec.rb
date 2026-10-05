@@ -449,5 +449,85 @@ RSpec.describe Elkrb::Layout::PortConstraintProcessor do
         expect(node_zero_dims.ports[0].side).to eq("UNDEFINED")
       end
     end
+
+    context "when node has a non-finite dimension" do
+      %i[width height].product(
+        [Float::NAN, Float::INFINITY, -Float::INFINITY],
+      ).each do |dim, bad|
+        it "does not process ports when #{dim} is #{bad}" do
+          node = Elkrb::Graph::Node.new(
+            id: "n1", width: 60, height: 60, dim => bad,
+            ports: [Elkrb::Graph::Port.new(id: "p1", x: 0, y: 30)]
+          )
+          processor.send(:process_node_ports, node)
+          expect(node.ports[0].side).to eq("UNDEFINED")
+        end
+      end
+    end
+
+    context "when node has a negative dimension" do
+      # A negative-width node's ports must still be processed: skipping them
+      # leaves an explicitly-sided port inside the node's own footprint.
+      let(:node_negative_width) do
+        Elkrb::Graph::Node.new(
+          id: "n1",
+          x: 12.0,
+          y: 0.0,
+          width: -20.0,
+          height: 100.0,
+          ports: [
+            Elkrb::Graph::Port.new(id: "p1", x: 5.0, y: 50.0, side: "EAST"),
+          ],
+        )
+      end
+
+      it "snaps an EAST port onto the real right edge, not the left one" do
+        processor.send(:process_node_ports, node_negative_width)
+
+        port = node_negative_width.ports[0]
+        # Real footprint is x in [-8.0, 12.0] (node.x + width .. node.x).
+        # EAST is its right edge, absolute 12.0 -- NOT -8.0, which is the
+        # real WEST edge and puts a cardinal port on the opposite side of
+        # the node from the one it names.
+        expect(node_negative_width.x + port.x).to eq(12.0)
+      end
+
+      it "snaps a WEST port onto the real left edge" do
+        node_negative_width.ports = [
+          Elkrb::Graph::Port.new(id: "p1", x: 5.0, y: 50.0, side: "WEST"),
+        ]
+        processor.send(:process_node_ports, node_negative_width)
+
+        expect(node_negative_width.x + node_negative_width.ports[0].x)
+          .to eq(-8.0)
+      end
+
+      context "with a negative height" do
+        let(:node_negative_height) do
+          Elkrb::Graph::Node.new(
+            id: "n1", x: 0.0, y: 12.0, width: 100.0, height: -20.0,
+            ports: [Elkrb::Graph::Port.new(id: "p1", x: 50.0, y: 5.0,
+                                           side: "SOUTH")]
+          )
+        end
+
+        it "snaps a SOUTH port onto the real bottom edge" do
+          processor.send(:process_node_ports, node_negative_height)
+
+          expect(node_negative_height.y + node_negative_height.ports[0].y)
+            .to eq(12.0)
+        end
+
+        it "snaps a NORTH port onto the real top edge" do
+          node_negative_height.ports = [
+            Elkrb::Graph::Port.new(id: "p1", x: 50.0, y: 5.0, side: "NORTH"),
+          ]
+          processor.send(:process_node_ports, node_negative_height)
+
+          expect(node_negative_height.y + node_negative_height.ports[0].y)
+            .to eq(-8.0)
+        end
+      end
+    end
   end
 end

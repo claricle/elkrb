@@ -93,11 +93,17 @@ module Elkrb
       # @return [String] The detected side (NORTH, SOUTH, EAST, WEST, UNDEFINED)
       def detect_side(node_width, node_height)
         return UNDEFINED if x.nil? || y.nil? || node_width.nil? || node_height.nil?
-        return UNDEFINED if node_width <= 0 || node_height <= 0
+        return UNDEFINED unless node_width.finite? && node_height.finite?
+        return UNDEFINED if node_width.zero? || node_height.zero?
 
-        # Calculate relative position (0.0 to 1.0)
-        rel_x = x / node_width.to_f
-        rel_y = y / node_height.to_f
+        # Relative position (0.0 to 1.0) from the real left/top edge, not
+        # from local x=0/y=0 -- for a negative dimension, local 0 is the
+        # real RIGHT/BOTTOM edge, so dividing by the raw signed value alone
+        # (as this used to) mislabels EAST ports as WEST and vice versa.
+        left = [0, node_width].min
+        top = [0, node_height].min
+        rel_x = (x - left) / node_width.abs.to_f
+        rel_y = (y - top) / node_height.abs.to_f
 
         # Calculate distance to each side
         distances = {
