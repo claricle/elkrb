@@ -13,6 +13,7 @@ requires:
   # no subjects in these files and still reports 100% coverage.
   # spec/mutant_yml_spec.rb keeps this list complete.
   - elkrb/cli
+  - elkrb/format_sniffer
   - elkrb/graphviz_wrapper
   - elkrb/commands/batch_command
   - elkrb/commands/convert_command

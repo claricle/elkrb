@@ -140,7 +140,7 @@ RSpec.describe Elkrb::Commands::ConvertCommand do
     end
 
     # Every input file above has a recognized extension, so #load_any_format
-    # never falls through to #detect_and_parse. These pin that an
+    # never falls through to FormatSniffer's sniffed path. These pin that an
     # unrecognized extension still reaches YAML and ELKT, not just JSON.
     it "auto-detects YAML when the extension is unrecognized" do
       input_file = File.join(temp_dir, "input.graph")
@@ -169,27 +169,38 @@ RSpec.describe Elkrb::Commands::ConvertCommand do
     end
 
     # A file of bare `key: value` lines is valid YAML as well as valid ELKT.
-    it "reads a property-only ELKT file the same with or without .elkt" do
+    # The two extensions deliberately do NOT read it the same way -- see
+    # shell_boundary_spec.rb's "exits 1 for an options-only file with no
+    # recognized extension" and "exits 0 for an options-only file whose
+    # extension declares ELKT", added by this same branch (903cdb3). A
+    # childless, edgeless result off the SNIFFED path (nothing declared the
+    # format) is treated as the parser finding nothing, so a garbage file
+    # still exits 1; the same bytes under a declared `.elkt` extension are
+    # real content because the extension already says what they are.
+    it "reads a property-only ELKT file when .elkt declares the format" do
+      source = File.expand_path("../../fixtures/elkt/option_keys.elkt", __dir__)
+      output_file = File.join(temp_dir, "output.json")
+
+      described_class.new(source, { output: output_file }).run
+      result = JSON.parse(File.read(output_file))
+
+      expect(result["layoutOptions"])
+        .to include("algorithm" => "org.eclipse.elk.layered")
+      expect(result["children"]).to eq([])
+      expect(result["edges"]).to eq([])
+    end
+
+    it "rejects the identical property-only content with no recognized " \
+       "extension" do
       source = File.expand_path("../../fixtures/elkt/option_keys.elkt", __dir__)
       unrecognized = File.join(temp_dir, "input.graph")
       FileUtils.cp(source, unrecognized)
-      outputs = [source, unrecognized].map.with_index do |input, i|
-        output = File.join(temp_dir, "output#{i}.json")
-        described_class.new(input, { output: output }).run
-        JSON.parse(File.read(output))
-      end
+      output_file = File.join(temp_dir, "output.json")
 
-      expect(outputs.last).to eq(outputs.first)
-    end
+      command = described_class.new(unrecognized, { output: output_file })
 
-    it "keeps the auto-detect helper private on every command that shares it" do
-      require "elkrb/commands/diagram_command"
-      require "elkrb/commands/validate_command"
-      commands = [described_class, Elkrb::Commands::DiagramCommand,
-                  Elkrb::Commands::ValidateCommand]
-
-      expect(commands.map { |c| c.private_method_defined?(:detect_and_parse) })
-        .to eq([true, true, true])
+      expect { command.run }.to raise_error(ArgumentError,
+                                            /Unable to parse input file/)
     end
 
     it "raises a clear error when nothing can parse the content" do
@@ -255,6 +266,50 @@ RSpec.describe Elkrb::Commands::ConvertCommand do
       expect do
         command.run
       end.to raise_error(ArgumentError, /Cannot detect output format/)
+    end
+
+    it "loads a YAML file with no recognized extension" do
+      input_file = File.join(temp_dir, "graph.noext")
+      output_file = File.join(temp_dir, "output.json")
+      File.write(input_file, graph_data.to_yaml)
+
+      command = described_class.new(input_file, { output: output_file })
+      command.run
+
+      result = JSON.parse(File.read(output_file))
+      expect(result["children"].map { |n| n["id"] }).to eq(%w[n1 n2])
+    end
+
+    it "raises for unparsable content with no recognized extension" do
+      input_file = File.join(temp_dir, "graph.noext")
+      output_file = File.join(temp_dir, "output.json")
+      File.write(input_file, "this is not a graph, just garbage!!! {{{ ]]] ###")
+
+      command = described_class.new(input_file, { output: output_file })
+
+      expect { command.run }.to raise_error(ArgumentError,
+                                            /Unable to parse input file/)
+    end
+
+    it "preserves options-only content from a file that declares ELKT" do
+      input_file = File.join(temp_dir, "options_only.elkt")
+      output_file = File.join(temp_dir, "output.json")
+      # The extension names the format, so a graph carrying only options is
+      # legitimate content. Proves the .elkt path doesn't just avoid
+      # raising -- the option itself survives the parse. The same bytes with
+      # no extension are rejected: nothing there declares them to be ELKT.
+      File.write(input_file, "algorithm: layered\n")
+
+      command = described_class.new(input_file, { output: output_file })
+      command.run
+
+      result = JSON.parse(File.read(output_file))
+      # PR #17 rewrote the ELKT parser to match ELK's own grammar: a bare
+      # property key is kept exactly as written, never auto-prefixed with
+      # "elk." (spec/fixtures/elkt/option_keys.json preserves "algorithm"
+      # unprefixed on v2). The expectation here moved to match that merged,
+      # reviewed behaviour.
+      expect(result["layoutOptions"]).to eq({ "algorithm" => "layered" })
     end
   end
 end

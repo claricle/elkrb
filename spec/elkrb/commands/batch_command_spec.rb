@@ -107,7 +107,7 @@ RSpec.describe Elkrb::Commands::BatchCommand do
       expect { command.run }.to output(/No graph files found/).to_stdout
     end
 
-    it "continues on error" do
+    it "continues on error, then raises so the caller can exit non-zero" do
       input_dir = File.join(temp_dir, "input")
       output_dir = File.join(temp_dir, "output")
       FileUtils.mkdir_p(input_dir)
@@ -120,7 +120,9 @@ RSpec.describe Elkrb::Commands::BatchCommand do
                                       format: "dot",
                                     })
 
-      expect { command.run }.to output(/Error processing/).to_stderr
+      expect do
+        expect { command.run }.to raise_error(Elkrb::Error)
+      end.to output(/Error processing/).to_stderr
     end
 
     it "reports success and error counts" do

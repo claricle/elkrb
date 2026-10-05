@@ -33,6 +33,76 @@ RSpec.describe "library callers keep control of their own process" do
   end
 
   describe "Elkrb::Cli" do
+    # A usage error -- unknown command, missing required argument -- is
+    # raised by Thor's own dispatch, before any command body runs, so
+    # fail_command never sees it. `exit_on_failure? = true` used to let
+    # Thor::Base#start call `exit` for it directly, killing the caller with
+    # no exception to rescue.
+    it "lets a caller of Cli.start rescue a missing required argument" do
+      stdout = survives(<<~RUBY)
+        require "elkrb"
+        require "elkrb/cli"
+        begin
+          Elkrb::Cli.start(["layout"])
+        rescue StandardError => e
+          puts "RESCUED \#{e.class}"
+        end
+        puts #{CliRunner::SENTINEL.inspect}
+      RUBY
+
+      expect(stdout).to include("RESCUED")
+      expect(stdout).not_to include("RESCUED Elkrb::CommandFailed")
+    end
+
+    it "lets a caller of Cli.start rescue an unknown command" do
+      stdout = survives(<<~RUBY)
+        require "elkrb"
+        require "elkrb/cli"
+        begin
+          Elkrb::Cli.start(["no-such-command"])
+        rescue StandardError => e
+          puts "RESCUED \#{e.class}"
+        end
+        puts #{CliRunner::SENTINEL.inspect}
+      RUBY
+
+      expect(stdout).to include("RESCUED Thor::UndefinedCommandError")
+    end
+
+    # output_result's own EPIPE rescue used to call `exit 0` directly.
+    # SystemExit is not a StandardError, so it skipped fail_command's
+    # existing `raise error if error.is_a?(Errno::EPIPE)` entirely and
+    # killed the caller before it could even reach its own rescue --
+    # the subprocess below never got as far as printing the sentinel.
+    it "keeps the caller alive when the plain stdout write hits a closed " \
+       "pipe" do
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, "in.json")
+        File.write(path, { id: "root", children: [], edges: [] }.to_json)
+
+        stdout = survives(<<~RUBY)
+          require "elkrb"
+          require "elkrb/cli"
+          saved = $stdout.dup
+          reader, writer = IO.pipe
+          reader.close
+          $stdout.reopen(writer)
+          outcome = begin
+            Elkrb::Cli.start(["layout", #{path.inspect}])
+            "NO RAISE"
+          rescue StandardError => e
+            "RESCUED \#{e.class}"
+          ensure
+            $stdout.reopen(saved)
+          end
+          puts outcome
+          puts #{CliRunner::SENTINEL.inspect}
+        RUBY
+
+        expect(stdout).to include("RESCUED Errno::EPIPE")
+      end
+    end
+
     # One argv per rescue site in cli.rb. All six are reachable with the same
     # input -- a path that does not exist -- and all six killed the caller
     # before this change.
@@ -140,13 +210,15 @@ RSpec.describe "library callers keep control of their own process" do
     # above. `verbose_output` writes a progress line BEFORE `layout` ever
     # reads the input file -- fail_command has not run yet, so its own
     # Errno::EPIPE guard cannot reach this write. With `--verbose` and a
-    # closed stdout, that progress write raised Errno::EPIPE straight out of
-    # `layout`'s body; `Errno::EPIPE < StandardError`, so `layout`'s own
-    # rescue caught it and handed it to fail_command, which re-raised it
-    # (the guard meant for a hung-up READER on a SUCCESSFUL run) -- and Thor
-    # turned that into exit(true) before the missing file was ever noticed.
-    # The caller lost its process with no exception it could ever have
-    # caught, and never got as far as learning what actually failed.
+    # closed stderr (RC10 moved this write off stdout -- see cli_spec.rb's
+    # "prints only JSON to stdout with --verbose"), that progress write
+    # raised Errno::EPIPE straight out of `layout`'s body; `Errno::EPIPE <
+    # StandardError`, so `layout`'s own rescue caught it and handed it to
+    # fail_command, which re-raised it (the guard meant for a hung-up READER
+    # on a SUCCESSFUL run) -- and Thor turned that into exit(true) before the
+    # missing file was ever noticed. The caller lost its process with no
+    # exception it could ever have caught, and never got as far as learning
+    # what actually failed.
     it "keeps the caller's error when a verbose progress line cannot be " \
        "printed" do
       Dir.mktmpdir do |dir|
@@ -155,17 +227,17 @@ RSpec.describe "library callers keep control of their own process" do
         stdout = survives(<<~RUBY)
           require "elkrb"
           require "elkrb/cli"
-          saved = $stdout.dup
+          saved = $stderr.dup
           reader, writer = IO.pipe
           reader.close
-          $stdout.reopen(writer)
+          $stderr.reopen(writer)
           outcome = begin
             Elkrb::Cli.start(["layout", #{missing.inspect}, "--verbose"])
             "NO RAISE"
           rescue StandardError => e
             "RESCUED \#{e.class}: \#{e.message} CAUSE=\#{e.cause.class}"
           ensure
-            $stdout.reopen(saved)
+            $stderr.reopen(saved)
           end
           puts outcome
           puts #{CliRunner::SENTINEL.inspect}

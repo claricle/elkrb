@@ -11,8 +11,27 @@ module Elkrb
   # Command-line interface for elkrb
   #
   # Provides commands for laying out graphs from the command line.
-  # Supports JSON and YAML input/output formats.
+  # Supports JSON and YAML input/output formats, with an ELKT fallback
+  # for files whose extension isn't recognized.
   class Cli < Thor
+    # Do not restore Thor::Base#start's rescues here. `rescue Thor::Error`
+    # either exits the process or swallows the error depending on
+    # `exit_on_failure?`, and `rescue Errno::EPIPE; exit(true)` exits
+    # unconditionally with no config to suppress it -- so a reader hanging
+    # up on `layout | head` would kill a library caller. Dispatching
+    # directly lets both propagate as themselves; exe/elkrb, the one entry
+    # point allowed to exit, turns them into exit codes.
+    def self.start(given_args = ARGV, config = {})
+      config[:shell] ||= Thor::Base.shell.new
+      dispatch(nil, given_args.dup, nil, config)
+    end
+
+    # Never reached: the override above calls #dispatch directly rather
+    # than Thor::Base#start, so nothing here consults this. Thor emits a
+    # deprecation warning if it is left undefined, so it stays, set to the
+    # value that matches this class actually being a library.
+    def self.exit_on_failure? = false
+
     # No Thor default: an absent --algorithm must stay nil so the graph's own
     # elk.algorithm can be read before falling back to layered.
     ALGORITHM_OPTION_DESC = "Layout algorithm to use (default: the graph's " \
@@ -21,7 +40,7 @@ module Elkrb
     class_option :verbose, type: :boolean, default: false,
                            desc: "Enable verbose output"
 
-    desc "layout FILE", "Layout a graph from a JSON or YAML file"
+    desc "layout FILE", "Layout a graph from a JSON, YAML, or ELKT file"
     option :algorithm, type: :string, desc: ALGORITHM_OPTION_DESC
     option :output, type: :string, aliases: "-o",
                     desc: "Output file (default: stdout)"
@@ -159,24 +178,8 @@ module Elkrb
     private
 
     def read_input_file(file)
-      require_relative "graph/graph"
-      content = File.read(file)
-
-      case File.extname(file).downcase
-      when ".json"
-        Elkrb::Graph::Graph.from_json(content)
-      when ".yml", ".yaml"
-        Elkrb::Graph::Graph.from_yaml(content)
-      else
-        # Try JSON first, then YAML. lutaml-model wraps a bad parse in
-        # Lutaml::Model::InvalidFormatError, so rescue that too or valid
-        # YAML never reaches the YAML attempt.
-        begin
-          Elkrb::Graph::Graph.from_json(content)
-        rescue JSON::ParserError, Lutaml::Model::InvalidFormatError
-          Elkrb::Graph::Graph.from_yaml(content)
-        end
-      end
+      require_relative "format_sniffer"
+      Elkrb::FormatSniffer.read(File.read(file), File.extname(file).downcase)
     end
 
     def build_layout_options
@@ -217,17 +220,34 @@ module Elkrb
     end
 
     # Best-effort: this is a progress line, not the result. On a closed
-    # stdout it must not take the command down with it -- see
+    # stderr it must not take the command down with it -- see
     # Elkrb::BestEffortWrite for why a dead stream here used to mean
     # SystemExit(0) with the real work never attempted.
+    #
+    # RC10: a progress line is not the result, so it never belongs on
+    # stdout next to the JSON. `say_error` is Thor's stderr counterpart to
+    # `say` and keeps the same colour helper.
     def verbose_output(message)
       return unless options[:verbose]
 
-      BestEffortWrite.attempt { say message, :yellow }
+      BestEffortWrite.attempt { say_error message, :yellow }
     end
 
     def error_output(message)
-      say message, :red
+      # Kernel#warn is silent when warnings are off. Measured on ruby 3.4.8:
+      # `ruby -W0 -e 'warn "MSG"'` prints nothing, `ruby -W0 -e '$stderr.puts
+      # "MSG"'` prints MSG. Every command's rescue reports through here, so
+      # this is the one line that has to survive -W0; the cop's suggestion
+      # would take it away. It does not rescue the detail lines the commands
+      # emit with warn -- those already vanish under -W0.
+      # rubocop:disable Style/StderrPuts
+      $stderr.puts message
+      # rubocop:enable Style/StderrPuts
+    rescue Errno::EPIPE
+      # Same reason as verbose_output. A closed stderr must not turn a real
+      # failure into a different one, or mask the exit status the caller
+      # needs to see.
+      nil
     end
 
     # Keep the CommandFailed re-raise: ValidateCommand#run prints its own list
