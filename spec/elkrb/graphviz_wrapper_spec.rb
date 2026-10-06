@@ -1284,7 +1284,7 @@ RSpec.describe Elkrb::GraphvizWrapper do
     end
   end
 
-  describe "the executable it settles on" do
+  describe "the executable it settles on", skip: windows_skip_reason do
     # A relative candidate -- a directory-bearing ELKRB_DOT like "bin/dot", or
     # an entry built from a relative PATH component -- used to be recorded as
     # given. A later chdir then silently repointed it: measured, a wrapper

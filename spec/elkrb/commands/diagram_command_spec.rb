@@ -7,6 +7,12 @@ require_relative "../../../lib/elkrb/commands/diagram_command"
 require_relative "../../../lib/elkrb/graphviz_wrapper"
 
 RSpec.describe Elkrb::Commands::DiagramCommand do
+  if Gem.win_platform?
+    windows_skip_reason = "these examples lock a directory with chmod, " \
+                          "point ELKRB_DOT at /usr/bin/true or install a " \
+                          "shebang script, none of which Windows honours"
+  end
+
   let(:temp_dir) { Dir.mktmpdir }
   let(:graph_data) do
     {
@@ -313,7 +319,7 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
                                             /Unable to parse input file/)
     end
   end
-  describe "when staging the DOT fails" do
+  describe "when staging the DOT fails", skip: windows_skip_reason do
     # I claimed this was covered and it was not. The existing cleanup
     # examples all run AFTER a successful staging write, so none of them
     # exercised the path where staging itself raises.
@@ -436,7 +442,7 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
     end
   end
 
-  describe "when the render dies partway" do
+  describe "when the render dies partway", skip: windows_skip_reason do
     let(:input_file) do
       File.join(temp_dir, "graph.json").tap do |path|
         File.write(path, graph_data.to_json)

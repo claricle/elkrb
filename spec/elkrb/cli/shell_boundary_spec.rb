@@ -579,13 +579,18 @@ RSpec.describe "a file whose extension already names the format" do
 end
 
 RSpec.describe "Graphviz lookup along PATH" do
+  if Gem.win_platform?
+    windows_skip_reason = "this example installs a shebang script, which " \
+                          "Windows will not execute from PATH"
+  end
+
   # Sets the real environment instead of stubbing ENV, the way
   # graphviz_wrapper_spec's with_path_only does. A stub named after one
   # reader (ENV#[]) stops intercepting the moment the code switches to
   # another (ENV#fetch), and the example then silently reads whatever the
   # developer's own environment happens to hold.
   it "reads an empty PATH component as the working directory, " \
-     "like the shell does" do
+     "like the shell does", skip: windows_skip_reason do
     original_path = ENV.fetch("PATH", nil)
     original_elkrb_dot = ENV.fetch("ELKRB_DOT", nil)
 
