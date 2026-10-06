@@ -59,6 +59,8 @@ detectors:
     - Elkrb::Parsers::Elkt::Parser#single_id
   ControlParameter:
     exclude:
+    - Elkrb::Commands::DiagramCommand#remove_empty_directory
+    - Elkrb::FormatSniffer#read_model
     - Elkrb::Layout::Algorithms::Layered::CycleBreaker#endpoint_owner_ids
     - Elkrb::Layout::Algorithms::Layered::LayerAssigner#endpoint_owner_id
     - Elkrb::Layout::Algorithms::LayeredAlgorithm#endpoint_list
@@ -84,6 +86,7 @@ detectors:
     - Elkrb::Parsers::Elkt::Token#keyword?
   DataClump:
     exclude:
+    - Elkrb::Commands::DiagramCommand
     - Elkrb::Layout::Algorithms::Disco
     - Elkrb::Layout::Algorithms::Libavoid
     - Elkrb::Layout::Algorithms::MRTree
@@ -104,11 +107,14 @@ detectors:
     - Elkrb::Commands::DiagramCommand#detect_format
     - Elkrb::Commands::DiagramCommand#load_graph
     - Elkrb::Commands::DiagramCommand#run
+    - Elkrb::Commands::DiagramCommand#scratch_dir
     - Elkrb::Commands::RenderCommand#run
     - Elkrb::Commands::ValidateCommand#validate_edge
     - Elkrb::Commands::ValidateCommand#validate_graph
     - Elkrb::Commands::ValidateCommand#validate_node
     - Elkrb::Commands::ValidateCommand#validate_port
+    - Elkrb::FormatSniffer#malformed_shape?
+    - Elkrb::FormatSniffer#sniff
     - Elkrb::Geometry::Bezier#self.bezier_point
     - Elkrb::Geometry::Bezier#self.calculate_control_points
     - Elkrb::Geometry::Bezier#self.horizontal_control_points
@@ -439,6 +445,7 @@ detectors:
     - Elkrb::Parsers::Elkt::Resolver
   NestedIterators:
     exclude:
+    - Elkrb::FormatSniffer#malformed_shape?
     - Elkrb::Graph::NodeConstraints#__elkrb_merge_legacy_aliases
     - Elkrb::Layout::Algorithms::Disco#arrange_in_column
     - Elkrb::Layout::Algorithms::Disco#arrange_in_grid
@@ -463,11 +470,16 @@ detectors:
     - Elkrb::Parsers::Elkt::Resolver#resolve_edge
   NilCheck:
     exclude:
+    - Elkrb::Commands::DiagramCommand#remove_scratch
+    - Elkrb::Commands::DiagramCommand#unlink_owned
+    - Elkrb::FormatSniffer#blank?
+    - Elkrb::FormatSniffer#hollow_model?
     - Elkrb::Graph::Edge#__elkrb_endpoint_ids
     - Elkrb::Graph::NormalizeOptionKeys#call
     - Elkrb::Graph::Port#detect_side
     - Elkrb::Graph::Port#side=
     - Elkrb::GraphvizWrapper#available?
+    - Elkrb::GraphvizWrapper#find_graphviz
     - Elkrb::Layout::AlgorithmRegistry#supported_options_for
     - Elkrb::Layout::Algorithms::BaseAlgorithm#apply_padding
     - Elkrb::Layout::Algorithms::Box#layout_flat
@@ -510,7 +522,9 @@ detectors:
     - Elkrb::Serializers::ElktSerializer
   TooManyMethods:
     exclude:
+    - Elkrb::Commands::DiagramCommand
     - Elkrb::Geometry::Rectangle
+    - Elkrb::GraphvizWrapper
     - Elkrb::Layout::Algorithms::Libavoid
     - Elkrb::Parsers::Elkt::Lexer
     - Elkrb::Parsers::Elkt::Parser
@@ -518,6 +532,7 @@ detectors:
     exclude:
     - Elkrb::Cli#algorithms
     - Elkrb::Cli#layout
+    - Elkrb::Cli#output_result
     - Elkrb::Cli#read_input_file
     - Elkrb::Commands::BatchCommand#run
     - Elkrb::Commands::ConvertCommand#detect_and_parse
@@ -529,8 +544,10 @@ detectors:
     - Elkrb::Commands::DiagramCommand#detect_format
     - Elkrb::Commands::DiagramCommand#export_to_format
     - Elkrb::Commands::DiagramCommand#load_graph
+    - Elkrb::Commands::DiagramCommand#remove_scratch
     - Elkrb::Commands::DiagramCommand#render_to_image
     - Elkrb::Commands::DiagramCommand#run
+    - Elkrb::Commands::DiagramCommand#scratch_dir
     - Elkrb::Commands::RenderCommand#detect_image_format
     - Elkrb::Commands::RenderCommand#run
     - Elkrb::Commands::ValidateCommand#collect_node_ids
@@ -541,6 +558,7 @@ detectors:
     - Elkrb::Commands::ValidateCommand#validate_graph
     - Elkrb::Commands::ValidateCommand#validate_node
     - Elkrb::Commands::ValidateCommand#validate_port
+    - Elkrb::FormatSniffer#malformed_shape?
     - Elkrb::Geometry::Bezier#self.bezier_point
     - Elkrb::Geometry::Bezier#self.calculate_control_points
     - Elkrb::Geometry::Bezier#self.calculate_curve
@@ -549,6 +567,7 @@ detectors:
     - Elkrb::Graph::Node#find_node
     - Elkrb::Graph::NodeConstraints#__elkrb_merge_legacy_aliases
     - Elkrb::Graph::Port#detect_side
+    - Elkrb::GraphvizWrapper#find_graphviz
     - Elkrb::GraphvizWrapper#render
     - Elkrb::Layout::Algorithms::BaseAlgorithm#apply_padding
     - Elkrb::Layout::Algorithms::BaseAlgorithm#calculate_bounding_box
@@ -723,6 +742,7 @@ detectors:
     - Elkrb::Commands::BatchCommand#run
     - Elkrb::Commands::DiagramCommand#render_to_image
     - Elkrb::Commands::ValidateCommand#run
+    - Elkrb::FormatSniffer#parse_elkt_declared!
     - Elkrb::Geometry::Bezier#self.bezier_point
     - Elkrb::Geometry::Bezier#self.calculate_control_points
     - Elkrb::Geometry::Bezier#self.calculate_curve
@@ -787,12 +807,18 @@ detectors:
     - Elkrb::Layout::HierarchicalProcessor#layout_flat
   UtilityFunction:
     exclude:
+    - Elkrb::Cli#error_output
     - Elkrb::Commands::ConvertCommand#write_output
+    - Elkrb::Commands::DiagramCommand#directory_identity
+    - Elkrb::Commands::DiagramCommand#file_identity
     - Elkrb::Commands::DiagramCommand#image_format?
     - Elkrb::Commands::DiagramCommand#write_output
     - Elkrb::Commands::ValidateCommand#validate_port
     - Elkrb::Commands::ValidateCommand#validate_strict
     - Elkrb::Graph::NodeConstraints#cast_legacy
+    - Elkrb::GraphvizWrapper#anchor_bare_name
+    - Elkrb::GraphvizWrapper#option_safe_path
+    - Elkrb::GraphvizWrapper#resolve_real
     - Elkrb::Layout::Algorithms::BaseAlgorithm#apply_pre_layout_constraints
     - Elkrb::Layout::Algorithms::BaseAlgorithm#calculate_bounding_box
     - Elkrb::Layout::Algorithms::Disco#find_connected_components

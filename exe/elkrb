@@ -1,7 +1,12 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-require "bundler/setup"
+# Run from a source checkout, load THIS checkout. Without bundler/setup on the
+# path there is nothing else pointing at ../lib, so `require "elkrb"` would
+# quietly pick up an installed gem instead, or fail outright.
+lib = File.expand_path("../lib", __dir__)
+$LOAD_PATH.unshift(lib) if File.directory?(lib) && !$LOAD_PATH.include?(lib)
+
 require "elkrb"
 require "elkrb/cli"
 
@@ -12,4 +17,25 @@ rescue Elkrb::CommandFailed
   # decide. Printing again here would duplicate the report in the usual case,
   # and a report that failed to write once will not write now either.
   exit 1
+rescue Thor::Error => e
+  # A usage error (unknown command, missing required argument, wrong arity)
+  # never reaches a command body, so CommandFailed is not what Cli.start
+  # raises for it -- Cli.start's own #start override always raises this
+  # instead of exiting, matching the entry point that is allowed to call
+  # exit being THIS file, not the library class.
+  #
+  # THOR_DEBUG=1 asks for the backtrace, which is Thor's own contract for this
+  # rescue; and the report goes to $stderr directly, NOT through `warn`, which
+  # `ruby -W0` silences -- a usage error must still be reported there.
+  raise if ENV["THOR_DEBUG"] == "1"
+
+  $stderr.puts e.message # rubocop:disable Style/StderrPuts -- the cop's own
+  # suggestion (`warn`) is the bug: `ruby -W0` silences `warn` and would
+  # re-introduce the silent usage error this rescue exists to fix.
+  exit 1
+rescue Errno::EPIPE
+  # A reader hanging up ends a SUCCESSFUL run (`elkrb layout big.json |
+  # head`), so this is the exit code a clean pipeline expects -- Cli.start's
+  # own #start override no longer calls `exit` for this itself.
+  exit 0
 end

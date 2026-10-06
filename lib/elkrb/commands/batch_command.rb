@@ -52,15 +52,26 @@ module Elkrb
 
         # Best-effort: every file above is already written to output_dir.
         # This summary must not decide the exit status -- see
-        # Elkrb::BestEffortWrite.
+        # Elkrb::BestEffortWrite. fail_on_errors decides it instead.
         BestEffortWrite.attempt do
           puts ""
           puts "✓ Processed #{success_count} file(s) → #{@options[:output_dir]}"
           puts "⚠ #{error_count} error(s)" if error_count.positive?
         end
+
+        fail_on_errors(error_count, files.size)
       end
 
       private
+
+      # The summary alone would let a batch that failed on every file still
+      # exit 0, so a non-empty error count has to reach the caller.
+      def fail_on_errors(error_count, total)
+        return unless error_count.positive?
+
+        require_relative "../errors"
+        raise Elkrb::Error, "#{error_count} of #{total} file(s) failed"
+      end
 
       def process_file(file)
         basename = File.basename(file, File.extname(file))

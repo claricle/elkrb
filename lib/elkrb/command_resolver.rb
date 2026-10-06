@@ -19,6 +19,32 @@ module Elkrb
       candidates.find { |path| runnable?(path) }
     end
 
+    # The absolute file a bare name resolves to via PATH, or the matched
+    # candidate for a name that already carries a separator -- nil when
+    # `runnable?` is false.
+    #
+    # Return the candidate that MATCHED, never `path` or
+    # `File.join(dir, path)`. On Windows `executable_candidates` fans an
+    # extensionless name out to its PATHEXT forms ("dot" -> "dot.exe"), so
+    # `path` is the form guaranteed NOT to exist and `File.realpath` would
+    # resolve it against the working directory instead of the PATH entry
+    # that matched.
+    def resolved_path(path)
+      return matched_candidate(path) if separator_form?(path)
+
+      dir = path_directories.find { |each| resolves_in_directory?(each, path) }
+      dir && matched_candidate(path, dir)
+    end
+
+    # Re-finds the candidate `runnable?` already confirmed, because neither
+    # it nor `resolves_in_directory?` keeps a reference to it.
+    def matched_candidate(path, dir = nil)
+      found = executable_candidates(path).find do |each|
+        executable_file?(dir ? File.join(dir, each) : each)
+      end
+      found && (dir ? File.join(dir, found) : found)
+    end
+
     # `File.executable?` on a bare name answers about the WORKING DIRECTORY
     # rather than about PATH, which is why it is not asked here.
     #

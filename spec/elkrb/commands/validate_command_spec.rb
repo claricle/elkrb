@@ -282,10 +282,10 @@ RSpec.describe Elkrb::Commands::ValidateCommand do
       expect { command.run }.to output(/✅.*valid/).to_stdout
     end
 
-    # #load_any_format only reaches #detect_and_parse when the extension is
-    # unrecognized, and every example above uses .json/.yml/.elkt -- so this
-    # auto-detect chain had near-zero mutation coverage and hid a real
-    # defect: Graph.from_json/.from_yaml raise
+    # #load_any_format only reaches FormatSniffer's sniffed path when the
+    # extension is unrecognized, and every example above uses
+    # .json/.yml/.elkt -- so this auto-detect chain had near-zero mutation
+    # coverage and hid a real defect: Graph.from_json/.from_yaml raise
     # Lutaml::Model::InvalidFormatError on bad content (measured directly
     # against lutaml-model), not the stdlib JSON::ParserError /
     # Psych::SyntaxError this method used to rescue. So it never fell
@@ -327,6 +327,25 @@ RSpec.describe Elkrb::Commands::ValidateCommand do
       command = described_class.new("nonexistent.json", {})
 
       expect { command.run }.to raise_error(ArgumentError, /File not found/)
+    end
+
+    it "loads a YAML file with no recognized extension" do
+      input_file = File.join(temp_dir, "graph.noext")
+      File.write(input_file, valid_graph.to_yaml)
+
+      command = described_class.new(input_file, {})
+
+      expect { command.run }.to output(/✅.*valid/).to_stdout
+    end
+
+    it "raises for unparsable content with no recognized extension" do
+      input_file = File.join(temp_dir, "graph.noext")
+      File.write(input_file, "this is not a graph, just garbage!!! {{{ ]]] ###")
+
+      command = described_class.new(input_file, {})
+
+      expect { command.run }.to raise_error(ArgumentError,
+                                            /Unable to parse input file/)
     end
   end
 end

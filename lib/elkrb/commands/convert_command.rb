@@ -11,9 +11,6 @@ module Elkrb
     # Command for converting between graph formats
     # Supports JSON, YAML, DOT, and ELKT formats
     class ConvertCommand
-      require_relative "format_auto_detection"
-      include FormatAutoDetection
-
       def initialize(file, options)
         @file = file
         @options = options
@@ -49,25 +46,8 @@ module Elkrb
       def load_any_format(file)
         raise ArgumentError, "File not found: #{file}" unless File.exist?(file)
 
-        content = File.read(file)
-        ext = File.extname(file).downcase
-
-        case ext
-        when ".json"
-          require_relative "../graph/graph"
-          Elkrb::Graph::Graph.from_json(content)
-        when ".yml", ".yaml"
-          require_relative "../graph/graph"
-          Elkrb::Graph::Graph.from_yaml(content)
-        when ".elkt"
-          require_relative "../parsers/elkt_parser"
-          Elkrb::Parsers::ElktParser.parse(content)
-        when ".dot", ".gv"
-          raise ArgumentError,
-                "DOT format input not yet supported. Use JSON, YAML, or ELKT."
-        else
-          detect_and_parse(content)
-        end
+        require_relative "../format_sniffer"
+        Elkrb::FormatSniffer.read(File.read(file), File.extname(file).downcase)
       end
 
       def detect_format(filename)
