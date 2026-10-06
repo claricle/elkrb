@@ -17,6 +17,7 @@ module Elkrb
       def apply_port_constraints(graph)
         return unless graph.children
 
+        placed_port_order.clear
         graph.children.each do |node|
           process_node_ports(node)
         end
@@ -44,8 +45,33 @@ module Elkrb
           order_ports_on_side(node, side, ports)
         end
 
+        placed_port_order[node] = ports_by_side
+
         # Position ports on node boundaries
         position_ports_on_boundaries(node, ports_by_side)
+      end
+
+      # Place a node's ports again after its size changed. A node that
+      # #process_node_ports already ordered keeps that order: indices cannot
+      # be sorted a second time (an explicit and an assigned one collide)
+      # and positions cannot be read back (they tie when the size is
+      # subnormal). A node it skipped gets the one full pass instead.
+      #
+      # @param node [Elkrb::Graph::Node] The node whose ports to place again
+      def replace_node_ports(node)
+        ports_by_side = placed_port_order[node]
+        return process_node_ports(node) unless ports_by_side
+        return unless [node.width, node.height].all? { |dim| dim&.finite? && !dim.zero? }
+
+        position_ports_on_boundaries(node, ports_by_side)
+      end
+
+      # Each node's ports per side, in the order #process_node_ports gave
+      # them. Keyed by identity: equal nodes would share one entry by value.
+      #
+      # @return [Hash{Elkrb::Graph::Node => Hash}]
+      def placed_port_order
+        @placed_port_order ||= {}.compare_by_identity
       end
 
       # Detect port sides for ports with UNDEFINED side

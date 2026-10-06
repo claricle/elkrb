@@ -207,6 +207,16 @@ module Elkrb
           self.class.finite_dimension(value)
         end
 
+        # Ports were placed on the declared size before layout. A declared
+        # size that is replaced here (size-less, non-positive or non-finite)
+        # leaves them on edges the node no longer has, or never placed.
+        #
+        # @param node [Elkrb::Graph::Node] The node, already resized
+        # @param declared [Array<Numeric, nil>] Its declared width and height
+        def replace_ports_for_resized_node(node, declared)
+          replace_node_ports(node) unless declared.all? { |dim| finite_dimension(dim) }
+        end
+
         # Place nodes in grid positions
         #
         # @param nodes [Array<Elkrb::Graph::Node>] The nodes to place
@@ -228,8 +238,11 @@ module Elkrb
             # size-less, non-finite (NaN/Infinity) or non-positive declared
             # value takes the grid cell size instead of reaching position
             # math as-is.
-            actual_width = (node.width = finite_dimension(node.width) || node_width)
-            actual_height = (node.height = finite_dimension(node.height) || node_height)
+            declared_width = node.width
+            declared_height = node.height
+            actual_width = (node.width = finite_dimension(declared_width) || node_width)
+            actual_height = (node.height = finite_dimension(declared_height) || node_height)
+            replace_ports_for_resized_node(node, [declared_width, declared_height])
 
             # Set node position
             node.x = current_x

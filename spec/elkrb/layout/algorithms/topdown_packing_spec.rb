@@ -332,6 +332,109 @@ RSpec.describe Elkrb::Layout::Algorithms::TopdownPacking do
           expect(overlap_x && overlap_y).to be(false), "#{node1.id} and #{node2.id} overlap"
         end
       end
+
+      it "puts a negative-size node's ports on the edges of the cell size it gets" do
+        port = ->(id, side) { Elkrb::Graph::Port.new(id: id, width: 4.0, height: 4.0, side: side) }
+        graph.children = [
+          Elkrb::Graph::Node.new(id: "neg", width: -80.0, height: -40.0,
+                                 ports: [port.("e", "EAST"), port.("w", "WEST"),
+                                         port.("n", "NORTH"), port.("s", "SOUTH")]),
+          Elkrb::Graph::Node.new(id: "peer", width: 30.0, height: 30.0),
+        ]
+
+        algorithm.layout(graph)
+
+        node = graph.children.first
+        edges = node.ports.to_h { |each| [each.id, each.side.match?(/EAST|WEST/) ? each.x : each.y] }
+        expect(edges).to eq("e" => node.width, "w" => 0.0, "n" => 0.0, "s" => node.height)
+      end
+
+      it "gives mixed-index ports the order and east edge a positive node of the same size gets" do
+        order_for = lambda do |width|
+          ports = [
+            # Declared out of final order, so a re-placement that trusts
+            # the declared order instead of the first pass's shows up.
+            Elkrb::Graph::Port.new(id: "a", side: "EAST", x: 0.0, y: 10.0, width: 4.0, height: 4.0),
+            Elkrb::Graph::Port.new(id: "b", side: "EAST", x: 0.0, y: 20.0, width: 4.0, height: 4.0),
+            Elkrb::Graph::Port.new(id: "explicit", side: "EAST", index: 2, x: 0.0, y: 5.0, width: 4.0, height: 4.0),
+          ]
+          graph.children = [
+            Elkrb::Graph::Node.new(id: "n", width: width, height: 40.0, ports: ports),
+            Elkrb::Graph::Node.new(id: "peer", width: 30.0, height: 30.0),
+          ]
+          algorithm.layout(graph)
+          node = graph.children.first
+          node.ports.sort_by(&:y).map { |each| [each.id, each.y, each.x - node.width] }
+        end
+
+        expect(order_for.call(-80.0)).to eq(order_for.call(80.0))
+        expect(order_for.call(80.0).map(&:first)).to eq(%w[explicit a b])
+      end
+
+      it "detects sides and places ports on the resized node when the other axis kept them from being placed" do
+        # A zero height meant no pass ran before the resize, so this port
+        # still has no side; only a full pass can give it one.
+        port = Elkrb::Graph::Port.new(id: "p", x: 1000.0, y: 20.0, width: 4.0, height: 4.0)
+        graph.children = [
+          Elkrb::Graph::Node.new(id: "neg", width: -80.0, height: 0.0, ports: [port]),
+          Elkrb::Graph::Node.new(id: "peer", width: 30.0, height: 30.0),
+        ]
+
+        algorithm.layout(graph)
+
+        node = graph.children.first
+        expect([port.side, port.x]).to eq(["EAST", node.width])
+      end
+
+      [0.0, nil, Float::NAN, Float::INFINITY].each do |declared|
+        it "places the ports on the resized node when the declared width is #{declared.inspect}" do
+          port = Elkrb::Graph::Port.new(id: "e", side: "EAST", width: 4.0, height: 4.0)
+          graph.children = [
+            Elkrb::Graph::Node.new(id: "n", width: declared, height: 40.0, ports: [port]),
+            Elkrb::Graph::Node.new(id: "peer", width: 30.0, height: 30.0),
+          ]
+
+          algorithm.layout(graph)
+
+          node = graph.children.first
+          expect([node.width.positive?, port.x, port.y]).to eq([true, node.width, node.height / 2])
+        end
+      end
+
+      it "does not carry a node's recorded port order into a later layout" do
+        port = ->(id) { Elkrb::Graph::Port.new(id: id, side: "EAST", width: 4.0, height: 4.0) }
+        node = Elkrb::Graph::Node.new(id: "n", width: 80.0, height: 40.0, ports: [port.("old")])
+        graph.children = [node, Elkrb::Graph::Node.new(id: "peer", width: 30.0, height: 30.0)]
+        algorithm.layout(graph)
+
+        # The same node, now size-less and with new ports: nothing was
+        # placed for it this time, so layout must place them from scratch.
+        node.width = 0.0
+        node.ports = [port.("new")]
+        algorithm.layout(graph)
+
+        expect(node.ports.first.x).to eq(node.width)
+      end
+
+      it "keeps the port order when the declared size is too small for positions to tell ports apart" do
+        order_for = lambda do |width|
+          ports = [
+            Elkrb::Graph::Port.new(id: "a", side: "NORTH", x: 10.0, y: 0.0, width: 4.0, height: 4.0),
+            Elkrb::Graph::Port.new(id: "b", side: "NORTH", x: 20.0, y: 0.0, width: 4.0, height: 4.0),
+            Elkrb::Graph::Port.new(id: "explicit", side: "NORTH", index: 2, x: 5.0, y: 0.0, width: 4.0, height: 4.0),
+          ]
+          graph.children = [
+            Elkrb::Graph::Node.new(id: "n", width: width, height: 40.0, ports: ports),
+            Elkrb::Graph::Node.new(id: "peer", width: 30.0, height: 30.0),
+          ]
+          algorithm.layout(graph)
+          graph.children.first.ports.sort_by(&:x).map(&:id)
+        end
+
+        subnormal = -(0.0.next_float)
+        expect(order_for.call(80.0)).to eq(%w[explicit a b])
+        expect(order_for.call(subnormal)).to eq(order_for.call(80.0))
+      end
     end
 
     context "with many nodes (20+ nodes)" do
