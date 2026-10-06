@@ -198,6 +198,22 @@ RSpec.describe Elkrb::Graph::Port do
         expect(port.detect_side(node_width, 0))
           .to eq(described_class::UNDEFINED)
       end
+
+      [Float::NAN, Float::INFINITY, -Float::INFINITY].each do |bad|
+        it "returns UNDEFINED when node_width is #{bad}" do
+          port.x = 50.0
+          port.y = 30.0
+          expect(port.detect_side(bad, node_height))
+            .to eq(described_class::UNDEFINED)
+        end
+
+        it "returns UNDEFINED when node_height is #{bad}" do
+          port.x = 50.0
+          port.y = 30.0
+          expect(port.detect_side(node_width, bad))
+            .to eq(described_class::UNDEFINED)
+        end
+      end
     end
 
     context "with valid port and node dimensions" do
@@ -255,6 +271,28 @@ RSpec.describe Elkrb::Graph::Port do
         port.y = 55.0
         side = port.detect_side(node_width, node_height)
         expect([described_class::SOUTH, described_class::EAST]).to include(side)
+      end
+    end
+
+    context "with a negative node dimension" do
+      # A negative width/height node has a real footprint too, but local 0
+      # is its real RIGHT/BOTTOM edge, not its left/top one.
+      it "detects EAST at local x = 0, the real right edge" do
+        port.x = 0.0
+        port.y = 50.0
+        expect(port.detect_side(-20.0, 100.0)).to eq(described_class::EAST)
+      end
+
+      it "detects WEST at local x = width, the real left edge" do
+        port.x = -20.0
+        port.y = 50.0
+        expect(port.detect_side(-20.0, 100.0)).to eq(described_class::WEST)
+      end
+
+      it "detects SOUTH at local y = 0, the real bottom edge" do
+        port.x = 50.0
+        port.y = 0.0
+        expect(port.detect_side(100.0, -60.0)).to eq(described_class::SOUTH)
       end
     end
   end
