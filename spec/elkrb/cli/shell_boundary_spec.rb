@@ -596,9 +596,9 @@ RSpec.describe "Graphviz lookup along PATH" do
 
       Dir.chdir(dir) do
         # A bare separator: one empty component, meaning "here". The absolute
-        # fallback locations are blanked so the example turns on that
-        # component alone, not on the developer having Graphviz installed.
-        stub_const("Elkrb::GraphvizWrapper::FALLBACK_DOT_PATHS", [])
+        # fallback locations are dropped from the candidates so the example
+        # turns on that component alone, not on Graphviz being installed.
+        stub_const("Elkrb::GraphvizWrapper::CANDIDATES", ["dot"].freeze)
         ENV["PATH"] = File::PATH_SEPARATOR
         ENV.delete("ELKRB_DOT")
 
