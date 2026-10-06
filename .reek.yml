@@ -288,7 +288,6 @@ detectors:
     - Elkrb::Graph::Edge#__elkrb_endpoint_ids
     - Elkrb::Graph::NodeConstraints#__elkrb_merge_legacy_aliases
     - Elkrb::GraphvizWrapper#build_command
-    - Elkrb::GraphvizWrapper#path_dot_candidates
     - Elkrb::Layout::Algorithms::BaseAlgorithm#apply_padding
     - Elkrb::Layout::Algorithms::BaseAlgorithm#enforce_post_layout_constraints
     - Elkrb::Layout::Algorithms::BaseAlgorithm#get_edge_routing_style
@@ -450,7 +449,6 @@ detectors:
     exclude:
     - Elkrb::FormatSniffer#malformed_shape?
     - Elkrb::Graph::NodeConstraints#__elkrb_merge_legacy_aliases
-    - Elkrb::GraphvizWrapper#path_dot_candidates
     - Elkrb::Layout::Algorithms::Disco#arrange_in_column
     - Elkrb::Layout::Algorithms::Disco#arrange_in_grid
     - Elkrb::Layout::Algorithms::Disco#arrange_in_row
@@ -572,7 +570,6 @@ detectors:
     - Elkrb::Graph::NodeConstraints#__elkrb_merge_legacy_aliases
     - Elkrb::Graph::Port#detect_side
     - Elkrb::GraphvizWrapper#find_graphviz
-    - Elkrb::GraphvizWrapper#path_dot_candidates
     - Elkrb::GraphvizWrapper#render
     - Elkrb::Layout::Algorithms::BaseAlgorithm#apply_padding
     - Elkrb::Layout::Algorithms::BaseAlgorithm#calculate_bounding_box
@@ -822,10 +819,8 @@ detectors:
     - Elkrb::Commands::ValidateCommand#validate_strict
     - Elkrb::Graph::NodeConstraints#cast_legacy
     - Elkrb::GraphvizWrapper#anchor_bare_name
-    - Elkrb::GraphvizWrapper#dot_basenames
     - Elkrb::GraphvizWrapper#option_safe_path
     - Elkrb::GraphvizWrapper#resolve_real
-    - Elkrb::GraphvizWrapper#valid_executable?
     - Elkrb::Layout::Algorithms::BaseAlgorithm#apply_pre_layout_constraints
     - Elkrb::Layout::Algorithms::BaseAlgorithm#calculate_bounding_box
     - Elkrb::Layout::Algorithms::Disco#find_connected_components
