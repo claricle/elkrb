@@ -435,8 +435,6 @@ detectors:
     - Elkrb::Parsers::Elkt::Lexer#step_location
   ManualDispatch:
     exclude:
-    - Elkrb::FormatSniffer#nested_malformed?
-    - Elkrb::FormatSniffer#present_collections
     - Elkrb::Graph::NodeConstraints#__elkrb_merge_legacy_aliases
     - Elkrb::Layout::Algorithms::TopdownPacking#get_option
     - Elkrb::Layout::Algorithms::VertiFlex#get_option
