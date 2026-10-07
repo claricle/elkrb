@@ -137,7 +137,6 @@ RSpec.describe ".reek.yml" do
       "Elkrb::Options::KVectorChain#each",
       "Elkrb::Options::KVectorChain#empty?",
       "Elkrb::Options::KVectorChain#initialize",
-      "Elkrb::Options::KVectorChain#self.coordinate_pairs?",
       "Elkrb::Options::KVectorChain#self.from_array",
       "Elkrb::Options::KVectorChain#self.from_string",
       "Elkrb::Options::KVectorChain#self.parse",
