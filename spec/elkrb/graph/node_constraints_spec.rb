@@ -315,21 +315,32 @@ RSpec.describe Elkrb::Graph::NodeConstraints do
       # Attribute#valid_collection!, so the legacy path must too. Two of these
       # used to parse clean and then crash the layout engine.
       [
+        { snake: "layer", camel: "layer", yaml: "[1]" },
         { snake: "fixed_position", camel: "fixedPosition", yaml: "[true]" },
         { snake: "align_group", camel: "alignGroup", yaml: "[g]" },
+        # lutaml hands an array straight to the validating align_direction=
+        # setter on the snake_case path, so that spelling fails there first;
+        # older lutaml releases check the cardinality first and raise the
+        # collection error instead.
         { snake: "align_direction", camel: "alignDirection",
-          yaml: "[horizontal]" },
+          yaml: "[horizontal]",
+          snake_errors: [Lutaml::Model::InvalidFormatError,
+                         Lutaml::Model::CollectionTrueMissingError] },
         { snake: "relative_to", camel: "relativeTo", yaml: "[n]" },
         { snake: "position_priority", camel: "positionPriority", yaml: "[1]" },
         { snake: "relative_offset", camel: "relativeOffset",
           yaml: "[{x: 1, y: 2}]" },
       ].each do |field|
         it "rejects an array for #{field[:camel]} as #{field[:snake]} does" do
-          both = [field[:camel], field[:snake]]
+          collection_error = [Lutaml::Model::CollectionTrueMissingError]
+          expected = {
+            field[:camel] => collection_error,
+            field[:snake] => field.fetch(:snake_errors, collection_error),
+          }
 
-          both.each do |key|
+          expected.each do |key, errors|
             expect { described_class.from_yaml("#{key}: #{field[:yaml]}\n") }
-              .to raise_error(Lutaml::Model::CollectionTrueMissingError)
+              .to(raise_error { |e| expect(errors).to include(e.class) })
           end
         end
       end
@@ -603,6 +614,12 @@ RSpec.describe Elkrb::Graph::NodeConstraints do
       it "rejects an invalid align_direction" do
         expect { described_class.from_yaml("align_direction: sideways\n") }
           .to raise_error(Lutaml::Model::InvalidFormatError)
+      end
+
+      it "normalizes align_direction through the setter" do
+        constraints = described_class.from_yaml("align_direction: HORIZONTAL\n")
+
+        expect(constraints.align_direction).to eq("horizontal")
       end
     end
 
