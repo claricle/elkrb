@@ -61,6 +61,29 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
     end
   end
 
+  describe "#route_edges without an explicit style" do
+    include RoutedBendPoints
+
+    let(:splines) { routed_bend_points(router, nil, "SPLINES") }
+
+    it "routes orthogonally when the graph names no style" do
+      expect(splines).not_to be_empty
+      expect(routed_bend_points(router, nil)).to eq(routed_bend_points(router, nil, "ORTHOGONAL"))
+      expect(routed_bend_points(router, { "elk.edgeRouting" => "UNDEFINED" }))
+        .to eq(routed_bend_points(router, nil, "ORTHOGONAL"))
+    end
+
+    ["elk.edgeRouting", "edgeRouting", "edge_routing", "edge.routing"].each do |key|
+      it "reads the #{key} spelling of the routing option" do
+        expect(routed_bend_points(router, { key => "SPLINES" })).to eq(splines)
+      end
+    end
+
+    it "reads the style case-insensitively" do
+      expect(routed_bend_points(router, { "edge_routing" => "splines" })).to eq(splines)
+    end
+  end
+
   describe "#route_edge" do
     let(:node1) do
       Elkrb::Graph::Node.new(
