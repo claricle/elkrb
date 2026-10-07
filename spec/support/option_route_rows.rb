@@ -47,7 +47,9 @@ module OptionRouteRows
   # @param readers [Hash{Array => Array, Hash}] [carrier, spelling, shape] =>
   #   algorithms whose output moves, or {positioned => algorithms}; a row
   #   absent from it is expected not to move
-  # @return [Hash{String => Array}] label => [probe arguments, moves]
+  # @return [Hash{String => Array}] label => [probe arguments, moves,
+  #   algorithm under test]. The probe's own :algorithm is the root's, which
+  #   a compound_other row sets to "fixed".
   def rows(id:, internal:, shapes:, readers:, algorithms:)
     spellings = spellings_for(id, internal)
     check_readers(readers, spellings, shapes.keys, algorithms)
@@ -57,7 +59,7 @@ module OptionRouteRows
       movers = movers(readers[[carrier, spelling, shape]], positioned)
       [[carrier, spelling, shape, "positioned=#{positioned}", name].join(" "),
        [probe_args(carrier, spelling, values, positioned, name),
-        movers.include?(name)]]
+        movers.include?(name), name]]
     end
   end
 
@@ -68,6 +70,43 @@ module OptionRouteRows
   #   first node has one
   def by_positioning(readers, unpositioned: readers, first_only: unpositioned)
     { true => readers, false => unpositioned, some: first_only }
+  end
+
+  # The status the Registry should report for `id`: :honoured when every
+  # in-scope route moved layout, :accepted when none did, else :partial. Scope
+  # is the entry's declared algorithms, or every algorithm in `rows` for a
+  # generic entry. A route outside it is probed by the caller but does not
+  # decide the status.
+  #
+  # @param id [String] canonical Registry id
+  # @param rows [Hash{String => Array}] from .rows
+  # @param moved [Hash{String => Boolean}] label => whether layout moved
+  # @return [Symbol]
+  def expected_status(id, rows, moved)
+    scope = scope_for(id, rows)
+    in_scope = moved.select do |label, _|
+      scope.include?(rows.fetch(label).last)
+    end.values
+    raise ArgumentError, "no row in scope #{scope}" if in_scope.empty?
+
+    if in_scope.all? then :honoured
+    elsif in_scope.none? then :accepted
+    else :partial
+    end
+  end
+
+  # @return [Array<String>] the Registry entry's declared algorithms, or every
+  #   algorithm in `rows` for a generic entry
+  # @raise [ArgumentError] when a declared algorithm has no row
+  def scope_for(id, rows)
+    probed = rows.values.map(&:last).uniq
+    declared = Elkrb::Options::Registry.all.fetch(id).fetch(:algorithms)
+    return probed if declared == :all
+
+    unknown = declared - probed
+    raise ArgumentError, "no row for #{unknown}" unless unknown.empty?
+
+    declared
   end
 
   # The first shape is probed at every positioning; the others at

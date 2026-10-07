@@ -189,8 +189,11 @@ RSpec.describe Elkrb::Options::Registry do
   # two values, the first shape at every positioning and the others with
   # input positions only. A row must move exactly when `readers` lists
   # it, so list a reader rather than adding a row. Status follows the rows:
-  # all move -> :honoured, none -> :accepted, some -> :partial. When a route
-  # gets wired, add its reader and change the registry's status and note.
+  # all move -> :honoured, none -> :accepted, some -> :partial, counting only
+  # the algorithms the entry's `algorithms` scope names. A route outside that
+  # scope is still probed and must move exactly as `readers` records, but it
+  # does not decide the status. When a route gets wired, add its reader and
+  # change the registry's status and note.
   describe "status agrees with what layout reads" do
     include OptionRouteProbe
 
@@ -260,14 +263,11 @@ RSpec.describe Elkrb::Options::Registry do
 
       it "#{id}: each route moves layout or not as recorded, and status matches" do
         moved = rows.transform_values { |args, _| option_moves_layout?(**args) }
-        wrong = moved.reject { |label, moves| moves == rows.fetch(label).last }
+        wrong = moved.reject { |label, moves| moves == rows.fetch(label)[1] }
 
         expect(wrong.keys).to eq([])
-        expected_status = if moved.values.all? then :honoured
-                          elsif moved.values.none? then :accepted
-                          else :partial
-                          end
-        expect(described_class.status(id)).to eq(expected_status)
+        expect(described_class.status(id))
+          .to eq(OptionRouteRows.expected_status(id, rows, moved))
       end
     end
   end
