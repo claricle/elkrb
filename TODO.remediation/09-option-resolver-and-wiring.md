@@ -152,6 +152,10 @@ globals; element options win. No parent→child inheritance (verified: a root
    Keys the registry does not know at all are logged once at DEBUG —
    `"elkrb: unknown option <key>: stored and echoed"` — and never at WARN.
    Per layout, not per process: the same graph laid out twice warns twice.
+   **Strict mode (owner ruling 2026-10-06).** `Elkrb.layout(graph, strict:
+   true)` raises `Elkrb::Error` instead, naming every key that is unknown or
+   not `:honoured`. The default stays as above, because elkjs ignores unknown
+   keys. sirena's contract spec asks for the raise and opts in to get it.
 4. `base_algorithm.rb`: `initialize(options = {})` keeps `@options` and adds
    `@resolver = Options::Resolver.new(options)`. `layout(graph)` sets
    `@graph = graph` **once** — it is never reassigned anywhere.
