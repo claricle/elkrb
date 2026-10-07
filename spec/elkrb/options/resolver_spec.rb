@@ -389,7 +389,7 @@ RSpec.describe Elkrb::Options::Resolver do
         end
       end
 
-      ["[top]", "[top=1=2]", "[=1]"].each do |bad|
+      ["[top]", "[top=1=2]", "[top=1=]", "[=1]"].each do |bad|
         it "raises for the padding entry in #{bad.inspect}" do
           expect { described_class.new(padding: bad).get("elk.padding") }
             .to raise_error(Elkrb::ValidationError, /elk\.padding/)
@@ -406,6 +406,15 @@ RSpec.describe Elkrb::Options::Resolver do
                 .to raise_error(Elkrb::ValidationError, /elk\.position/)
             end
           end
+        end
+      end
+
+      ["(1,abc)", "(0x10,1; 2,3)", "(1,2; 3,1e)", [[1, "abc"]]].each do |bad|
+        it "raises for the non-numeric vector chain #{bad.inspect}" do
+          resolver = described_class.new("elk.bendPoints" => bad)
+
+          expect { resolver.get("elk.bendPoints") }
+            .to raise_error(Elkrb::ValidationError, /elk\.bendPoints/)
         end
       end
 
