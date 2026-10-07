@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "json"
 require "open3"
 require "rbconfig"
 
@@ -31,6 +32,13 @@ module CliRunner
   def run_elkrb(*, stdin: nil, env: {})
     capture_opts = stdin.nil? ? {} : { stdin_data: stdin }
     Open3.capture3(env, RbConfig.ruby, "-I#{LIB}", EXE, *, **capture_opts)
+  end
+
+  # `run_elkrb` for a command that prints one JSON document on stdout.
+  # Returns [parsed document, stderr, status].
+  def run_elkrb_json(*)
+    stdout, stderr, status = run_elkrb(*)
+    [JSON.parse(stdout), stderr, status]
   end
 
   # Runs the CLI with one of its output streams closed before it writes a

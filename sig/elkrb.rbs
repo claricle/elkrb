@@ -44,6 +44,10 @@ module Elkrb
     end
   end
 
+  def self.logger: () -> Logger
+
+  def self.logger=: (Logger logger) -> Logger
+
   def self.layout: (Graph::Graph | Hash[Symbol, untyped] graph, ?Hash[Symbol, untyped] options) -> Graph::Graph
 
   def self.register_algorithm: (String name, Class algorithm_class, ?Hash[Symbol, untyped] metadata) -> void

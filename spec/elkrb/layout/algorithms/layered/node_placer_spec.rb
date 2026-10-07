@@ -66,7 +66,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::NodePlacer do
       placer = described_class.new(
         Elkrb::Graph::Graph.new(id: "r"),
         layers,
-        { spacing_node_node: 5.0 },
+        node_spacing: 5.0,
       )
 
       expect(placer.send(:calculate_layer_widths))

@@ -14,7 +14,7 @@ module Elkrb
           return graph if graph.children.nil? || graph.children.empty?
 
           # Get configuration
-          aspect_ratio = option("aspect_ratio", 1.6).to_f
+          aspect_ratio = option("aspect_ratio", default: 1.6).to_f
           spacing = node_spacing
 
           # Calculate total area needed

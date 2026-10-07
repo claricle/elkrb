@@ -49,6 +49,67 @@ RSpec.describe Elkrb::Layout::Algorithms::BaseAlgorithm do
 
       expect(described_class.new.send(:get_edge_routing_style, graph)).to eq("POLYLINE")
     end
+
+    it "reads the snake_case edge_routing alias through the resolver" do
+      graph = Elkrb::Graph::Graph.new(layout_options: { "edge_routing" => "splines" })
+
+      expect(described_class.new.send(:get_edge_routing_style, graph)).to eq("SPLINES")
+    end
+
+    it "reads a call-level edgeRouting when the graph names none" do
+      graph = Elkrb::Graph::Graph.new
+
+      expect(described_class.new(edge_routing: "POLYLINE").send(:get_edge_routing_style, graph))
+        .to eq("POLYLINE")
+    end
+
+    it "maps UNDEFINED, the registry default, to ORTHOGONAL" do
+      expect(described_class.new.send(:get_edge_routing_style, Elkrb::Graph::Graph.new))
+        .to eq("ORTHOGONAL")
+    end
+  end
+
+  describe "#option" do
+    it "defaults to the registry default" do
+      expect(described_class.new.send(:option, "elk.spacing.nodeNode")).to eq(20.0)
+    end
+
+    it "returns the literal for default: and nil for default: nil" do
+      algorithm = described_class.new
+
+      expect(algorithm.send(:option, "custom.key", default: 7)).to eq(7)
+      expect(algorithm.send(:option, "custom.key", default: nil)).to be_nil
+    end
+
+    it "reads the graph being laid out before the call options" do
+      algorithm = described_class.new("elk.spacing.nodeNode" => 70)
+      algorithm.instance_variable_set(
+        :@graph,
+        Elkrb::Graph::Graph.new(layout_options: { "elk.spacing.nodeNode" => 50 }),
+      )
+
+      expect(algorithm.send(:option, "elk.spacing.nodeNode")).to eq(50.0)
+    end
+  end
+
+  describe "#padding" do
+    it "defaults to 12 on every side" do
+      expect(described_class.new.send(:padding)).to eq(top: 12.0, left: 12.0, bottom: 12.0, right: 12.0)
+    end
+
+    it "reads a Symbol-keyed Hash call option, filling the missing sides" do
+      expect(described_class.new(padding: { top: 50 }).send(:padding))
+        .to eq(top: 50.0, left: 12.0, bottom: 12.0, right: 12.0)
+    end
+  end
+
+  describe "#node_spacing" do
+    it "reads the ELK id and the spacing_node_node alias alike" do
+      by_id = described_class.new("elk.spacing.nodeNode" => 33)
+      by_alias = described_class.new(spacing_node_node: 33)
+
+      expect([by_id, by_alias].map { |a| a.send(:node_spacing) }).to eq([33.0, 33.0])
+    end
   end
 
   describe ".normalize_nil_positions" do

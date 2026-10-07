@@ -436,16 +436,6 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
         style = router.send(:get_routing_style, graph)
         expect(style).to eq("SPLINES")
       end
-
-      it "reads from the legacy snake_case edge_routing option (Gate A finding 1, Gate B finding 3)" do
-        graph = Elkrb::Graph::Graph.new(
-          id: "g1",
-          layout_options: { "edge_routing" => "SPLINES" },
-        )
-
-        style = router.send(:get_routing_style, graph)
-        expect(style).to eq("SPLINES")
-      end
     end
 
     describe "#calculate_spline_controls" do

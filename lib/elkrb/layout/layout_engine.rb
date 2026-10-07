@@ -2,6 +2,7 @@
 
 require_relative "algorithm_registry"
 require_relative "../options/registry"
+require_relative "../options/resolver"
 
 module Elkrb
   module Layout
@@ -46,13 +47,19 @@ module Elkrb
         # appropriate algorithm based on options, and computes node positions
         # and edge routes.
         #
-        # The algorithm is selected in this order:
-        # 1. options[:algorithm] or options["algorithm"]
-        # 2. The graph's own algorithm selector, read from graph.layoutOptions
-        #    via Options::Registry -- so the canonical "elk.algorithm" key,
-        #    its "algorithm" alias, or the "org.eclipse.elk.algorithm" long
-        #    form are all honoured
+        # The algorithm is the first of these that names one:
+        # 1. The graph's own selector -- layoutOptions under "elk.algorithm",
+        #    "algorithm" or the "org.eclipse.elk.algorithm" long form, then
+        #    properties
+        # 2. options[:algorithm] or options["algorithm"]
         # 3. Default: "layered"
+        #
+        # A graph that pins an algorithm keeps it; the caller's option is
+        # the fallback for graphs that pin none.
+        #
+        # With options[:strict] set to true, an option in the graph's
+        # layoutOptions that elkrb does not know, or does not fully honour,
+        # raises Elkrb::Error instead of logging a warning.
         #
         # @param graph [Hash, Elkrb::Graph::Graph] The graph to layout. Can be:
         #   - A Hash with keys: :id, :children, :edges, :layoutOptions
@@ -62,7 +69,8 @@ module Elkrb
         #   - Algorithm-specific options
         # @return [Elkrb::Graph::Graph] The input graph with computed positions
         # @raise [ArgumentError] If graph is neither a Hash nor a Graph::Graph
-        # @raise [Elkrb::Error] If the specified algorithm is not found
+        # @raise [Elkrb::AlgorithmNotFoundError] If the algorithm is not found
+        # @raise [Elkrb::Error] In strict mode, for an unknown or unhonoured option
         #
         # @example With specific algorithm
         #   result = Elkrb::Layout::LayoutEngine.layout(
@@ -80,18 +88,14 @@ module Elkrb
         def layout(graph, options = {})
           graph = graph_argument(graph)
 
-          # Get algorithm name from options
-          algorithm_name = options[:algorithm] ||
-            options["algorithm"] ||
-            graph_algorithm(graph) ||
-            "layered"
+          resolver = Options::Resolver.new(options)
+          algorithm_name = resolver.get("elk.algorithm", graph)
 
           algorithm_class = AlgorithmRegistry.get(algorithm_name)
+          raise AlgorithmNotFoundError, algorithm_name unless algorithm_class
 
-          raise Error, "Unknown layout algorithm: #{algorithm_name}" unless
-            algorithm_class
+          resolver.report_unhonoured(graph)
 
-          # Create and run algorithm with options
           algorithm = algorithm_class.new(options)
           algorithm.layout(graph)
 
@@ -181,32 +185,6 @@ module Elkrb
           raise ArgumentError,
                 "graph must be a Hash or Elkrb::Graph::Graph, " \
                 "got #{graph.class}"
-        end
-
-        # Scans the graph's own layoutOptions for whatever spelling of the
-        # algorithm selector it carries -- the canonical "elk.algorithm" key,
-        # its "algorithm" alias, or the "org.eclipse.elk.algorithm" long form
-        # -- and resolves it through Options::Registry so all three fold to
-        # the same lookup. Only called when neither options[:algorithm] nor
-        # options["algorithm"] was given at the call site; those always win.
-        #
-        # When a map carries more than one spelling, the canonical key wins,
-        # so the result never depends on Hash insertion order.
-        #
-        # layout_options is nil for a graph built from a hash with no
-        # layoutOptions, and a Hash otherwise.
-        def graph_algorithm(graph)
-          layout_options = graph.layout_options
-          return nil unless layout_options
-
-          layout_options["elk.algorithm"] || aliased_graph_algorithm(layout_options)
-        end
-
-        # The alias/long-form fallback for graph_algorithm.
-        def aliased_graph_algorithm(layout_options)
-          layout_options.find do |key, _value|
-            Options::Registry.canonical(key) == "elk.algorithm"
-          end&.last
         end
       end
     end

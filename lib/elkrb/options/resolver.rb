@@ -1,0 +1,165 @@
+# frozen_string_literal: true
+
+require_relative "registry"
+require_relative "../errors"
+require_relative "option_map"
+require_relative "spellings"
+require_relative "unhonoured_report"
+
+module Elkrb
+  module Options
+    # Reads layout options in one order: element layoutOptions, element
+    # properties, call-level options, registry default. The caller names the
+    # elements to consult; nothing is inherited from a parent. Every spelling
+    # the registry knows reaches the same value, and an explicit false or 0 is
+    # a value, not a miss.
+    #
+    # @example
+    #   resolver = Elkrb::Options::Resolver.new(spacing_node_node: 40)
+    #   resolver.get("elk.spacing.nodeNode", node, graph) # => 40.0
+    class Resolver
+      NUMERIC_TYPES = %i[float integer].freeze
+      # Plain decimal notation. Float() also takes "0x10", which String#to_f
+      # and #to_i read as 0, so the guard must be narrower than Float().
+      DECIMAL_NUMBER = /\A[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?\z/
+      # Ruby 3.3's Float() rejects "5." and "1.e3"; 3.4 accepts them.
+      TRAILING_DOT = /\.(?=\D|\z)/
+      private_constant :TRAILING_DOT, :NUMERIC_TYPES, :DECIMAL_NUMBER
+
+      # @param call_options [Hash] the options passed to the layout call, under
+      #   any key spelling; Symbol keys are read like String keys
+      def initialize(call_options = {})
+        @spellings = Spellings.new
+        @call = OptionMap.new(call_options, @spellings)
+      end
+
+      # @param key [String, Symbol] any registry id or alias, or a custom key
+      # @param elements [Array<#layout_options, #properties, nil>] consulted
+      #   in the order given
+      # @param default [Object] returned when nothing names the key;
+      #   :registry means the registry default, nil means nil
+      # @return [Object] the value, coerced to the registry type for a known
+      #   id and left as written for an unknown one
+      # @raise [Elkrb::ValidationError] when the value cannot be coerced to
+      #   the registered type, or is a non-finite number
+      def get(key, *elements, default: :registry)
+        id = @spellings.id(key)
+
+        elements.each do |element|
+          value = element_value(element, id)
+          return coerce(id, value) unless value.nil?
+        end
+
+        value = @call.value(id)
+        return coerce(id, value) unless value.nil?
+
+        default == :registry ? Registry.default(id) : default
+      end
+
+      # True when the call asked for strict option handling.
+      #
+      # @raise [Elkrb::ValidationError] when strict: is neither true nor
+      #   false, so a typo cannot silently turn strictness off
+      def strict?
+        case (strict = @call.value(@spellings.id("strict")))
+        when true then true
+        when false, nil then false
+        else
+          raise ValidationError,
+                "option strict must be true or false, got #{strict.inspect}"
+        end
+      end
+
+      # Reports every option key in the graph's layoutOptions, at any level,
+      # that the registry does not know or does not fully honour. One report
+      # per key per call: the same graph laid out twice reports twice.
+      #
+      # Warns by default. With strict: true it raises instead, before anything
+      # is logged, naming every such key.
+      #
+      # @param graph [Elkrb::Graph::Graph]
+      # @raise [Elkrb::Error] in strict mode when any key is unknown or not
+      #   :honoured
+      def report_unhonoured(graph)
+        strict = strict?
+        report = UnhonouredReport.new(graph, @spellings)
+        return if report.empty?
+
+        raise Error, report.strict_message if strict
+
+        report.log
+      end
+
+      private
+
+      # layoutOptions, then the deprecated map nested in it, then properties.
+      # A nil is a miss; an explicit false is a value.
+      def element_value(element, id)
+        layout = OptionMap.new(element&.layout_options, @spellings)
+        value = layout.value(id)
+        value = layout.nested_value(id) if value.nil?
+        return value unless value.nil?
+
+        OptionMap.new(element&.properties, @spellings).value(id)
+      end
+
+      def coerce(id, value)
+        coerced = coerce_value(id, numeric_input(id, value))
+        unless finite?(coerced)
+          raise ValidationError,
+                "option #{id} must be a finite number, got #{value.inspect}"
+        end
+
+        coerced
+      end
+
+      # String#to_f answers 0.0 for "abc" and 0.0 for "0x10", which would lay
+      # a graph out with zero spacing and no sign anything was wrong. A string
+      # for a numeric option must be plain decimal; it is parsed here, once.
+      def numeric_input(id, value)
+        return value unless value.is_a?(String)
+        return value unless NUMERIC_TYPES.include?(Registry.all.dig(id, :type))
+
+        text = decimal_text(value)
+        return Float(text.sub(TRAILING_DOT, ".0")) if text
+
+        raise ValidationError, "invalid value #{value.inspect} for option #{id}"
+      end
+
+      # The stripped text when it is plain decimal in a readable encoding.
+      def decimal_text(value)
+        return unless value.encoding.ascii_compatible? && value.valid_encoding?
+
+        text = value.strip
+        text if DECIMAL_NUMBER.match?(text)
+      end
+
+      # The one delegate call the rescue covers. Registry.coerce raises
+      # NoMethodError/TypeError for a value of the wrong shape (an Array for
+      # a Float), ArgumentError for malformed padding, and RangeError
+      # (FloatDomainError, Complex) for a number that cannot be an Integer or
+      # Float; all are bad input here, and the caller needs the option's name.
+      def coerce_value(id, value)
+        Registry.coerce(id, value)
+      rescue ArgumentError, TypeError, NoMethodError, RangeError, EncodingError
+        raise ValidationError,
+              "invalid value #{value.inspect} for option #{id}"
+      end
+
+      # Infinity or NaN anywhere in a coerced number, padding or vector.
+      def finite?(coerced)
+        components(coerced).none? { |n| n.is_a?(Float) && !n.finite? }
+      end
+
+      def components(coerced)
+        case coerced
+        when Float then [coerced]
+        when Options::ElkPadding then coerced.to_h.values
+        when Options::KVector then coerced.to_a
+        when Options::KVectorChain then coerced.vectors.flat_map(&:to_a)
+        else []
+        end
+      end
+    end
+  end
+end

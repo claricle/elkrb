@@ -60,8 +60,7 @@ module Elkrb
           layers = layer_assigner.assign_layers
 
           # Phase 3: Place nodes
-          node_placer = Layered::NodePlacer.new(graph, layers, @options)
-          node_placer.place_nodes
+          place_nodes(graph, layers)
 
           # Apply padding and set graph dimensions
           apply_padding(graph)
@@ -70,6 +69,14 @@ module Elkrb
         end
 
         private
+
+        def place_nodes(graph, layers)
+          Layered::NodePlacer.new(
+            graph, layers,
+            layer_spacing: option("elk.layered.spacing.nodeNodeBetweenLayers"),
+            node_spacing: node_spacing
+          ).place_nodes
+        end
 
         def validate_edges(index)
           index.edges.each do |edge|

@@ -261,10 +261,7 @@ module Elkrb
         return "ORTHOGONAL" unless graph.layout_options
 
         style = graph.layout_options["elk.edgeRouting"] ||
-          graph.layout_options["edgeRouting"] ||
-          # legacy snake_case key; S5's resolver takes over alias handling
-          # and deletes this line
-          graph.layout_options["edge_routing"]
+          graph.layout_options["edgeRouting"]
 
         style ? style.to_s.upcase : "ORTHOGONAL"
       end

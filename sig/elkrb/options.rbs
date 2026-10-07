@@ -20,6 +20,16 @@ module Elkrb
       def self.render_known_options: (algorithm_values: Array[String]) -> Hash[String, Hash[Symbol, untyped]]
     end
 
+    class Resolver
+      def initialize: (?Hash[String | Symbol, untyped] call_options) -> void
+
+      def get: (String | Symbol key, *untyped elements, ?default: untyped) -> untyped
+
+      def strict?: () -> bool
+
+      def report_unhonoured: (Graph::Graph graph) -> void
+    end
+
     class ElkPadding
       attr_reader left: Float
       attr_reader top: Float

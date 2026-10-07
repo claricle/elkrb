@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "logger"
+
 require_relative "elkrb/version"
 require_relative "elkrb/errors"
 
@@ -32,6 +34,7 @@ require_relative "elkrb/options/elk_padding"
 require_relative "elkrb/options/k_vector"
 require_relative "elkrb/options/k_vector_chain"
 require_relative "elkrb/options/registry"
+require_relative "elkrb/options/resolver"
 
 # Layout constraints
 require_relative "elkrb/layout/constraints/base_constraint"
@@ -101,6 +104,19 @@ require_relative "elkrb/layout/algorithms/vertiflex"
 # @see https://www.eclipse.org/elk/ Eclipse Layout Kernel
 # @see https://github.com/kieler/elkjs elkjs - JavaScript port
 module Elkrb
+  # The logger every elkrb warning goes through. Defaults to WARN on $stderr;
+  # assign your own to redirect or silence it.
+  #
+  # @return [Logger]
+  def self.logger
+    @logger ||= Logger.new($stderr, level: Logger::WARN)
+  end
+
+  # @param logger [Logger] replaces the default logger
+  def self.logger=(logger)
+    @logger = logger
+  end
+
   # Register basic layout algorithms
   Layout::AlgorithmRegistry.register(
     "random",
@@ -273,11 +289,21 @@ module Elkrb
   # Graph and left untouched.
   #
   # @param graph [Hash, Graph::Graph] The graph to layout
+  # Options are read in one order: the graph's own layoutOptions, then its
+  # properties, then these call-level options, then the registry default. A
+  # graph that pins an algorithm keeps it, whatever :algorithm says here.
+  #
   # @param options [Hash] Layout options including:
-  #   - :algorithm (String) - Algorithm name (default: "layered")
+  #   - :algorithm (String) - Algorithm name, used when the graph pins none
+  #     (default: "layered")
+  #   - :strict (Boolean) - Raise instead of warn when the graph carries an
+  #     option elkrb does not know or does not fully honour (default: false)
   #   - Algorithm-specific options (e.g., "elk.spacing.nodeNode")
   # @return [Graph::Graph] The input graph with computed positions
   # @raise [ArgumentError] If graph is neither a Hash nor a Graph::Graph
+  # @raise [Elkrb::AlgorithmNotFoundError] If the algorithm is not registered
+  # @raise [Elkrb::ValidationError] If an option value has the wrong type
+  # @raise [Elkrb::Error] In strict mode, for an unknown or unhonoured option
   #
   # @example With hash input
   #   result = Elkrb.layout({

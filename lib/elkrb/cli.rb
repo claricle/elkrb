@@ -6,6 +6,8 @@ require "yaml"
 
 require_relative "errors"
 require_relative "best_effort_write"
+require_relative "layout_flags"
+require_relative "options/resolver"
 
 module Elkrb
   # Command-line interface for elkrb
@@ -51,6 +53,10 @@ module Elkrb
                      desc: "Node spacing"
     option :layer_spacing, type: :numeric,
                            desc: "Layer spacing (for layered algorithm)"
+    option :direction, type: :string,
+                       desc: "Layout direction (e.g., DOWN, RIGHT)"
+    option :edge_routing, type: :string,
+                          desc: "Edge routing strategy"
     option :padding_top, type: :numeric,
                          desc: "Top padding"
     option :padding_bottom, type: :numeric,
@@ -65,15 +71,14 @@ module Elkrb
       # Read input file
       graph_data = read_input_file(file)
 
-      # Build layout options
-      layout_options = build_layout_options
+      # Explicit flags go onto the root graph, where they outrank the file
+      graph = LayoutFlags.apply(graph_data, options)
 
-      algorithm_display = layout_options[:algorithm] ||
-        "the graph's own, else layered"
-      verbose_output "Using algorithm: #{algorithm_display}"
+      algorithm = Options::Resolver.new.get("elk.algorithm", graph)
+      verbose_output "Using algorithm: #{algorithm}"
 
       # Perform layout
-      result = Layout::LayoutEngine.layout(graph_data, layout_options)
+      result = Layout::LayoutEngine.layout(graph, {})
 
       # Output result
       output_result(result)
@@ -163,6 +168,10 @@ module Elkrb
     option :format, type: :string, default: "svg",
                     desc: "Output format for all files"
     option :algorithm, type: :string, desc: ALGORITHM_OPTION_DESC
+    option :direction, type: :string,
+                       desc: "Layout direction (e.g., DOWN, RIGHT)"
+    option :edge_routing, type: :string,
+                          desc: "Edge routing strategy"
     def batch(directory)
       require_relative "commands/batch_command"
       Commands::BatchCommand.new(directory, options).run
@@ -180,27 +189,6 @@ module Elkrb
     def read_input_file(file)
       require_relative "format_sniffer"
       Elkrb::FormatSniffer.read(File.read(file), File.extname(file).downcase)
-    end
-
-    def build_layout_options
-      opts = { algorithm: options[:algorithm] }
-
-      # Add spacing options
-      opts[:spacing_node_node] = options[:spacing] if options[:spacing]
-      opts[:layer_spacing] = options[:layer_spacing] if options[:layer_spacing]
-
-      # Add padding options
-      if options[:padding_top] || options[:padding_bottom] ||
-          options[:padding_left] || options[:padding_right]
-        opts[:padding] = {
-          top: options[:padding_top] || 12,
-          bottom: options[:padding_bottom] || 12,
-          left: options[:padding_left] || 12,
-          right: options[:padding_right] || 12,
-        }
-      end
-
-      opts
     end
 
     def output_result(result)

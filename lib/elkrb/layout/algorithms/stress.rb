@@ -25,8 +25,8 @@ module Elkrb
           return graph if graph.children.nil? || graph.children.empty?
 
           # Get configuration
-          iterations = option("iterations", DEFAULT_ITERATIONS).to_i
-          epsilon = option("epsilon", DEFAULT_EPSILON).to_f
+          iterations = option("iterations", default: DEFAULT_ITERATIONS).to_i
+          epsilon = option("epsilon", default: DEFAULT_EPSILON).to_f
 
           # Initialize positions
           initialize_positions(graph)
