@@ -2,9 +2,10 @@
 
 # The rows registry_spec probes for one option id: every carrier crossed with
 # every spelling the Registry or layout knows for the id, every value shape,
-# every algorithm and the input-positioning modes (see .combinations).
+# every algorithm and every input-positioning mode (see .combinations).
 # `readers` only says which rows MOVE; a route nobody lists is probed and
-# expected not to move, so a route cannot be left out by omission.
+# expected not to move, so a route cannot be left out by omission. Which
+# carriers an option applies to only decides its status (see .rows).
 module OptionRouteRows
   module_function
 
@@ -44,22 +45,27 @@ module OptionRouteRows
     ([id, "org.eclipse.#{id}"] + aliases + [internal]).uniq
   end
 
+  # @param spellings [Array<String>] from .spellings_for
   # @param readers [Hash{Array => Array, Hash}] [carrier, spelling, shape] =>
   #   algorithms whose output moves, or {positioned => algorithms}; a row
   #   absent from it is expected not to move
+  # @param carriers [Array<Symbol>] the carriers the option applies to, such
+  #   as the graph's layoutOptions for an option ELK targets at a parent. A
+  #   carrier outside it is still probed, and must move exactly as `readers`
+  #   records, but its rows do not decide the status.
   # @return [Hash{String => Array}] label => [probe arguments, moves,
-  #   algorithm under test]. The probe's own :algorithm is the root's, which
-  #   a compound_other row sets to "fixed".
-  def rows(id:, internal:, shapes:, readers:, algorithms:)
-    spellings = spellings_for(id, internal)
+  #   algorithm under test, whether the carrier applies]. The probe's own
+  #   :algorithm is the root's, which a compound_other row sets to "fixed".
+  def rows(spellings:, shapes:, readers:, algorithms:, carriers: CARRIERS)
     check_readers(readers, spellings, shapes.keys, algorithms)
+    check_carriers(carriers)
 
-    combinations = combinations(spellings, shapes, algorithms)
-    combinations.to_h do |carrier, spelling, (shape, values), positioned, name|
+    combinations(spellings, shapes, algorithms)
+      .to_h do |carrier, spelling, (shape, values), positioned, name|
       movers = movers(readers[[carrier, spelling, shape]], positioned)
       [[carrier, spelling, shape, "positioned=#{positioned}", name].join(" "),
        [probe_args(carrier, spelling, values, positioned, name),
-        movers.include?(name), name]]
+        movers.include?(name), name, carriers.include?(carrier)]]
     end
   end
 
@@ -73,9 +79,10 @@ module OptionRouteRows
   end
 
   # The status the Registry should report for `id`: :honoured when every
-  # in-scope route moved layout, :accepted when none did, else :partial. Scope
-  # is the entry's declared algorithms, or every algorithm in `rows` for a
-  # generic entry. A route outside it is probed by the caller but does not
+  # in-scope route moved layout, :accepted when none did, else :partial. A
+  # route is in scope when its carrier applies to the option (see .rows) and
+  # its algorithm is one the entry declares, or any algorithm in `rows` for a
+  # generic entry. A route outside scope is probed by the caller but does not
   # decide the status.
   #
   # @param id [String] canonical Registry id
@@ -85,7 +92,8 @@ module OptionRouteRows
   def expected_status(id, rows, moved)
     scope = scope_for(id, rows)
     in_scope = moved.select do |label, _|
-      scope.include?(rows.fetch(label).last)
+      _args, _moves, algorithm, applies = rows.fetch(label)
+      applies && scope.include?(algorithm)
     end.values
     raise ArgumentError, "no row in scope #{scope}" if in_scope.empty?
 
@@ -99,7 +107,7 @@ module OptionRouteRows
   #   algorithm in `rows` for a generic entry
   # @raise [ArgumentError] when a declared algorithm has no row
   def scope_for(id, rows)
-    probed = rows.values.map(&:last).uniq
+    probed = rows.values.map { |row| row[2] }.uniq
     declared = Elkrb::Options::Registry.all.fetch(id).fetch(:algorithms)
     return probed if declared == :all
 
@@ -109,15 +117,11 @@ module OptionRouteRows
     declared
   end
 
-  # The first shape is probed at every positioning; the others at
-  # positioned=true only, which keeps every carrier x spelling x shape x
-  # algorithm route and bounds the run time. A reader of a later shape that
-  # acts only without input positions is not seen.
+  # Every carrier x spelling x shape x positioning x algorithm: a reader that
+  # acts only for some positionings, or only for some value shapes, shows up
+  # as a row that moves.
   def combinations(spellings, shapes, algorithms)
-    shapes.each_with_index.flat_map do |shape, index|
-      positionings = index.zero? ? POSITIONING : [true]
-      CARRIERS.product(spellings, [shape], positionings, algorithms)
-    end
+    CARRIERS.product(spellings, shapes.to_a, POSITIONING, algorithms)
   end
 
   def movers(entry, positioned)
@@ -144,6 +148,12 @@ module OptionRouteRows
 
       check_algorithms(entry, algorithms)
     end
+  end
+
+  def check_carriers(carriers)
+    unknown = carriers - CARRIERS
+    raise ArgumentError, "not carriers: #{unknown}" unless unknown.empty?
+    raise ArgumentError, "no carrier applies" if carriers.empty?
   end
 
   def check_algorithms(entry, algorithms)

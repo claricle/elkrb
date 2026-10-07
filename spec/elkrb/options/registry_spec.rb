@@ -185,21 +185,27 @@ RSpec.describe Elkrb::Options::Registry do
     end
   end
 
-  # OptionRouteRows lays out every carrier x spelling x shape x algorithm at
-  # two values, the first shape at every positioning and the others with
-  # input positions only. A row must move exactly when `readers` lists
-  # it, so list a reader rather than adding a row. Status follows the rows:
-  # all move -> :honoured, none -> :accepted, some -> :partial, counting only
-  # the algorithms the entry's `algorithms` scope names. A route outside that
-  # scope is still probed and must move exactly as `readers` records, but it
-  # does not decide the status. When a route gets wired, add its reader and
-  # change the registry's status and note.
+  # OptionRouteRows lays out every carrier x spelling x shape x positioning x
+  # algorithm at two values. A row must move exactly when `readers` lists it,
+  # so list a reader rather than adding a row. Status follows the rows: all
+  # move -> :honoured, none -> :accepted, some -> :partial, counting only the
+  # algorithms the entry's `algorithms` scope names and the carriers the
+  # option applies to (`carriers`). A route outside that scope is still probed
+  # and must move exactly as `readers` records, but it does not decide the
+  # status. When a route gets wired, add its reader and change the registry's
+  # status and note.
   describe "status agrees with what layout reads" do
     include OptionRouteProbe
 
     algorithms = Elkrb::Layout::AlgorithmRegistry.available_algorithms
     by_positioning = OptionRouteRows.method(:by_positioning)
     compounds = %i[compound_other compound_same compound_none]
+    # elkjs 0.11 (knownLayoutOptions) targets these three options at parents
+    # (padding also at nodes), never at an edge, so an edge's layoutOptions
+    # does not decide their status. elk.direction is a parent target too, but
+    # elkrb reads an edge's own direction, which its :partial note documents,
+    # so every carrier applies to it.
+    parent_carriers = OptionRouteRows::CARRIERS - %i[edge]
 
     spacing = { value: [5, 80] }
     box = ->(v) { { top: v, left: v, bottom: v, right: v } }
@@ -237,13 +243,16 @@ RSpec.describe Elkrb::Options::Registry do
       },
       "elk.layered.spacing.nodeNodeBetweenLayers" => {
         internal: "layer_spacing", shapes: spacing,
+        carriers: parent_carriers,
         readers: { [:call_symbol, "layer_spacing", :value] => %w[layered] }
       },
       "elk.padding" => {
-        internal: "padding", shapes: padding, readers: padding_readers
+        internal: "padding", shapes: padding, readers: padding_readers,
+        carriers: parent_carriers
       },
       "elk.spacing.nodeNode" => {
         internal: "spacing_node_node", shapes: spacing,
+        carriers: parent_carriers,
         readers: {
           [:call_string, "spacing_node_node", :value] =>
             by_positioning.call(string_readers,
@@ -259,7 +268,9 @@ RSpec.describe Elkrb::Options::Registry do
         }
       },
     }.each do |id, spec|
-      rows = OptionRouteRows.rows(id: id, algorithms: algorithms, **spec)
+      spellings = OptionRouteRows.spellings_for(id, spec.fetch(:internal))
+      rows = OptionRouteRows.rows(spellings: spellings, algorithms: algorithms,
+                                  **spec.except(:internal))
 
       it "#{id}: each route moves layout or not as recorded, and status matches" do
         moved = rows.transform_values { |args, _| option_moves_layout?(**args) }
