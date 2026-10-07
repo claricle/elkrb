@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "decimal"
+
 module Elkrb
   module Options
     # KVector parser for coordinate pairs
@@ -10,8 +12,8 @@ module Elkrb
       attr_reader :x, :y
 
       def initialize(x, y)
-        @x = x.to_f
-        @y = y.to_f
+        @x = Decimal.to_f(x)
+        @y = Decimal.to_f(y)
       end
 
       # Parse KVector from string, hash, or array

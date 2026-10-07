@@ -2,6 +2,7 @@
 
 require_relative "registry"
 require_relative "../errors"
+require_relative "decimal"
 require_relative "option_map"
 require_relative "spellings"
 require_relative "unhonoured_report"
@@ -19,12 +20,7 @@ module Elkrb
     #   resolver.get("elk.spacing.nodeNode", node, graph) # => 40.0
     class Resolver
       NUMERIC_TYPES = %i[float integer].freeze
-      # Plain decimal notation. Float() also takes "0x10", which String#to_f
-      # and #to_i read as 0, so the guard must be narrower than Float().
-      DECIMAL_NUMBER = /\A[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?\z/
-      # Ruby 3.3's Float() rejects "5." and "1.e3"; 3.4 accepts them.
-      TRAILING_DOT = /\.(?=\D|\z)/
-      private_constant :TRAILING_DOT, :NUMERIC_TYPES, :DECIMAL_NUMBER
+      private_constant :NUMERIC_TYPES
 
       # @param call_options [Hash] the options passed to the layout call, under
       #   any key spelling; Symbol keys are read like String keys
@@ -113,25 +109,15 @@ module Elkrb
         coerced
       end
 
-      # String#to_f answers 0.0 for "abc" and 0.0 for "0x10", which would lay
-      # a graph out with zero spacing and no sign anything was wrong. A string
-      # for a numeric option must be plain decimal; it is parsed here, once.
+      # A string for a numeric option must be plain decimal, so "abc" and
+      # "0x10" raise instead of becoming 0.0. It is parsed here, once.
       def numeric_input(id, value)
         return value unless value.is_a?(String)
         return value unless NUMERIC_TYPES.include?(Registry.all.dig(id, :type))
 
-        text = decimal_text(value)
-        return Float(text.sub(TRAILING_DOT, ".0")) if text
-
-        raise ValidationError, "invalid value #{value.inspect} for option #{id}"
-      end
-
-      # The stripped text when it is plain decimal in a readable encoding.
-      def decimal_text(value)
-        return unless value.encoding.ascii_compatible? && value.valid_encoding?
-
-        text = value.strip
-        text if DECIMAL_NUMBER.match?(text)
+        Decimal.parse(value) ||
+          raise(ValidationError,
+                "invalid value #{value.inspect} for option #{id}")
       end
 
       # The one delegate call the rescue covers. Registry.coerce raises

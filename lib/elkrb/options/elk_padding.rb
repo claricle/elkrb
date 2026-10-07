@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "decimal"
+
 module Elkrb
   module Options
     # ElkPadding parser for padding specifications
@@ -10,10 +12,10 @@ module Elkrb
       attr_reader :left, :top, :right, :bottom
 
       def initialize(left: 0, top: 0, right: 0, bottom: 0)
-        @left = left.to_f
-        @top = top.to_f
-        @right = right.to_f
-        @bottom = bottom.to_f
+        @left = Decimal.to_f(left)
+        @top = Decimal.to_f(top)
+        @right = Decimal.to_f(right)
+        @bottom = Decimal.to_f(bottom)
       end
 
       # Parse padding from string or hash
@@ -51,8 +53,12 @@ module Elkrb
         parts = {}
 
         content.split(",").each do |part|
-          key, value = part.split("=").map(&:strip)
-          parts[key.to_sym] = value.to_f
+          key, value, extra = part.split("=", -1).map(&:strip)
+          if value.nil? || extra
+            raise ArgumentError, "Invalid padding entry: #{part.inspect}"
+          end
+
+          parts[key.to_sym] = value
         end
 
         new(**parts)

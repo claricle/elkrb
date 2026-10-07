@@ -374,6 +374,80 @@ RSpec.describe Elkrb::Options::Resolver do
           .to raise_error(Elkrb::ValidationError, /elk\.padding/)
       end
 
+      # Every spelling of a structured numeric option has to read each
+      # component like a scalar one: "abc" and "0x10" are not 0.0.
+      StructuredOptionForms::SIDES.each do |side|
+        StructuredOptionForms::BAD_COMPONENTS.each do |bad|
+          StructuredOptionForms.paddings(side, bad).each do |form, value|
+            it "raises for #{bad.inspect} as #{side} of a padding #{form}" do
+              resolver = described_class.new(padding: value)
+
+              expect { resolver.get("elk.padding") }
+                .to raise_error(Elkrb::ValidationError, /elk\.padding/)
+            end
+          end
+        end
+      end
+
+      ["[top]", "[top=1=2]", "[=1]"].each do |bad|
+        it "raises for the padding entry in #{bad.inspect}" do
+          expect { described_class.new(padding: bad).get("elk.padding") }
+            .to raise_error(Elkrb::ValidationError, /elk\.padding/)
+        end
+      end
+
+      StructuredOptionForms::AXES.each do |axis|
+        StructuredOptionForms::BAD_COMPONENTS.each do |bad|
+          StructuredOptionForms.vectors(axis, bad).each do |form, value|
+            it "raises for #{bad.inspect} as #{axis} of a vector #{form}" do
+              resolver = described_class.new("elk.position" => value)
+
+              expect { resolver.get("elk.position") }
+                .to raise_error(Elkrb::ValidationError, /elk\.position/)
+            end
+          end
+        end
+      end
+
+      it "raises for a vector string with one component" do
+        resolver = described_class.new("elk.position" => "(1,)")
+
+        expect { resolver.get("elk.position") }
+          .to raise_error(Elkrb::ValidationError, /elk\.position/)
+      end
+
+      it "raises for a malformed padding on an element, not only on the call" do
+        node = with_layout_options("elk.padding" => "[top=abc]")
+
+        expect { described_class.new({}).get("elk.padding", node) }
+          .to raise_error(Elkrb::ValidationError, /elk\.padding/)
+      end
+
+      {
+        "[top=5.,left= 1 ,bottom=1.e1,right=+2]" => [5.0, 1.0, 10.0, 2.0],
+        { top: "5", left: 1, bottom: "2.5", right: " 3 " } =>
+          [5.0, 1.0, 2.5, 3.0],
+      }.each do |good, (top, left, bottom, right)|
+        it "reads the padding #{good.inspect} component by component" do
+          padding = described_class.new(padding: good).get("elk.padding")
+
+          expect(padding.to_h.values_at(:top, :left, :bottom, :right))
+            .to eq([top, left, bottom, right])
+        end
+      end
+
+      {
+        "(5., 1.e1)" => [5.0, 10.0],
+        { x: "2.5", y: 3 } => [2.5, 3.0],
+        ["7", " 8 "] => [7.0, 8.0],
+      }.each do |good, expected|
+        it "reads the vector #{good.inspect} component by component" do
+          resolver = described_class.new("elk.position" => good)
+
+          expect(resolver.get("elk.position").to_a).to eq(expected)
+        end
+      end
+
       [Float::INFINITY, -Float::INFINITY, Float::NAN].each do |bad|
         it "raises for the non-finite float #{bad}" do
           expect { described_class.new(spacing => bad).get(spacing) }

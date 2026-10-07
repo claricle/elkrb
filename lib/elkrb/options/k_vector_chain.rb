@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative "decimal"
 require_relative "k_vector"
 
 module Elkrb
@@ -9,11 +10,6 @@ module Elkrb
     # Parses coordinate chain strings in the format:
     #   "( {1,2}, {3,4} )" or "({1,2},{3,4})"
     class KVectorChain
-      # String#to_f answers 0.0 for junk, so every token is checked before
-      # conversion — ELK's own parser rejects a non-numeric token.
-      NUMERIC_TOKEN = /\A[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?\z/
-      private_constant :NUMERIC_TOKEN
-
       attr_reader :vectors
 
       def initialize(vectors = [])
@@ -60,10 +56,10 @@ module Elkrb
         new(vectors)
       end
 
-      # Every token has to be numeric and they have to pair up. String#to_f
-      # answers 0.0 for junk, so a token is checked before it is converted.
+      # Every token has to be numeric and they have to pair up. ELK's own
+      # parser rejects a non-numeric token.
       def self.coordinate_pairs?(tokens)
-        tokens.size.even? && tokens.all? { |token| token.match?(NUMERIC_TOKEN) }
+        tokens.size.even? && tokens.all? { |token| Decimal.parse(token) }
       end
       private_class_method :coordinate_pairs?
 
