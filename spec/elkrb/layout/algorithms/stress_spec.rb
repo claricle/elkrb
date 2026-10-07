@@ -107,6 +107,15 @@ RSpec.describe Elkrb::Layout::Algorithms::Stress do
         .to eq(laid_out_positions(graph_hash, iterations: 1))
     end
 
+    [false, nil].each do |absent|
+      it "treats #{absent.inspect} under the legacy key as not given" do
+        graph_hash["layoutOptions"]["elk.stress.iterationLimit"] = 1
+
+        expect(laid_out_positions(graph_hash, iterations: absent))
+          .to eq(laid_out_positions(graph_hash, iterations: 1))
+      end
+    end
+
     it "lets the call's legacy iterations key beat the graph's limit" do
       graph_hash["layoutOptions"]["elk.stress.iterationLimit"] = 1
 

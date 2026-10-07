@@ -60,9 +60,8 @@ module Elkrb
         def call_iterations
           call = options.is_a?(Hash) ? options : {}
           given = call.fetch("iterations", nil) || call.fetch(:iterations, nil)
-          if given.nil?
-            return @resolver.get(ITERATION_LIMIT, @graph,
-                                 default: DEFAULT_ITERATIONS)
+          unless given
+            return option(ITERATION_LIMIT, default: DEFAULT_ITERATIONS)
           end
 
           Options::Resolver.new(ITERATION_LIMIT => given).get(ITERATION_LIMIT)

@@ -54,7 +54,7 @@ module Elkrb
 
         content.split(",").each do |part|
           key, value, extra = part.split("=", -1).map(&:strip)
-          if value.nil? || extra
+          if extra || !value
             raise ArgumentError, "Invalid padding entry: #{part.inspect}"
           end
 
