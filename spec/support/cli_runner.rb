@@ -63,4 +63,14 @@ module CliRunner
   def run_ruby(source)
     Open3.capture3(RbConfig.ruby, "-I#{LIB}", "-e", source, chdir: ROOT)
   end
+
+  # Writes `hash` as JSON to `name` under `dir`; returns the path.
+  def write_json_to(dir, name, hash)
+    File.join(dir, name).tap { |path| File.write(path, hash.to_json) }
+  end
+
+  # [id, x, y] per child of a parsed `layout` document.
+  def layout_coordinates(layout)
+    layout["children"].map { |node| [node["id"], node["x"], node["y"]] }
+  end
 end

@@ -25,7 +25,7 @@ module Elkrb
           return graph if graph.children.nil? || graph.children.empty?
 
           # Get configuration
-          iterations = option("iterations", default: DEFAULT_ITERATIONS).to_i
+          iterations = call_iterations
           epsilon = option("epsilon", default: DEFAULT_EPSILON).to_f
 
           # Initialize positions
@@ -51,6 +51,16 @@ module Elkrb
         end
 
         private
+
+        # The registry reads "iterations" as force's elk.force.iterations, so
+        # the resolver would let force's option change a stress layout. Read
+        # the call's own key, as before the resolver, until stress moves to
+        # elk.stress.iterationLimit.
+        def call_iterations
+          call = options.is_a?(Hash) ? options : {}
+          given = call.fetch("iterations", nil) || call.fetch(:iterations, nil)
+          (given || DEFAULT_ITERATIONS).to_i
+        end
 
         def initialize_positions(graph)
           # Use circular initial layout

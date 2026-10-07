@@ -21,21 +21,13 @@ RSpec.describe "elkrb CLI layout flags" do
               { id: "e2", sources: ["a"], targets: ["c"] }],
     }
   end
-  let(:fan_out_path) { write_json("fan_out.json", fan_out) }
+  let(:fan_out_path) { write_json_to(dir, "fan_out.json", fan_out) }
   let(:pinned_box_path) do
     pinned = fan_out.merge(layoutOptions: { "elk.algorithm" => "box" })
-    write_json("pinned_box.json", pinned)
+    write_json_to(dir, "pinned_box.json", pinned)
   end
 
   after { FileUtils.remove_entry(dir) }
-
-  def write_json(name, hash)
-    File.join(dir, name).tap { |path| File.write(path, hash.to_json) }
-  end
-
-  def coordinates(layout)
-    layout["children"].map { |node| [node["id"], node["x"], node["y"]] }
-  end
 
   describe "layout --algorithm" do
     it "runs the algorithm the file pins when the flag is absent" do
@@ -44,8 +36,8 @@ RSpec.describe "elkrb CLI layout flags" do
       layered, = run_elkrb_json("layout", fan_out_path)
 
       expect(status.exitstatus).to eq(0)
-      expect(coordinates(pinned)).to eq(coordinates(explicit))
-      expect(coordinates(pinned)).not_to eq(coordinates(layered))
+      expect(layout_coordinates(pinned)).to eq(layout_coordinates(explicit))
+      expect(layout_coordinates(pinned)).not_to eq(layout_coordinates(layered))
     end
 
     it "lets an explicit flag beat the pin and echoes it in layoutOptions" do
@@ -54,7 +46,7 @@ RSpec.describe "elkrb CLI layout flags" do
       pinned, = run_elkrb_json("layout", pinned_box_path)
 
       expect(flagged["layoutOptions"]["elk.algorithm"]).to eq("random")
-      expect(coordinates(flagged)).not_to eq(coordinates(pinned))
+      expect(layout_coordinates(flagged)).not_to eq(layout_coordinates(pinned))
     end
 
     it "defaults to layered for a graph that pins nothing" do
@@ -62,7 +54,7 @@ RSpec.describe "elkrb CLI layout flags" do
       layered, = run_elkrb_json("layout", fan_out_path,
                                 "--algorithm", "layered")
 
-      expect(coordinates(default)).to eq(coordinates(layered))
+      expect(layout_coordinates(default)).to eq(layout_coordinates(layered))
     end
 
     it "fails with the algorithm's name for an unknown one" do
@@ -80,8 +72,8 @@ RSpec.describe "elkrb CLI layout flags" do
       layered, = run_elkrb_json("layout", chain_path, "--layer-spacing", "50")
       nodes, = run_elkrb_json("layout", chain_path, "--spacing", "50")
 
-      expect(coordinates(layered)).not_to eq(coordinates(default))
-      expect(coordinates(nodes)).to eq(coordinates(default))
+      expect(layout_coordinates(layered)).not_to eq(layout_coordinates(default))
+      expect(layout_coordinates(nodes)).to eq(layout_coordinates(default))
     end
   end
 
@@ -90,19 +82,19 @@ RSpec.describe "elkrb CLI layout flags" do
       default, = run_elkrb_json("layout", fan_out_path)
       spaced, = run_elkrb_json("layout", fan_out_path, "--spacing", "50")
 
-      expect(coordinates(spaced)).not_to eq(coordinates(default))
+      expect(layout_coordinates(spaced)).not_to eq(layout_coordinates(default))
       expect(spaced["layoutOptions"]).to include("elk.spacing.nodeNode" => 50)
     end
 
     it "beats an alias the file already carries" do
-      aliased = write_json(
-        "aliased.json",
-        fan_out.merge(layoutOptions: { "spacing_node_node" => 200 }),
+      aliased = write_json_to(
+        dir, "aliased.json",
+        fan_out.merge(layoutOptions: { "spacing_node_node" => 200 })
       )
       flagged, = run_elkrb_json("layout", aliased, "--spacing", "50")
       plain, = run_elkrb_json("layout", fan_out_path, "--spacing", "50")
 
-      expect(coordinates(flagged)).to eq(coordinates(plain))
+      expect(layout_coordinates(flagged)).to eq(layout_coordinates(plain))
     end
   end
 
@@ -170,8 +162,8 @@ RSpec.describe "elkrb CLI layout flags" do
       run_elkrb("diagram", fan_out_path, "-o", explicit,
                 "--algorithm", "box")
 
-      expect(coordinates(JSON.parse(File.read(out))))
-        .to eq(coordinates(JSON.parse(File.read(explicit))))
+      expect(layout_coordinates(JSON.parse(File.read(out))))
+        .to eq(layout_coordinates(JSON.parse(File.read(explicit))))
     end
 
     it "batch applies --direction and --edge-routing to each file" do
@@ -198,7 +190,7 @@ RSpec.describe "elkrb CLI layout flags" do
                   "elk.spacing.edgeNode" => 5,
                   "elk.spacing.nodeNode" => 40,
                   "foo.bar" => 1 }
-      write_json("warned.json", fan_out.merge(layoutOptions: options))
+      write_json_to(dir, "warned.json", fan_out.merge(layoutOptions: options))
     end
 
     it "warns once for a partial key and once for an accepted key" do

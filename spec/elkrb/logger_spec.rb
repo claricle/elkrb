@@ -1,24 +1,20 @@
 # frozen_string_literal: true
 
 require "spec_helper"
-require "open3"
 
 RSpec.describe "Elkrb.logger" do
-  def run_ruby(code)
-    root = File.expand_path("../..", __dir__)
-    Open3.capture3(RbConfig.ruby, "-I", File.join(root, "lib"),
-                   "-relkrb", "-e", code)
-  end
+  include CliRunner
 
   it "defaults to WARN, so only unhonoured options are reported" do
-    stdout, stderr, status = run_ruby("puts Elkrb.logger.level")
+    stdout, stderr, status =
+      run_ruby("require 'elkrb'; puts Elkrb.logger.level")
 
     expect([stdout.strip, status.exitstatus, stderr])
       .to eq([Logger::WARN.to_s, 0, ""])
   end
 
   it "writes to stderr, never stdout" do
-    stdout, stderr, = run_ruby('Elkrb.logger.warn("hello")')
+    stdout, stderr, = run_ruby('require "elkrb"; Elkrb.logger.warn("hello")')
 
     expect([stdout, stderr]).to match([eq(""), /hello/])
   end

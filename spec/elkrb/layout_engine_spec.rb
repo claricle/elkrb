@@ -3,6 +3,8 @@
 require "spec_helper"
 
 RSpec.describe Elkrb::Layout::LayoutEngine do
+  include GraphPositions
+
   let(:simple_graph_json) do
     JSON.parse(File.read("spec/fixtures/simple_graph.json"))
   end
@@ -157,10 +159,6 @@ RSpec.describe Elkrb::Layout::LayoutEngine do
         }
       end
 
-      def positions(graph)
-        graph.children.map { |node| [node.id, node.x, node.y] }
-      end
-
       it "runs box for a pin and no call option: b sits right of a with 20 spacing" do
         result = described_class.layout(pinned_box_json, {})
         a, b = result.children
@@ -169,23 +167,23 @@ RSpec.describe Elkrb::Layout::LayoutEngine do
       end
 
       it "keeps the pin when the call passes a different algorithm" do
-        pinned = positions(described_class.layout(pinned_box_json, algorithm: "random"))
+        pinned = child_positions(described_class.layout(pinned_box_json, algorithm: "random"))
 
-        expect(pinned).to eq(positions(described_class.layout(pinned_box_json, {})))
+        expect(pinned).to eq(child_positions(described_class.layout(pinned_box_json, {})))
       end
 
       it "uses the call option when the graph pins nothing" do
         unpinned = pinned_box_json.merge(layoutOptions: {})
 
-        expect(positions(described_class.layout(unpinned, algorithm: "box")))
-          .to eq(positions(described_class.layout(pinned_box_json, {})))
+        expect(child_positions(described_class.layout(unpinned, algorithm: "box")))
+          .to eq(child_positions(described_class.layout(pinned_box_json, {})))
       end
 
       it "reads an algorithm from the graph's properties" do
         from_properties = pinned_box_json.merge(layoutOptions: {}, properties: { "algorithm" => "box" })
 
-        expect(positions(described_class.layout(from_properties, {})))
-          .to eq(positions(described_class.layout(pinned_box_json, {})))
+        expect(child_positions(described_class.layout(from_properties, {})))
+          .to eq(child_positions(described_class.layout(pinned_box_json, {})))
       end
 
       it "reads spacing from the graph's layoutOptions under the ELK id" do
