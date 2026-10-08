@@ -44,11 +44,6 @@ module Elkrb
         @nested = raw.is_a?(Hash) ? self.class.new(raw, @spellings) : nil
       end
 
-      # @return [Object, nil] the value for a canonical id from the nested map
-      def nested_value(id)
-        nested&.value(id)
-      end
-
       # Every canonical id the map names, nested properties included, in
       # first-seen order. A nested map replaces its own "properties" key.
       #

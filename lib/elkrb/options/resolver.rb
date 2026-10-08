@@ -3,6 +3,7 @@
 require_relative "registry"
 require_relative "../errors"
 require_relative "decimal"
+require_relative "element_options"
 require_relative "option_map"
 require_relative "spellings"
 require_relative "unhonoured_report"
@@ -87,15 +88,8 @@ module Elkrb
 
       private
 
-      # layoutOptions, then the deprecated map nested in it, then properties.
-      # A nil is a miss; an explicit false is a value.
       def element_value(element, id)
-        layout = OptionMap.new(element&.layout_options, @spellings)
-        value = layout.value(id)
-        value = layout.nested_value(id) if value.nil?
-        return value unless value.nil?
-
-        OptionMap.new(element&.properties, @spellings).value(id)
+        ElementOptions.new(element, @spellings).value(id)
       end
 
       def coerce(id, value)

@@ -689,6 +689,53 @@ RSpec.describe Elkrb::Options::Resolver do
       end
     end
 
+    describe "every source #get reads is reported" do
+      let(:edge_node) { "elk.spacing.edgeNode" }
+
+      %i[layout_options properties nested call].each do |source|
+        it "reads and reports a registered key from #{source}" do
+          resolver, elements = option_source(source, { edge_node => 5 }, :plain)
+
+          resolver.report_unhonoured(option_graph({}, children: elements))
+
+          expect(resolver.get(edge_node, *elements)).to eq(5.0)
+          expect(log.string).to eq(
+            "WARN elkrb: option #{edge_node} is accepted but not " \
+            "honoured in this version\n",
+          )
+        end
+      end
+
+      it "raises in strict mode for a registered key in element properties" do
+        strict = described_class.new(strict: true)
+        graph = option_graph(
+          {}, children: [option_element(properties: { edge_node => 5 })]
+        )
+
+        expect { strict.report_unhonoured(graph) }
+          .to raise_error(Elkrb::Error, /#{Regexp.escape(edge_node)}/)
+      end
+
+      it "treats an unknown name in properties as metadata, not an option" do
+        strict = described_class.new(strict: true)
+        element = option_element(
+          properties: { "foo.bar" => 1, "_constraint_layer" => 2 },
+        )
+        graph = option_graph({}, children: [element])
+
+        expect { strict.report_unhonoured(graph) }.not_to raise_error
+        expect(log.string).to eq("")
+      end
+
+      it "stays silent for an honoured key in element properties" do
+        element = option_element(properties: { spacing => 5 })
+
+        resolver.report_unhonoured(option_graph({}, children: [element]))
+
+        expect(log.string).to eq("")
+      end
+    end
+
     describe "options passed to the layout call" do
       let(:empty_graph) { option_graph({}) }
 

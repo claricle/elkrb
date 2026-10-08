@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative "element_options"
 require_relative "option_map"
 require_relative "registry"
 require_relative "spellings"
@@ -8,10 +9,10 @@ module Elkrb
   module Options
     # @api private
     #
-    # The option keys in a graph's layoutOptions, at any level, that the
-    # registry does not know or does not fully honour, plus the call's own
-    # registered keys that are not fully honoured. Built and read by
-    # Resolver#report_unhonoured.
+    # The option keys in a graph's elements, at any level, that the registry
+    # does not know or does not fully honour, plus the call's own registered
+    # keys that are not fully honoured. An element's sources are those of
+    # ElementOptions. Built and read by Resolver#report_unhonoured.
     class UnhonouredReport
       NESTED_COLLECTIONS = %i[children edges ports labels].freeze
       CONTROL_CHARACTERS = /[[:cntrl:]]/
@@ -61,7 +62,7 @@ module Elkrb
       # flags such as strict and hierarchical. The call's nested properties
       # map is never read as options, so it is not reported either.
       def findings_for(graph, call)
-        graph_ids = option_maps(graph).flat_map(&:ids)
+        graph_ids = option_ids(graph)
         call_ids = call.own_ids.select { |id| Registry.status(id) }
         (graph_ids + call_ids).each_with_object({}) do |id, findings|
           status = Registry.status(id)
@@ -69,9 +70,9 @@ module Elkrb
         end
       end
 
-      def option_maps(graph)
-        reachable_elements(graph).map do |element|
-          OptionMap.new(element.layout_options, @spellings)
+      def option_ids(graph)
+        reachable_elements(graph).flat_map do |element|
+          ElementOptions.new(element, @spellings).ids
         end
       end
 
