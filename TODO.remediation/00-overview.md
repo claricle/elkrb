@@ -212,20 +212,20 @@ unless it says close.
 
 | # | Item | Slice | Size | Can start | Blocks | Status |
 |---|---|---|---|---|---|---|
-| 01 | Crash guards on ordinary ELK input | S1 | medium | closed | is the `v2` base of everything; 02, 03 | **merged** @ `a008889`; PR #2 still open, 2 Highs |
-| 02 | Corpus and CLI harness | S0b | medium | now | 05; close of 03, and of every **remaining** XD-gated item from 05 on — 06, 08 and 11 already gated against the driver materialised uncommitted and merged ahead of it | built, not merged, **1 open Blocker** |
-| 03 | elkjs golden harness | S0a | large | now; closes after 02 | close of 24; start of 12, 13, 14, 16–23, 31 | built, not merged |
+| 01 | Crash guards on ordinary ELK input | S1 | medium | closed | is the `v2` base of everything; 02, 03 | **merged** @ `a008889` (v2 seed); PR #2 closed |
+| 02 | Corpus and CLI harness | S0b | medium | now | 05; close of 03, and of every **remaining** XD-gated item from 05 on — 06, 08 and 11 already gated against the driver materialised uncommitted and merged ahead of it | **merged** @ `26dc466`, PR #14 |
+| 03 | elkjs golden harness | S0a | large | now; closes after 02 | close of 24; start of 12, 13, 14, 16–23, 31 | **merged** @ `96703b7`, PR #15 |
 | 04 | Lint and CI hygiene | S28 | small | closed | nothing; moves the bar to `rake` | **merged** @ `56900d3`, PR #6 |
-| 05 | CLI and shell boundary | S2 | medium | after 02 | 09, 26, 36 | built, not merged — **critical path** |
+| 05 | CLI and shell boundary | S2 | medium | after 02 | 09, 26, 36 | **merged** @ `e04c1e5`, PR #13 |
 | 06 | LayoutOptions open map | S3 | medium | closed | 07, 09, 27, 29, 34 | **merged** @ `36e0eb1`, PR #4 |
-| 07 | Drop the LayoutOptions shim | S3b | medium | **now** | must merge before 14, 16, 17, 19, 23, 24, 28, 30 start | ready — 06 and 11 are merged |
+| 07 | Drop the LayoutOptions shim | S3b | medium | **now** | must merge before 14, 16, 17, 19, 23, 24, 28, 30 start | **merged** @ `1b305c4`, PR #10 |
 | 08 | Options registry | S4 | medium | closed | 09, 36 | **merged** @ `1c0abca`, PR #7 |
-| 09 | Resolver, wiring, precedence, CLI flags | S5 | large | after 05 | 10, 13, 14, 25, 28, 35, 36 | blocked by 05 only |
+| 09 | Resolver, wiring, precedence, CLI flags | S5 | large | after 05 | 10, 13, 14, 25, 28, 35, 36 | ready — 05 is merged; **sirena critical path** |
 | 10 | Every remaining option read onto the resolver | S6 | large | after 09, 11 | 13, 14, 16, 17, 18, 20, 22, 23, 24, 35 | blocked by 09 |
 | 11 | NodeIndex: endpoints, duplicate ids, disco | S7 | medium | closed | 07, 10, 12, 14, 16, 20, 23, 24 | **merged** @ `4364739`, PR #5 |
-| 12 | Layered: internal cycle breaking, hyperedges raise | S8 | medium | after 11, 03 | 13, 25; close of 33 | blocked by 03 |
-| 13 | Layered: direction, ELK spacing, centring | S9 | small | after 09, 10, 12, 03 | 14, 16, 31; merges before 36 touches `cli_spec` | blocked by 10, 12 |
-| 14 | Hierarchy: bottom-up sizing, per-level routing | S10 | large | after 07, 09, 10, 11, 13, 03 | 15, 16, 17, 21, 25 | blocked by 13, 07 |
+| 12 | Layered: internal cycle breaking, hyperedges raise | S8 | medium | after 11, 03 | 13, 25; close of 33 | **merged** @ `b703ffb`, PR #19 |
+| 13 | Layered: direction, ELK spacing, centring | S9 | small | after 09, 10, 12, 03 | 14, 16, 31; merges before 36 touches `cli_spec` | blocked by 09, 10 |
+| 14 | Hierarchy: bottom-up sizing, per-level routing | S10 | large | after 07, 09, 10, 11, 13, 03 | 15, 16, 17, 21, 25 | blocked by 13 |
 | 15 | Cross-level edge routing | S10b | small | after 14, 16 | 30, 35 | blocked by 16 |
 | 16 | Edge sections: borders, ids, shapes, ORTHOGONAL | S11 | medium | after 07, 10, 11, 13, 14, 03 | 15, 18, 19, 31 | blocked by 14 |
 | 17 | Labels owner-relative | S12 | medium | after 07, 10, 14, 03 | 30 | blocked by 14 |
@@ -234,41 +234,25 @@ unless it says close.
 | 20 | Seeded RNG, stress edge length, random | S14 | medium | after 10, 11, 03 | 21; close of 33 | blocked by 10 |
 | 21 | Force rewrite (Fruchterman–Reingold) | S15 | medium–large | after 14, 20, 03 | 30; close of 33 | blocked by 14, 20 |
 | 22 | Box, rectpacking, fixed | S16 | medium–large | after 10, 03 | 30, 35 | blocked by 10 |
-| 23 | mrtree and radial | S17 | medium | after 07, 10, 11, 03 | 30, 35 | blocked by 07, 10 |
-| 24 | Truthfulness: disco, libavoid, vertiflex, spore, topdown | S18 | medium–large | after 07, 10, 11; closes after 03 | 33 | blocked by 07, 10 |
+| 23 | mrtree and radial | S17 | medium | after 07, 10, 11, 03 | 30, 35 | blocked by 10 |
+| 24 | Truthfulness: disco, libavoid, vertiflex, spore, topdown | S18 | medium–large | after 07, 10, 11; closes after 03 | 33 | blocked by 10 |
 | 25 | Constraints | S19 | medium | after 09, 12, 14 | 37 | blocked by 14 |
-| 26 | `validate` correctness | S20 | medium | after 05 | 36 | blocked by 05 |
-| 27 | ELKT parser rewrite | S21 | large | **now** | 28 | ready — 06 is merged |
-| 28 | ELKT and DOT serializers | S22 | large | after 07, 09, 27 | 37 | blocked by 27, 09, 07 |
-| 29 | Data-model completeness | S23 | medium | **now** | 37 | ready — 06 is merged |
+| 26 | `validate` correctness | S20 | medium | after 05 | 36 | ready — 05 is merged |
+| 27 | ELKT parser rewrite | S21 | large | **now** | 28 | **merged** @ `9ed11d0`, PR #17 |
+| 28 | ELKT and DOT serializers | S22 | large | after 07, 09, 27 | 37 | blocked by 09 |
+| 29 | Data-model completeness | S23 | medium | **now** | 37 | **merged** @ `34d339b`, PR #16 |
 | 30 | README and examples | S24 | medium | after 06–23 merged | 37 | blocked by 15, 17, 19, 21, 22, 23 |
 | 31 | Layered: barycenter crossing minimisation | S25a | medium | after 13, 16, 03 | 32, 35 | blocked by 16 |
 | 32 | Layered: long-edge dummies | S25b | medium | after 31 | 35, 37 | blocked by 31 |
 | 33 | Performance leftovers | S26 | small | after 24; closes after 12, 20, 21 | 35, 37 | blocked by 24 |
-| 34 | Consumer fixtures: capture | S27a | small | **now** | 35, which reads its fixtures | ready — 06 is merged |
-| 35 | Consumer contract: acceptance | S27b | small | after 09, 10, 13, 14, 15, 16, 22, 23, 31, 32, 33, 34, 36 merged; reads 34's fixtures | 37 | blocked by 15, 22, 23, 32, 33, 34, 36 |
+| 34 | Consumer fixtures: capture | S27a | small | **now** | 35, which reads its fixtures | **merged** @ `583051c`, PR #11 |
+| 35 | Consumer contract: acceptance | S27b | small | after 09, 10, 13, 14, 15, 16, 22, 23, 31, 32, 33, 34, 36 merged; reads 34's fixtures | 37 | blocked by 15, 22, 23, 32, 33, 36 |
 | 36 | CLI UX and option introspection | S29 | medium | after 05, 08, 09, 26 | 35, 37 | blocked by 09, 26 |
-| 37 | CHANGELOG, generated docs, packaging | S30 | medium | after 25, 28, 29, 30, 32, 33, 35, 36 | nothing; the `v2 → main` PR follows | blocked by 25, 28, 29, 30, 35 |
+| 37 | CHANGELOG, generated docs, packaging | S30 | medium | after 25, 28, 29, 30, 32, 33, 35, 36 | nothing; the `v2 → main` PR follows | blocked by 25, 28, 30, 35 |
 
-Ready to pick up today, branching straight from `origin/v2`:
-**07**, **27**, **29** and **34**. Every blocker of theirs is merged.
-
-Two that look ready and are not:
-
-- **12** needs 03, which is built but not merged. 03 gates the start of
-  12, 13, 14, 16, 17, 18, 19, 20, 21, 22, 23 and 31.
-- **26** needs 05, which is built but not merged.
-
-Three built branches are still unmerged: **02**, **03** and **05**. Gate
-A and Gate B both ran on each of them at an earlier SHA. Every one has
-since moved, so **no current tip carries a valid approval** — an approval
-names a SHA, and a new commit invalidates it. 02 also has an open
-Blocker (see its card).
-
-Clearing **05** is the highest-value move on the board. Counted from the
-dependency columns above, **24 of the 29 unstarted cards are blocked
-behind it**, through 09 and then 10. Nothing else on the list moves that
-many.
+Status as of 2026-10-06. **Sirena comes first** (owner ruling 2026-10-06).
+Its cards in dependency order: 09 and 10, then 13, 14 and 16, then 31 and
+15, then 32. 26 is also ready but off that path.
 
 ## Rulings
 
@@ -290,7 +274,7 @@ ruling is wrong.
 | 10 | Hyperedges in layered | Raise `UnsupportedConfigurationException` | ELK and elkjs do; splitting internally is not semantics-preserving |
 | 11 | Hyperedges elsewhere | Per algorithm, follow the elkjs golden; elkrb-only algorithms raise | match the reference wherever one exists |
 | 12 | Nested `elk.algorithm` | Honoured — registry dispatch per compound; an unknown pin raises `AlgorithmNotFoundError` | ELK `SEPARATE_CHILDREN`; a silent fallback hides a typo |
-| 13 | Ruby floor | `>= 3.2`, set in 37 | lutaml-model 0.8.19 already requires it |
+| 13 | Ruby floor | `>= 3.3` (revised 2026-10-06; v2 raised it in #26) | 3.2 is end-of-life |
 | 14 | `elk.hierarchyHandling: INCLUDE_CHILDREN` | Partial: flat graphs equal SEPARATE_CHILDREN; nested graphs get cross-level edges routed in the container frame (item 15); no cross-level layering | covers sirena's C4 relationships without a layered rewrite |
 | 15 | Slice-1 coordination | `v2` is seeded at 01's head `a008889` and frozen; PR #2 keeps base `main` and is merged forward | `v2` is never rewritten |
 | 16 | Integration branch | `v2`; every slice PR targets it; one `v2 → main` PR at the end | `main` only moves through maintainer-approved merges |
@@ -319,7 +303,7 @@ sections — that inventory is the source, not this list. No item edits
 | 25 | `_constraint_*` and `_assigned_layer` scratch keys leave output `properties`; violations go through `Elkrb.logger`; a layer constraint actually moves the node | stop reading the scratch keys |
 | 31 | Layered node order within a layer follows a barycenter sweep, so cross-axis coordinates move | `"elk.layered.crossingMinimization.strategy":"NONE"` restores insertion order |
 | 32 | Edges spanning more than one layer carry bend points and route around intervening nodes | none; the old output drew lines through node boxes |
-| 37 | Ruby floor `>= 3.2`; `sig/` and the `rbs` dependency deleted; `spec.files` becomes an explicit whitelist | upgrade Ruby; do not depend on shipped RBS |
+| 37 | Ruby floor `>= 3.3`; `sig/` and the `rbs` dependency deleted; `spec.files` becomes an explicit whitelist | upgrade Ruby; do not depend on shipped RBS |
 
 Reported in the PR body but not on the plan's carrier list — the
 maintainer decides whether each enters the 2.0.0 block:
@@ -392,76 +376,7 @@ branch that exists on origin — merge `origin/v2` in instead.
 
 ## Current state
 
-`v2` is on origin at `75bdb13`. **Four slice PRs are merged into it**
-— #4, #5, #6 and #7. Item 01 was seeded directly rather than merged, and
-its PR #2 is still open. PR #8 is not a slice; it restored the lint
-ratchet. The
-suite there is **763 examples, 0 failures**, and RuboCop reports **0
-offences across 120 files** — measured 2026-08-27 in the clean worktree
-`~/.claude/pipeline/worktrees/elkrb/todo-remediation`, with `origin/v2`
-merged in.
-
-### Merged into `v2`
-
-Four slice PRs (#4-#7), the 01 seed, and #8's lint ratchet.
-
-**Two tables, one authority each.** They do overlap — both mention 02's
-open Blocker and 05's critical-path status, and SHAs are quoted all
-over these cards as history, as bases, as evidence. That is fine and
-not worth stamping out. What the rule settles is which copy is right
-when two disagree:
-
-- **The Items table above is the authoritative MERGE record.** The seed
-  `a008889` appears in several places as history and as a base; that
-  table is what those quotes must agree with, and the copy to correct
-  first.
-- **The table below is the authoritative BRANCH record** — name,
-  current head, how far ahead of `v2`, and what state it is in. The
-  three current heads also appear in their own card headers, which is
-  where a reader of one card needs them. When a head moves, fix it here
-  first, then the card.
-
-That is why the Items table's Status column says only "built, not
-merged" for 02, 03 and 05. It used to carry their heads too, and two
-copies of a moving SHA is exactly how this section came to be wrong
-once already.
-
-One thing that table cannot say: **PR #2 is still an open draft against
-`main` and carries 2 open High findings**, even though its code is the `v2`
-seed.
-
-### Built and gated once, since moved, not merged
-
-| Item | Branch | Head | Ahead of `v2` | State |
-|---|---|---|---|---|
-| 02 | `fix/s0b-corpus-cli-harness` | `37bb0ce` | 5 | **one open Blocker** — `prune_stale_dumps` still deletes across sibling directories when the destination is a real directory whose name contains `*`. `File.file?` reads the path literally, `Dir[]` globs it. See the card |
-| 03 | `fix/s0a-golden-harness` | `e8c7e69` | 11 | step 7's `corpus_spec` reconciliation happens at merge — the file it edits arrives with 02 |
-| 05 | `fix/s2-cli-shell` | `249a4d8` | 20 | **the critical path.** Base is a frozen integration ref: the `v2` seed `a008889` plus 02's **old** tip `dcec6d0`. It contains neither current `origin/v2` nor current 02, and its Rakefile is still spec-only |
-
-Suite counts on those three branches are not carried here. Each tip has
-moved since it was last measured, and a number nobody re-ran is worse
-than no number.
-
-### What that leaves
-
-- **5 merged**, 3 built but ungated, **29 unstarted**.
-- Ready today from `origin/v2`: **07, 27, 29, 34**. Not 12 — 03 gates
-  its start and 03 is unmerged.
-- The chain **05 → 09 → 10** is single-file and cannot be parallelised.
-  Counted from the Items table's own dependency columns, transitively:
-
-  | until this lands | cards still blocked |
-  |---|---|
-  | 05 | **24** |
-  | 09 | 22 |
-  | 10 | 19 |
-
-  So 05 is not one card among three. It gates **24 of the 29
-  unstarted cards** — 83% of what has not been touched, or 75% of the
-  32 that are not yet merged.
-
-This section used to close by saying nothing was pushed and no PR
-existed except #2. Both are now false: `v2` is on origin at `75bdb13`, PRs #4-#8 are
-merged (#4-#7 are the slices, #8 the lint ratchet), and PR #3 carries
-this plan. What still holds is the rule — a
-branch is not pushed until it has a Codex approval naming its exact tip.
+The Items table's Status column is the merge record. When it looks stale,
+`git log --first-parent --oneline origin/v2` is the authority; open work is
+`gh pr list -R claricle/elkrb --base v2`. A branch is not pushed until it has
+a Codex approval naming its exact tip.
