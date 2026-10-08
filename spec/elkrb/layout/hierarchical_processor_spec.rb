@@ -187,16 +187,23 @@ RSpec.describe Elkrb::Layout::HierarchicalProcessor do
       "element properties" => { properties: { "elk.algorithm" => "box" } },
     }
 
+    # Keep: the examples below compare equal positions; this one is the only
+    # check that box and layered differ on the fixture, so they cannot pass
+    # vacuously.
     it "differs from the parent's algorithm when it names none" do
       expect(nested_graph_positions({}))
         .not_to eq(nested_graph_positions(shapes["layoutOptions"]))
     end
 
+    # Keep: the opposite direction of the table below; it goes red when a
+    # nested graph that names no algorithm gets the registry default.
     it "keeps the parent's algorithm when it names none" do
       expect(nested_graph_positions({}, root_algorithm: "box"))
         .to eq(nested_graph_positions(shapes["layoutOptions"]))
     end
 
+    # Keep: it goes red when a nested graph that names no algorithm takes the
+    # call's algorithm over the graph's own.
     it "does not take the call's algorithm for a graph that names none" do
       expect(nested_graph_positions({}, root_algorithm: "box",
                                         call: { algorithm: "layered" }))
