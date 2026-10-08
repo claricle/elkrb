@@ -10,8 +10,8 @@ module Elkrb
     # maps only through this table: it walks with each_pair, so a Hash
     # default is never a value, and it folds String and Symbol keys and every
     # spelling of an id. The best spelling wins, then a String over a Symbol,
-    # then the first inserted. A nil value is a miss, but its id still counts
-    # as present for the report.
+    # then the first inserted, which only two keys of another class can reach.
+    # A nil value is a miss, but its id still counts as present for the report.
     class OptionMap
       NESTED_KEY = "properties"
       STRING_KEY = 0

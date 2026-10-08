@@ -22,7 +22,8 @@ module Elkrb
       # @return [Array(String, Integer)] the canonical id (an unknown key
       #   stays under its own name) and the spelling's rank, lowest best:
       #   the id, then its org.eclipse.elk. form, then each alias in
-      #   registry order, then any other spelling the registry resolves.
+      #   registry order, then the shorter dot-suffixes of the id, the
+      #   longer first. No two spellings of one id share a rank.
       def resolve(key)
         name = key.to_s
         @resolved[name] ||= begin
@@ -44,7 +45,10 @@ module Elkrb
         aliases = Array(entry&.fetch(:aliases, nil))
         return 1 if name == long_form(id)
 
-        2 + (aliases.index(name) || aliases.size)
+        position = aliases.index(name)
+        return 2 + position if position
+
+        2 + aliases.size + id.length - name.length
       end
 
       def long_form(id)
