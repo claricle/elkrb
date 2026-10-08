@@ -512,6 +512,7 @@ RSpec.describe Elkrb::Options::Resolver do
                       formatter: ->(sev, _t, _p, msg) { "#{sev} #{msg}\n" })
     end
     let(:resolver) { described_class.new({}) }
+    let(:honoured) { "elk.edgeRouting" }
 
     around do |example|
       previous = Elkrb.logger
@@ -545,7 +546,7 @@ RSpec.describe Elkrb::Options::Resolver do
 
     it "stays silent for honoured keys" do
       resolver.report_unhonoured(
-        option_graph({ spacing => 5, "elk.algorithm" => "box" }),
+        option_graph({ honoured => 5, "elk.algorithm" => "box" }),
       )
 
       expect(log.string).to eq("")
@@ -600,7 +601,7 @@ RSpec.describe Elkrb::Options::Resolver do
     end
 
     it "does not report a deprecated nested properties map as unknown" do
-      graph = option_graph({ "properties" => { spacing => 5 } })
+      graph = option_graph({ "properties" => { honoured => 5 } })
 
       resolver.report_unhonoured(graph)
 
@@ -637,14 +638,14 @@ RSpec.describe Elkrb::Options::Resolver do
       it "raises Elkrb::Error naming every unknown and unhonoured key" do
         graph = option_graph({ "foo.bar" => 1, "elk.spacing.edgeNode" => 5,
                                "elk.hierarchyHandling" => "INCLUDE_CHILDREN",
-                               spacing => 3 })
+                               honoured => 3 })
 
         expect { strict.report_unhonoured(graph) }
           .to raise_error(Elkrb::Error) { |error|
             expect(error.message)
               .to include("foo.bar", "elk.spacing.edgeNode",
                           "elk.hierarchyHandling")
-            expect(error.message).not_to include(spacing)
+            expect(error.message).not_to include(honoured)
           }
       end
 
@@ -656,7 +657,7 @@ RSpec.describe Elkrb::Options::Resolver do
       end
 
       it "does not raise for a graph carrying only honoured keys" do
-        expect { strict.report_unhonoured(option_graph({ spacing => 3 })) }
+        expect { strict.report_unhonoured(option_graph({ honoured => 3 })) }
           .not_to raise_error
       end
 
@@ -797,7 +798,7 @@ RSpec.describe Elkrb::Options::Resolver do
       it "stays silent for honoured call keys and engine flags, even strict" do
         strict = described_class.new(
           strict: true, hierarchical: true, algorithm: "box",
-          spacing_node_node: 5, iterations: 10, "not.a.key" => 1
+          edge_routing: "ORTHOGONAL", iterations: 10, "not.a.key" => 1
         )
 
         expect { strict.report_unhonoured(empty_graph) }.not_to raise_error

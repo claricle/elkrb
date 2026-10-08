@@ -179,6 +179,7 @@ RSpec.describe Elkrb::Options::Resolver, "key shapes" do
 
   describe "#report_unhonoured" do
     reported = "elk.selfLoopOffset"
+    honoured = "elk.edgeRouting"
     report_spellings = [
       reported,
       "org.eclipse.elk.selfLoopOffset",
@@ -237,7 +238,9 @@ RSpec.describe Elkrb::Options::Resolver, "key shapes" do
 
         it "reports nothing for an honoured key under #{nested_key.inspect} " \
            "on a #{kind} map, whatever its default holds" do
-          options = leaky_layout_options(nested_key, [[id, 5]], kind, ghost)
+          options = leaky_layout_options(
+            nested_key, [[honoured, "ORTHOGONAL"]], kind, ghost
+          )
           graph = option_graph_holding(options)
 
           described_class.new({}).report_unhonoured(graph)
