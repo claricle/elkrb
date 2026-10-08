@@ -40,15 +40,16 @@ module Elkrb
 
       def rank(name, id)
         return 0 if name == id
-
-        entry = Registry.all[id]
-        aliases = Array(entry&.fetch(:aliases, nil))
         return 1 if name == long_form(id)
 
-        position = aliases.index(name)
-        return 2 + position if position
+        2 + other_rank(name, id)
+      end
 
-        2 + aliases.size + id.length - name.length
+      # An alias by its place in the registry, else a dot-suffix of the id
+      # after all the aliases, the longer suffix first.
+      def other_rank(name, id)
+        aliases = Array(Registry.all[id]&.fetch(:aliases, nil))
+        aliases.index(name) || (aliases.size + id.length - name.length)
       end
 
       def long_form(id)
