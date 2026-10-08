@@ -168,7 +168,10 @@ module Elkrb
         # @param id [String, Symbol] any id or alias
         # @param algorithm [String, nil] a normalised algorithm name
         # @return [Boolean] whether the id lists the algorithm among its
-        #   readers; false for an id with no readers
+        #   readers; false for an id with no readers. Readers are the
+        #   built-in algorithms, matched by registered name: a class
+        #   registered under another name is not one, and a class registered
+        #   over a built-in name is taken to read what that name reads.
         def read_by?(id, algorithm)
           Array(entry_for(id)&.[](:readers)).include?(algorithm)
         end
