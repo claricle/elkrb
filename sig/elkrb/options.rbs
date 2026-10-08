@@ -13,6 +13,8 @@ module Elkrb
 
       def self.note: (String | Symbol id) -> String?
 
+      def self.read_by?: (String | Symbol id, String? algorithm) -> bool
+
       def self.for_algorithm: (String name, ?include_all: bool) -> Array[String]
 
       def self.all: () -> Hash[String, Hash[Symbol, untyped]]
@@ -27,7 +29,7 @@ module Elkrb
 
       def strict?: () -> bool
 
-      def report_unhonoured: (Graph::Graph graph) -> void
+      def report_unhonoured: (Graph::Graph graph, ?algorithm_name: ^(untyped) -> String?) -> void
     end
 
     class ElkPadding
