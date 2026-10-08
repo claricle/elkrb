@@ -15,24 +15,28 @@ module Elkrb
       # @param options [Hash] Layout options
       # @return [Graph::Graph] The laid out graph
       def layout_hierarchical(graph, options = {})
-        return layout_flat(graph, options) unless graph.hierarchical?
+        # Options are read from the graph being laid out, so each nested
+        # graph uses its own and none inherits its parent's.
+        reading_options_from(graph) do
+          next layout_flat(graph, options) unless graph.hierarchical?
 
-        # First, recursively layout all child nodes
-        layout_children_recursively(graph)
+          # First, recursively layout all child nodes
+          layout_children_recursively(graph)
 
-        # Then layout the top-level graph
-        layout_flat(graph, options)
+          # Then layout the top-level graph
+          layout_flat(graph, options)
 
-        # Apply parent constraints
-        apply_parent_constraints(graph)
+          # Apply parent constraints
+          apply_parent_constraints(graph)
 
-        # Handle cross-hierarchy edges
-        handle_cross_hierarchy_edges(graph)
+          # Handle cross-hierarchy edges
+          handle_cross_hierarchy_edges(graph)
 
-        # Update parent bounds
-        update_parent_bounds(graph)
+          # Update parent bounds
+          update_parent_bounds(graph)
 
-        graph
+          graph
+        end
       end
 
       private
@@ -75,6 +79,7 @@ module Elkrb
           children: node.children || [],
           edges: node.edges || [],
           layout_options: node.layout_options,
+          properties: node.properties,
         )
       end
 

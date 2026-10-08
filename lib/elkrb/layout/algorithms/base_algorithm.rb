@@ -113,6 +113,19 @@ module Elkrb
           @resolver.get(key, @graph, default: default)
         end
 
+        # Runs the block with #option reading from graph, then puts the
+        # previous graph back, even when the block raises.
+        #
+        # @param graph [Elkrb::Graph::Graph]
+        # @return [Object] the block's value
+        def reading_options_from(graph)
+          outer = @graph
+          @graph = graph
+          yield
+        ensure
+          @graph = outer
+        end
+
         # Get spacing between nodes
         #
         # @return [Float] The node spacing value

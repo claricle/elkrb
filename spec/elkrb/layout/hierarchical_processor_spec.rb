@@ -117,6 +117,74 @@ RSpec.describe Elkrb::Layout::HierarchicalProcessor do
     end
   end
 
+  describe "options in a nested graph" do
+    let(:recorder_class) do
+      Class.new(Elkrb::Layout::Algorithms::BaseAlgorithm) do
+        def spacing_by_graph
+          @spacing_by_graph ||= {}
+        end
+
+        def layout_flat(graph, _options = {})
+          spacing_by_graph[graph.id] = option("elk.spacing.nodeNode")
+          graph
+        end
+      end
+    end
+
+    def parent_with(id, layout_options: nil, properties: nil)
+      Elkrb::Graph::Node.new(
+        id: id, width: 50, height: 50, layout_options: layout_options,
+        properties: properties,
+        children: [Elkrb::Graph::Node.new(id: "#{id}-kid", width: 5, height: 5)]
+      )
+    end
+
+    let(:root) do
+      Elkrb::Graph::Graph.new(
+        id: "root",
+        layout_options: { "elk.spacing.nodeNode" => 5 },
+        children: [
+          parent_with("own", layout_options: { "elk.spacing.nodeNode" => 100 }),
+          parent_with("props", properties: { "elk.spacing.nodeNode" => 33 }),
+          parent_with("bare"),
+        ],
+      )
+    end
+
+    it "reads each nested graph's own options, not the root's" do
+      algorithm = recorder_class.new
+      algorithm.layout(root)
+
+      expect(algorithm.spacing_by_graph).to include(
+        "own_children" => 100.0, "props_children" => 33.0,
+        "bare_children" => 20.0
+      )
+    end
+
+    it "reads the root's options again once the nested graphs are done" do
+      algorithm = recorder_class.new
+      algorithm.layout(root)
+
+      expect(algorithm.spacing_by_graph["root"]).to eq(5.0)
+    end
+
+    it "lets call-level options reach a nested graph that names none" do
+      algorithm = recorder_class.new("elk.spacing.nodeNode" => 70)
+      algorithm.layout(root)
+
+      expect(algorithm.spacing_by_graph).to include(
+        "own_children" => 100.0, "bare_children" => 70.0,
+      )
+    end
+
+    it "reads a nested graph's options when called without #layout" do
+      algorithm = recorder_class.new
+      algorithm.layout_hierarchical(root)
+
+      expect(algorithm.spacing_by_graph["own_children"]).to eq(100.0)
+    end
+  end
+
   describe "#apply_parent_constraints" do
     it "adjusts children for padding" do
       layout_opts = {}
