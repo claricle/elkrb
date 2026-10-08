@@ -89,6 +89,29 @@ RSpec.describe Elkrb::Options::UnhonouredReport do
       end
     end
 
+    # [root, middle compound, raises?]: the inner compound names no algorithm
+    # and carries the key, so it is laid out by the middle one's.
+    [["force", "layered", false], ["layered", "force", true]]
+      .each do |root, middle, raises|
+      it "lays out an inner compound by its parent's, #{root} > #{middle}" do
+        inner = { id: "inner", layoutOptions: { node_node => 30 },
+                  children: positioned_nodes("in-") }
+        mid = { id: "mid", layoutOptions: { "elk.algorithm" => middle },
+                children: [inner] }
+        graph = Elkrb::Graph::Graph.from_json(
+          { id: "root", children: [mid] }.to_json,
+        )
+        strictly = { algorithm: root, strict: true }
+
+        if raises
+          expect { Elkrb.layout(graph, strictly) }
+            .to raise_error(Elkrb::Error, unhonoured)
+        else
+          expect { Elkrb.layout(graph, strictly) }.not_to raise_error
+        end
+      end
+    end
+
     it "accepts the root's key under the algorithm spelled any way" do
       %w[Layered org.eclipse.elk.layered].each do |spelled|
         graph, = option_carried(:root, node_node, 30)
