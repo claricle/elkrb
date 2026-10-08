@@ -688,5 +688,71 @@ RSpec.describe Elkrb::Options::Resolver do
           }
       end
     end
+
+    describe "options passed to the layout call" do
+      let(:empty_graph) { option_graph({}) }
+
+      it "warns once for a call-level accepted key" do
+        resolver = described_class.new("elk.spacing.edgeNode" => 5)
+
+        resolver.report_unhonoured(empty_graph)
+
+        expect(log.string).to eq(
+          "WARN elkrb: option elk.spacing.edgeNode is accepted but not " \
+          "honoured in this version\n",
+        )
+      end
+
+      it "warns with the registry note for a call-level partial key" do
+        note = Elkrb::Options::Registry.note("elk.hierarchyHandling")
+
+        resolver = described_class.new(
+          "elk.hierarchyHandling" => "SEPARATE_CHILDREN",
+        )
+
+        resolver.report_unhonoured(empty_graph)
+
+        expect(log.string).to eq(
+          "WARN elkrb: option elk.hierarchyHandling is partially honoured: " \
+          "#{note}\n",
+        )
+      end
+
+      it "warns once when graph and call carry the same key" do
+        resolver = described_class.new("elk.spacing.edgeNode" => 5)
+
+        resolver.report_unhonoured(
+          option_graph({ "elk.spacing.edgeNode" => 5 }),
+        )
+
+        expect(log.string.lines.size).to eq(1)
+      end
+
+      it "raises under strict: true, naming the call-level key" do
+        strict = described_class.new(strict: true, "elk.spacing.edgeNode" => 5)
+
+        expect { strict.report_unhonoured(empty_graph) }
+          .to raise_error(Elkrb::Error, /elk\.spacing\.edgeNode/)
+        expect(log.string).to eq("")
+      end
+
+      it "reads the key under any spelling" do
+        strict = described_class.new(strict: true,
+                                     hierarchyHandling: "SEPARATE_CHILDREN")
+
+        expect { strict.report_unhonoured(empty_graph) }
+          .to raise_error(Elkrb::Error, /elk\.hierarchyHandling/)
+      end
+
+      it "stays silent for honoured call keys and engine flags, even strict" do
+        strict = described_class.new(
+          strict: true, hierarchical: true, algorithm: "box",
+          spacing_node_node: 5, iterations: 10, "not.a.key" => 1
+        )
+
+        expect { strict.report_unhonoured(empty_graph) }.not_to raise_error
+        expect(log.string).to eq("")
+      end
+    end
   end
 end

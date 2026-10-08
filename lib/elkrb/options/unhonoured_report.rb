@@ -9,7 +9,8 @@ module Elkrb
     # @api private
     #
     # The option keys in a graph's layoutOptions, at any level, that the
-    # registry does not know or does not fully honour. Built and read by
+    # registry does not know or does not fully honour, plus the call's own
+    # registered keys that are not fully honoured. Built and read by
     # Resolver#report_unhonoured.
     class UnhonouredReport
       NESTED_COLLECTIONS = %i[children edges ports labels].freeze
@@ -18,9 +19,11 @@ module Elkrb
 
       # @param graph [Elkrb::Graph::Graph]
       # @param spellings [Spellings]
-      def initialize(graph, spellings = Spellings.new)
+      # @param call [OptionMap] the options passed to the layout call
+      def initialize(graph, spellings = Spellings.new,
+                     call = OptionMap.new({}, spellings))
         @spellings = spellings
-        @findings = findings_for(graph)
+        @findings = findings_for(graph, call)
       end
 
       def empty?
@@ -53,10 +56,13 @@ module Elkrb
 
       private
 
-      # { canonical id => status }; status is nil for an unknown key.
-      def findings_for(graph)
-        ids = option_maps(graph).flat_map(&:ids)
-        ids.each_with_object({}) do |id, findings|
+      # { canonical id => status }; status is nil for an unknown key. An
+      # unknown key in the call is not reported: the call also carries engine
+      # flags such as strict and hierarchical.
+      def findings_for(graph, call)
+        graph_ids = option_maps(graph).flat_map(&:ids)
+        call_ids = call.ids.select { |id| Registry.status(id) }
+        (graph_ids + call_ids).each_with_object({}) do |id, findings|
           status = Registry.status(id)
           findings[id] = status unless status == :honoured
         end

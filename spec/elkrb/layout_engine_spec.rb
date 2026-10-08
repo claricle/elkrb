@@ -225,6 +225,20 @@ RSpec.describe Elkrb::Layout::LayoutEngine do
       end
     end
 
+    context "with an accepted-but-unhonoured option in the call" do
+      let(:graph) { { id: "r", children: [] } }
+
+      it "raises Elkrb::Error naming the option under strict: true" do
+        expect { described_class.layout(graph, strict: true, "elk.spacing.edgeNode" => 5) }
+          .to raise_error(Elkrb::Error, /elk\.spacing\.edgeNode/)
+      end
+
+      it "lays out under strict: true when the call carries only engine flags" do
+        expect { described_class.layout(graph, strict: true, hierarchical: true) }
+          .not_to raise_error
+      end
+    end
+
     context "with an accepted-but-unhonoured option on the graph" do
       let(:graph) { { id: "r", layoutOptions: { "elk.spacing.edgeNode" => 5 }, children: [] } }
 

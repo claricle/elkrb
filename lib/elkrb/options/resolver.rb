@@ -66,19 +66,18 @@ module Elkrb
         end
       end
 
-      # Reports every option key in the graph's layoutOptions, at any level,
-      # that the registry does not know or does not fully honour. One report
-      # per key per call: the same graph laid out twice reports twice.
-      #
-      # Warns by default. With strict: true it raises instead, before anything
-      # is logged, naming every such key.
+      # Reports every key in the graph's layoutOptions, at any level, that the
+      # registry does not know or does not fully honour, and every registered
+      # key in the call that is not fully honoured. An unknown call key is not
+      # reported. One report per key per call. Warns by default; with
+      # strict: true it raises before anything is logged.
       #
       # @param graph [Elkrb::Graph::Graph]
-      # @raise [Elkrb::Error] in strict mode when any key is unknown or not
-      #   :honoured
+      # @raise [Elkrb::Error] in strict mode, naming every key that is
+      #   unknown or not :honoured
       def report_unhonoured(graph)
         strict = strict?
-        report = UnhonouredReport.new(graph, @spellings)
+        report = UnhonouredReport.new(graph, @spellings, @call)
         return if report.empty?
 
         raise Error, report.strict_message if strict
