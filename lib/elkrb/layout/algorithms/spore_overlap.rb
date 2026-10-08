@@ -14,8 +14,8 @@ module Elkrb
           self.class.normalize_nil_positions(graph.children)
 
           # Iteratively remove overlaps
-          max_iterations = graph.layout_options&.[]("spore.maxIterations") || 50
-          min_spacing = graph.layout_options&.[]("spore.nodeSpacing") || 10.0
+          max_iterations = resolver.get("spore.maxIterations", graph)
+          min_spacing = resolver.get("spore.nodeSpacing", graph)
 
           max_iterations.times do
             overlaps = find_overlaps(graph.children, min_spacing)

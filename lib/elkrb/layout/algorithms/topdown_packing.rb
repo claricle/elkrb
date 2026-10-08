@@ -132,22 +132,15 @@ module Elkrb
                      height: 0.0 }
           end
 
-          # Get options from graph layout options
-          layout_opts = graph.layout_options || {}
-
           # Get target aspect ratio (default: 1.0 for square cells). A
-          # non-positive OR non-finite (NaN/Infinity, both valid YAML float
-          # literals) declared ratio falls back to square rather than
-          # reaching the division below, or the identical Array#max crash
-          # in calculate_bounding_box that finite_dimension exists to
-          # prevent for per-node sizes.
-          target_aspect_ratio = get_option(layout_opts,
-                                           "topdownpacking.aspectRatio", 1.0).to_f
-          target_aspect_ratio = 1.0 if target_aspect_ratio <= 0.0 || !target_aspect_ratio.finite?
+          # non-positive ratio falls back to square rather than reaching the
+          # division below; the resolver already rejects NaN and Infinity.
+          target_aspect_ratio = resolver.get("topdownpacking.aspectRatio", graph)
+          target_aspect_ratio = 1.0 if target_aspect_ratio <= 0.0
 
           # Calculate node dimensions based on aspect ratio
           # We can either use specified dimensions or calculate from available space
-          node_width_opt = finite_dimension(get_option(layout_opts, "topdownpacking.nodeWidth")&.to_f)
+          node_width_opt = finite_dimension(resolver.get("topdownpacking.nodeWidth", graph))
           if node_width_opt
             node_width = node_width_opt
             node_height = node_width / target_aspect_ratio
@@ -179,22 +172,6 @@ module Elkrb
           end
 
           { width: node_width, height: node_height }
-        end
-
-        # Get option value from layout options or default
-        #
-        # @param layout_opts [Hash] The layout options
-        # @param key [String] The option key
-        # @param default [Object] The default value
-        # @return [Object] The option value or default
-        def get_option(layout_opts, key, default = nil)
-          return default unless layout_opts
-
-          value = if layout_opts.respond_to?(:[])
-                    layout_opts[key]
-                  end
-
-          value.nil? ? default : value
         end
 
         # Instance-side delegate to the class method above, so callers in

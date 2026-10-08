@@ -287,7 +287,7 @@ end
 RSpec.describe "EdgeRouter node_map contract" do
   # A plain {id => node} Hash was the documented node_map before NodeIndex
   # existed. Both public entry points still have to accept one.
-  let(:router) { Class.new { include Elkrb::Layout::EdgeRouter }.new }
+  let(:router) { RouterHost.new }
 
   def fresh
     a = Elkrb::Graph::Node.new(id: "a", x: 0, y: 0, width: 10, height: 10)

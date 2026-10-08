@@ -14,8 +14,8 @@ module Elkrb
           self.class.normalize_nil_positions(graph.children)
 
           # Compact in both directions
-          direction = graph.layout_options&.[]("spore.compactionDirection") || "both"
-          min_spacing = graph.layout_options&.[]("spore.nodeSpacing") || 10.0
+          direction = resolver.get("spore.compactionDirection", graph)
+          min_spacing = resolver.get("spore.nodeSpacing", graph)
 
           case direction
           when "horizontal"

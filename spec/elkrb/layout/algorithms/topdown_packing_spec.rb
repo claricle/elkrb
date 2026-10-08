@@ -665,17 +665,35 @@ RSpec.describe Elkrb::Layout::Algorithms::TopdownPacking do
       end
     end
 
-    context "with a non-finite topdownpacking option and a fully size-less graph" do
-      # finite_dimension was only ever applied to per-node width/height,
-      # never to these two options. When every node is size-less (so the
-      # fallback cell size actually gets computed and used), an unguarded
-      # NaN reaches the identical Array#max call in
-      # calculate_bounding_box that finite_dimension exists to protect
-      # against for per-node sizes, and raises the identical
-      # ArgumentError: comparison of Float with NaN failed. Masked
-      # whenever any node has its own finite declared size (that node's
-      # own value wins over the poisoned cell size), which is exactly why
-      # this needs its own size-less-graph coverage.
+    context "with a non-positive aspectRatio" do
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "root",
+          layout_options: { "algorithm" => "topdownpacking",
+                            "topdownpacking.nodeWidth" => 100.0,
+                            "topdownpacking.aspectRatio" => ratio },
+          children: (1..4).map { |i| Elkrb::Graph::Node.new(id: "n#{i}") },
+        )
+      end
+
+      [0.0, -2.0].each do |value|
+        context "of #{value}" do
+          let(:ratio) { value }
+
+          it "falls back to square cells" do
+            algorithm.layout(graph)
+
+            expect(graph.children.map(&:height)).to all(eq(100.0))
+          end
+        end
+      end
+    end
+
+    context "with a non-finite topdownpacking option" do
+      # The resolver rejects a non-finite number at the read, naming the
+      # option, before it can reach the position math or Array#max in
+      # calculate_bounding_box (ArgumentError: comparison of Float with NaN).
+      # The graph is fully size-less so the cell size is always computed.
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
@@ -687,37 +705,35 @@ RSpec.describe Elkrb::Layout::Algorithms::TopdownPacking do
         graph.children = (1..4).map { |i| Elkrb::Graph::Node.new(id: "n#{i}") }
       end
 
-      shared_examples "falls back to the default cell size" do
-        it "does not crash and falls back to the default cell size" do
-          expect { algorithm.layout(graph) }.not_to raise_error
-
-          expect(graph.children.map { |n| [n.width, n.height] }.uniq)
-            .to eq([[described_class::DEFAULT_CELL_SIZE, described_class::DEFAULT_CELL_SIZE]])
+      shared_examples "rejects the option by name" do |id|
+        it "raises a ValidationError naming #{id}" do
+          expect { algorithm.layout(graph) }
+            .to raise_error(Elkrb::ValidationError, /#{Regexp.escape(id)}/)
         end
       end
 
       context "with aspectRatio: NaN" do
         let(:layout_option) { { "topdownpacking.aspectRatio" => Float::NAN } }
 
-        include_examples "falls back to the default cell size"
+        include_examples "rejects the option by name", "topdownpacking.aspectRatio"
       end
 
       context "with aspectRatio: Infinity" do
         let(:layout_option) { { "topdownpacking.aspectRatio" => Float::INFINITY } }
 
-        include_examples "falls back to the default cell size"
+        include_examples "rejects the option by name", "topdownpacking.aspectRatio"
       end
 
       context "with nodeWidth: NaN" do
         let(:layout_option) { { "topdownpacking.nodeWidth" => Float::NAN } }
 
-        include_examples "falls back to the default cell size"
+        include_examples "rejects the option by name", "topdownpacking.nodeWidth"
       end
 
       context "with nodeWidth: Infinity" do
         let(:layout_option) { { "topdownpacking.nodeWidth" => Float::INFINITY } }
 
-        include_examples "falls back to the default cell size"
+        include_examples "rejects the option by name", "topdownpacking.nodeWidth"
       end
     end
 

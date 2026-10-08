@@ -18,8 +18,10 @@ module Elkrb
       # - Publication-ready layouts
       # - Small to medium-sized graphs
       class Stress < BaseAlgorithm
-        DEFAULT_ITERATIONS = 500
-        DEFAULT_EPSILON = 0.0001
+        # The registry owns these; the constants stay for existing callers.
+        DEFAULT_ITERATIONS =
+          Options::Registry.default("elk.stress.iterationLimit")
+        DEFAULT_EPSILON = Options::Registry.default("elk.stress.epsilon")
         ITERATION_LIMIT = "elk.stress.iterationLimit"
 
         def layout_flat(graph, _options = {})
@@ -27,7 +29,7 @@ module Elkrb
 
           # Get configuration
           iterations = call_iterations
-          epsilon = option("epsilon", default: DEFAULT_EPSILON).to_f
+          epsilon = option("elk.stress.epsilon")
 
           # Initialize positions
           initialize_positions(graph)

@@ -1,9 +1,12 @@
 # frozen_string_literal: true
 
+require_relative "../options/resolver"
+
 module Elkrb
   module Layout
     # Module to add automatic label placement to layout algorithms.
     # Handles positioning of node labels, edge labels, and port labels.
+    # The including class sets @resolver, as BaseAlgorithm does.
     module LabelPlacer
       # Place all labels in the graph after layout is complete.
       #
@@ -49,7 +52,7 @@ module Elkrb
 
       # Place a single node label.
       def place_node_label(node, label, index = 0)
-        placement = label_placement_option(node, "node.label.placement") ||
+        placement = label_placement_option(node, "elk.nodeLabels.placement") ||
           "INSIDE CENTER"
 
         case placement.upcase
@@ -154,7 +157,7 @@ module Elkrb
         port_x = node.x + (port.x || 0)
         port_y = node.y + (port.y || 0)
 
-        placement = label_placement_option(port, "port.label.placement") ||
+        placement = label_placement_option(port, "elk.portLabels.placement") ||
           "OUTSIDE"
 
         margin = label_margin_option(port)
@@ -322,26 +325,31 @@ module Elkrb
         end
       end
 
-      # Get label placement option from node/port layout options.
-      def label_placement_option(element, option_key)
-        return nil unless element.layout_options
+      # Get the label placement an element names, or nil. The element's own
+      # options come before the call's: for a port, `label.placement` is one
+      # of them, though the registry aliases it to nodes. Because it is that
+      # alias, a port that names elk.nodeLabels.placement is read the same way.
+      def label_placement_option(element, option_id)
+        [option_id, "label.placement"].each do |id|
+          own = own_option(id, element)
+          return own if own
+        end
+        @resolver.get(option_id, element, default: nil)
+      end
 
-        element.layout_options[option_key] ||
-          element.layout_options["label.placement"]
+      # An element's own option, ignoring the call's options.
+      def own_option(id, element)
+        (@own_options ||= Options::Resolver.new).get(id, element, default: nil)
       end
 
       # Get label padding option.
       def label_padding_option(element)
-        return 5.0 unless element.layout_options
-
-        element.layout_options["label.padding"] || 5.0
+        @resolver.get("label.padding", element)
       end
 
       # Get label margin option.
       def label_margin_option(element)
-        return 5.0 unless element.layout_options
-
-        element.layout_options["label.margin"] || 5.0
+        @resolver.get("label.margin", element)
       end
     end
   end

@@ -1,0 +1,264 @@
+# frozen_string_literal: true
+
+require "spec_helper"
+
+# For every registered algorithm and every id the registry scopes to it, one
+# example that proves the option reaches the layout: a :honoured id moves the
+# output, a :accepted id leaves it byte-identical. Each row writes the option
+# at the element that owns it, because the resolver reads only the elements
+# the caller names. The direct rows are in option_plumbing_direct_spec.rb.
+#
+# Keep the unwired, read-only, accepted and completeness examples: they pass
+# today by design and go red when an id gets wired, a read is removed or the
+# registry gains an :honoured id without a row.
+RSpec.describe "option plumbing" do
+  registry = Elkrb::Options::Registry
+  algorithms = Elkrb::Layout::AlgorithmRegistry.available_algorithms
+
+  # The registry says :honoured but no code reads the id today. The example
+  # asserts the output does NOT move, so wiring the id turns it red and the
+  # row has to move to the live table.
+  unread = lambda do |why, only: :all|
+    { algorithms: only, why: why }
+  end
+  # The id is read but no 4-node output can show it; the example asserts the
+  # resolver was asked for the id.
+  read_only = lambda do |why, only: :all|
+    { algorithms: only, why: why }
+  end
+  libavoid_astar = "libavoid's A* never finds a path on this fixture; card 24"
+
+  # at:        where the option is written (OptionPlumbing::PLACES)
+  # value:     what is written; a Proc receives the algorithm name
+  # with:      further options written alongside, at their own places
+  # variant:   the fixture shape (OptionPlumbing::NODE_VARIANTS); a Hash picks
+  #            one per algorithm
+  # unwired:   see `unread`
+  # read_only: see `read_only`
+  cases = {
+    "disco.componentAlgorithm" => { at: :root, value: "radial" },
+    "disco.componentArrangement" => { at: :root, value: "column" },
+    "disco.componentSpacing" => { at: :root, value: 77.0 },
+    "elk.algorithm" => {
+      at: :root,
+      value: ->(name) { name == "radial" ? "box" : "radial" },
+    },
+    "elk.aspectRatio" => { at: :root, value: 3.0 },
+    "elk.bendPoints" => {
+      at: :edge, value: "(1,2; 3,4)",
+      unwired: unread["no algorithm reads it yet; card 22 wires it for fixed"]
+    },
+    "elk.direction" => {
+      at: :root, value: "RIGHT",
+      unwired: unread["layered and mrtree do not read it yet; cards 13, 23"]
+    },
+    "elk.edgeLabels.placement" => {
+      at: :edge, value: "TAIL",
+      unwired: unread["nothing reads it yet; card 17"]
+    },
+    "elk.edgeRouting" => { at: :root, value: "SPLINES" },
+    "elk.force.iterations" => { at: :root, value: 5 },
+    "elk.force.repulsion" => { at: :root, value: 50.0 },
+    "elk.force.temperature" => { at: :root, value: 0.5 },
+    "elk.layered.spacing.nodeNodeBetweenLayers" => {
+      at: :root, value: 200.0
+    },
+    "elk.nodeLabels.placement" => {
+      at: :node, value: "OUTSIDE V_TOP H_LEFT"
+    },
+    "elk.padding" => {
+      at: :root, value: "[top=40,left=40,bottom=40,right=40]"
+    },
+    "elk.port.index" => {
+      at: :port, value: 2,
+      unwired: unread["port indices are read from the model attribute; card 18"]
+    },
+    "elk.port.side" => {
+      at: :port, value: "NORTH",
+      unwired: unread["port sides are read from the model attribute; card 18"]
+    },
+    "elk.portConstraints" => {
+      at: :node, value: "FIXED_SIDE",
+      unwired: unread["nothing reads it yet; card 18"]
+    },
+    "elk.portLabels.placement" => { at: :port, value: "INSIDE" },
+    "elk.position" => {
+      at: :node, value: "(5,5)",
+      unwired: unread["fixed does not read it yet; card 22"]
+    },
+    "elk.radial.radius" => {
+      at: :root, value: 300.0,
+      unwired: unread["radial reads no option for it yet; card 23"]
+    },
+    "elk.randomSeed" => {
+      at: :root, value: 7,
+      unwired: unread["force and random use the unseeded Kernel#rand; card 20"]
+    },
+    "elk.selfLoopSide" => { at: :loop, value: "WEST" },
+    "elk.spacing.componentComponent" => {
+      at: :root, value: 90.0,
+      unwired: unread["disco reads disco.componentSpacing only"]
+    },
+    "elk.spacing.nodeNode" => {
+      at: :root, value: 90.0,
+      variant: { "libavoid" => :unpositioned },
+      unwired: unread[
+        "these algorithms do not read it today",
+        only: %w[disco fixed force radial spore_compaction
+                 spore_overlap stress],
+      ]
+    },
+    "elk.spline.curvature" => { at: :spline_edge, value: 0.9 },
+    "elk.stress.desiredEdgeLength" => {
+      at: :root, value: 300.0,
+      unwired: unread["stress reads no desired edge length yet; card 20"]
+    },
+    "elk.stress.epsilon" => { at: :root, value: 1e9 },
+    "elk.stress.iterationLimit" => { at: :root, value: 1 },
+    "hierarchical" => {
+      at: :root, value: true,
+      read_only: read_only[
+        "layout_hierarchical hands a graph with no compound node to flat",
+      ]
+    },
+    "label.margin" => {
+      at: :node, value: 30.0,
+      with: { node: { "label.placement" => "OUTSIDE V_TOP" } }
+    },
+    "label.padding" => {
+      at: :node, value: 30.0,
+      with: { node: { "label.placement" => "INSIDE V_TOP" } }
+    },
+    "label.placement.disabled" => {
+      at: :root, value: true,
+      read_only: read_only[
+        "disco's component layouts have already placed the labels",
+        only: %w[disco],
+      ]
+    },
+    "libavoid.bendPenalty" => {
+      at: :root, value: 50.0, read_only: read_only[libavoid_astar]
+    },
+    "libavoid.routingPadding" => {
+      at: :root, value: 40.0, read_only: read_only[libavoid_astar]
+    },
+    "libavoid.segmentPenalty" => {
+      at: :root, value: 50.0, read_only: read_only[libavoid_astar]
+    },
+    "spore.compactionDirection" => {
+      at: :root, value: "horizontal", variant: :spread
+    },
+    "spore.maxIterations" => { at: :root, value: 1, variant: :crowded },
+    "spore.nodeSpacing" => { at: :root, value: 80.0 },
+    "topdownpacking.aspectRatio" => {
+      at: :root, value: 5.0, variant: :sizeless
+    },
+    "topdownpacking.nodeWidth" => {
+      at: :root, value: 90.0, variant: :sizeless
+    },
+    "vertiflex.balanceColumns" => { at: :root, value: false },
+    "vertiflex.columnCount" => { at: :root, value: 2 },
+    "vertiflex.columnSpacing" => { at: :root, value: 120.0 },
+    "vertiflex.verticalSpacing" => { at: :root, value: 99.0 },
+  }
+
+  applies = lambda do |setting, name|
+    setting &&
+      (setting[:algorithms] == :all || setting[:algorithms].include?(name))
+  end
+
+  # A value the registry would accept, for the rows that carry no test value.
+  accepted_value = lambda do |id|
+    entry = registry.all.fetch(id)
+    entry[:values]&.last ||
+      { float: 77.0, integer: 7, boolean: true }.fetch(entry[:type], "X")
+  end
+
+  describe "the table" do
+    # option_plumbing_direct_spec carries this :partial id's row.
+    direct_ids = ["elk.hierarchyHandling"]
+
+    it "has a row for every honoured or partial id except direct rows" do
+      covered = algorithms.flat_map { |name| registry.for_algorithm(name) }
+        .select { |id| %i[honoured partial].include?(registry.status(id)) }
+        .uniq - direct_ids
+
+      expect(cases.keys.sort).to eq(covered.sort)
+    end
+
+    it "lists, in every unwired and read_only entry, only algorithms " \
+       "the registry scopes the id to" do
+      kinds = %i[unwired read_only]
+      stale = cases.flat_map do |id, row|
+        kinds.flat_map do |kind|
+          listed = row.dig(kind, :algorithms)
+          next [] unless listed.is_a?(Array)
+
+          scoped = algorithms.select do |name|
+            registry.for_algorithm(name).include?(id)
+          end
+          (listed - scoped).map { |name| "#{id}: #{kind} lists #{name}" }
+        end
+      end
+
+      expect(stale).to eq([])
+    end
+  end
+
+  algorithms.each do |name|
+    describe name do
+      registry.for_algorithm(name).each do |id|
+        status = registry.status(id)
+
+        if %i[honoured partial].include?(status)
+          row = cases[id]
+          next unless row
+
+          value = row[:value]
+          value = value.call(name) if value.respond_to?(:call)
+          places = { row[:at] => { id => value } }
+          row.fetch(:with, {}).each do |place, extra|
+            places[place] = (places[place] || {}).merge(extra)
+          end
+          # The same places without the option: the two layouts may differ
+          # only by it, or a `with:` setting could be what moves the output.
+          without_option = places.transform_values { |set| set.except(id) }
+          variant = row.fetch(:variant, :default)
+          variant = variant.fetch(name, :default) if variant.is_a?(Hash)
+
+          if applies.call(row[:unwired], name)
+            it "#{id} is not read yet (#{row[:unwired][:why]})" do
+              expect(plumbing_geometry(name, places, variant: variant))
+                .to eq(plumbing_geometry(name, without_option,
+                                         variant: variant))
+            end
+          elsif applies.call(row[:read_only], name)
+            it "#{id} is read, though no output shows it " \
+               "(#{row[:read_only][:why]})" do
+              expect(plumbing_reads(name, places, variant: variant))
+                .to include(id)
+            end
+          else
+            it "#{id} changes the output" do
+              expect(plumbing_geometry(name, places, variant: variant))
+                .not_to eq(plumbing_geometry(name, without_option,
+                                             variant: variant))
+            end
+          end
+        elsif %i[accepted unsupported].include?(status)
+          # An id whose only legal value is its default sets the same value
+          # in both layouts, so no wiring could make the two differ.
+          entry = registry.all.fetch(id)
+          next if entry[:values] == [entry[:default]]
+
+          it "#{id} (#{status}) leaves the output byte-identical" do
+            places = { root: { id => accepted_value.call(id) } }
+
+            expect(plumbing_geometry(name, places))
+              .to eq(plumbing_geometry(name, {}))
+          end
+        end
+      end
+    end
+  end
+end

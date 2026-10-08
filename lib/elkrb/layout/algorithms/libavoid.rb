@@ -92,7 +92,7 @@ f_score = Float::INFINITY, direction = nil)
 
         # Build obstacle map from nodes
         def build_obstacle_map(nodes)
-          padding = option("libavoid.routingPadding", default: 10).to_f
+          padding = option("libavoid.routingPadding")
 
           nodes.map do |node|
             Geometry::Rectangle.new(
@@ -155,8 +155,8 @@ f_score = Float::INFINITY, direction = nil)
 
         # A* pathfinding algorithm
         def find_path(start, goal, obstacles)
-          segment_penalty = option("libavoid.segmentPenalty", default: 1.0).to_f
-          bend_penalty = option("libavoid.bendPenalty", default: 2.0).to_f
+          segment_penalty = option("libavoid.segmentPenalty")
+          bend_penalty = option("libavoid.bendPenalty")
 
           start_node = PathNode.new(start, nil, 0, heuristic(start, goal))
           open_set = [start_node]
@@ -212,7 +212,7 @@ f_score = Float::INFINITY, direction = nil)
 
         # Get orthogonal neighbors (4-directional)
         def get_orthogonal_neighbors(point, _goal, obstacles)
-          step_size = option("libavoid.routingPadding", default: 10).to_f
+          step_size = option("libavoid.routingPadding")
           neighbors = []
 
           # Four orthogonal directions

@@ -3,12 +3,7 @@
 require "spec_helper"
 
 RSpec.describe Elkrb::Layout::EdgeRouter do
-  let(:router_class) do
-    Class.new do
-      include Elkrb::Layout::EdgeRouter
-    end
-  end
-  let(:router) { router_class.new }
+  let(:router) { RouterHost.new }
 
   describe "#route_edges" do
     it "routes all edges in a graph" do
@@ -424,10 +419,10 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
       end
     end
 
-    describe "#get_routing_style" do
+    describe "#get_edge_routing_style" do
       it "returns ORTHOGONAL as default" do
         graph = Elkrb::Graph::Graph.new(id: "g1")
-        style = router.send(:get_routing_style, graph)
+        style = router.send(:get_edge_routing_style, graph)
         expect(style).to eq("ORTHOGONAL")
       end
 
@@ -438,7 +433,7 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
         )
         graph.layout_options["elk.edgeRouting"] = "SPLINES"
 
-        style = router.send(:get_routing_style, graph)
+        style = router.send(:get_edge_routing_style, graph)
         expect(style).to eq("SPLINES")
       end
 
@@ -448,7 +443,7 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
           layout_options: { "edgeRouting" => "POLYLINE" },
         )
 
-        style = router.send(:get_routing_style, graph)
+        style = router.send(:get_edge_routing_style, graph)
         expect(style).to eq("POLYLINE")
       end
 
@@ -459,7 +454,7 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
         )
         graph.layout_options["elk.edgeRouting"] = "splines"
 
-        style = router.send(:get_routing_style, graph)
+        style = router.send(:get_edge_routing_style, graph)
         expect(style).to eq("SPLINES")
       end
     end

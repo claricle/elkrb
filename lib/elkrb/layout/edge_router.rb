@@ -4,11 +4,13 @@ require_relative "../geometry/point"
 require_relative "../geometry/bezier"
 require_relative "../graph/edge"
 require_relative "node_index"
-require_relative "../options/resolver"
 
 module Elkrb
   module Layout
-    # Provides edge routing functionality for layout algorithms
+    # Provides edge routing functionality for layout algorithms.
+    #
+    # The including class sets @resolver (an Options::Resolver), as
+    # BaseAlgorithm does; every option read goes through it.
     module EdgeRouter
       # Route edges in a graph using specified routing style
       # @param graph [Graph::Graph] The graph to route edges for
@@ -52,7 +54,7 @@ module Elkrb
 
       def route_edges(graph, node_map = nil, routing_style = nil)
         node_map = coerce_node_map(node_map || NodeIndex.build(graph))
-        routing_style ||= get_routing_style(graph)
+        routing_style ||= get_edge_routing_style(graph)
 
         graph.edges&.each do |edge|
           if self_loop?(edge)
@@ -68,7 +70,7 @@ module Elkrb
       # @param node_map [NodeIndex] Resolves node/port ids to owning
       #   nodes for this level
       # @param graph [Graph::Graph] The containing graph
-      def route_edge(edge, node_map, _graph)
+      def route_edge(edge, node_map, graph)
         return unless edge.sources&.any? && edge.targets&.any?
 
         node_map = coerce_node_map(node_map)
@@ -94,9 +96,9 @@ module Elkrb
 
         # Calculate routing points based on port-awareness
         if edge_uses_ports?(edge, source_node, target_node)
-          route_with_ports(section, edge, source_node, target_node)
+          route_with_ports(section, edge, source_node, target_node, graph)
         else
-          route_node_to_node(section, source_node, target_node, edge)
+          route_node_to_node(section, source_node, target_node, edge, graph)
         end
       end
 
@@ -112,7 +114,7 @@ module Elkrb
       end
 
       # Route edge using port positions
-      def route_with_ports(section, edge, source_node, target_node)
+      def route_with_ports(section, edge, source_node, target_node, graph)
         # Get port positions or fallback to node center
         source_port = find_port_by_id(edge.sources.first, source_node)
         target_port = find_port_by_id(edge.targets.first, target_node)
@@ -141,13 +143,14 @@ module Elkrb
             source_port,
             target_port,
           )
-        elsif should_use_orthogonal_routing?(edge)
+        elsif should_use_orthogonal_routing?(edge, graph)
           add_orthogonal_bend_points(section, start_point, end_point)
         end
       end
 
       # Route edge from node center to node center
-      def route_node_to_node(section, source_node, target_node, edge = nil)
+      def route_node_to_node(section, source_node, target_node, edge = nil,
+                             graph = nil)
         start_point = get_node_center(source_node)
         end_point = get_node_center(target_node)
 
@@ -156,7 +159,7 @@ module Elkrb
         section.bend_points ||= []
 
         # Add orthogonal routing if configured
-        if edge && should_use_orthogonal_routing?(edge)
+        if edge && should_use_orthogonal_routing?(edge, graph)
           add_orthogonal_bend_points(section, start_point, end_point)
         end
       end
@@ -191,8 +194,9 @@ module Elkrb
       end
 
       # Check if orthogonal routing should be used
-      def should_use_orthogonal_routing?(edge)
-        edge.layout_options&.[]("edge.routing") == "orthogonal"
+      def should_use_orthogonal_routing?(edge, graph)
+        @resolver.get("elk.edgeRouting", edge, graph, default: nil)
+          .to_s.upcase == "ORTHOGONAL"
       end
 
       # Add intelligent bend points based on port sides
@@ -257,9 +261,12 @@ module Elkrb
         section.add_bend_point(mid_x, end_point.y)
       end
 
-      # Get routing style from graph options
-      def get_routing_style(graph)
-        style = Options::Resolver.new.get("elk.edgeRouting", graph)
+      # Get edge routing style from graph options
+      #
+      # @param graph [Elkrb::Graph::Graph] The graph
+      # @return [String] Routing style (ORTHOGONAL, POLYLINE, SPLINES)
+      def get_edge_routing_style(graph)
+        style = @resolver.get("elk.edgeRouting", graph)
 
         style == "UNDEFINED" ? "ORTHOGONAL" : style
       end
@@ -364,17 +371,12 @@ module Elkrb
 
       # Get spline curvature from options
       def get_spline_curvature(edge)
-        return 0.5 unless edge.layout_options
-
-        curvature = edge.layout_options["elk.spline.curvature"] ||
-          edge.layout_options["spline.curvature"]
-
-        curvature ? curvature.to_f : 0.5
+        @resolver.get("elk.spline.curvature", edge)
       end
 
       # Calculate Bezier control points for smooth curves
       def calculate_spline_controls(start_point, end_point, curvature, edge)
-        # Determine routing direction from edge or graph options
+        # Determine routing direction from the edge's options
         direction = get_routing_direction(edge)
 
         case direction
@@ -402,11 +404,7 @@ module Elkrb
 
       # Get routing direction from edge options
       def get_routing_direction(edge)
-        return nil unless edge.layout_options
-
-        edge.layout_options["elk.direction"] ||
-          edge.layout_options["direction"] ||
-          nil
+        @resolver.get("elk.direction", edge, default: nil)
       end
 
       # Check if edge is a self-loop (source == target)
@@ -716,22 +714,7 @@ module Elkrb
 
       # Get self-loop side from options or default
       def get_self_loop_side(edge, node)
-        # Check edge layout options first
-        if edge.layout_options
-          side = edge.layout_options["elk.selfLoopSide"] ||
-            edge.layout_options["selfLoopSide"]
-          return side if side
-        end
-
-        # Check node layout options
-        if node.layout_options
-          side = node.layout_options["elk.selfLoopSide"] ||
-            node.layout_options["selfLoopSide"]
-          return side if side
-        end
-
-        # Default: EAST
-        "EAST"
+        @resolver.get("elk.selfLoopSide", edge, node)
       end
 
       # Check if self-loop edge uses ports
