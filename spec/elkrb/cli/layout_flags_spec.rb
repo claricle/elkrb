@@ -138,6 +138,16 @@ RSpec.describe "elkrb CLI layout flags" do
         "elk.direction" => "RIGHT", "elk.edgeRouting" => "POLYLINE",
       )
     end
+
+    %w[layout diagram batch].each do |command|
+      it "tells #{command} --help that no algorithm applies --direction yet" do
+        stdout, _err, status = run_elkrb("help", command)
+        direction = stdout.split("\n").grep(/--direction/).first.to_s
+
+        expect(status.exitstatus).to eq(0)
+        expect(direction).to include("not yet applied by any algorithm")
+      end
+    end
   end
 
   describe "diagram and batch" do

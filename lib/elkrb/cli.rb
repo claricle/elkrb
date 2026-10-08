@@ -54,7 +54,9 @@ module Elkrb
     option :layer_spacing, type: :numeric,
                            desc: "Layer spacing (for layered algorithm)"
     option :direction, type: :string,
-                       desc: "Layout direction (e.g., DOWN, RIGHT)"
+                       desc: "Layout direction (e.g., DOWN, RIGHT); " \
+                             "stored in layoutOptions, not yet applied " \
+                             "by any algorithm"
     option :edge_routing, type: :string,
                           desc: "Edge routing strategy"
     option :padding_top, type: :numeric,
@@ -108,7 +110,9 @@ module Elkrb
     desc "diagram FILE", "Create diagram from ELK graph file"
     option :algorithm, type: :string, desc: ALGORITHM_OPTION_DESC
     option :direction, type: :string,
-                       desc: "Layout direction (e.g., DOWN, RIGHT)"
+                       desc: "Layout direction (e.g., DOWN, RIGHT); " \
+                             "stored in layoutOptions, not yet applied " \
+                             "by any algorithm"
     option :spacing, type: :numeric,
                      desc: "Node spacing"
     option :edge_routing, type: :string,
@@ -169,7 +173,9 @@ module Elkrb
                     desc: "Output format for all files"
     option :algorithm, type: :string, desc: ALGORITHM_OPTION_DESC
     option :direction, type: :string,
-                       desc: "Layout direction (e.g., DOWN, RIGHT)"
+                       desc: "Layout direction (e.g., DOWN, RIGHT); " \
+                             "stored in layoutOptions, not yet applied " \
+                             "by any algorithm"
     option :edge_routing, type: :string,
                           desc: "Edge routing strategy"
     def batch(directory)
