@@ -32,9 +32,6 @@ module GoldenCases
   rc7_cycle_breaker =
     "RC7: cycle breaker permanently reverses edges and layered lacks " \
     "crossing minimisation"
-  rc7_spacing_unread =
-    "RC7: elk.spacing.nodeNode and " \
-    "elk.layered.spacing.nodeNodeBetweenLayers are not read"
   rc8_absolute_node_labels =
     "RC8: node labels are absolute, not owner-relative"
   rc8_label_placement_unread =
@@ -68,7 +65,7 @@ module GoldenCases
     { name: "direction_down", tier: :exact,
       pending: rc7_direction_unread },
     { name: "spacing_override", tier: :exact,
-      pending: rc7_spacing_unread },
+      pending: rc7_direction_unread },
     { name: "sizeless", tier: :exact, pending: rc7_direction_and_layer_gap },
     { name: "two_components", tier: :structural,
       pending: rc7_direction_and_layer_gap },
