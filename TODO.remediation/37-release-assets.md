@@ -58,12 +58,13 @@ lutaml-model 0.8.19 ships only a VERSION stub in its own `sig/`, so
 no Steepfile, no rbs task, no CI step. Decision 4 (maintainer-ruled):
 delete `sig/` here and drop the `rbs` dependency with it.
 
-`required_ruby_version` is `>= 3.0.0` (`elkrb.gemspec:19`) and the gem
-cannot load there (docs-packaging-8):
+`required_ruby_version` was `>= 3.0.0` and the gem could not load there
+(docs-packaging-8):
 `lib/elkrb/options/k_vector_chain.rb:103` is `def each(&)`, which is
 Ruby 3.1+, and lutaml-model 0.8.19's `runtime_compatibility.rb` uses
-`(*, &)`, which is 3.2+. Decision 13 (maintainer-ruled): the floor is
-`>= 3.2`, stated here and in the 2.0 migration block.
+`(*, &)`, which is 3.2+. v2 already raised it to `>= 3.3.0` in #26.
+Decision 13 (revised 2026-10-06): the floor stays `>= 3.3`, because 3.2 is
+end-of-life. State it here and in the 2.0 migration block.
 
 There is no `docs/` directory in the repository. `README.adoc:830` links
 `docs/MIGRATION_FROM_ELKJS.adoc`, which item 30 either fixed or left
@@ -96,7 +97,7 @@ Everything below is settled — do not re-decide.
 1. `CHANGELOG.md`, Keep-a-Changelog format. Assemble the 2.0.0 block from
    the merged slice PRs' `## Breaking` sections — sections that say
    "none" contribute nothing. One entry per section, each with before /
-   after JSON and a migration line. State the Ruby floor 3.2 and the bare
+   after JSON and a migration line. State the Ruby floor 3.3 and the bare
    `direction` alias (decision 9). Record in the PR body which PR numbers
    you read, so the inventory is auditable.
 2. `rake docs:options` generates `docs/OPTIONS.adoc` from
@@ -114,7 +115,7 @@ Everything below is settled — do not re-decide.
 6. Delete `sig/` and remove `spec.add_dependency "rbs", "~> 3.0"`
    (`elkrb.gemspec:37`). Decision 4: restoring signatures later needs an
    owned source of truth plus CI validation, and neither exists.
-7. `elkrb.gemspec`: `required_ruby_version = ">= 3.2"` (`:19`);
+7. `elkrb.gemspec`: `required_ruby_version` stays `">= 3.3.0"`;
    `metadata["changelog_uri"]` points at the CHANGELOG (`:23`);
    `spec.files` becomes an explicit whitelist — `lib/**/*.rb`, `exe/*`,
    `README.adoc`, `LICENSE`, `CHANGELOG.md`, `docs/**` — replacing the
@@ -144,7 +145,7 @@ wrong, that is a finding for the owning slice, not a fix here.
 - `git ls-files sig` returns nothing and
   `grep -n rbs elkrb.gemspec` returns nothing.
 - `bundle exec ruby -e 'p Gem::Specification.load("elkrb.gemspec").required_ruby_version.to_s'`
-  prints `>= 3.2`.
+  prints `>= 3.3.0`.
 - `grep -rn 'link:docs/' README.adoc` — every target is a committed file.
 - `git diff lib/elkrb/version.rb elkrb.gemspec | grep -i version` shows
   no version change.

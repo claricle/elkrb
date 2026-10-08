@@ -166,8 +166,8 @@ RSpec.describe Elkrb::Options::Registry do
   end
 
   describe ".status" do
-    it "reports :honoured for core ids" do
-      expect(described_class.status("elk.spacing.nodeNode")).to eq(:honoured)
+    it "reports :honoured for elk.algorithm" do
+      expect(described_class.status("elk.algorithm")).to eq(:honoured)
     end
 
     it "reports :accepted for a self-loop id with no wired read today" do
@@ -182,6 +182,139 @@ RSpec.describe Elkrb::Options::Registry do
     it "reports :partial for elk.hierarchyHandling, with a non-empty note" do
       expect(described_class.status("elk.hierarchyHandling")).to eq(:partial)
       expect(described_class.note("elk.hierarchyHandling")).not_to be_empty
+    end
+  end
+
+  # OptionRouteRows lays out every carrier x spelling x shape x positioning x
+  # algorithm at two values. A row must move exactly when `readers` lists it,
+  # so list a reader rather than adding a row. Status follows the rows: all
+  # move -> :honoured, none -> :accepted, some -> :partial, counting only the
+  # algorithms the entry's `algorithms` scope names and the carriers the
+  # option applies to (`carriers`). A route outside that scope is still probed
+  # and must move exactly as `readers` records, but it does not decide the
+  # status. When a route gets wired, add its reader and change the registry's
+  # status and note.
+  describe "status agrees with what layout reads" do
+    include OptionRouteProbe
+
+    algorithms = Elkrb::Layout::AlgorithmRegistry.available_algorithms
+    by_positioning = OptionRouteRows.method(:by_positioning)
+    compounds = %i[compound_other compound_same compound_none]
+    # elkjs 0.11 (knownLayoutOptions) targets these three options at parents
+    # (padding also at nodes), never at an edge, so an edge's layoutOptions
+    # does not decide their status. elk.direction is a parent target too, but
+    # elkrb reads an edge's own direction, which its :partial note documents,
+    # so every carrier applies to it.
+    parent_carriers = OptionRouteRows::CARRIERS - %i[edge]
+
+    spacing = { value: [5, 80] }
+    box = ->(v) { { top: v, left: v, bottom: v, right: v } }
+    padding = {
+      sym_hash: [5, 50].map(&box),
+      str_hash: [5, 50].map { |v| box.call(v).transform_keys(&:to_s) },
+      number: [5, 50],
+      elk_string: [5, 50].map { |v| "[top=#{v},left=#{v},bottom=#{v},right=#{v}]" },
+    }
+
+    # Measured: an edge's own direction orients SPLINES routing everywhere,
+    # except that fixed and spore_compaction give the same output at both
+    # directions when no node has an input position.
+    edge_direction = by_positioning.call(
+      algorithms, unpositioned: algorithms - %w[fixed spore_compaction],
+                  first_only: algorithms
+    )
+    # Measured: a Symbol-keyed Hash under the padding call option, and a
+    # Hash or Number under padding or elk.padding in a compound node's own
+    # layoutOptions; no other carrier, spelling or shape.
+    padding_routes = [
+      [%i[call_string call_symbol], %w[padding], %i[sym_hash]],
+      [compounds, %w[padding elk.padding], %i[sym_hash str_hash number]],
+    ].flat_map { |carriers, names, shapes| carriers.product(names, shapes) }
+    padding_readers = padding_routes.to_h { |route| [route, algorithms] }
+    string_readers = %w[mrtree box random rectpacking topdownpacking]
+
+    {
+      "elk.direction" => {
+        internal: "direction", shapes: { value: %w[RIGHT DOWN] },
+        readers: {
+          [:edge, "elk.direction", :value] => edge_direction,
+          [:edge, "direction", :value] => edge_direction,
+        }
+      },
+      "elk.layered.spacing.nodeNodeBetweenLayers" => {
+        internal: "layer_spacing", shapes: spacing,
+        carriers: parent_carriers,
+        readers: { [:call_symbol, "layer_spacing", :value] => %w[layered] }
+      },
+      "elk.padding" => {
+        internal: "padding", shapes: padding, readers: padding_readers,
+        carriers: parent_carriers
+      },
+      "elk.spacing.nodeNode" => {
+        internal: "spacing_node_node", shapes: spacing,
+        carriers: parent_carriers,
+        readers: {
+          [:call_string, "spacing_node_node", :value] =>
+            by_positioning.call(string_readers,
+                                unpositioned: string_readers + %w[libavoid]),
+          [:call_symbol, "spacing_node_node", :value] =>
+            by_positioning.call(string_readers + %w[layered],
+                                unpositioned: string_readers + %w[layered libavoid]),
+          [:compound_other, "spacing_node_node", :value] =>
+            by_positioning.call(string_readers,
+                                unpositioned: string_readers + %w[libavoid]),
+          [:root, "elk.spacing.nodeNode", :value] => %w[vertiflex],
+          **compounds.to_h { |c| [[c, "elk.spacing.nodeNode", :value], %w[vertiflex]] },
+        }
+      },
+    }.each do |id, spec|
+      spellings = OptionRouteRows.spellings_for(id, spec.fetch(:internal))
+      rows = OptionRouteRows.rows(spellings: spellings, algorithms: algorithms,
+                                  **spec.except(:internal))
+
+      it "#{id}: each route moves layout or not as recorded, and status matches" do
+        moved = rows.transform_values { |args, _| option_moves_layout?(**args) }
+        wrong = moved.reject { |label, moves| moves == rows.fetch(label)[1] }
+
+        expect(wrong.keys).to eq([])
+        expect(described_class.status(id))
+          .to eq(OptionRouteRows.expected_status(id, rows, moved))
+      end
+    end
+  end
+
+  describe "elk.padding note" do
+    it "names the keys a compound node reads padding under" do
+      expect(described_class.note("elk.padding"))
+        .to match(/compound node reads a Hash or Number under padding or elk\.padding/)
+    end
+  end
+
+  describe "elk.direction outside layout" do
+    it "says DOT export reads it as elk.direction or direction" do
+      expect(described_class.note("elk.direction")).to match(/DOT export.*elk\.direction or direction/)
+    end
+
+    directions = %w[RIGHT DOWN]
+    %w[elk.direction direction].each do |key|
+      it "is read by DOT export from the graph's layoutOptions as #{key}" do
+        rankdirs = directions.map do |direction|
+          graph = Elkrb::Graph::Graph.from_json({
+            id: "root", layoutOptions: { key => direction },
+            children: [{ id: "a", width: 30, height: 30 }]
+          }.to_json)
+          Elkrb.export_dot(graph)[/rankdir=\w+/]
+        end
+        expect(rankdirs).to eq(%w[rankdir=LR rankdir=TB])
+      end
+    end
+
+    it "does not read org.eclipse.elk.direction from the graph's layoutOptions" do
+      graph = Elkrb::Graph::Graph.from_json({
+        id: "root", layoutOptions: { "org.eclipse.elk.direction" => "RIGHT" },
+        children: [{ id: "a", width: 30, height: 30 }]
+      }.to_json)
+      expect(Elkrb.export_dot(graph)).not_to include("rankdir")
     end
   end
 
@@ -283,8 +416,8 @@ RSpec.describe Elkrb::Options::Registry do
         default: 20.0,
         values: nil,
         parser: nil,
-        status: :honoured,
-        note: nil,
+        status: :partial,
+        note: "the spacing_node_node call option is read by layered (Symbol key only), mrtree, box, random, rectpacking, topdownpacking and libavoid (unless every node has an input position); vertiflex reads the ELK id from the layoutOptions of the graph or compound node it lays out; a compound node's layoutOptions reach mrtree, box, random, rectpacking, topdownpacking and libavoid only in some nestings, and reach layered only under Symbol keys, which graph input never produces because it stores their keys as Strings; no other algorithm reads spacing_node_node",
       )
       expect(rendered["elk.padding"][:parser]).to eq("Elkrb::Options::ElkPadding")
     end
