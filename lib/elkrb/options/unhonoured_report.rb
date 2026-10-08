@@ -36,6 +36,7 @@ module Elkrb
                      call = OptionMap.new({}, spellings),
                      root_algorithm: nil, algorithm_name: AS_WRITTEN)
         @spellings = spellings
+        @graph = graph
         @root_algorithm = root_algorithm
         @algorithm_name = algorithm_name
         @findings = findings_for(graph, call)
@@ -114,23 +115,23 @@ module Elkrb
           element, enclosing = pending.shift
           next if seen.key?(element)
 
-          seen[element] = level_of(element, enclosing, graph)
+          seen[element] = level_of(element, enclosing)
           algorithm = seen[element].last
-          pending.concat(nested_elements(element).map { |n| [n, algorithm] })
+          nested_elements(element).each { |child| pending << [child, algorithm] }
         end
         seen.values
       end
 
-      def level_of(element, enclosing, graph)
+      def level_of(element, enclosing)
         options = ElementOptions.new(element, @spellings)
-        [options, layout_algorithm(element, options, enclosing, graph)]
+        [options, layout_algorithm(element, options, enclosing)]
       end
 
       # The algorithm a compound node is laid out by is its own registered
       # elk.algorithm, else the one laying out the level it sits in, the way
       # HierarchicalProcessor picks it.
-      def layout_algorithm(element, options, enclosing, graph)
-        return enclosing if element.equal?(graph)
+      def layout_algorithm(element, options, enclosing)
+        return enclosing if element.equal?(@graph)
         return unless compound?(element)
 
         own = options.value(ALGORITHM_ID)
