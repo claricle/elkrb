@@ -13,6 +13,9 @@ RSpec.describe Elkrb::Options::UnhonouredReport do
   algorithms = Elkrb::Layout::AlgorithmRegistry.available_algorithms
   unhonoured = /strict mode.*#{Regexp.escape(node_node)} \(partial/
 
+  # Keep: the refusing rows below pass on code that reports every partial
+  # key. They hold the report to the registry's readers, so a reader added
+  # by mistake goes red here and nowhere else.
   let(:warnings) { StringIO.new }
 
   around do |example|

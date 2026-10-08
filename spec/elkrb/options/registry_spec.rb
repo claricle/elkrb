@@ -311,6 +311,8 @@ RSpec.describe Elkrb::Options::Registry do
     algorithms = Elkrb::Layout::AlgorithmRegistry.available_algorithms
     with_readers = described_class.all.select { |_, entry| entry[:readers] }
 
+    # Keep: the examples after the first pass while no id lists readers; they
+    # become the only check on a new row's readers.
     it "lists them on at least one id, so the examples below are not vacuous" do
       expect(with_readers.keys).to include("elk.spacing.nodeNode")
     end

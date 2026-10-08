@@ -68,20 +68,16 @@ module Elkrb
       end
 
       # Reports every key in the graph's layoutOptions, at any level, that the
-      # registry does not know or does not fully honour, every registered key
-      # in an element's properties that is not fully honoured, and every
-      # registered key in the call that is not fully honoured. An unknown
-      # property name or call key is not reported. One report per key per
-      # call. A key that only some algorithms read is reported only where the
-      # algorithm laying out its element does not read it. Warns by default;
-      # with strict: true it raises before anything is logged.
+      # registry does not know or does not fully honour, and every registered
+      # key in an element's properties or the call that it does not. A key
+      # only some algorithms read is reported only where the algorithm laying
+      # out its element does not read it. Unknown property names and call keys
+      # are not reported. Warns once per key; with strict: true it raises
+      # before anything is logged.
       #
       # @param graph [Elkrb::Graph::Graph]
-      # @param algorithm_name [#call] resolves an algorithm name to the name
-      #   it is registered under, or nil; the default takes every name as
-      #   registered
-      # @raise [Elkrb::Error] in strict mode, naming every key that is
-      #   unknown or not :honoured
+      # @param algorithm_name [#call] name as written => registered name or nil
+      # @raise [Elkrb::Error] in strict mode, naming each such key
       def report_unhonoured(graph,
                             algorithm_name: UnhonouredReport::AS_WRITTEN)
         strict = strict?
