@@ -25,8 +25,10 @@ module Elkrb
         # @api private
         # @param name [String] an algorithm name, in any spelling #get takes
         # @return [String, nil] the key the algorithm is registered under, or
-        #   nil when none is
+        #   nil when none is, as for a name with invalid bytes
         def registered_name(name)
+          return unless name.to_s.valid_encoding?
+
           key = resolve_key(name)
           key if @algorithms.key?(key)
         end
