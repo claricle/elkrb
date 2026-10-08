@@ -34,10 +34,7 @@ module Elkrb
       # @param hash [Hash] Hash with :x and :y keys
       # @return [KVector] Parsed coordinate object
       def self.from_hash(hash)
-        new(
-          hash[:x] || hash["x"] || 0,
-          hash[:y] || hash["y"] || 0,
-        )
+        new(Decimal.component(hash, :x, 0), Decimal.component(hash, :y, 0))
       end
 
       # Parse from array
@@ -57,7 +54,7 @@ module Elkrb
       def self.from_string(str)
         # Remove parentheses and split by comma
         content = str.strip.gsub(/^\(|\)$/, "")
-        parts = content.split(",").map(&:strip)
+        parts = content.split(",", -1).map(&:strip)
 
         unless parts.size == 2
           raise ArgumentError,

@@ -36,10 +36,9 @@ module Elkrb
       # @return [ElkPadding] Parsed padding object
       def self.from_hash(hash)
         new(
-          left: hash[:left] || hash["left"] || 0,
-          top: hash[:top] || hash["top"] || 0,
-          right: hash[:right] || hash["right"] || 0,
-          bottom: hash[:bottom] || hash["bottom"] || 0,
+          **%i[left top right bottom].to_h do |side|
+            [side, Decimal.component(hash, side, 0)]
+          end,
         )
       end
 
@@ -48,21 +47,21 @@ module Elkrb
       # @param str [String] String like "[left=2, top=3, right=3, bottom=2]"
       # @return [ElkPadding] Parsed padding object
       def self.from_string(str)
-        # Remove brackets and split by comma
         content = str.strip.gsub(/^\[|\]$/, "")
-        parts = {}
+        new(**content.split(",", -1).to_h { |entry| side_and_text(entry) })
+      end
 
-        content.split(",").each do |part|
-          key, value, extra = part.split("=", -1).map(&:strip)
-          if extra || !value
-            raise ArgumentError, "Invalid padding entry: #{part.inspect}"
-          end
-
-          parts[key.to_sym] = value
+      # One "side=number" entry. The text stays a String for the constructor
+      # to validate; an entry without exactly one '=' is malformed.
+      def self.side_and_text(entry)
+        key, value, extra = entry.split("=", -1).map(&:strip)
+        if extra || !value
+          raise ArgumentError, "Invalid padding entry: #{entry.inspect}"
         end
 
-        new(**parts)
+        [key.to_sym, value]
       end
+      private_class_method :side_and_text
 
       # Convert to hash
       #

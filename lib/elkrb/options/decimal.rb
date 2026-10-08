@@ -22,14 +22,28 @@ module Elkrb
         Float(stripped.sub(TRAILING_DOT, ".0")) if PATTERN.match?(stripped)
       end
 
-      # @param value [String, Numeric, nil] a number or its text
+      # @param value [String, Numeric, nil] a number or its text; nil is 0.0
       # @return [Float]
-      # @raise [ArgumentError] when a String is not plain decimal
+      # @raise [ArgumentError] when a String is not plain decimal, or the
+      #   value is neither a number nor a String (false, true, an Array)
       def self.to_f(value)
-        return value.to_f unless value.is_a?(String)
+        return value.to_f if value.nil? || value.is_a?(Numeric)
 
-        parse(value) ||
+        (value.is_a?(String) && parse(value)) ||
           raise(ArgumentError, "Invalid number: #{value.inspect}")
+      end
+
+      # The first non-nil of hash[key as Symbol], hash[key as String], so an
+      # explicit false reaches to_f and is rejected instead of reading as
+      # absent the way `||` would.
+      #
+      # @param hash [Hash]
+      # @param key [Symbol]
+      # @param default [Object] returned when both spellings are nil
+      def self.component(hash, key, default)
+        value = hash[key]
+        value = hash[key.to_s] if value.nil?
+        value.nil? ? default : value
       end
     end
   end

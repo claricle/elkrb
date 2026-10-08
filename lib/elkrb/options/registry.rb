@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative "decimal"
 require_relative "elk_padding"
 require_relative "k_vector"
 require_relative "k_vector_chain"
@@ -288,10 +289,9 @@ module Elkrb
 
           fallback = ElkPadding.parse(default_string)
           ElkPadding.new(
-            top: value[:top] || value["top"] || fallback.top,
-            left: value[:left] || value["left"] || fallback.left,
-            bottom: value[:bottom] || value["bottom"] || fallback.bottom,
-            right: value[:right] || value["right"] || fallback.right,
+            **fallback.to_h.to_h do |side, default|
+              [side, Decimal.component(value, side, default)]
+            end,
           )
         end
       end

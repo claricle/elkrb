@@ -66,7 +66,10 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
 
     let(:splines) { routed_bend_points(router, nil, "SPLINES") }
 
-    it "routes orthogonally when the graph names no style" do
+    # The router draws ORTHOGONAL and POLYLINE alike today (route_edge adds
+    # bends only for an edge-level routing option), so this pins the default
+    # to "not SPLINES" and to the explicit ORTHOGONAL result.
+    it "does not spline when the graph names no style" do
       expect(splines).not_to be_empty
       expect(routed_bend_points(router, nil)).to eq(routed_bend_points(router, nil, "ORTHOGONAL"))
       expect(routed_bend_points(router, { "elk.edgeRouting" => "UNDEFINED" }))

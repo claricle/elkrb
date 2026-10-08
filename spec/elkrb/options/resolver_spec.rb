@@ -389,7 +389,8 @@ RSpec.describe Elkrb::Options::Resolver do
         end
       end
 
-      ["[top]", "[top=1=2]", "[top=1=]", "[=1]"].each do |bad|
+      ["[top]", "[top=1=2]", "[top=1=]", "[=1]", "[top=1,]", "[top=1, ]",
+       "[top=1,,left=2]"].each do |bad|
         it "raises for the padding entry in #{bad.inspect}" do
           expect { described_class.new(padding: bad).get("elk.padding") }
             .to raise_error(Elkrb::ValidationError, /elk\.padding/)
@@ -416,6 +417,29 @@ RSpec.describe Elkrb::Options::Resolver do
           expect { resolver.get("elk.bendPoints") }
             .to raise_error(Elkrb::ValidationError, /elk\.bendPoints/)
         end
+      end
+
+      ["(1,2,)", "(1,2, )", "(,1)", "()", "(1)"].each do |bad|
+        it "raises for the vector string #{bad.inspect}" do
+          resolver = described_class.new("elk.position" => bad)
+
+          expect { resolver.get("elk.position") }
+            .to raise_error(Elkrb::ValidationError, /elk\.position/)
+        end
+      end
+
+      it "reads an empty padding string as no padding" do
+        padding = described_class.new(padding: "[]").get("elk.padding")
+
+        expect(padding.to_h.values).to eq([0.0, 0.0, 0.0, 0.0])
+      end
+
+      it "keeps the default for a side a padding hash leaves out or nils" do
+        resolver = described_class.new(padding: { top: 5, left: nil })
+        padding = resolver.get("elk.padding")
+
+        expect(padding.to_h).to eq(left: 12.0, top: 5.0, right: 12.0,
+                                   bottom: 12.0)
       end
 
       it "raises for a vector string with one component" do

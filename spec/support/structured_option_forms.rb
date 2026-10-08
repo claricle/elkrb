@@ -5,8 +5,8 @@
 module StructuredOptionForms
   SIDES = %i[top left bottom right].freeze
   AXES = %i[x y].freeze
-  # Each reads as 0.0 through String#to_f.
-  BAD_COMPONENTS = ["abc", "0x10", "1e", ""].freeze
+  # Each reads as 0.0, or as absent, through String#to_f or `||`.
+  BAD_COMPONENTS = ["abc", "0x10", "1e", "", false].freeze
 
   # @return [Hash{String => Object}] spelling name => padding value with
   #   `bad` as `side` and 1 elsewhere
