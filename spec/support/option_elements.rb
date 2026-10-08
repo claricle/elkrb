@@ -77,6 +77,30 @@ module OptionElements
     option_hash({ nested_key => map }, kind, leak: leak)
   end
 
+  # A node holding one child, as the parent of a nested graph.
+  def nested_parent(id, layout_options: nil, properties: nil)
+    Elkrb::Graph::Node.new(
+      id: id, width: 50, height: 50, layout_options: layout_options,
+      properties: properties,
+      children: [Elkrb::Graph::Node.new(id: "#{id}-kid", width: 5, height: 5)]
+    )
+  end
+
+  # [x, y] of the three chained nodes of a graph nested under a root that
+  # pins `root_algorithm`, where `inner` adds the options naming the nested
+  # algorithm and `call` holds the options passed to Elkrb.layout.
+  def nested_graph_positions(inner, root_algorithm: "layered", call: {})
+    inner_graph = {
+      id: "inner",
+      children: %w[a b c].map { |id| { id: id, width: 10, height: 10 } },
+      edges: [{ id: "ab", sources: ["a"], targets: ["b"] },
+              { id: "bc", sources: ["b"], targets: ["c"] }],
+    }.merge(inner)
+    root = { id: "root", layoutOptions: { "elk.algorithm" => root_algorithm },
+             children: [inner_graph] }
+    Elkrb.layout(root, call).children.first.children.map { |n| [n.x, n.y] }
+  end
+
   # A root graph with the given layoutOptions and children.
   def option_graph(layout_options, children: [])
     Elkrb::Graph::Graph.new(id: "root", layout_options: layout_options,

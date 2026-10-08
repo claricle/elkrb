@@ -2,6 +2,7 @@
 
 require_relative "algorithm_registry"
 require_relative "../options/registry"
+require_relative "../options/resolver"
 
 module Elkrb
   module Layout
@@ -57,7 +58,7 @@ module Elkrb
           # root graph's -- a node that is itself a graph with a different
           # elk.algorithm gets laid out by that algorithm, not whichever
           # one is already recursing through the hierarchy.
-          processor = child_layout_processor(node_options)
+          processor = child_layout_processor(child_graph, node_options)
           processor.layout_hierarchical(child_graph, node_options)
 
           # Apply the layout back to the node
@@ -88,14 +89,17 @@ module Elkrb
         node.layout_options || {}
       end
 
-      # Resolves and instantiates the algorithm named by a node's own
-      # layoutOptions (via AlgorithmRegistry.for_layout_options), so a
-      # nested graph's elk.algorithm selector is honoured instead of
-      # ignored. Falls back to the algorithm already recursing (self)
-      # when the node names none, names the algorithm already running,
-      # or names one that isn't registered.
-      def child_layout_processor(node_options)
-        algorithm_class = AlgorithmRegistry.for_layout_options(node_options)
+      # Resolves and instantiates the algorithm named by the nested graph's
+      # own options, read from the same sources as the root graph's
+      # (layoutOptions, the map nested in it, properties), so a nested
+      # graph's elk.algorithm selector is honoured instead of ignored. Falls
+      # back to the algorithm already recursing (self) when the graph names
+      # none, names the algorithm already running, or names one that isn't
+      # registered.
+      def child_layout_processor(child_graph, node_options)
+        name = Options::Resolver.new.get("elk.algorithm", child_graph,
+                                         default: nil)
+        algorithm_class = name && AlgorithmRegistry.get(name)
         different = algorithm_class && !algorithm_class.equal?(self.class)
         return self unless different
 

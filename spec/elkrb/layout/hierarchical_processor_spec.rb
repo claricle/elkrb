@@ -131,22 +131,14 @@ RSpec.describe Elkrb::Layout::HierarchicalProcessor do
       end
     end
 
-    def parent_with(id, layout_options: nil, properties: nil)
-      Elkrb::Graph::Node.new(
-        id: id, width: 50, height: 50, layout_options: layout_options,
-        properties: properties,
-        children: [Elkrb::Graph::Node.new(id: "#{id}-kid", width: 5, height: 5)]
-      )
-    end
-
     let(:root) do
       Elkrb::Graph::Graph.new(
         id: "root",
         layout_options: { "elk.spacing.nodeNode" => 5 },
         children: [
-          parent_with("own", layout_options: { "elk.spacing.nodeNode" => 100 }),
-          parent_with("props", properties: { "elk.spacing.nodeNode" => 33 }),
-          parent_with("bare"),
+          nested_parent("own", layout_options: { "elk.spacing.nodeNode" => 100 }),
+          nested_parent("props", properties: { "elk.spacing.nodeNode" => 33 }),
+          nested_parent("bare"),
         ],
       )
     end
@@ -184,6 +176,38 @@ RSpec.describe Elkrb::Layout::HierarchicalProcessor do
       algorithm.layout_hierarchical(root)
 
       expect(algorithm.spacing_by_graph["own_children"]).to eq(100.0)
+    end
+  end
+
+  describe "algorithm selection for a nested graph" do
+    shapes = {
+      "layoutOptions" => { layoutOptions: { "elk.algorithm" => "box" } },
+      "the deprecated layoutOptions properties map" =>
+        { layoutOptions: { "properties" => { "elk.algorithm" => "box" } } },
+      "element properties" => { properties: { "elk.algorithm" => "box" } },
+    }
+
+    it "differs from the parent's algorithm when it names none" do
+      expect(nested_graph_positions({}))
+        .not_to eq(nested_graph_positions(shapes["layoutOptions"]))
+    end
+
+    it "keeps the parent's algorithm when it names none" do
+      expect(nested_graph_positions({}, root_algorithm: "box"))
+        .to eq(nested_graph_positions(shapes["layoutOptions"]))
+    end
+
+    it "does not take the call's algorithm for a graph that names none" do
+      expect(nested_graph_positions({}, root_algorithm: "box",
+                                        call: { algorithm: "layered" }))
+        .to eq(nested_graph_positions({}, root_algorithm: "box"))
+    end
+
+    shapes.each do |source, shape|
+      it "honours elk.algorithm given in #{source}" do
+        expect(nested_graph_positions(shape))
+          .to eq(nested_graph_positions(shapes["layoutOptions"]))
+      end
     end
   end
 
