@@ -60,8 +60,9 @@ module Elkrb
         # With options[:strict] set to true, an option in the graph's
         # layoutOptions that elkrb does not know, or does not fully honour,
         # raises Elkrb::Error instead of logging a warning. So does a
-        # registered option in +options+ that is not fully honoured; an
-        # unknown key in +options+ is not reported.
+        # registered option in an element's properties or in +options+ that
+        # is not fully honoured; an unknown property name or key in +options+
+        # is not reported.
         #
         # @param graph [Hash, Elkrb::Graph::Graph] The graph to layout. Can be:
         #   - A Hash with keys: :id, :children, :edges, :layoutOptions

@@ -68,10 +68,12 @@ module Elkrb
       end
 
       # Reports every key in the graph's layoutOptions, at any level, that the
-      # registry does not know or does not fully honour, and every registered
-      # key in the call that is not fully honoured. An unknown call key is not
-      # reported. One report per key per call. Warns by default; with
-      # strict: true it raises before anything is logged.
+      # registry does not know or does not fully honour, every registered key
+      # in an element's properties that is not fully honoured, and every
+      # registered key in the call that is not fully honoured. An unknown
+      # property name or call key is not reported. One report per key per
+      # call. Warns by default; with strict: true it raises before anything
+      # is logged.
       #
       # @param graph [Elkrb::Graph::Graph]
       # @raise [Elkrb::Error] in strict mode, naming every key that is
