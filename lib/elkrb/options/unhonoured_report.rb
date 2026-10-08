@@ -89,12 +89,11 @@ module Elkrb
       # read it.
       def occurrences(levels, call)
         in_play = levels.filter_map(&:last).uniq
-        written = levels.flat_map do |element, algorithm|
-          ElementOptions.new(element, @spellings).ids
-            .map { |id| [id, [algorithm]] }
+        written = levels.flat_map do |options, algorithm|
+          options.ids.map { |id| [id, [algorithm]] }
         end
         called = call.own_ids.select { |id| Registry.status(id) }
-        written + called.map { |id| [id, in_play] }
+        (written + called.map { |id| [id, in_play] }).uniq
       end
 
       def unread?(id, status, algorithms)
@@ -102,8 +101,8 @@ module Elkrb
           algorithms.none? { |name| Registry.read_by?(id, name) }
       end
 
-      # [[element, algorithm]] for every element reachable from the graph,
-      # breadth first; the algorithm is the one laying out the element's
+      # [[ElementOptions, algorithm]] for every element reachable from the
+      # graph, breadth first; the algorithm is the one laying out the element's
       # children, nil for an element that has none to lay out (a leaf node,
       # an edge, a port, a label). Iterative, so a deeply nested graph
       # cannot overflow the stack here; an element reachable by two paths is
@@ -115,21 +114,26 @@ module Elkrb
           element, enclosing = pending.shift
           next if seen.key?(element)
 
-          algorithm = layout_algorithm(element, enclosing, graph)
-          seen[element] = algorithm
+          seen[element] = level_of(element, enclosing, graph)
+          algorithm = seen[element].last
           pending.concat(nested_elements(element).map { |n| [n, algorithm] })
         end
-        seen.to_a
+        seen.values
+      end
+
+      def level_of(element, enclosing, graph)
+        options = ElementOptions.new(element, @spellings)
+        [options, layout_algorithm(element, options, enclosing, graph)]
       end
 
       # The algorithm a compound node is laid out by is its own registered
       # elk.algorithm, else the one laying out the level it sits in, the way
       # HierarchicalProcessor picks it.
-      def layout_algorithm(element, enclosing, graph)
+      def layout_algorithm(element, options, enclosing, graph)
         return enclosing if element.equal?(graph)
         return unless compound?(element)
 
-        own = ElementOptions.new(element, @spellings).value(ALGORITHM_ID)
+        own = options.value(ALGORITHM_ID)
         (own && @algorithm_name.call(own)) || enclosing
       end
 
