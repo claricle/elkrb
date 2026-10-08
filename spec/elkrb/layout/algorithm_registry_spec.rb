@@ -18,7 +18,7 @@ RSpec.describe Elkrb::Layout::AlgorithmRegistry do
       "layered" => "layered", "Layered" => "layered",
       "org.eclipse.elk.layered" => "layered",
       "mrTree" => "mrtree", "sporeOverlap" => "spore_overlap",
-      "nonesuch" => nil, "" => nil, "bad\xFF" => nil
+      "nonesuch" => nil, "" => nil, ".." => nil, "bad\xFF" => nil
     }.each do |written, registered|
       it "answers #{registered.inspect} for #{written.inspect}" do
         expect(described_class.registered_name(written)).to eq(registered)

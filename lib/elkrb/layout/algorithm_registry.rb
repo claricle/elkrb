@@ -99,13 +99,13 @@ module Elkrb
           # "org.eclipse.elk.sporeOverlap" / "sporeOverlap" / "spore_overlap"
           # all fold to the same "spore_overlap" key.
           name = name.to_s
-          name = name.split(".").last if name.include?(".")
+          name = name.split(".").last.to_s if name.include?(".")
           name.gsub(/([a-z\d])([A-Z])/, '\1_\2').downcase
         end
 
         def legacy_normalize_name(name)
           name = name.to_s
-          name = name.split(".").last if name.include?(".")
+          name = name.split(".").last.to_s if name.include?(".")
           name.downcase
         end
       end

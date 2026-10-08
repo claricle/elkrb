@@ -20,7 +20,6 @@ module Elkrb
       def self.register: (String name, singleton(Algorithms::BaseAlgorithm) algorithm_class, ?algorithmMetadata metadata) -> void
       def self.get: (String name) -> singleton(Algorithms::BaseAlgorithm)?
       def self.registered_name: (String name) -> String?
-
       def self.available_algorithms: () -> Array[String]
       def self.algorithm_info: (String name) -> algorithmInfo?
       def self.all_algorithm_info: () -> Array[algorithmInfo]
