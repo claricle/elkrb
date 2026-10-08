@@ -13,9 +13,6 @@ RSpec.describe Elkrb::Options::UnhonouredReport do
   algorithms = Elkrb::Layout::AlgorithmRegistry.available_algorithms
   unhonoured = /strict mode.*#{Regexp.escape(node_node)} \(partial/
 
-  # Keep: the refusing rows below pass on code that reports every partial
-  # key. They hold the report to the registry's readers, so a reader added
-  # by mistake goes red here and nowhere else.
   let(:warnings) { StringIO.new }
 
   around do |example|
@@ -50,6 +47,9 @@ RSpec.describe Elkrb::Options::UnhonouredReport do
     end
   end
 
+  # Keep: the refusing rows below pass on code that reports every partial
+  # key. They hold the report to the registry's readers, so a reader added
+  # by mistake goes red here and nowhere else.
   describe "a key that is partial within every algorithm" do
     { "elk.direction" => "RIGHT",
       "elk.hierarchyHandling" => "INCLUDE_CHILDREN" }.each do |key, value|
@@ -89,6 +89,35 @@ RSpec.describe Elkrb::Options::UnhonouredReport do
         else
           expect { Elkrb.layout(graph, strictly) }.not_to raise_error
         end
+      end
+    end
+
+    # [algorithm pinned in the root's layoutOptions, call algorithm, raises?]
+    [["force", nil, true], ["layered", "force", false]]
+      .each do |pinned, called, raises|
+      it "judges a root pinning #{pinned} with call algorithm " \
+         "#{called.inspect} by the pin" do
+        graph = positioned_graph(
+          layout_options: { "elk.algorithm" => pinned, node_node => 30 },
+        )
+        strictly = { algorithm: called, strict: true }.compact
+
+        if raises
+          expect { Elkrb.layout(graph, strictly) }
+            .to raise_error(Elkrb::Error, unhonoured)
+        else
+          expect { Elkrb.layout(graph, strictly) }.not_to raise_error
+        end
+      end
+    end
+
+    %w[algorithm elk.algorithm org.eclipse.elk.algorithm].each do |spelling|
+      it "reads a compound's own algorithm spelled #{spelling}" do
+        own = { spelling => "layered", node_node => 30 }
+        graph = positioned_graph(compound: { layoutOptions: own })
+
+        expect { Elkrb.layout(graph, algorithm: "force", strict: true) }
+          .not_to raise_error
       end
     end
 

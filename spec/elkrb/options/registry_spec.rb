@@ -334,7 +334,8 @@ RSpec.describe Elkrb::Options::Registry do
     it "names every reader in the note, and says nothing about them in it twice" do
       with_readers.each do |id, entry|
         expect(described_class.note(id)).to start_with("Read by #{entry[:readers].join(', ')}. ")
-        expect(entry[:note]).not_to start_with("Read by")
+        expect(entry[:note])
+          .not_to match(/\b(?:#{entry[:readers].join('|')})\b/)
       end
     end
 
