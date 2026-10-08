@@ -248,6 +248,7 @@ RSpec.describe Elkrb::Layout::HierarchicalProcessor do
         algorithms = registry.instance_variable_get(:@algorithms).dup
         metadata = registry.instance_variable_get(:@metadata).dup
         example.run
+      ensure
         registry.instance_variable_set(:@algorithms, algorithms)
         registry.instance_variable_set(:@metadata, metadata)
       end
