@@ -115,6 +115,13 @@ RSpec.describe Elkrb::Options::UnhonouredReport do
       end
     end
 
+    it "judges a root with no children by the algorithm that lays it out" do
+      graph = option_graph({ node_node => 30 })
+
+      expect { Elkrb.layout(graph, algorithm: "layered", strict: true) }
+        .not_to raise_error
+    end
+
     it "accepts the root's key under the algorithm spelled any way" do
       %w[Layered org.eclipse.elk.layered].each do |spelled|
         graph, = option_carried(:root, node_node, 30)

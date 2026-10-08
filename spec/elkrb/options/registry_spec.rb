@@ -338,6 +338,12 @@ RSpec.describe Elkrb::Options::Registry do
       end
     end
 
+    it "gives an id without readers its plain note, and an unknown id none" do
+      expect([described_class.note("elk.direction"),
+              described_class.note("elk.nonesuch")])
+        .to eq([described_class.all.fetch("elk.direction").fetch(:note), nil])
+    end
+
     it "answers read_by? for a reader, a non-reader and an id with none" do
       expect([
                described_class.read_by?("elk.spacing.nodeNode", "layered"),

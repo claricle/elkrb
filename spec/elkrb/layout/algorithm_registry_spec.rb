@@ -17,6 +17,8 @@ RSpec.describe Elkrb::Layout::AlgorithmRegistry do
     {
       "layered" => "layered", "Layered" => "layered",
       "org.eclipse.elk.layered" => "layered",
+      "org.eclipse.elk.sporeOverlap" => "spore_overlap",
+      "org.eclipse.elk.mrTree" => "mrtree",
       "mrTree" => "mrtree", "sporeOverlap" => "spore_overlap",
       "nonesuch" => nil, "" => nil, ".." => nil, "bad\xFF" => nil
     }.each do |written, registered|
