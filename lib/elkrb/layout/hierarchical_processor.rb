@@ -59,7 +59,7 @@ module Elkrb
           # elk.algorithm gets laid out by that algorithm, not whichever
           # one is already recursing through the hierarchy.
           processor = child_layout_processor(child_graph)
-          processor.layout_hierarchical(child_graph, node_options)
+          layout_child(processor, child_graph, node_options)
 
           # Apply the layout back to the node
           apply_child_layout(node, child_graph)
@@ -105,6 +105,16 @@ module Elkrb
         return self unless different
 
         algorithm_class.new(@options)
+      end
+
+      # A registered class that only implements #layout (the compatible
+      # interface of Elkrb.register_algorithm) has no #layout_hierarchical.
+      def layout_child(processor, child_graph, node_options)
+        if processor.respond_to?(:layout_hierarchical)
+          processor.layout_hierarchical(child_graph, node_options)
+        else
+          processor.layout(child_graph)
+        end
       end
 
       # Apply the child graph layout back to the parent node.

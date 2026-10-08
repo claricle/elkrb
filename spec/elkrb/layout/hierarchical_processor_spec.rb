@@ -180,12 +180,15 @@ RSpec.describe Elkrb::Layout::HierarchicalProcessor do
   end
 
   describe "algorithm selection for a nested graph" do
-    shapes = {
-      "layoutOptions" => { layoutOptions: { "elk.algorithm" => "box" } },
-      "the deprecated layoutOptions properties map" =>
-        { layoutOptions: { "properties" => { "elk.algorithm" => "box" } } },
-      "element properties" => { properties: { "elk.algorithm" => "box" } },
-    }
+    shapes_for = lambda do |algorithm|
+      {
+        "layoutOptions" => { layoutOptions: { "elk.algorithm" => algorithm } },
+        "the deprecated layoutOptions properties map" =>
+          { layoutOptions: { "properties" => { "elk.algorithm" => algorithm } } },
+        "element properties" => { properties: { "elk.algorithm" => algorithm } },
+      }
+    end
+    shapes = shapes_for.call("box")
 
     # Keep: the examples below compare equal positions; this one is the only
     # check that box and layered differ on the fixture, so they cannot pass
@@ -226,6 +229,39 @@ RSpec.describe Elkrb::Layout::HierarchicalProcessor do
 
       expect(grandchild_positions(with_own, call: call))
         .to eq(grandchild_positions({}, call: call))
+    end
+
+    context "with a registered class that only implements #layout" do
+      let(:compatible_class) do
+        Class.new do
+          def initialize(_options = {}); end
+
+          def layout(graph)
+            graph.children.each { |node| node.x = 777.0 }
+            graph
+          end
+        end
+      end
+
+      around do |example|
+        registry = Elkrb::Layout::AlgorithmRegistry
+        algorithms = registry.instance_variable_get(:@algorithms).dup
+        metadata = registry.instance_variable_get(:@metadata).dup
+        example.run
+        registry.instance_variable_set(:@algorithms, algorithms)
+        registry.instance_variable_set(:@metadata, metadata)
+      end
+
+      shapes_for.call("compatible").each do |source, shape|
+        it "lays out a nested graph that selects it in #{source}" do
+          Elkrb::Layout::AlgorithmRegistry.register("compatible",
+                                                    compatible_class)
+
+          positions = nested_graph_positions(shape)
+
+          expect(positions.map(&:first)).to all(be >= 777.0)
+        end
+      end
     end
 
     shapes.each do |source, shape|
