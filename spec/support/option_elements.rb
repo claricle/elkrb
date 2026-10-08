@@ -101,6 +101,20 @@ module OptionElements
     Elkrb.layout(root, call).children.first.children.map { |n| [n.x, n.y] }
   end
 
+  # [x, y] of the four nodes of a graph two levels down: a layered root, a
+  # middle node that selects box through `mid_options`, and a graph below it
+  # that names no options. `call` holds the options passed to Elkrb.layout.
+  def grandchild_positions(mid_options, call: {})
+    leaves = Array.new(4) { |i| { id: "n#{i}", width: 10, height: 10 } }
+    below = { id: "below", width: 50, height: 50, children: leaves }
+    mid = { id: "mid", properties: { "elk.algorithm" => "box" },
+            children: [below] }.merge(mid_options)
+    root = { id: "root", layoutOptions: { "elk.algorithm" => "layered" },
+             children: [mid] }
+    graph = Elkrb.layout(root, call)
+    graph.children.first.children.first.children.map { |n| [n.x, n.y] }
+  end
+
   # A root graph with the given layoutOptions and children.
   def option_graph(layout_options, children: [])
     Elkrb::Graph::Graph.new(id: "root", layout_options: layout_options,

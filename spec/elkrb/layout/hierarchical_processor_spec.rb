@@ -210,6 +210,24 @@ RSpec.describe Elkrb::Layout::HierarchicalProcessor do
         .to eq(nested_graph_positions({}, root_algorithm: "box"))
     end
 
+    it "passes the call's options to a nested graph that switches algorithm" do
+      call = { "elk.spacing.nodeNode" => 90 }
+
+      expect(nested_graph_positions(shapes["element properties"], call: call))
+        .to eq(nested_graph_positions(shapes["element properties"],
+                                      root_algorithm: "box", call: call))
+    end
+
+    # Keep: it goes red when a switched-to algorithm takes the nested graph's
+    # own options as its call options, which then reach the graphs below.
+    it "does not let a switching graph's options leak into the graphs below" do
+      call = { "elk.spacing.nodeNode" => 40 }
+      with_own = { layoutOptions: { "elk.spacing.nodeNode" => 90 } }
+
+      expect(grandchild_positions(with_own, call: call))
+        .to eq(grandchild_positions({}, call: call))
+    end
+
     shapes.each do |source, shape|
       it "honours elk.algorithm given in #{source}" do
         expect(nested_graph_positions(shape))

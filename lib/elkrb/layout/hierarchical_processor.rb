@@ -58,7 +58,7 @@ module Elkrb
           # root graph's -- a node that is itself a graph with a different
           # elk.algorithm gets laid out by that algorithm, not whichever
           # one is already recursing through the hierarchy.
-          processor = child_layout_processor(child_graph, node_options)
+          processor = child_layout_processor(child_graph)
           processor.layout_hierarchical(child_graph, node_options)
 
           # Apply the layout back to the node
@@ -95,15 +95,16 @@ module Elkrb
       # graph's elk.algorithm selector is honoured instead of ignored. Falls
       # back to the algorithm already recursing (self) when the graph names
       # none, names the algorithm already running, or names one that isn't
-      # registered.
-      def child_layout_processor(child_graph, node_options)
+      # registered. A switched-to algorithm gets this one's call options, so
+      # they reach every level.
+      def child_layout_processor(child_graph)
         name = Options::Resolver.new.get("elk.algorithm", child_graph,
                                          default: nil)
         algorithm_class = name && AlgorithmRegistry.get(name)
         different = algorithm_class && !algorithm_class.equal?(self.class)
         return self unless different
 
-        algorithm_class.new(node_options)
+        algorithm_class.new(@options)
       end
 
       # Apply the child graph layout back to the parent node.
