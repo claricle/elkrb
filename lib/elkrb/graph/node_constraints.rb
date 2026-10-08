@@ -83,6 +83,16 @@ module Elkrb
       }.freeze
       private_constant :LEGACY_YAML_KEYS
 
+      # Every snake_case key, applied by the same hook just before the legacy
+      # spellings so a legacy spelling still wins.
+      CANONICAL_YAML_KEYS =
+        LEGACY_YAML_KEYS.values.to_h { |name| [name.to_s, name] }
+          .merge("layer" => :layer).freeze
+      private_constant :CANONICAL_YAML_KEYS
+
+      ALL_YAML_KEYS = CANONICAL_YAML_KEYS.merge(LEGACY_YAML_KEYS).freeze
+      private_constant :ALL_YAML_KEYS
+
       key_value do
         map "fixedPosition", to: :fixed_position
         map "layer", to: :layer
@@ -102,12 +112,18 @@ module Elkrb
       # yielding "horizontal". The base had no snake_case key at all, so it
       # could not hit this.
       #
-      # The legacy path is otherwise exactly what it was before the snake_case
-      # keys existed, for every value shape -- scalar, wrong-typed, array and
-      # blank. It casts through the attribute the way lutaml's own deserializer
+      # The hook also re-applies every snake_case key, just before the legacy
+      # ones. Newer lutaml 0.8.x releases no longer run the cardinality check
+      # or the public setter for a canonical key (`layer: [1]` parses, and
+      # `align_direction: sideways` is stored), so the hook does both for the
+      # canonical spelling as well, and the two spellings reject the same input
+      # (an array for align_direction fails with a different error class).
+      #
+      # For every value shape -- scalar, wrong-typed, array and blank -- the
+      # hook casts through the attribute the way lutaml's own deserializer
       # does, applies the same cardinality check, and assigns through the
-      # public setter, so it rejects the same input, produces the same Ruby
-      # types, and runs align_direction's validation.
+      # public setter, so it produces the same Ruby types and runs
+      # align_direction's validation.
       #
       # Two things about the shape of the rule, neither of them free choices:
       #
@@ -173,10 +189,10 @@ module Elkrb
         # still merged -- see the note above `yaml do`.
         return unless doc.respond_to?(:key?) && doc.respond_to?(:[])
 
-        LEGACY_YAML_KEYS.each do |camel, name|
+        ALL_YAML_KEYS.each do |key_name, name|
           # The standard YAML adapter preserves Symbol keys, and lutaml's own
           # mappings resolve either spelling, so both are honoured here.
-          key = [camel, camel.to_sym].find { |candidate| doc.key?(candidate) }
+          key = [key_name, key_name.to_sym].find { |candidate| doc.key?(candidate) }
           next unless key
 
           model.public_send(:"#{name}=", cast_legacy(model, name, doc[key]))
