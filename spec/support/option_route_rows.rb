@@ -136,15 +136,15 @@ module OptionRouteRows
     args.merge(CARRIER_ARGS.fetch(carrier).call(spelling, name))
   end
 
-  # A readers key that matches no generated row, or names something that is
-  # not an algorithm, would otherwise be silently inert.
+  # A readers key that matches no generated row (including one with more or
+  # fewer than [carrier, spelling, shape]), or names something that is not an
+  # algorithm, would otherwise be silently inert.
   def check_readers(readers, spellings, shapes, algorithms)
     readers.each do |route, entry|
       carrier, spelling, shape = route
-      unless [CARRIERS.include?(carrier), spellings.include?(spelling),
-              shapes.include?(shape)].all?
-        raise ArgumentError, "no row for #{route}"
-      end
+      known = [CARRIERS.include?(carrier), spellings.include?(spelling),
+               shapes.include?(shape)].all?
+      raise ArgumentError, "no row for #{route}" unless known && route.size == 3
 
       check_algorithms(entry, algorithms)
     end

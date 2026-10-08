@@ -182,6 +182,34 @@ RSpec.describe OptionRouteRows do
       end
     end
 
+    context "with a readers key that is not [carrier, spelling, shape]" do
+      let(:extra) { { readers: { key => %w[box] } } }
+
+      [
+        [:root, "padding", :first, :typo],
+        [:root, "padding"],
+        [],
+        "root",
+      ].each do |bad_key|
+        context "when the key is #{bad_key.inspect}" do
+          let(:key) { bad_key }
+
+          it "raises rather than leave the reader silently inert" do
+            expect { rows }.to raise_error(ArgumentError, /no row for/)
+          end
+        end
+      end
+
+      context "when the key is exactly three elements" do
+        let(:key) { [:root, "padding", :first] }
+
+        it "is accepted" do
+          expect(rows.select { |_, row| row[1] }.keys)
+            .to all(start_with("root padding first"))
+        end
+      end
+    end
+
     context "with a carrier that does not exist" do
       let(:extra) { { carriers: %i[root typo] } }
 
