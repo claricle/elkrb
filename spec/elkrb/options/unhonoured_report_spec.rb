@@ -151,6 +151,18 @@ RSpec.describe Elkrb::Options::UnhonouredReport do
         .not_to raise_error
     end
 
+    # One compound object under two parents is laid out once per parent, by
+    # that parent's algorithm, whichever parent comes first.
+    [%w[layered force], %w[force layered]].each do |first, second|
+      it "refuses a shared compound's key when #{second} lays it out " \
+         "beside #{first}" do
+        graph = shared_compound_graph(first, second, node_node)
+
+        expect { Elkrb.layout(graph, algorithm: "box", strict: true) }
+          .to raise_error(Elkrb::Error, unhonoured)
+      end
+    end
+
     it "accepts the root's key under the algorithm spelled any way" do
       %w[Layered org.eclipse.elk.layered].each do |spelled|
         graph, = option_carried(:root, node_node, 30)

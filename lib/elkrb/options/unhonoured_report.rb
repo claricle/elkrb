@@ -107,19 +107,18 @@ module Elkrb
       # children, nil for an element that has none to lay out (a leaf node,
       # an edge, a port, a label). Iterative, so a deeply nested graph
       # cannot overflow the stack here; an element reachable by two paths is
-      # visited once.
+      # visited once for each algorithm that would lay out the level above it.
       def laid_out_elements(graph)
-        seen = {}.compare_by_identity
-        pending = [[graph, @root_algorithm]]
-        until pending.empty?
-          element, enclosing = pending.shift
-          next if seen.key?(element)
+        visits = [[graph, @root_algorithm]]
+        seen = {}
+        visits.filter_map do |element, enclosing| # visits grows as it is walked
+          next if seen.key?(key = [element.object_id, enclosing])
 
-          seen[element] = level_of(element, enclosing)
-          algorithm = seen[element].last
-          nested_elements(element).each { |c| pending << [c, algorithm] }
+          seen[key] = true
+          level_of(element, enclosing).tap do |level|
+            nested_elements(element).each { |c| visits << [c, level.last] }
+          end
         end
-        seen.values
       end
 
       def level_of(element, enclosing)

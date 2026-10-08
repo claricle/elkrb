@@ -152,6 +152,21 @@ module OptionElements
     end
   end
 
+  # A root graph of two compound nodes laid out by the given algorithms, both
+  # holding the SAME inner compound object, which carries `key` => 30.
+  def shared_compound_graph(first, second, key)
+    leaves = %w[a b].map do |id|
+      Elkrb::Graph::Node.new(id: id, width: 30, height: 30)
+    end
+    shared = Elkrb::Graph::Node.new(id: "shared", layout_options: { key => 30 },
+                                    children: leaves)
+    parents = [first, second].each_with_index.map do |algorithm, i|
+      Elkrb::Graph::Node.new(id: "p#{i}", children: [shared],
+                             layout_options: { "elk.algorithm" => algorithm })
+    end
+    Elkrb::Graph::Graph.new(id: "root", children: parents)
+  end
+
   # A root graph with the given layoutOptions and children.
   def option_graph(layout_options, children: [])
     Elkrb::Graph::Graph.new(id: "root", layout_options: layout_options,

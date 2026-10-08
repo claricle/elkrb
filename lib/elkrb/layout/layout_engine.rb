@@ -62,7 +62,8 @@ module Elkrb
         # raises Elkrb::Error instead of logging a warning. So does a
         # registered option in an element's properties or in +options+ that
         # is not fully honoured; an unknown property name or key in +options+
-        # is not reported.
+        # is not reported. An option only some algorithms read is accepted
+        # where the algorithm laying out its element is one of them.
         #
         # @param graph [Hash, Elkrb::Graph::Graph] The graph to layout. Can be:
         #   - A Hash with keys: :id, :children, :edges, :layoutOptions
