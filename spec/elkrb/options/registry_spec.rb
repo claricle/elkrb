@@ -298,6 +298,9 @@ RSpec.describe Elkrb::Options::Registry do
   end
 
   describe "partial notes" do
+    # Keep: it passes against any registry whose :partial rows all carry a
+    # note, so it protects nothing until a row is marked :partial without
+    # one, and then it is the only check that the warning has text.
     it "carries a non-empty note on every :partial id" do
       missing = described_class.all.select do |id, entry|
         entry[:status] == :partial && described_class.note(id).to_s.strip.empty?
