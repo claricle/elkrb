@@ -744,6 +744,15 @@ RSpec.describe Elkrb::Options::Resolver do
           .to raise_error(Elkrb::Error, /elk\.hierarchyHandling/)
       end
 
+      it "does not report a nested properties map the call never reads" do
+        strict = described_class.new(
+          strict: true, properties: { "elk.spacing.edgeNode" => 5 },
+        )
+
+        expect { strict.report_unhonoured(empty_graph) }.not_to raise_error
+        expect(log.string).to eq("")
+      end
+
       it "stays silent for honoured call keys and engine flags, even strict" do
         strict = described_class.new(
           strict: true, hierarchical: true, algorithm: "box",

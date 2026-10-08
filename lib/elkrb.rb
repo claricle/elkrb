@@ -297,7 +297,8 @@ module Elkrb
   #   - :algorithm (String) - Algorithm name, used when the graph pins none
   #     (default: "layered")
   #   - :strict (Boolean) - Raise instead of warn when the graph carries an
-  #     option elkrb does not know or does not fully honour (default: false)
+  #     option elkrb does not know or does not fully honour, or the call
+  #     passes a registered option that is not fully honoured (default: false)
   #   - Algorithm-specific options (e.g., "elk.spacing.nodeNode")
   # @return [Graph::Graph] The input graph with computed positions
   # @raise [ArgumentError] If graph is neither a Hash nor a Graph::Graph

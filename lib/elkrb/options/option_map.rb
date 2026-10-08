@@ -60,8 +60,10 @@ module Elkrb
         own_ids - [nested_id] + inner.own_ids
       end
 
-      protected
-
+      # The canonical ids of the map's own keys, without the nested
+      # properties map.
+      #
+      # @return [Array<String>]
       def own_ids
         @ids.keys
       end

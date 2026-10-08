@@ -58,10 +58,11 @@ module Elkrb
 
       # { canonical id => status }; status is nil for an unknown key. An
       # unknown key in the call is not reported: the call also carries engine
-      # flags such as strict and hierarchical.
+      # flags such as strict and hierarchical. The call's nested properties
+      # map is never read as options, so it is not reported either.
       def findings_for(graph, call)
         graph_ids = option_maps(graph).flat_map(&:ids)
-        call_ids = call.ids.select { |id| Registry.status(id) }
+        call_ids = call.own_ids.select { |id| Registry.status(id) }
         (graph_ids + call_ids).each_with_object({}) do |id, findings|
           status = Registry.status(id)
           findings[id] = status unless status == :honoured
