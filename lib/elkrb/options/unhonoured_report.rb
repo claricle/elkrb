@@ -117,7 +117,7 @@ module Elkrb
 
           seen[element] = level_of(element, enclosing)
           algorithm = seen[element].last
-          nested_elements(element).each { |child| pending << [child, algorithm] }
+          nested_elements(element).each { |c| pending << [c, algorithm] }
         end
         seen.values
       end
