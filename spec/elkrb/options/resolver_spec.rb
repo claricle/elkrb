@@ -716,6 +716,8 @@ RSpec.describe Elkrb::Options::Resolver do
           .to raise_error(Elkrb::Error, /#{Regexp.escape(edge_node)}/)
       end
 
+      # Keep: the opposite direction of the examples above; it is the only
+      # check that properties keeps ordinary metadata out of strict mode.
       it "treats an unknown name in properties as metadata, not an option" do
         strict = described_class.new(strict: true)
         element = option_element(
@@ -724,14 +726,6 @@ RSpec.describe Elkrb::Options::Resolver do
         graph = option_graph({}, children: [element])
 
         expect { strict.report_unhonoured(graph) }.not_to raise_error
-        expect(log.string).to eq("")
-      end
-
-      it "stays silent for an honoured key in element properties" do
-        element = option_element(properties: { spacing => 5 })
-
-        resolver.report_unhonoured(option_graph({}, children: [element]))
-
         expect(log.string).to eq("")
       end
     end

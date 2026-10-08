@@ -161,6 +161,8 @@ RSpec.describe Elkrb::Layout::HierarchicalProcessor do
       )
     end
 
+    # Keep: it is the only check that the scope is restored after a nested
+    # graph; the root is laid out after its children.
     it "reads the root's options again once the nested graphs are done" do
       algorithm = recorder_class.new
       algorithm.layout(root)
