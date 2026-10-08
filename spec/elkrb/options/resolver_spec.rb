@@ -419,6 +419,21 @@ RSpec.describe Elkrb::Options::Resolver do
         end
       end
 
+      # to_h would collapse a repeated side before it is validated.
+      ["[top=abc,top=1]", "[top=1,top=abc]", "[top=0x10,left=1,top=2]"]
+        .each do |bad|
+        it "raises for the repeated side in #{bad.inspect}" do
+          expect { described_class.new(padding: bad).get("elk.padding") }
+            .to raise_error(Elkrb::ValidationError, /elk\.padding/)
+        end
+      end
+
+      it "lets the last of a repeated valid side win" do
+        resolver = described_class.new(padding: "[top=1,top=3]")
+
+        expect(resolver.get("elk.padding").top).to eq(3.0)
+      end
+
       ["(1,2,)", "(1,2, )", "(,1)", "()", "(1)"].each do |bad|
         it "raises for the vector string #{bad.inspect}" do
           resolver = described_class.new("elk.position" => bad)

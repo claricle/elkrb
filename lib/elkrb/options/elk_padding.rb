@@ -48,20 +48,21 @@ module Elkrb
       # @return [ElkPadding] Parsed padding object
       def self.from_string(str)
         content = str.strip.gsub(/^\[|\]$/, "")
-        new(**content.split(",", -1).to_h { |entry| side_and_text(entry) })
+        new(**content.split(",", -1).to_h { |entry| side_and_number(entry) })
       end
 
-      # One "side=number" entry. The text stays a String for the constructor
-      # to validate; an entry without exactly one '=' is malformed.
-      def self.side_and_text(entry)
+      # One "side=number" entry, validated here so a repeated side cannot
+      # hide a malformed earlier value; an entry without exactly one '=' is
+      # malformed.
+      def self.side_and_number(entry)
         key, value, extra = entry.split("=", -1).map(&:strip)
         if extra || !value
           raise ArgumentError, "Invalid padding entry: #{entry.inspect}"
         end
 
-        [key.to_sym, value]
+        [key.to_sym, Decimal.to_f(value)]
       end
-      private_class_method :side_and_text
+      private_class_method :side_and_number
 
       # Convert to hash
       #
