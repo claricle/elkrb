@@ -22,6 +22,15 @@ module Elkrb
           @algorithms[resolve_key(name)]
         end
 
+        # @api private
+        # @param name [String] an algorithm name, in any spelling #get takes
+        # @return [String, nil] the key the algorithm is registered under, or
+        #   nil when none is
+        def registered_name(name)
+          key = resolve_key(name)
+          key if @algorithms.key?(key)
+        end
+
         def available_algorithms
           @algorithms.keys.sort
         end

@@ -295,6 +295,56 @@ RSpec.describe Elkrb::Options::Registry do
           .to eq(OptionRouteRows.expected_status(id, rows, moved))
       end
     end
+
+    # The rows above hold node_node_readers to what layout does. An algorithm
+    # the registry lists as a reader makes strict mode accept the key, so it
+    # must move on every route, with every node positioned.
+    it "#{node_node}: the registry's readers are the algorithms every route moves" do
+      every_route = node_node_readers.values.map { |by| by.fetch(true) }
+
+      expect(described_class.all.fetch(node_node).fetch(:readers))
+        .to eq(every_route.reduce(:&).sort)
+    end
+  end
+
+  describe "readers" do
+    algorithms = Elkrb::Layout::AlgorithmRegistry.available_algorithms
+    with_readers = described_class.all.select { |_, entry| entry[:readers] }
+
+    it "lists them on at least one id, so the examples below are not vacuous" do
+      expect(with_readers.keys).to include("elk.spacing.nodeNode")
+    end
+
+    it "lists them only on :partial ids" do
+      expect(with_readers.reject { |_, entry| entry[:status] == :partial }.keys)
+        .to eq([])
+    end
+
+    it "names only registered algorithms, in scope for the id" do
+      stray = with_readers.flat_map do |id, entry|
+        scope = entry[:algorithms] == :all ? algorithms : entry[:algorithms]
+        (entry[:readers] - (algorithms & scope)).map { |name| [id, name] }
+      end
+
+      expect(stray).to eq([])
+    end
+
+    it "names every reader in the note, and says nothing about them in it twice" do
+      with_readers.each do |id, entry|
+        expect(described_class.note(id)).to start_with("Read by #{entry[:readers].join(', ')}. ")
+        expect(entry[:note]).not_to start_with("Read by")
+      end
+    end
+
+    it "answers read_by? for a reader, a non-reader and an id with none" do
+      expect([
+               described_class.read_by?("elk.spacing.nodeNode", "layered"),
+               described_class.read_by?("elk.spacing.nodeNode", "force"),
+               described_class.read_by?("spacing_node_node", "box"),
+               described_class.read_by?("elk.direction", "layered"),
+               described_class.read_by?("foo.bar", "layered"),
+             ]).to eq([true, false, true, false, false])
+    end
   end
 
   describe "partial notes" do

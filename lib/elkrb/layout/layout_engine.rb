@@ -97,7 +97,9 @@ module Elkrb
           algorithm_class = AlgorithmRegistry.get(algorithm_name)
           raise AlgorithmNotFoundError, algorithm_name unless algorithm_class
 
-          resolver.report_unhonoured(graph)
+          resolver.report_unhonoured(
+            graph, algorithm_name: AlgorithmRegistry.method(:registered_name)
+          )
 
           algorithm = algorithm_class.new(options)
           algorithm.layout(graph)

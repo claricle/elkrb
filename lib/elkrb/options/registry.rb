@@ -18,6 +18,11 @@ module Elkrb
       private_constant :BOOLEAN_LITERALS
       private_constant :ELK_PREFIX
 
+      # A :partial row either lists `readers`, the algorithms that read the id
+      # on every route it can arrive by (the id is partial ACROSS algorithms),
+      # or lists none (it is partial WITHIN each algorithm). With `readers`,
+      # `note` holds only what the list leaves out; .note joins the two.
+      #
       # The OPTIONS constant name/path is private; .all below returns
       # this same frozen object, so use .all (or .canonical/.coerce/
       # .default/.status/.note/.for_algorithm) rather than reaching for
@@ -62,7 +67,7 @@ module Elkrb
         "elk.spacing.componentComponent" => { type: :float, default: 20.0, algorithms: %w[disco], status: :honoured, description: "Spacing between disconnected components" },
         "elk.spacing.edgeEdge" => { type: :float, default: 10.0, algorithms: %w[layered], status: :accepted, description: "Spacing between two edges; not honoured today" },
         "elk.spacing.edgeNode" => { type: :float, default: 10.0, algorithms: %w[layered], status: :accepted, description: "Spacing between an edge and a node it does not connect to; not honoured today" },
-        "elk.spacing.nodeNode" => { type: :float, default: 20.0, aliases: %w[spacing.nodeNode spacing_node_node], algorithms: :all, status: :partial, note: "layered, mrtree, box, random, rectpacking and topdownpacking read it, and libavoid reads it unless every node has an input position, under every spelling, from the call options and from the layoutOptions of the graph or compound node they lay out; vertiflex reads only the elk.spacing.nodeNode spelling, from the layoutOptions of the graph or compound node it lays out; no other algorithm reads it", description: "Spacing between nodes" },
+        "elk.spacing.nodeNode" => { type: :float, default: 20.0, aliases: %w[spacing.nodeNode spacing_node_node], algorithms: :all, status: :partial, readers: %w[box layered mrtree random rectpacking topdownpacking], note: "They read it under every spelling, from the call options and from the layoutOptions of the graph or compound node they lay out. libavoid also reads it, unless every node has an input position; vertiflex reads only the elk.spacing.nodeNode spelling, from layoutOptions; disco reads it only from a compound node's layoutOptions. No other algorithm reads it", description: "Spacing between nodes" },
         "elk.spline.curvature" => { type: :float, default: 0.5, aliases: %w[spline.curvature], namespace: :elkrb, algorithms: :all, status: :honoured, description: "elkrb-private: curvature factor for SPLINES routing" },
         "elk.stress.desiredEdgeLength" => { type: :float, default: 100.0, algorithms: %w[stress], status: :honoured, description: "Desired edge length for stress majorization" },
         "elk.stress.epsilon" => { type: :float, default: 0.0001, aliases: %w[epsilon], algorithms: %w[stress], status: :honoured, description: "Stress majorization convergence threshold" },
@@ -98,6 +103,7 @@ module Elkrb
         entry[:aliases]&.freeze
         entry[:values]&.freeze
         entry[:algorithms].freeze if entry[:algorithms].is_a?(Array)
+        entry[:readers]&.freeze
       end
 
       ALIAS_LOOKUP = OPTIONS.each_with_object({}) do |(id, entry), lookup|
@@ -149,9 +155,22 @@ module Elkrb
         end
 
         # @param id [String, Symbol] any id or alias
-        # @return [String, nil] explanatory note for a :partial id
+        # @return [String, nil] explanatory note for a :partial id; for an id
+        #   with readers it names them first
         def note(id)
-          entry_for(id)&.[](:note)
+          entry = entry_for(id)
+          return unless entry
+          return entry[:note] unless entry[:readers]
+
+          "Read by #{entry[:readers].join(', ')}. #{entry[:note]}"
+        end
+
+        # @param id [String, Symbol] any id or alias
+        # @param algorithm [String, nil] a normalised algorithm name
+        # @return [Boolean] whether the id lists the algorithm among its
+        #   readers; false for an id with no readers
+        def read_by?(id, algorithm)
+          Array(entry_for(id)&.[](:readers)).include?(algorithm)
         end
 
         # Membership, not truthfulness: an id's presence here means it's
@@ -204,7 +223,7 @@ module Elkrb
               values: entry[:values],
               parser: parsers[entry[:type]],
               status: entry[:status],
-              note: entry[:note],
+              note: note(id),
             }
           end
 

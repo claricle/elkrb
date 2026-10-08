@@ -115,6 +115,43 @@ module OptionElements
     graph.children.first.children.first.children.map { |n| [n.x, n.y] }
   end
 
+  # Three nodes spread far apart, named after `prefix`, as input positions.
+  def positioned_nodes(prefix = "")
+    %w[a b c].each_with_index.map do |id, i|
+      { id: "#{prefix}#{id}", x: 200 * i, y: 0, width: 30, height: 30 }
+    end
+  end
+
+  # A root graph of three positioned nodes carrying `layout_options`. A
+  # `compound` Hash adds a node with those attributes (its layoutOptions
+  # among them) holding three positioned nodes, `leaf` a childless node, and
+  # `edge` an edge between two of the three.
+  def positioned_graph(layout_options: {}, compound: nil, leaf: nil, edge: nil)
+    nodes = positioned_nodes
+    if compound
+      nodes << compound.merge(id: "compound", width: 30, height: 30,
+                              children: positioned_nodes("in-"))
+    end
+    nodes << leaf.merge(id: "leaf", width: 30, height: 30) if leaf
+    edges = edge ? [edge.merge(id: "e", sources: ["a"], targets: ["b"])] : []
+    Elkrb::Graph::Graph.from_json(
+      { id: "root", layoutOptions: layout_options, children: nodes,
+        edges: edges }.to_json,
+    )
+  end
+
+  # [graph, call options] with `key` => `value` placed where `kind` says: the
+  # root's layoutOptions, the call options, or the layoutOptions of a
+  # compound node that names no algorithm of its own.
+  def option_carried(kind, key, value)
+    case kind
+    when :root then [positioned_graph(layout_options: { key => value }), {}]
+    when :call then [positioned_graph, { key => value }]
+    when :compound
+      [positioned_graph(compound: { layoutOptions: { key => value } }), {}]
+    end
+  end
+
   # A root graph with the given layoutOptions and children.
   def option_graph(layout_options, children: [])
     Elkrb::Graph::Graph.new(id: "root", layout_options: layout_options,

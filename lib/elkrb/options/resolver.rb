@@ -72,15 +72,24 @@ module Elkrb
       # in an element's properties that is not fully honoured, and every
       # registered key in the call that is not fully honoured. An unknown
       # property name or call key is not reported. One report per key per
-      # call. Warns by default; with strict: true it raises before anything
-      # is logged.
+      # call. A key that only some algorithms read is reported only where the
+      # algorithm laying out its element does not read it. Warns by default;
+      # with strict: true it raises before anything is logged.
       #
       # @param graph [Elkrb::Graph::Graph]
+      # @param algorithm_name [#call] resolves an algorithm name to the name
+      #   it is registered under, or nil; the default takes every name as
+      #   registered
       # @raise [Elkrb::Error] in strict mode, naming every key that is
       #   unknown or not :honoured
-      def report_unhonoured(graph)
+      def report_unhonoured(graph,
+                            algorithm_name: UnhonouredReport::AS_WRITTEN)
         strict = strict?
-        report = UnhonouredReport.new(graph, @spellings, @call)
+        report = UnhonouredReport.new(
+          graph, @spellings, @call,
+          root_algorithm: algorithm_name.call(get("elk.algorithm", graph)),
+          algorithm_name: algorithm_name
+        )
         return if report.empty?
 
         raise Error, report.strict_message if strict
