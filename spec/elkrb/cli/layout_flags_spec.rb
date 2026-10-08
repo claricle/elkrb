@@ -198,7 +198,7 @@ RSpec.describe "elkrb CLI layout flags" do
     let(:warned_path) do
       options = { "elk.hierarchyHandling" => "INCLUDE_CHILDREN",
                   "elk.spacing.edgeNode" => 5,
-                  "elk.spacing.nodeNode" => 40,
+                  "elk.edgeRouting" => "ORTHOGONAL",
                   "foo.bar" => 1 }
       write_json_to(dir, "warned.json", fan_out.merge(layoutOptions: options))
     end
