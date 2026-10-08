@@ -23,6 +23,9 @@ RSpec.describe Elkrb::Options::OptionMap, "spelling order" do
 
   key_forms = { "String" => :to_s.to_proc, "Symbol" => :to_sym.to_proc }
 
+  # Keep: it passes against the old code and goes red when the helper above
+  # stops listing the dot-suffixes, which would leave the two sweeps below
+  # with no suffix spelling to compare.
   it "finds the suffix spellings the sweep exists for" do
     expect(ordered_spellings.call("elk.layered.spacing.nodeNodeBetweenLayers"))
       .to eq(%w[
