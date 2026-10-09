@@ -1,81 +1,144 @@
 # frozen_string_literal: true
 
+require_relative "port_order"
+
 module Elkrb
   module Layout
     module Algorithms
       module Layered
-        # Reorders nodes inside assigned layers using four barycenter sweeps.
+        # Reorders nodes inside assigned layers with barycenter sweeps, the
+        # way ELK's layer sweep does: a forward sweep, then backward sweeps
+        # alternating while the crossing count keeps falling.
+        #
+        # A node's barycenter is the mean rank of the ports its edges meet
+        # in the fixed layer, so two edges leaving one node pull their
+        # targets apart. Each sweep also reorders the ports of the layer it
+        # moves; #port_order carries the result to the node placer.
         class CrossingMinimizer
           STRATEGY = "elk.layered.crossingMinimization.strategy"
           MODEL_ORDER = "elk.layered.considerModelOrder.strategy"
 
+          # @return [PortOrder] the port lists as the last sweep left them
+          attr_reader :port_order
+
           def initialize(graph, layers, index, resolver)
             @layers = layers
-            @index = index
             @strategy = resolver.get(STRATEGY, graph)
             @preserve_input_order =
               resolver.get(MODEL_ORDER, graph) == "NODES_AND_EDGES"
             @input_order = input_order(graph, layers)
-            @neighbors = build_neighbors
+            @port_order = PortOrder.new(layers, index)
           end
 
           def minimize
             return @layers if @strategy == "NONE"
 
-            2.times do
-              sweep_down
-              sweep_up
-            end
+            sweep_until_stable
             @layers
           end
 
           private
 
+          def sweep_until_stable
+            forward = true
+            crossings = sweep_and_count(forward)
+            loop do
+              previous = crossings
+              forward = !forward
+              crossings = sweep_and_count(forward)
+              break unless previous > crossings && crossings.positive?
+            end
+          end
+
+          def sweep_and_count(forward)
+            sweep(forward)
+            count_crossings
+          end
+
           def input_order(graph, layers)
-            children = graph.children || []
-            order = children.each_with_index.to_h do |node, position|
-              [node.id, position]
-            end
-            offset = order.length
-            dummy_slots(layers).each do |slot|
-              order[slot.id] = offset + slot.edge_order
-            end
+            order = (graph.children || []).each_with_index
+              .to_h { |node, position| [node.id, position] }
+            layers.flatten.select { |item| item.respond_to?(:edge_order) }
+              .each { |slot| order[slot.id] = order.length + slot.edge_order }
             order
           end
 
-          def sweep_down
-            (1...@layers.length).each do |layer_index|
-              reorder(layer_index, layer_index - 1)
+          def sweep(forward)
+            if forward
+              (1...@layers.length).each { |i| reorder(i, i - 1) }
+            else
+              (@layers.length - 2).downto(0) { |i| reorder(i, i + 1) }
             end
           end
 
-          def sweep_up
-            (@layers.length - 2).downto(0) do |layer_index|
-              reorder(layer_index, layer_index + 1)
+          def reorder(layer_index, fixed_index)
+            forward = fixed_index < layer_index
+            free_side = forward ? :west : :east
+            ranks = port_ranks(@layers[fixed_index], forward ? :east : :west)
+            layer = @layers[layer_index]
+            sort_ports(layer, free_side, ranks)
+            layer.replace(sorted(layer, free_side, ranks))
+          end
+
+          def sort_ports(layer, side, ranks)
+            layer.each do |item|
+              @port_order.sort!(item.id, side) do |port|
+                port_key(port, side, ranks)
+              end
             end
           end
 
-          def reorder(layer_index, adjacent_index)
-            adjacent_positions = positions(@layers[adjacent_index])
-            current_positions = positions(@layers[layer_index])
-            @layers[layer_index].sort_by! do |node|
-              barycenter = neighbor_barycenter(node.id, adjacent_positions)
-              [barycenter || current_positions.fetch(node.id),
-               tie_breaker(node)]
+          # Model order keeps the WEST ports of a node in the order of the
+          # nodes they come from; the stored WEST list runs bottom to top.
+          def port_key(port, side, ranks)
+            if @preserve_input_order && side == :west
+              -port.others.map { |other| @input_order.fetch(other.item_id) }.min
+            else
+              mean(port.others.map { |other| ranks.fetch(other) })
             end
           end
 
-          def positions(layer)
-            layer.each_with_index.to_h { |node, position| [node.id, position] }
+          # Rank of every port on one side of a layer, counted top to bottom
+          # across the whole layer.
+          def port_ranks(layer, side)
+            ranks = {}.compare_by_identity
+            layer.each do |item|
+              @port_order.visual(item.id, side).each do |port|
+                ranks[port] = ranks.length
+              end
+            end
+            ranks
           end
 
-          def neighbor_barycenter(node_id, adjacent_positions)
-            values = @neighbors[node_id].filter_map do |id|
-              adjacent_positions[id]
-            end
-            return if values.empty?
-
+          def mean(values)
             values.sum.to_f / values.length
+          end
+
+          def sorted(layer, side, ranks)
+            keys = fill_unknown(layer.map do |item|
+              barycenter(item, side, ranks)
+            end)
+            layer.each_with_index.sort_by do |item, position|
+              known, value = keys[position]
+              [value, known ? 0 : 1, known ? tie_breaker(item) : position]
+            end.map(&:first)
+          end
+
+          def barycenter(item, side, ranks)
+            others = @port_order.visual(item.id, side)
+              .flat_map(&:others)
+            mean(others.map { |other| ranks.fetch(other) }) unless others.empty?
+          end
+
+          # A node with no edge toward the fixed layer takes the barycenter
+          # of the node before it, so it keeps its place.
+          def fill_unknown(values)
+            lead = values.compact.first || 0.0
+            last = nil
+            values.map do |value|
+              last = value if value
+              [!value.nil?, value || last || lead]
+            end
           end
 
           def tie_breaker(node)
@@ -86,62 +149,52 @@ module Elkrb
             end
           end
 
-          def build_neighbors
-            neighbors = Hash.new { |hash, id| hash[id] = [] }
-            slots_by_edge = dummy_slots_by_edge
-            layer_by_id = layer_indexes
-            @index.edges.each do |edge|
-              connect_edge_neighbors(
-                edge, neighbors, slots_by_edge, layer_by_id
-              )
+          def count_crossings
+            positions = layer_positions
+            visual = visual_indexes
+            gaps = @port_order.segments.group_by do |segment|
+              positions.fetch(segment.from_port.item_id).first
             end
-            neighbors
-          end
-
-          def connect_edge_neighbors(edge, neighbors, slots_by_edge,
-                                     layer_by_id)
-            source = endpoint_owner(edge.sources)
-            target = endpoint_owner(edge.targets)
-            return unless source && target && source != target
-
-            chain = edge_chain(
-              source, target, slots_by_edge[edge], layer_by_id
-            )
-            chain.each_cons(2) do |first, second|
-              neighbors[first] << second
-              neighbors[second] << first
+            gaps.values.sum do |segments|
+              crossings_in(slot_pairs(segments, positions, visual))
             end
           end
 
-          def dummy_slots(layers = @layers)
-            layers.flatten.select { |item| item.respond_to?(:dummy?) }
-          end
-
-          def dummy_slots_by_edge
-            slots = {}.compare_by_identity
-            dummy_slots.each do |slot|
-              (slots[slot.edge] ||= []) << slot
-            end
-            slots
-          end
-
-          def layer_indexes
-            @layers.each_with_index.with_object({}) do |(layer, index), map|
-              layer.each { |item| map[item.id] = index }
+          def slot_pairs(segments, positions, visual)
+            segments.map do |segment|
+              [slot(segment.from_port, positions, visual),
+               slot(segment.to_port, positions, visual)]
             end
           end
 
-          def edge_chain(source, target, slots, layer_by_id)
-            ordered = Array(slots).sort_by(&:layer_index)
-            if layer_by_id.fetch(source) > layer_by_id.fetch(target)
-              ordered.reverse!
+          def crossings_in(pairs)
+            pairs.combination(2).count do |(a1, b1), (a2, b2)|
+              (a1 <=> a2) * (b1 <=> b2) == -1
             end
-            [source, *ordered.map(&:id), target]
           end
 
-          def endpoint_owner(endpoints)
-            id = (endpoints || []).first
-            @index.owner(id)&.id if id
+          def slot(port, positions, visual)
+            [positions.fetch(port.item_id).last, visual.fetch(port)]
+          end
+
+          def layer_positions
+            @layers.each_with_index.with_object({}) do |(layer, number), map|
+              layer.each_with_index do |item, position|
+                map[item.id] = [number, position]
+              end
+            end
+          end
+
+          def visual_indexes
+            indexes = {}.compare_by_identity
+            @layers.flatten.each do |item|
+              PortOrder::SIDES.each do |side|
+                @port_order.visual(item.id, side).each_with_index do |port, i|
+                  indexes[port] = i
+                end
+              end
+            end
+            indexes
           end
         end
       end

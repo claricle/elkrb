@@ -55,15 +55,15 @@ module SirenaContract
     hash
   end
 
-  # a fans out to b and c, declared c before b: b and c tie on barycenter, so
-  # only model order decides which one goes first.
+  # b and c fan in to d, declared b before c: with model order off the layered
+  # algorithm puts c first, with NODES_AND_EDGES it keeps b first.
   def model_order_tie_hash(options)
     node = ->(id) { { "id" => id, "width" => 40, "height" => 30 } }
     {
       "id" => "tie",
       "layoutOptions" => options,
-      "children" => %w[a c b].map(&node),
-      "edges" => %w[a-b a-c].map do |pair|
+      "children" => %w[d b c].map(&node),
+      "edges" => %w[b-d c-d].map do |pair|
         source, target = pair.split("-")
         { "id" => pair, "sources" => [source], "targets" => [target] }
       end,
