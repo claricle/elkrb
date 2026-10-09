@@ -20,6 +20,10 @@ RSpec.describe "library callers keep control of their own process" do
   include CliRunner
   include FakeDot
 
+  windows_shebang_skip = if Gem.win_platform?
+                           "the fake Graphviz executable is a shebang script"
+                         end
+
   def survives(source)
     stdout, stderr, status = run_ruby(source)
     expect(stdout).to include(CliRunner::SENTINEL), "died: #{stderr}"
@@ -85,8 +89,8 @@ RSpec.describe "library callers keep control of their own process" do
           require "elkrb/cli"
           saved = $stdout.dup
           reader, writer = IO.pipe
-          reader.close
           $stdout.reopen(writer)
+          reader.close
           outcome = begin
             Elkrb::Cli.start(["layout", #{path.inspect}])
             "NO RAISE"
@@ -181,8 +185,8 @@ RSpec.describe "library callers keep control of their own process" do
           require "elkrb/cli"
           saved = $stdout.dup
           reader, writer = IO.pipe
-          reader.close
           $stdout.reopen(writer)
+          reader.close
           outcome = begin
             Elkrb::Cli.start(["layout", #{missing.inspect}])
             "NO RAISE"
@@ -229,8 +233,8 @@ RSpec.describe "library callers keep control of their own process" do
           require "elkrb/cli"
           saved = $stderr.dup
           reader, writer = IO.pipe
-          reader.close
           $stderr.reopen(writer)
+          reader.close
           outcome = begin
             Elkrb::Cli.start(["layout", #{missing.inspect}, "--verbose"])
             "NO RAISE"
@@ -305,8 +309,8 @@ RSpec.describe "library callers keep control of their own process" do
             require "elkrb/cli"
             saved = $stdout.dup
             reader, writer = IO.pipe
-            reader.close
             $stdout.reopen(writer)
+            reader.close
             outcome = begin
               Elkrb::Cli.start(#{argv.inspect})
               "NO RAISE"
@@ -335,7 +339,7 @@ RSpec.describe "library callers keep control of their own process" do
     # real install. `with_fake_dot` sets PATH and FAKE_DOT_LOG in THIS
     # process's env, which `run_ruby`'s child inherits.
     it "keeps the caller alive when render's completion message cannot be " \
-       "printed after a successful run" do
+       "printed after a successful run", skip: windows_shebang_skip do
       with_fake_dot do
         Dir.mktmpdir do |dir|
           dot_file = File.join(dir, "in.dot")
@@ -347,8 +351,8 @@ RSpec.describe "library callers keep control of their own process" do
             require "elkrb/cli"
             saved = $stdout.dup
             reader, writer = IO.pipe
-            reader.close
             $stdout.reopen(writer)
+            reader.close
             outcome = begin
               Elkrb::Cli.start(["render", #{dot_file.inspect}, "-o", #{output.inspect}])
               "NO RAISE"
@@ -398,8 +402,8 @@ RSpec.describe "library callers keep control of their own process" do
           require "elkrb/cli"
           saved = $stdout.dup
           reader, writer = IO.pipe
-          reader.close
           $stdout.reopen(writer)
+          reader.close
           outcome = begin
             Elkrb::Cli.start(["batch", #{input_dir.inspect},
                               "--output-dir", #{output_dir.inspect},
@@ -451,8 +455,8 @@ RSpec.describe "library callers keep control of their own process" do
           require "elkrb/cli"
           saved = $stdout.dup
           reader, writer = IO.pipe
-          reader.close
           $stdout.reopen(writer)
+          reader.close
           outcome = begin
             Elkrb::Cli.start(["batch", #{input_dir.inspect},
                               "--output-dir", #{output_dir.inspect}])

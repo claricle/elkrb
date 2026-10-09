@@ -305,7 +305,12 @@ RSpec.describe "spec/fixtures/consumers/sirena/capture.rb" do
     # a.json -- 0600, not 0500, because 0500 keeps the search bit and
     # `present?` then answers true, which does not reach the defect
     # (measured: the guard restored, this example stayed green at 0500).
-    it "reports a target it published and could not delete" do
+    permission_skip = if Gem.win_platform?
+                        "requires POSIX directory search permissions"
+                      end
+
+    it "reports a target it published and could not delete",
+       skip: permission_skip do
       Dir.mkdir(@out_dir)
       # b.json exists, a.json does NOT -- so a.json's rollback is the
       # DELETE arm, which is the one that used to fail silently.

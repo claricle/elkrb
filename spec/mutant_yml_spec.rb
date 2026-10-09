@@ -28,7 +28,16 @@ RSpec.describe "mutant.yml requires" do
     probe = <<~RUBY
       requires = #{requires.inspect}
       requires.each { |r| require r }
-      loaded = $LOADED_FEATURES.select { |f| f.include?("/lib/elkrb/") || f.end_with?("/lib/elkrb.rb") }
+      loaded = $LOADED_FEATURES.map do |feature|
+        if File::ALT_SEPARATOR
+          feature.tr(File::ALT_SEPARATOR, File::SEPARATOR)
+        else
+          feature
+        end
+      end
+      loaded.select! do |f|
+        f.include?("/lib/elkrb/") || f.end_with?("/lib/elkrb.rb")
+      end
       puts loaded.map { |f| f.sub(%r{.*/lib/}, "") }.sort
     RUBY
 
