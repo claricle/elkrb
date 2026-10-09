@@ -1,0 +1,1139 @@
+[
+  {
+    "name": "RIGHT forward 0",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered",
+        "elk.direction": "RIGHT",
+        "elk.edgeRouting": "ORTHOGONAL"
+      },
+      "children": [
+        {
+          "id": "n0",
+          "width": 50,
+          "height": 30,
+          "ports": [
+            {
+              "id": "n0p0",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "EAST"
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.portConstraints": "FIXED_SIDE"
+          }
+        },
+        {
+          "id": "n1",
+          "width": 30,
+          "height": 30,
+          "ports": [
+            {
+              "id": "n1p0",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "EAST"
+              }
+            },
+            {
+              "id": "n1p1",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "WEST"
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.portConstraints": "FIXED_SIDE"
+          }
+        },
+        {
+          "id": "n2",
+          "width": 50,
+          "height": 50,
+          "ports": [
+            {
+              "id": "n2p0",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "WEST"
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.portConstraints": "FIXED_SIDE"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "sources": [
+            "n1p0"
+          ],
+          "targets": [
+            "n2p0"
+          ]
+        },
+        {
+          "id": "e1",
+          "sources": [
+            "n0p0"
+          ],
+          "targets": [
+            "n2p0"
+          ]
+        },
+        {
+          "id": "e2",
+          "sources": [
+            "n0p0"
+          ],
+          "targets": [
+            "n1p1"
+          ]
+        }
+      ]
+    },
+    "junctions": {
+      "e0": [],
+      "e1": [
+        [
+          74.0,
+          38.0
+        ],
+        [
+          128.0,
+          38.0
+        ]
+      ],
+      "e2": []
+    }
+  },
+  {
+    "name": "RIGHT with a back edge 1",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered",
+        "elk.direction": "RIGHT",
+        "elk.edgeRouting": "ORTHOGONAL"
+      },
+      "children": [
+        {
+          "id": "n0",
+          "width": 50,
+          "height": 50,
+          "ports": [
+            {
+              "id": "n0p0",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "EAST"
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.portConstraints": "FIXED_SIDE"
+          }
+        },
+        {
+          "id": "n1",
+          "width": 30,
+          "height": 30,
+          "ports": [
+            {
+              "id": "n1p0",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "WEST"
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.portConstraints": "FIXED_SIDE"
+          }
+        },
+        {
+          "id": "n2",
+          "width": 30,
+          "height": 30,
+          "ports": [
+            {
+              "id": "n2p0",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "WEST"
+              }
+            },
+            {
+              "id": "n2p1",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "EAST"
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.portConstraints": "FIXED_SIDE"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "sources": [
+            "n0p0"
+          ],
+          "targets": [
+            "n1p0"
+          ]
+        },
+        {
+          "id": "e1",
+          "sources": [
+            "n0p0"
+          ],
+          "targets": [
+            "n2p0"
+          ]
+        },
+        {
+          "id": "e2",
+          "sources": [
+            "n2p1"
+          ],
+          "targets": [
+            "n1p0"
+          ]
+        }
+      ]
+    },
+    "junctions": {
+      "e0": [
+        [
+          74.0,
+          38.0
+        ],
+        [
+          128.0,
+          38.0
+        ]
+      ],
+      "e1": [],
+      "e2": []
+    }
+  },
+  {
+    "name": "LEFT forward 2",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered",
+        "elk.direction": "LEFT",
+        "elk.edgeRouting": "ORTHOGONAL"
+      },
+      "children": [
+        {
+          "id": "n0",
+          "width": 30,
+          "height": 50,
+          "ports": [
+            {
+              "id": "n0p0",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "WEST"
+              }
+            },
+            {
+              "id": "n0p1",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "WEST"
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.portConstraints": "FIXED_SIDE"
+          }
+        },
+        {
+          "id": "n1",
+          "width": 30,
+          "height": 40,
+          "ports": [
+            {
+              "id": "n1p0",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "EAST"
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.portConstraints": "FIXED_SIDE"
+          }
+        },
+        {
+          "id": "n2",
+          "width": 50,
+          "height": 50,
+          "ports": [
+            {
+              "id": "n2p0",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "EAST"
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.portConstraints": "FIXED_SIDE"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "sources": [
+            "n0p0"
+          ],
+          "targets": [
+            "n1p0"
+          ]
+        },
+        {
+          "id": "e2",
+          "sources": [
+            "n0p1"
+          ],
+          "targets": [
+            "n2p0"
+          ]
+        },
+        {
+          "id": "e3",
+          "sources": [
+            "n0p1"
+          ],
+          "targets": [
+            "n1p0"
+          ]
+        }
+      ]
+    },
+    "junctions": {
+      "e0": [],
+      "e2": [
+        [
+          74.0,
+          49.33333333333333
+        ]
+      ],
+      "e3": [
+        [
+          74.0,
+          32.0
+        ]
+      ]
+    }
+  },
+  {
+    "name": "LEFT with a back edge 3",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered",
+        "elk.direction": "LEFT",
+        "elk.edgeRouting": "ORTHOGONAL"
+      },
+      "children": [
+        {
+          "id": "n0",
+          "width": 40,
+          "height": 40,
+          "ports": [
+            {
+              "id": "n0p0",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "EAST"
+              }
+            },
+            {
+              "id": "n0p1",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "WEST"
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.portConstraints": "FIXED_SIDE"
+          }
+        },
+        {
+          "id": "n1",
+          "width": 40,
+          "height": 50,
+          "ports": [
+            {
+              "id": "n1p0",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "EAST"
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.portConstraints": "FIXED_SIDE"
+          }
+        },
+        {
+          "id": "n2",
+          "width": 30,
+          "height": 30,
+          "ports": [
+            {
+              "id": "n2p0",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "WEST"
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.portConstraints": "FIXED_SIDE"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "sources": [
+            "n2p0"
+          ],
+          "targets": [
+            "n0p0"
+          ]
+        },
+        {
+          "id": "e1",
+          "sources": [
+            "n2p0"
+          ],
+          "targets": [
+            "n1p0"
+          ]
+        },
+        {
+          "id": "e2",
+          "sources": [
+            "n0p1"
+          ],
+          "targets": [
+            "n1p0"
+          ]
+        }
+      ]
+    },
+    "junctions": {
+      "e0": [],
+      "e1": [
+        [
+          128.0,
+          43.0
+        ],
+        [
+          64.0,
+          43.0
+        ]
+      ],
+      "e2": []
+    }
+  },
+  {
+    "name": "DOWN forward 4",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered",
+        "elk.direction": "DOWN",
+        "elk.edgeRouting": "ORTHOGONAL"
+      },
+      "children": [
+        {
+          "id": "n0",
+          "width": 40,
+          "height": 50,
+          "ports": [
+            {
+              "id": "n0p0",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "SOUTH"
+              }
+            },
+            {
+              "id": "n0p1",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "SOUTH"
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.portConstraints": "FIXED_SIDE"
+          }
+        },
+        {
+          "id": "n1",
+          "width": 40,
+          "height": 30,
+          "ports": [
+            {
+              "id": "n1p0",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "NORTH"
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.portConstraints": "FIXED_SIDE"
+          }
+        },
+        {
+          "id": "n2",
+          "width": 40,
+          "height": 50,
+          "ports": [
+            {
+              "id": "n2p0",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "NORTH"
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.portConstraints": "FIXED_SIDE"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "sources": [
+            "n0p0"
+          ],
+          "targets": [
+            "n2p0"
+          ]
+        },
+        {
+          "id": "e3",
+          "sources": [
+            "n0p0"
+          ],
+          "targets": [
+            "n1p0"
+          ]
+        },
+        {
+          "id": "e4",
+          "sources": [
+            "n0p1"
+          ],
+          "targets": [
+            "n1p0"
+          ]
+        }
+      ]
+    },
+    "junctions": {
+      "e0": [],
+      "e3": [
+        [
+          32.0,
+          74.0
+        ]
+      ],
+      "e4": [
+        [
+          46.0,
+          74.0
+        ]
+      ]
+    }
+  },
+  {
+    "name": "DOWN with a back edge 5",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered",
+        "elk.direction": "DOWN",
+        "elk.edgeRouting": "ORTHOGONAL"
+      },
+      "children": [
+        {
+          "id": "n0",
+          "width": 40,
+          "height": 30,
+          "ports": [
+            {
+              "id": "n0p0",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "NORTH"
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.portConstraints": "FIXED_SIDE"
+          }
+        },
+        {
+          "id": "n1",
+          "width": 50,
+          "height": 40,
+          "ports": [
+            {
+              "id": "n1p0",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "SOUTH"
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.portConstraints": "FIXED_SIDE"
+          }
+        },
+        {
+          "id": "n2",
+          "width": 50,
+          "height": 50,
+          "ports": [
+            {
+              "id": "n2p0",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "NORTH"
+              }
+            },
+            {
+              "id": "n2p1",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "SOUTH"
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.portConstraints": "FIXED_SIDE"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "sources": [
+            "n1p0"
+          ],
+          "targets": [
+            "n0p0"
+          ]
+        },
+        {
+          "id": "e2",
+          "sources": [
+            "n1p0"
+          ],
+          "targets": [
+            "n2p0"
+          ]
+        },
+        {
+          "id": "e4",
+          "sources": [
+            "n2p1"
+          ],
+          "targets": [
+            "n0p0"
+          ]
+        }
+      ]
+    },
+    "junctions": {
+      "e1": [
+        [
+          48.0,
+          64.0
+        ],
+        [
+          48.0,
+          138.0
+        ]
+      ],
+      "e2": [],
+      "e4": []
+    }
+  },
+  {
+    "name": "UP forward 6",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered",
+        "elk.direction": "UP",
+        "elk.edgeRouting": "ORTHOGONAL"
+      },
+      "children": [
+        {
+          "id": "n0",
+          "width": 30,
+          "height": 40,
+          "ports": [
+            {
+              "id": "n0p0",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "NORTH"
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.portConstraints": "FIXED_SIDE"
+          }
+        },
+        {
+          "id": "n1",
+          "width": 40,
+          "height": 30,
+          "ports": [
+            {
+              "id": "n1p0",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "SOUTH"
+              }
+            },
+            {
+              "id": "n1p1",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "NORTH"
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.portConstraints": "FIXED_SIDE"
+          }
+        },
+        {
+          "id": "n2",
+          "width": 40,
+          "height": 40,
+          "ports": [
+            {
+              "id": "n2p0",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "SOUTH"
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.portConstraints": "FIXED_SIDE"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "sources": [
+            "n0p0"
+          ],
+          "targets": [
+            "n1p0"
+          ]
+        },
+        {
+          "id": "e1",
+          "sources": [
+            "n0p0"
+          ],
+          "targets": [
+            "n2p0"
+          ]
+        },
+        {
+          "id": "e2",
+          "sources": [
+            "n1p1"
+          ],
+          "targets": [
+            "n2p0"
+          ]
+        }
+      ]
+    },
+    "junctions": {
+      "e0": [],
+      "e1": [
+        [
+          43.0,
+          118.0
+        ],
+        [
+          43.0,
+          64.0
+        ]
+      ],
+      "e2": []
+    }
+  },
+  {
+    "name": "UP with a back edge 7",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered",
+        "elk.direction": "UP",
+        "elk.edgeRouting": "ORTHOGONAL"
+      },
+      "children": [
+        {
+          "id": "n0",
+          "width": 30,
+          "height": 50,
+          "ports": [
+            {
+              "id": "n0p0",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "SOUTH"
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.portConstraints": "FIXED_SIDE"
+          }
+        },
+        {
+          "id": "n1",
+          "width": 40,
+          "height": 40,
+          "ports": [
+            {
+              "id": "n1p0",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "NORTH"
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.portConstraints": "FIXED_SIDE"
+          }
+        },
+        {
+          "id": "n2",
+          "width": 30,
+          "height": 50,
+          "ports": [
+            {
+              "id": "n2p0",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "NORTH"
+              }
+            },
+            {
+              "id": "n2p1",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "SOUTH"
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.portConstraints": "FIXED_SIDE"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "sources": [
+            "n2p0"
+          ],
+          "targets": [
+            "n0p0"
+          ]
+        },
+        {
+          "id": "e1",
+          "sources": [
+            "n1p0"
+          ],
+          "targets": [
+            "n2p1"
+          ]
+        },
+        {
+          "id": "e3",
+          "sources": [
+            "n1p0"
+          ],
+          "targets": [
+            "n0p0"
+          ]
+        }
+      ]
+    },
+    "junctions": {
+      "e0": [],
+      "e1": [],
+      "e3": [
+        [
+          38.0,
+          148.0
+        ],
+        [
+          38.0,
+          74.0
+        ]
+      ]
+    }
+  },
+  {
+    "name": "UP forward 8",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered",
+        "elk.direction": "UP",
+        "elk.edgeRouting": "ORTHOGONAL"
+      },
+      "children": [
+        {
+          "id": "n0",
+          "width": 30,
+          "height": 40,
+          "ports": [
+            {
+              "id": "n0p0",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "NORTH"
+              }
+            },
+            {
+              "id": "n0p1",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "NORTH"
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.portConstraints": "FIXED_SIDE"
+          }
+        },
+        {
+          "id": "n1",
+          "width": 40,
+          "height": 30,
+          "ports": [
+            {
+              "id": "n1p0",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "SOUTH"
+              }
+            },
+            {
+              "id": "n1p1",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "NORTH"
+              }
+            },
+            {
+              "id": "n1p2",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "SOUTH"
+              }
+            },
+            {
+              "id": "n1p3",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "NORTH"
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.portConstraints": "FIXED_SIDE"
+          }
+        },
+        {
+          "id": "n2",
+          "width": 50,
+          "height": 40,
+          "ports": [
+            {
+              "id": "n2p0",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "SOUTH"
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.portConstraints": "FIXED_SIDE"
+          }
+        },
+        {
+          "id": "n3",
+          "width": 40,
+          "height": 30,
+          "ports": [
+            {
+              "id": "n3p0",
+              "width": 2,
+              "height": 2,
+              "layoutOptions": {
+                "elk.port.side": "SOUTH"
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.portConstraints": "FIXED_SIDE"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e2",
+          "sources": [
+            "n0p0"
+          ],
+          "targets": [
+            "n1p0"
+          ]
+        },
+        {
+          "id": "e3",
+          "sources": [
+            "n0p0"
+          ],
+          "targets": [
+            "n1p0"
+          ]
+        },
+        {
+          "id": "e4",
+          "sources": [
+            "n1p1"
+          ],
+          "targets": [
+            "n2p0"
+          ]
+        },
+        {
+          "id": "e5",
+          "sources": [
+            "n0p0"
+          ],
+          "targets": [
+            "n1p2"
+          ]
+        },
+        {
+          "id": "e6",
+          "sources": [
+            "n0p1"
+          ],
+          "targets": [
+            "n1p2"
+          ]
+        },
+        {
+          "id": "e7",
+          "sources": [
+            "n1p3"
+          ],
+          "targets": [
+            "n3p0"
+          ]
+        }
+      ]
+    },
+    "junctions": {
+      "e2": [
+        [
+          47.666666666666664,
+          118.0
+        ]
+      ],
+      "e3": [],
+      "e4": [],
+      "e5": [
+        [
+          37.0,
+          118.0
+        ]
+      ],
+      "e6": [],
+      "e7": []
+    }
+  }
+]
