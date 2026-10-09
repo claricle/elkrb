@@ -28,14 +28,14 @@ RSpec::Matchers.define :have_edges_on_node_borders do
   end
 
   define_method(:edge_context) do |edge, index, owner|
-    return unless border_checked_edge?(edge, owner)
+    return unless border_checked_edge?(edge)
 
     source, target = endpoint_entries(edge, index, owner)
     [edge, source, target] if source && target
   end
 
-  define_method(:border_checked_edge?) do |edge, owner|
-    edge.sections&.any? && !port_edge?(edge, owner)
+  define_method(:border_checked_edge?) do |edge|
+    edge.sections&.any?
   end
 
   define_method(:endpoint_entries) do |edge, index, owner|
@@ -47,16 +47,25 @@ RSpec::Matchers.define :have_edges_on_node_borders do
 
   define_method(:endpoint_entry) do |index, deep_index, id|
     node = index.node(id)
-    return [node, Elkrb::Geometry::Point.new] if node
+    if node
+      return endpoint_box(node, Elkrb::Geometry::Point.new, id)
+    end
 
     matches = deep_index[id]
-    matches.first if matches&.one?
+    return unless matches&.one?
+
+    endpoint_box(*matches.first, id)
   end
 
-  define_method(:port_edge?) do |edge, owner|
-    ((edge.sources || []) + (edge.targets || [])).any? do |id|
-      endpoint_kind(owner, id) == :port
-    end
+  define_method(:endpoint_box) do |node, offset, id|
+    port = node.ports&.find { |candidate| candidate.id == id }
+    return [node, offset] unless port
+
+    node_offset = Elkrb::Geometry::Point.new(
+      x: offset.x + (node.x || 0.0),
+      y: offset.y + (node.y || 0.0),
+    )
+    [port, node_offset]
   end
 
   define_method(:check_edge_sections) do |context, path|
@@ -66,38 +75,6 @@ RSpec::Matchers.define :have_edges_on_node_borders do
       check_border(section.start_point, source, "#{section_path}/start")
       check_border(section.end_point, target, "#{section_path}/end")
     end
-  end
-
-  # Mirror NodeIndex's level-scoped resolution order: an id owned directly
-  # by this level wins over any same-named descendant.
-  define_method(:endpoint_kind) do |owner, id|
-    children = owner.children || []
-    owned_endpoint_kind(children, id) || descendant_endpoint_kind(children, id)
-  end
-
-  define_method(:owned_endpoint_kind) do |nodes, id|
-    nodes.each do |node|
-      kind = object_endpoint_kind(node, id)
-      return kind if kind
-    end
-    nil
-  end
-
-  define_method(:object_endpoint_kind) do |node, id|
-    return :node if node.id == id
-
-    :port if (node.ports || []).any? { |port| port.id == id }
-  end
-
-  define_method(:descendant_endpoint_kind) do |nodes, id|
-    nodes.each do |node|
-      (node.children || []).each do |child|
-        kind = object_endpoint_kind(child, id) ||
-          descendant_endpoint_kind([child], id)
-        return kind if kind
-      end
-    end
-    nil
   end
 
   define_method(:check_border) do |point, endpoint, path|

@@ -177,10 +177,8 @@ module Elkrb
       def absolute_endpoint_anchor(node, offset, port, rectangle)
         return rectangle.center unless port
 
-        Geometry::Point.new(
-          x: offset.x + (node.x || 0.0) + (port.x || 0.0),
-          y: offset.y + (node.y || 0.0) + (port.y || 0.0),
-        )
+        point = get_port_position(port.id, node, nil)
+        Geometry::Point.new(x: offset.x + point.x, y: offset.y + point.y)
       end
 
       def route_cross_level_bends(section, edge, graph)
@@ -275,20 +273,25 @@ module Elkrb
         node.ports&.find { |p| p.id == port_id }
       end
 
-      # Get position of a port or node center
+      # Get the port's outer-border anchor, or the node center.
       def get_port_position(port_id, node, _direction)
-        # Try to find port
         port = find_port_by_id(port_id, node)
+        return get_node_center(node) unless port
 
-        if port
-          # Port position is relative to node position
-          Geometry::Point.new(
-            x: (node.x || 0.0) + (port.x || 0.0),
-            y: (node.y || 0.0) + (port.y || 0.0),
-          )
-        else
-          # Fallback to node center
-          get_node_center(node)
+        x = (node.x || 0.0) + (port.x || 0.0)
+        y = (node.y || 0.0) + (port.y || 0.0)
+        width = port.width || 0.0
+        height = port.height || 0.0
+        case port.side
+        when Graph::Port::NORTH
+          Geometry::Point.new(x: x + (width / 2.0), y: y)
+        when Graph::Port::SOUTH
+          Geometry::Point.new(x: x + (width / 2.0), y: y + height)
+        when Graph::Port::WEST
+          Geometry::Point.new(x: x, y: y + (height / 2.0))
+        when Graph::Port::EAST
+          Geometry::Point.new(x: x + width, y: y + (height / 2.0))
+        else Geometry::Point.new(x: x, y: y)
         end
       end
 

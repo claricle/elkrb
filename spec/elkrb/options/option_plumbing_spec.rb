@@ -85,15 +85,16 @@ RSpec.describe "option plumbing" do
     },
     "elk.port.index" => {
       at: :port, value: 2,
-      unwired: unread["port indices are read from the model attribute; card 18"]
+      with: { node: { "elk.portConstraints" => "FIXED_ORDER" } }
     },
     "elk.port.side" => {
-      at: :port, value: "NORTH",
-      unwired: unread["port sides are read from the model attribute; card 18"]
+      at: :port, value: "NORTH"
     },
     "elk.portConstraints" => {
       at: :node, value: "FIXED_SIDE",
-      unwired: unread["nothing reads it yet; card 18"]
+      read_only: read_only[
+        "the fixture's one port already has a fixed side and order",
+      ]
     },
     "elk.portLabels.placement" => { at: :port, value: "INSIDE" },
     "elk.position" => { at: :node, value: "(5,5)" },

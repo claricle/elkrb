@@ -18,31 +18,38 @@ module Elkrb
         return unless graph.children
 
         placed_port_order.clear
-        graph.children.each do |node|
-          process_node_ports(node)
-        end
+        process_port_level(graph.children, graph.edges, graph)
       end
 
       private
 
+      def process_port_level(nodes, edges, owner)
+        inferred_sides = inferred_port_sides(edges, owner)
+        nodes.each do |node|
+          process_node_ports(node, inferred_sides)
+          process_port_level(node.children, node.edges, node) if node.children
+        end
+      end
+
       # Process ports for a single node
       #
       # @param node [Elkrb::Graph::Node] The node to process
-      def process_node_ports(node)
+      def process_node_ports(node, inferred_sides = {})
         return unless node.ports && !node.ports.empty?
         # Skip zero and non-finite dimensions: a zero axis has nothing to
         # distribute along, and `[0, NaN].min` raises. Negative is fine.
         return unless [node.width, node.height].all? { |dim| dim&.finite? && !dim.zero? }
 
-        # Detect sides if not specified
-        detect_port_sides(node)
+        detect_port_sides(node, inferred_sides)
+        constraint = @resolver.get("elk.portConstraints", node)
+        return if constraint == "FIXED_POS"
 
-        # Group ports by side
         ports_by_side = group_ports_by_side(node.ports)
 
-        # Apply ordering within each side
         ports_by_side.each do |side, ports|
-          order_ports_on_side(node, side, ports)
+          order_ports_on_side(
+            node, side, ports, fixed: fixed_order?(constraint)
+          )
         end
 
         placed_port_order[node] = ports_by_side
@@ -77,13 +84,45 @@ module Elkrb
       # Detect port sides for ports with UNDEFINED side
       #
       # @param node [Elkrb::Graph::Node] The node containing the ports
-      def detect_port_sides(node)
+      def detect_port_sides(node, inferred_sides = {})
         node.ports.each do |port|
-          if port.side == Graph::Port::UNDEFINED
-            detected_side = port.detect_side(node.width, node.height)
-            port.side = detected_side
-          end
+          configured = @resolver.get("elk.port.side", port, default: nil) ||
+            port.side
+          side = configured&.upcase
+          side = port.detect_side(node.width, node.height) if
+            side.nil? || side == Graph::Port::UNDEFINED
+          side = inferred_sides.fetch(port.id, side) if
+            side == Graph::Port::UNDEFINED
+          validate_port_side!(port, side)
+          port.side = side unless side == Graph::Port::UNDEFINED && port.side.nil?
         end
+      end
+
+      def inferred_port_sides(edges, owner)
+        outgoing_side, incoming_side = endpoint_sides(owner)
+        (edges || []).each_with_object({}) do |edge, sides|
+          next if edge.sources == edge.targets
+
+          (edge.sources || []).each { |id| sides[id] ||= outgoing_side }
+          (edge.targets || []).each { |id| sides[id] ||= incoming_side }
+        end
+      end
+
+      def endpoint_sides(owner)
+        case @resolver.get("elk.direction", owner)
+        when "LEFT" then [Graph::Port::WEST, Graph::Port::EAST]
+        when "DOWN" then [Graph::Port::SOUTH, Graph::Port::NORTH]
+        when "UP" then [Graph::Port::NORTH, Graph::Port::SOUTH]
+        else [Graph::Port::EAST, Graph::Port::WEST]
+        end
+      end
+
+      def validate_port_side!(port, side)
+        return if port.valid_side?(side)
+
+        raise ArgumentError,
+              "Invalid port side: #{side}. Must be one of " \
+              "#{Graph::Port::SIDES.join(', ')}"
       end
 
       # Group ports by their side
@@ -91,7 +130,11 @@ module Elkrb
       # @param ports [Array<Elkrb::Graph::Port>] The ports to group
       # @return [Hash<String, Array<Elkrb::Graph::Port>>] Ports grouped by side
       def group_ports_by_side(ports)
-        ports.group_by(&:side)
+        ports.group_by { |port| port.side || Graph::Port::UNDEFINED }
+      end
+
+      def fixed_order?(constraint)
+        %w[FIXED_SIDE FIXED_ORDER].include?(constraint)
       end
 
       # Order ports on a specific side
@@ -103,11 +146,14 @@ module Elkrb
       # @param node [Elkrb::Graph::Node] The node containing the ports
       # @param side [String] The side to order ports on
       # @param ports [Array<Elkrb::Graph::Port>] The ports on this side
-      def order_ports_on_side(_node, side, ports)
+      def order_ports_on_side(_node, side, ports, fixed: false)
+        return order_fixed_ports(ports) if fixed
+
         # Sort by index if specified, otherwise by position
         ports.sort_by! do |port|
-          if port.index >= 0
-            port.index
+          index = port.index || -1
+          if index >= 0
+            index
           elsif [Graph::Port::NORTH, Graph::Port::SOUTH].include?(side)
             # Horizontal sides: sort by x position
             port.x || 0
@@ -119,8 +165,22 @@ module Elkrb
 
         # Assign sequential indices to ports without explicit index
         ports.each_with_index do |port, idx|
-          port.index = idx if port.index.negative?
+          port.index = idx if (port.index || -1).negative?
         end
+      end
+
+      def order_fixed_ports(ports)
+        ordered = ports.each_with_index.sort_by do |(port, position)|
+          resolved_port_index(port) || position
+        end
+        ports.replace(ordered.map(&:first))
+        ports.each_with_index do |port, position|
+          port.index = resolved_port_index(port) || position
+        end
+      end
+
+      def resolved_port_index(port)
+        @resolver.get("elk.port.index", port, default: nil) || port.index
       end
 
       # Position ports on node boundaries
@@ -170,7 +230,7 @@ module Elkrb
         spacing = (width.abs / (count + 1).to_f)
 
         ports.each_with_index do |port, idx|
-          port.x = left + (spacing * (idx + 1))
+          port.x = left + (spacing * (idx + 1)) - ((port.width || 0.0) / 2.0)
           port.y = y_pos
           port.offset = port.x
         end
@@ -191,7 +251,7 @@ module Elkrb
 
         ports.each_with_index do |port, idx|
           port.x = x_pos
-          port.y = top + (spacing * (idx + 1))
+          port.y = top + (spacing * (idx + 1)) - ((port.height || 0.0) / 2.0)
           port.offset = port.y
         end
       end

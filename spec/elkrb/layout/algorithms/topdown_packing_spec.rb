@@ -397,7 +397,8 @@ RSpec.describe Elkrb::Layout::Algorithms::TopdownPacking do
           algorithm.layout(graph)
 
           node = graph.children.first
-          expect([node.width.positive?, port.x, port.y]).to eq([true, node.width, node.height / 2])
+          expected_y = (node.height - port.height) / 2
+          expect([node.width.positive?, port.x, port.y]).to eq([true, node.width, expected_y])
         end
       end
 

@@ -48,13 +48,26 @@ RSpec.describe "have_edges_on_node_borders" do
     expect(graph).not_to have_edges_on_node_borders
   end
 
-  it "excludes port-carrying edges until port placement lands" do
-    port = Elkrb::Graph::Port.new(id: "source_port", x: 20, y: 15)
+  it "checks a port-carrying edge against the port border" do
+    port = Elkrb::Graph::Port.new(
+      id: "source_port", x: 40, y: 12, width: 6, height: 6, side: "EAST",
+    )
     graph = graph_with_section(
-      start_point: point(30, 35), end_point: point(100, 35), ports: [port],
+      start_point: point(56, 35), end_point: point(100, 35), ports: [port],
     )
 
     expect(graph).to have_edges_on_node_borders
+  end
+
+  it "rejects a port endpoint at the port centre" do
+    port = Elkrb::Graph::Port.new(
+      id: "source_port", x: 40, y: 12, width: 6, height: 6, side: "EAST",
+    )
+    graph = graph_with_section(
+      start_point: point(53, 35), end_point: point(100, 35), ports: [port],
+    )
+
+    expect(graph).not_to have_edges_on_node_borders
   end
 
   it "does not let a nested port shadow a node endpoint at this level" do

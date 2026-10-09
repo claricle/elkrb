@@ -2247,13 +2247,15 @@ RSpec.describe Elkrb::Layout::Algorithms::Libavoid do
       end
 
       # Keep: guards endpoint_point using a port's own position; it is the only check that a ported edge starts at its port.
-      it "starts at the port position, not the node border facing the target" do
+      it "starts at the port's outer border, not the node border facing the target" do
         algorithm.layout(graph)
 
         node = graph.children.first
         port = node.ports.first
         start = graph.edges.first.sections.first.start_point
-        expect([start.x, start.y]).to eq([node.x + port.x, node.y + port.y])
+        expect([start.x, start.y]).to eq(
+          [node.x + port.x, node.y + port.y + (port.height / 2)],
+        )
       end
     end
 
@@ -2297,7 +2299,9 @@ RSpec.describe Elkrb::Layout::Algorithms::Libavoid do
         points = path_points(section)
 
         expect(algorithm.routing_diagnostics).to eq("e" => :found)
-        expect([section.start_point.x, section.start_point.y]).to eq([node.x + port.x, node.y + port.y])
+        expect([section.start_point.x, section.start_point.y]).to eq(
+          [node.x + port.x, node.y + port.y + (port.height / 2)],
+        )
         expect(points.each_cons(2).select { |from, to| segment_intersects_rect?(from, to, wall) }).to be_empty
         # No leg of the route -- not even the stub leaving the port -- may
         # cross back INTO the port's own owning node, or the route runs
