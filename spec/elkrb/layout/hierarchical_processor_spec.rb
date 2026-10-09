@@ -156,6 +156,68 @@ RSpec.describe Elkrb::Layout::HierarchicalProcessor do
     expect(sibling.x - (parent.x + parent.width)).to eq(20.0)
   end
 
+  it "inherits the root pin when the call names a different algorithm" do
+    result = layout_json(
+      {
+        "id" => "root",
+        "layoutOptions" => { "elk.algorithm" => "box" },
+        "children" => [{
+          "id" => "p",
+          "children" => [
+            { "id" => "c1", "width" => 30, "height" => 30 },
+            { "id" => "c2", "width" => 30, "height" => 30 },
+            { "id" => "c3", "width" => 30, "height" => 30 },
+          ],
+          "edges" => [],
+        }],
+        "edges" => [],
+      },
+      algorithm: "layered",
+    )
+
+    expect(result.children.first.children.map(&:y)).to eq([15.0, 15.0, 60.0])
+  end
+
+  it "reads a compound's algorithm from its properties" do
+    result = layout_json(
+      "id" => "root",
+      "layoutOptions" => { "elk.algorithm" => "layered" },
+      "children" => [{
+        "id" => "p",
+        "properties" => { "elk.algorithm" => "box" },
+        "children" => [
+          { "id" => "c1", "width" => 30, "height" => 30 },
+          { "id" => "c2", "width" => 30, "height" => 30 },
+          { "id" => "c3", "width" => 30, "height" => 30 },
+        ],
+        "edges" => [],
+      }],
+      "edges" => [],
+    )
+
+    expect(result.children.first.children.map(&:y)).to eq([15.0, 15.0, 60.0])
+  end
+
+  it "reads a compound's padding from its properties" do
+    result = layout_json(
+      "id" => "root",
+      "children" => [{
+        "id" => "p",
+        "properties" => {
+          "elk.padding" => "[top=30,left=30,bottom=30,right=30]",
+        },
+        "children" => [{ "id" => "c", "width" => 80, "height" => 30 }],
+        "edges" => [],
+      }],
+      "edges" => [],
+    )
+    parent = result.children.first
+
+    expect([parent.children.first.x, parent.children.first.y])
+      .to eq([30.0, 30.0])
+    expect([parent.width, parent.height]).to eq([140.0, 90.0])
+  end
+
   it "raises when a compound pins an unknown algorithm" do
     graph = {
       "id" => "root",

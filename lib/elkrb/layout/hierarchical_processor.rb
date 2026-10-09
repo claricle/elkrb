@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "algorithm_registry"
+require_relative "../options/resolver"
 
 module Elkrb
   module Layout
@@ -8,6 +9,7 @@ module Elkrb
     module HierarchicalProcessor
       # Layout each compound as its own graph before its parent level.
       def size_compound_children(graph)
+        child_resolver = Options::Resolver.new
         graph.children.each do |node|
           next unless node.hierarchical?
 
@@ -16,8 +18,9 @@ module Elkrb
             children: node.children,
             edges: node.edges,
             layout_options: node.layout_options,
+            properties: node.properties,
           )
-          pin = @resolver.get("elk.algorithm", child_graph, default: nil)
+          pin = child_resolver.get("elk.algorithm", child_graph, default: nil)
           algorithm = pin ? AlgorithmRegistry.get(pin) : self.class
           raise AlgorithmNotFoundError.new(pin) unless algorithm
 
