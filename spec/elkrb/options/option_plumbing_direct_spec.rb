@@ -17,10 +17,11 @@ RSpec.describe "option plumbing, direct rows" do
         .to eq(legacy)
     end
 
-    it "bends where the unrouted edge does not" do
+    it "bends where the edge's POLYLINE route does not" do
       orthogonal = bends({ "elk.edgeRouting" => "ORTHOGONAL" }, "box")
+      polyline = bends({ "elk.edgeRouting" => "POLYLINE" }, "box")
 
-      expect([bends({}, "box").size, orthogonal.size]).to eq([0, 2])
+      expect([polyline.size, orthogonal.size]).to eq([0, 2])
     end
   end
 
@@ -40,8 +41,10 @@ RSpec.describe "option plumbing, direct rows" do
   describe "elk.edgeRouting on an edge from a port to a node" do
     let(:orthogonal) { { "elk.edgeRouting" => "ORTHOGONAL" } }
 
-    it "bends where the unrouted edge does not" do
-      expect([port_to_node_bends({}).size,
+    it "bends where the edge's POLYLINE route does not" do
+      polyline = { "elk.edgeRouting" => "POLYLINE" }
+
+      expect([port_to_node_bends(polyline).size,
               port_to_node_bends(orthogonal).size]).to eq([0, 2])
     end
 

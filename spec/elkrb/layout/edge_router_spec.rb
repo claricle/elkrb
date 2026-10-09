@@ -61,9 +61,7 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
 
     let(:splines) { routed_bend_points(router, nil, "SPLINES") }
 
-    # The router draws ORTHOGONAL and POLYLINE alike today (route_edge adds
-    # bends only for an edge-level routing option), so this pins the default
-    # to "not SPLINES" and to the explicit ORTHOGONAL result.
+    # The default is ORTHOGONAL, while SPLINES produces control points.
     it "does not spline when the graph names no style" do
       expect(splines).not_to be_empty
       expect(routed_bend_points(router, nil)).to eq(routed_bend_points(router, nil, "ORTHOGONAL"))
@@ -120,10 +118,13 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
 
       expect(edge.sections).not_to be_empty
       section = edge.sections.first
-      expect(section.id).to eq("e1_section_0")
-      expect(section.start_point.x).to eq(25.0) # Center of n1
+      expect(section.id).to eq("e1_s0")
+      expect(section.incoming_shape).to eq("n1")
+      expect(section.outgoing_shape).to eq("n2")
+      expect(edge.container).to eq("g1")
+      expect(section.start_point.x).to eq(50.0) # Right border of n1
       expect(section.start_point.y).to eq(25.0)
-      expect(section.end_point.x).to eq(125.0) # Center of n2
+      expect(section.end_point.x).to eq(100.0) # Left border of n2
       expect(section.end_point.y).to eq(25.0)
     end
 
@@ -147,6 +148,31 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
       expect(section.end_point.y).to eq(25.0) # node2.y + port.y
     end
 
+    it "uses node borders when the edge does not name an available port" do
+      node1.ports = [
+        Elkrb::Graph::Port.new(id: "unused", x: 25.0, y: 25.0),
+      ]
+
+      router.route_edge(edge, node_map, graph)
+
+      section = edge.sections.first
+      expect(section.start_point.to_h).to eq(x: 50.0, y: 25.0)
+      expect(section.end_point.to_h).to eq(x: 100.0, y: 25.0)
+    end
+
+    it "clips a mixed port-to-node edge only at its node endpoint" do
+      node1.ports = [
+        Elkrb::Graph::Port.new(id: "p1", x: 50.0, y: 25.0),
+      ]
+      edge.sources = ["p1"]
+
+      router.route_edge(edge, node_map, graph)
+
+      section = edge.sections.first
+      expect(section.start_point.to_h).to eq(x: 50.0, y: 25.0)
+      expect(section.end_point.to_h).to eq(x: 100.0, y: 25.0)
+    end
+
     it "handles missing nodes gracefully" do
       empty_index = Elkrb::Layout::NodeIndex.build(Elkrb::Graph::Graph.new)
       expect { router.route_edge(edge, empty_index, graph) }
@@ -154,20 +180,93 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
       expect(edge.sections).to be_nil
     end
 
-    it "adds orthogonal bend points when configured" do
+    it "omits orthogonal bend points when endpoints are aligned" do
       edge.layout_options = {}
       edge.layout_options["edge.routing"] = "orthogonal"
 
       router.route_edge(edge, node_map, graph)
 
       section = edge.sections.first
-      expect(section.bend_points.length).to eq(2)
-      # Mid-point x coordinate
-      mid_x = (25.0 + 125.0) / 2.0
-      expect(section.bend_points[0].x).to eq(mid_x)
-      expect(section.bend_points[0].y).to eq(25.0)
-      expect(section.bend_points[1].x).to eq(mid_x)
-      expect(section.bend_points[1].y).to eq(25.0)
+      expect(section.bend_points).to be_empty
+    end
+
+    it "adds dominant-axis orthogonal bends for diagonal endpoints" do
+      node2.y = 100.0
+      edge.layout_options = { "edge.routing" => "orthogonal" }
+
+      router.route_edge(edge, node_map, graph)
+
+      section = edge.sections.first
+      expect(section.start_point.to_h).to eq(x: 50.0, y: 50.0)
+      expect(section.end_point.to_h).to eq(x: 100.0, y: 100.0)
+      expect(section.bend_points.map(&:to_h)).to eq(
+        [{ x: 75.0, y: 50.0 }, { x: 75.0, y: 100.0 }],
+      )
+    end
+
+    it "lets an edge routing style override the graph style" do
+      node2.y = 100.0
+      graph.layout_options = { "elk.edgeRouting" => "ORTHOGONAL" }
+      edge.layout_options = { "elk.edgeRouting" => "POLYLINE" }
+
+      router.route_edge(edge, node_map, graph)
+
+      expect(edge.sections.first.bend_points).to be_empty
+    end
+
+    it "replaces stale sections deterministically on repeat routing" do
+      edge.sections = [
+        Elkrb::Graph::EdgeSection.new(id: "stale_1"),
+        Elkrb::Graph::EdgeSection.new(id: "stale_2"),
+      ]
+
+      router.route_edge(edge, node_map, graph)
+      first = edge.sections.map do |section|
+        [
+          section.id,
+          section.incoming_shape,
+          section.outgoing_shape,
+          section.start_point.to_h,
+          section.end_point.to_h,
+          section.bend_points.map(&:to_h),
+        ]
+      end
+      router.route_edge(edge, node_map, graph)
+
+      expect(edge.sections.length).to eq(1)
+      expect(edge.sections.first.id).to eq("e1_s0")
+      rerouted = edge.sections.map do |section|
+        [
+          section.id,
+          section.incoming_shape,
+          section.outgoing_shape,
+          section.start_point.to_h,
+          section.end_point.to_h,
+          section.bend_points.map(&:to_h),
+        ]
+      end
+      expect(rerouted).to eq(first)
+    end
+  end
+
+  describe "#clip_to_border" do
+    let(:rectangle) { Elkrb::Geometry::Rectangle.new(10, 20, 80, 40) }
+    let(:center) { rectangle.center }
+
+    it "clips a horizontal ray to the right border" do
+      target = Elkrb::Geometry::Point.new(x: 200, y: 40)
+
+      point = router.send(:clip_to_border, rectangle, center, target)
+
+      expect(point.to_h).to eq(x: 90.0, y: 40.0)
+    end
+
+    it "clips a diagonal ray to the first intersected border" do
+      target = Elkrb::Geometry::Point.new(x: 90, y: 120)
+
+      point = router.send(:clip_to_border, rectangle, center, target)
+
+      expect(point.to_h).to eq(x: 60.0, y: 60.0)
     end
   end
 
@@ -320,13 +419,13 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
         expect(section.bend_points.length).to eq(2)
       end
 
-      it "uses node centers for routing" do
+      it "uses node borders for routing" do
         router.send(:route_spline_edge, edge, node_map, graph)
 
         section = edge.sections.first
-        expect(section.start_point.x).to eq(25.0) # Center of n1
+        expect(section.start_point.x).to eq(50.0) # Right border of n1
         expect(section.start_point.y).to eq(75.0)
-        expect(section.end_point.x).to eq(225.0) # Center of n2
+        expect(section.end_point.x).to eq(200.0) # Left border of n2
         expect(section.end_point.y).to eq(75.0)
       end
 
@@ -361,6 +460,19 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
         expect(section.bend_points.length).to eq(2)
       end
 
+      it "clips a mixed spline at its node endpoint" do
+        node1.ports = [
+          Elkrb::Graph::Port.new(id: "p1", x: 50.0, y: 25.0),
+        ]
+        edge.sources = ["p1"]
+
+        router.send(:route_spline_edge, edge, node_map, graph)
+
+        section = edge.sections.first
+        expect(section.start_point.to_h).to eq(x: 50.0, y: 75.0)
+        expect(section.end_point.to_h).to eq(x: 200.0, y: 75.0)
+      end
+
       it "respects curvature setting" do
         edge.layout_options = {}
         edge.layout_options["elk.spline.curvature"] = 0.8
@@ -388,7 +500,7 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
         expect(section.bend_points.length).to eq(2)
       end
 
-      it "uses orthogonal routing by default" do
+      it "omits orthogonal bends for aligned endpoints" do
         graph = Elkrb::Graph::Graph.new(
           id: "g1",
           children: [node1, node2],
@@ -400,8 +512,7 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
         router.route_edges(graph)
 
         section = edge.sections.first
-        # Orthogonal routing creates 2 bend points
-        expect(section.bend_points.length).to eq(2)
+        expect(section.bend_points).to be_empty
       end
 
       it "uses polyline routing when configured" do
@@ -634,13 +745,13 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
         # Self-loop should have 4 bend points (rectangular)
         expect(self_loop_edge.sections.first.bend_points.length).to eq(4)
 
-        # Normal edge should have 2 bend points (orthogonal)
+        # The normal edge is already horizontally aligned.
         normal_edge.layout_options = {}
         normal_edge.layout_options["edge.routing"] = "orthogonal"
         router.route_edge(normal_edge,
                           Elkrb::Layout::NodeIndex.build(mixed_graph),
                           mixed_graph)
-        expect(normal_edge.sections.first.bend_points.length).to eq(2)
+        expect(normal_edge.sections.first.bend_points).to be_empty
       end
 
       it "routes multiple self-loops separately from normal edges" do
@@ -677,10 +788,10 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
 
         router.route_edges(mixed_graph)
 
-        # Normal edge should connect centers
+        # Normal edge should connect node borders.
         normal_section = normal_edge.sections.first
-        expect(normal_section.start_point.x).to eq(100.0) # node1 center x
-        expect(normal_section.end_point.x).to eq(250.0) # node2 center x
+        expect(normal_section.start_point.x).to eq(150.0)
+        expect(normal_section.end_point.x).to eq(200.0)
       end
     end
   end

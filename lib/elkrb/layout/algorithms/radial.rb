@@ -173,13 +173,23 @@ module Elkrb
             target = index.endpoint_nodes(edge.targets).first
             next unless source && target && source.id != target.id
 
-            section = Graph::EdgeSection.new(id: "#{edge.id}_s0")
-            section.start_point = border_towards(source, target)
-            section.end_point = border_towards(target, source)
+            section = reset_section(edge, graph)
+            section.start_point = radial_endpoint_position(
+              edge.sources.first, source, target, :outgoing
+            )
+            section.end_point = radial_endpoint_position(
+              edge.targets.first, target, source, :incoming
+            )
             section.bend_points = []
-            edge.sections = [section]
             edge.container = graph.id
           end
+        end
+
+        def radial_endpoint_position(endpoint_id, node, other, direction)
+          return border_towards(node, other) unless
+            find_port_by_id(endpoint_id, node)
+
+          get_port_position(endpoint_id, node, direction)
         end
 
         def border_towards(node, other)

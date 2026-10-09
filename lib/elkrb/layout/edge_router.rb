@@ -2,6 +2,7 @@
 
 require_relative "../geometry/point"
 require_relative "../geometry/bezier"
+require_relative "../geometry/rectangle"
 require_relative "../graph/edge"
 require_relative "node_index"
 
@@ -54,13 +55,12 @@ module Elkrb
 
       def route_edges(graph, node_map = nil, routing_style = nil)
         node_map = coerce_node_map(node_map || NodeIndex.build(graph))
-        routing_style ||= get_edge_routing_style(graph)
-
         graph.edges&.each do |edge|
+          style = routing_style || get_edge_routing_style(graph, edge)
           if self_loop?(edge)
-            route_self_loop(edge, node_map, graph, routing_style)
+            route_self_loop(edge, node_map, graph, style)
           else
-            route_edge_with_style(edge, node_map, graph, routing_style)
+            route_edge_with_style(edge, node_map, graph, style)
           end
         end
       end
@@ -70,7 +70,7 @@ module Elkrb
       # @param node_map [NodeIndex] Resolves node/port ids to owning
       #   nodes for this level
       # @param graph [Graph::Graph] The containing graph
-      def route_edge(edge, node_map, graph)
+      def route_edge(edge, node_map, graph, routing_style = nil)
         return unless edge.sources&.any? && edge.targets&.any?
 
         node_map = coerce_node_map(node_map)
@@ -84,84 +84,94 @@ module Elkrb
 
         return unless source_node && target_node
 
-        # Create edge section if not exists
-        edge.sections ||= []
-        if edge.sections.empty?
-          edge.sections << Graph::EdgeSection.new(
-            id: "#{edge.id}_section_0",
-          )
-        end
-
-        section = edge.sections.first
+        section = reset_section(edge, graph)
+        routing_style ||= get_edge_routing_style(graph, edge)
 
         # Calculate routing points based on port-awareness
         if edge_uses_ports?(edge, source_node, target_node)
-          route_with_ports(section, edge, source_node, target_node, graph)
+          route_with_ports(section, edge, source_node, target_node,
+                           routing_style)
         else
-          route_node_to_node(section, source_node, target_node, edge, graph)
+          route_node_to_node(section, source_node, target_node, routing_style)
         end
       end
 
       private
 
       # Check if edge should use port-based routing
-      def edge_uses_ports?(_edge, source_node, target_node)
-        # Check if nodes have ports
-        has_source_ports = source_node.ports&.any?
-        has_target_ports = target_node.ports&.any?
-
-        has_source_ports || has_target_ports
+      def edge_uses_ports?(edge, source_node, target_node)
+        find_port_by_id(edge.sources.first, source_node) ||
+          find_port_by_id(edge.targets.first, target_node)
       end
 
       # Route edge using port positions
-      def route_with_ports(section, edge, source_node, target_node, graph)
-        # Get port positions or fallback to node center
-        source_port = find_port_by_id(edge.sources.first, source_node)
-        target_port = find_port_by_id(edge.targets.first, target_node)
-
-        start_point = get_port_position(
-          edge.sources.first,
-          source_node,
-          :outgoing,
-        )
-        end_point = get_port_position(
-          edge.targets.first,
-          target_node,
-          :incoming,
-        )
+      def route_with_ports(section, edge, source_node, target_node,
+                           routing_style)
+        start_point, end_point = endpoint_points(edge, source_node, target_node)
 
         section.start_point = start_point
         section.end_point = end_point
-        section.bend_points ||= []
+        section.bend_points = []
 
-        # Add intelligent bend points based on port sides
-        if source_port && target_port
-          add_port_aware_bend_points(
-            section,
-            start_point,
-            end_point,
-            source_port,
-            target_port,
-          )
-        elsif should_use_orthogonal_routing?(edge, graph)
+        if routing_style == "ORTHOGONAL"
           add_orthogonal_bend_points(section, start_point, end_point)
         end
       end
 
-      # Route edge from node center to node center
-      def route_node_to_node(section, source_node, target_node, edge = nil,
-                             graph = nil)
-        start_point = get_node_center(source_node)
-        end_point = get_node_center(target_node)
+      # Route edge from source border to target border
+      def route_node_to_node(section, source_node, target_node, routing_style)
+        source_rect = node_rectangle(source_node)
+        target_rect = node_rectangle(target_node)
+        source_center = source_rect.center
+        target_center = target_rect.center
+        start_point = clip_to_border(source_rect, source_center, target_center)
+        end_point = clip_to_border(target_rect, target_center, source_center)
 
         section.start_point = start_point
         section.end_point = end_point
-        section.bend_points ||= []
+        section.bend_points = []
 
-        # Add orthogonal routing if configured
-        if edge && should_use_orthogonal_routing?(edge, graph)
+        if routing_style == "ORTHOGONAL"
           add_orthogonal_bend_points(section, start_point, end_point)
         end
+      end
+
+      def node_rectangle(node)
+        Geometry::Rectangle.new(
+          node.x || 0.0,
+          node.y || 0.0,
+          node.width || 0.0,
+          node.height || 0.0,
+        )
+      end
+
+      # Intersect the ray from a rectangle's centre towards another point
+      # with the rectangle border.
+      def clip_to_border(rect, from, to)
+        dx = to.x - from.x
+        dy = to.y - from.y
+        return Geometry::Point.new(x: from.x, y: from.y) if dx.zero? && dy.zero?
+
+        scales = []
+        scales << ((rect.width / 2.0) / dx.abs) unless dx.zero?
+        scales << ((rect.height / 2.0) / dy.abs) unless dy.zero?
+        scale = scales.min
+
+        Geometry::Point.new(
+          x: from.x + (dx * scale),
+          y: from.y + (dy * scale),
+        )
+      end
+
+      def reset_section(edge, graph)
+        section = Graph::EdgeSection.new(
+          id: "#{edge.id}_s0",
+          incoming_shape: edge.sources.first,
+          outgoing_shape: edge.targets.first,
+        )
+        edge.sections = [section]
+        edge.container ||= graph.id
+        section
       end
 
       # Find port by ID
@@ -193,38 +203,27 @@ module Elkrb
         Geometry::Point.new(x: x, y: y)
       end
 
-      # Check if orthogonal routing should be used
-      def should_use_orthogonal_routing?(edge, graph)
-        @resolver.get("elk.edgeRouting", edge, graph, default: nil)
-          .to_s.upcase == "ORTHOGONAL"
-      end
+      def endpoint_points(edge, source_node, target_node)
+        source_id = edge.sources.first
+        target_id = edge.targets.first
+        source_port = find_port_by_id(source_id, source_node)
+        target_port = find_port_by_id(target_id, target_node)
+        source_anchor = get_port_position(source_id, source_node, :outgoing)
+        target_anchor = get_port_position(target_id, target_node, :incoming)
 
-      # Add intelligent bend points based on port sides
-      def add_port_aware_bend_points(section, start_point, end_point,
-                                       source_port, target_port)
-        source_side = source_port.side
-        target_side = target_port.side
-
-        # Calculate bend points based on port side combinations
-        case [source_side, target_side]
-        when ["EAST", "WEST"], ["WEST", "EAST"]
-          # Horizontal connection: add midpoint
-          add_horizontal_bend_points(section, start_point, end_point)
-        when ["NORTH", "SOUTH"], ["SOUTH", "NORTH"]
-          # Vertical connection: add midpoint
-          add_vertical_bend_points(section, start_point, end_point)
-        when ["EAST", "NORTH"], ["EAST", "SOUTH"],
-             ["WEST", "NORTH"], ["WEST", "SOUTH"]
-          # Horizontal to vertical
-          add_horizontal_then_vertical(section, start_point, end_point)
-        when ["NORTH", "EAST"], ["NORTH", "WEST"],
-             ["SOUTH", "EAST"], ["SOUTH", "WEST"]
-          # Vertical to horizontal
-          add_vertical_then_horizontal(section, start_point, end_point)
-        else
-          # Default orthogonal routing
-          add_orthogonal_bend_points(section, start_point, end_point)
-        end
+        start_point = if source_port
+                        source_anchor
+                      else
+                        clip_to_border(node_rectangle(source_node),
+                                       source_anchor, target_anchor)
+                      end
+        end_point = if target_port
+                      target_anchor
+                    else
+                      clip_to_border(node_rectangle(target_node),
+                                     target_anchor, source_anchor)
+                    end
+        [start_point, end_point]
       end
 
       # Add horizontal bend points (for horizontal connections)
@@ -241,33 +240,28 @@ module Elkrb
         section.add_bend_point(end_point.x, mid_y)
       end
 
-      # Route horizontal then vertical
-      def add_horizontal_then_vertical(section, start_point, end_point)
-        section.add_bend_point(end_point.x, start_point.y)
-      end
-
-      # Route vertical then horizontal
-      def add_vertical_then_horizontal(section, start_point, end_point)
-        section.add_bend_point(start_point.x, end_point.y)
-      end
-
       # Add orthogonal (right-angle) bend points
       def add_orthogonal_bend_points(section, start_point, end_point)
-        # Simple orthogonal routing: horizontal then vertical
-        mid_x = (start_point.x + end_point.x) / 2.0
+        return if start_point.x == end_point.x || start_point.y == end_point.y
 
-        # Add bend points for orthogonal path
-        section.add_bend_point(mid_x, start_point.y)
-        section.add_bend_point(mid_x, end_point.y)
+        dx = (end_point.x - start_point.x).abs
+        dy = (end_point.y - start_point.y).abs
+        if dx >= dy
+          add_horizontal_bend_points(section, start_point, end_point)
+        else
+          add_vertical_bend_points(section, start_point, end_point)
+        end
       end
 
       # Get edge routing style from graph options
       #
       # @param graph [Elkrb::Graph::Graph] The graph
       # @return [String] Routing style (ORTHOGONAL, POLYLINE, SPLINES)
-      def get_edge_routing_style(graph)
-        style = @resolver.get("elk.edgeRouting", graph)
+      def get_edge_routing_style(graph, edge = nil)
+        elements = edge ? [edge, graph] : [graph]
+        style = @resolver.get("elk.edgeRouting", *elements)
 
+        style = style.to_s.upcase
         style == "UNDEFINED" ? "ORTHOGONAL" : style
       end
 
@@ -279,18 +273,17 @@ module Elkrb
         when "POLYLINE"
           route_polyline_edge(edge, node_map, graph)
         else
-          route_edge(edge, node_map, graph)
+          route_edge(edge, node_map, graph, "ORTHOGONAL")
         end
       end
 
       # Route edge with polyline (straight segments) style
       def route_polyline_edge(edge, node_map, graph)
-        # Polyline is just direct routing without bend points
-        route_edge(edge, node_map, graph)
+        route_edge(edge, node_map, graph, "POLYLINE")
       end
 
       # Route edge with spline (curved) style
-      def route_spline_edge(edge, node_map, _graph)
+      def route_spline_edge(edge, node_map, graph)
         return unless edge.sources&.any? && edge.targets&.any?
 
         source_id = edge.sources.first
@@ -301,15 +294,7 @@ module Elkrb
 
         return unless source_node && target_node
 
-        # Create edge section if not exists
-        edge.sections ||= []
-        if edge.sections.empty?
-          edge.sections << Graph::EdgeSection.new(
-            id: "#{edge.id}_section_0",
-          )
-        end
-
-        section = edge.sections.first
+        section = reset_section(edge, graph)
 
         # Calculate spline routing
         if edge_uses_ports?(edge, source_node, target_node)
@@ -321,16 +306,7 @@ module Elkrb
 
       # Route spline edge using port positions
       def route_spline_with_ports(section, edge, source_node, target_node)
-        start_point = get_port_position(
-          edge.sources.first,
-          source_node,
-          :outgoing,
-        )
-        end_point = get_port_position(
-          edge.targets.first,
-          target_node,
-          :incoming,
-        )
+        start_point, end_point = endpoint_points(edge, source_node, target_node)
 
         section.start_point = start_point
         section.end_point = end_point
@@ -341,8 +317,12 @@ module Elkrb
 
       # Route spline edge from node center to node center
       def route_spline_node_to_node(section, edge, source_node, target_node)
-        start_point = get_node_center(source_node)
-        end_point = get_node_center(target_node)
+        source_rect = node_rectangle(source_node)
+        target_rect = node_rectangle(target_node)
+        source_center = source_rect.center
+        target_center = target_rect.center
+        start_point = clip_to_border(source_rect, source_center, target_center)
+        end_point = clip_to_border(target_rect, target_center, source_center)
 
         section.start_point = start_point
         section.end_point = end_point
