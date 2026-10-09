@@ -61,6 +61,32 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
     end
   end
 
+  describe "#route_edges without an explicit style" do
+    include RoutedBendPoints
+
+    let(:splines) { routed_bend_points(router, nil, "SPLINES") }
+
+    # The router draws ORTHOGONAL and POLYLINE alike today (route_edge adds
+    # bends only for an edge-level routing option), so this pins the default
+    # to "not SPLINES" and to the explicit ORTHOGONAL result.
+    it "does not spline when the graph names no style" do
+      expect(splines).not_to be_empty
+      expect(routed_bend_points(router, nil)).to eq(routed_bend_points(router, nil, "ORTHOGONAL"))
+      expect(routed_bend_points(router, { "elk.edgeRouting" => "UNDEFINED" }))
+        .to eq(routed_bend_points(router, nil, "ORTHOGONAL"))
+    end
+
+    ["elk.edgeRouting", "edgeRouting", "edge_routing", "edge.routing"].each do |key|
+      it "reads the #{key} spelling of the routing option" do
+        expect(routed_bend_points(router, { key => "SPLINES" })).to eq(splines)
+      end
+    end
+
+    it "reads the style case-insensitively" do
+      expect(routed_bend_points(router, { "edge_routing" => "splines" })).to eq(splines)
+    end
+  end
+
   describe "#route_edge" do
     let(:node1) do
       Elkrb::Graph::Node.new(
@@ -432,16 +458,6 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
           layout_options: {},
         )
         graph.layout_options["elk.edgeRouting"] = "splines"
-
-        style = router.send(:get_routing_style, graph)
-        expect(style).to eq("SPLINES")
-      end
-
-      it "reads from the legacy snake_case edge_routing option (Gate A finding 1, Gate B finding 3)" do
-        graph = Elkrb::Graph::Graph.new(
-          id: "g1",
-          layout_options: { "edge_routing" => "SPLINES" },
-        )
 
         style = router.send(:get_routing_style, graph)
         expect(style).to eq("SPLINES")

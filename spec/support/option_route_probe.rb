@@ -42,7 +42,7 @@ module OptionRouteProbe
 
   # force and random draw from Kernel#rand, so both runs start from one seed,
   # put back afterwards. Call-option keys go to Elkrb.layout exactly as
-  # given: layered reads only Symbol keys, so a String key is its own row.
+  # given, so a String key and a Symbol key are separate rows.
   def probe_layout(algorithm, options)
     call_options = options.fetch(:call_option, {})
     previous = srand(1)

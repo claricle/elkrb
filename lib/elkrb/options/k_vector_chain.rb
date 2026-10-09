@@ -9,11 +9,6 @@ module Elkrb
     # Parses coordinate chain strings in the format:
     #   "( {1,2}, {3,4} )" or "({1,2},{3,4})"
     class KVectorChain
-      # String#to_f answers 0.0 for junk, so every token is checked before
-      # conversion — ELK's own parser rejects a non-numeric token.
-      NUMERIC_TOKEN = /\A[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?\z/
-      private_constant :NUMERIC_TOKEN
-
       attr_reader :vectors
 
       def initialize(vectors = [])
@@ -44,7 +39,8 @@ module Elkrb
       #
       # Mirrors ELK's own KVectorChain parser: split on any run of comma,
       # semicolon, and bracket/brace/paren characters (plus whitespace),
-      # then group the resulting numeric tokens into pairs. Accepts every
+      # then group the resulting tokens into pairs; KVector rejects a token
+      # that is not a plain decimal number. Accepts every
       # bracket style elkrb previously emitted as well as ELK's own
       # canonical "(x,y; x,y)" output.
       #
@@ -52,20 +48,13 @@ module Elkrb
       # @return [KVectorChain] Parsed coordinate chain object
       def self.from_string(str)
         tokens = str.split(/[,;()\[\]{}\s]+/).reject(&:empty?)
-        unless coordinate_pairs?(tokens)
+        unless tokens.size.even?
           raise ArgumentError, "Invalid KVectorChain format: #{str}"
         end
 
         vectors = tokens.each_slice(2).map { |x, y| KVector.new(x, y) }
         new(vectors)
       end
-
-      # Every token has to be numeric and they have to pair up. String#to_f
-      # answers 0.0 for junk, so a token is checked before it is converted.
-      def self.coordinate_pairs?(tokens)
-        tokens.size.even? && tokens.all? { |token| token.match?(NUMERIC_TOKEN) }
-      end
-      private_class_method :coordinate_pairs?
 
       # Add a vector to the chain
       #

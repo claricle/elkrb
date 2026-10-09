@@ -4,6 +4,7 @@ require_relative "../geometry/point"
 require_relative "../geometry/bezier"
 require_relative "../graph/edge"
 require_relative "node_index"
+require_relative "../options/resolver"
 
 module Elkrb
   module Layout
@@ -258,15 +259,9 @@ module Elkrb
 
       # Get routing style from graph options
       def get_routing_style(graph)
-        return "ORTHOGONAL" unless graph.layout_options
+        style = Options::Resolver.new.get("elk.edgeRouting", graph)
 
-        style = graph.layout_options["elk.edgeRouting"] ||
-          graph.layout_options["edgeRouting"] ||
-          # legacy snake_case key; S5's resolver takes over alias handling
-          # and deletes this line
-          graph.layout_options["edge_routing"]
-
-        style ? style.to_s.upcase : "ORTHOGONAL"
+        style == "UNDEFINED" ? "ORTHOGONAL" : style
       end
 
       # Route edge with specified routing style

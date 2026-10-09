@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "json"
 require "open3"
 require "rbconfig"
 
@@ -33,6 +34,13 @@ module CliRunner
     Open3.capture3(env, RbConfig.ruby, "-I#{LIB}", EXE, *, **capture_opts)
   end
 
+  # `run_elkrb` for a command that prints one JSON document on stdout.
+  # Returns [parsed document, stderr, status].
+  def run_elkrb_json(*)
+    stdout, stderr, status = run_elkrb(*)
+    [JSON.parse(stdout), stderr, status]
+  end
+
   # Runs the CLI with one of its output streams closed before it writes a
   # byte, which is what a consumer like `| head -1` looks like from the
   # child's side. Returns the exit status.
@@ -54,5 +62,15 @@ module CliRunner
   # against the checkout under test rather than the runner's cwd.
   def run_ruby(source)
     Open3.capture3(RbConfig.ruby, "-I#{LIB}", "-e", source, chdir: ROOT)
+  end
+
+  # Writes `hash` as JSON to `name` under `dir`; returns the path.
+  def write_json_to(dir, name, hash)
+    File.join(dir, name).tap { |path| File.write(path, hash.to_json) }
+  end
+
+  # [id, x, y] per child of a parsed `layout` document.
+  def layout_coordinates(layout)
+    layout["children"].map { |node| [node["id"], node["x"], node["y"]] }
   end
 end

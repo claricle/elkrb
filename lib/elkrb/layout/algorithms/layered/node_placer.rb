@@ -9,12 +9,13 @@ module Elkrb
         # This phase calculates the x and y coordinates for each node
         # based on their layer assignment and spacing requirements.
         class NodePlacer
-          def initialize(graph, layers, options = {})
+          # @param layer_spacing [Numeric] gap between consecutive layers
+          # @param node_spacing [Numeric] gap between nodes in one layer
+          def initialize(graph, layers, layer_spacing: 60.0, node_spacing: 20.0)
             @graph = graph
             @layers = layers
-            @options = options
-            @layer_spacing = options[:layer_spacing] || 60.0
-            @node_spacing = options[:spacing_node_node] || 20.0
+            @layer_spacing = layer_spacing
+            @node_spacing = node_spacing
           end
 
           def place_nodes

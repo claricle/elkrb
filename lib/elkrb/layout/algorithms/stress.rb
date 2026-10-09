@@ -20,13 +20,14 @@ module Elkrb
       class Stress < BaseAlgorithm
         DEFAULT_ITERATIONS = 500
         DEFAULT_EPSILON = 0.0001
+        ITERATION_LIMIT = "elk.stress.iterationLimit"
 
         def layout_flat(graph, _options = {})
           return graph if graph.children.nil? || graph.children.empty?
 
           # Get configuration
-          iterations = option("iterations", DEFAULT_ITERATIONS).to_i
-          epsilon = option("epsilon", DEFAULT_EPSILON).to_f
+          iterations = call_iterations
+          epsilon = option("epsilon", default: DEFAULT_EPSILON).to_f
 
           # Initialize positions
           initialize_positions(graph)
@@ -51,6 +52,20 @@ module Elkrb
         end
 
         private
+
+        # The registry reads "iterations" as force's elk.force.iterations, so
+        # the resolver alone would let force's option change a stress layout.
+        # The call's own "iterations" key still wins, validated as stress's
+        # option; otherwise elk.stress.iterationLimit is resolved.
+        def call_iterations
+          call = options.is_a?(Hash) ? options : {}
+          given = call.fetch("iterations", nil) || call.fetch(:iterations, nil)
+          unless given
+            return option(ITERATION_LIMIT, default: DEFAULT_ITERATIONS)
+          end
+
+          Options::Resolver.new(ITERATION_LIMIT => given).get(ITERATION_LIMIT)
+        end
 
         def initialize_positions(graph)
           # Use circular initial layout

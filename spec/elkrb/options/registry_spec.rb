@@ -223,15 +223,43 @@ RSpec.describe Elkrb::Options::Registry do
       algorithms, unpositioned: algorithms - %w[fixed spore_compaction],
                   first_only: algorithms
     )
-    # Measured: a Symbol-keyed Hash under the padding call option, and a
-    # Hash or Number under padding or elk.padding in a compound node's own
-    # layoutOptions; no other carrier, spelling or shape.
-    padding_routes = [
-      [%i[call_string call_symbol], %w[padding], %i[sym_hash]],
-      [compounds, %w[padding elk.padding], %i[sym_hash str_hash number]],
-    ].flat_map { |carriers, names, shapes| carriers.product(names, shapes) }
+    # Measured: every carrier an option applies to reads padding in every
+    # shape and spelling, for every algorithm.
+    padding_spellings = OptionRouteRows.spellings_for("elk.padding", "padding")
+    padding_routes = parent_carriers.product(padding_spellings, padding.keys)
     padding_readers = padding_routes.to_h { |route| [route, algorithms] }
-    string_readers = %w[mrtree box random rectpacking topdownpacking]
+
+    # Measured: every spelling, as a call option under either key kind or in
+    # the layoutOptions of the graph or a compound node, moves layered. An
+    # edge's layoutOptions moves nothing.
+    layer_spacing = "elk.layered.spacing.nodeNodeBetweenLayers"
+    layer_spacing_readers =
+      parent_carriers.product(
+        OptionRouteRows.spellings_for(layer_spacing, "layer_spacing"),
+      ).to_h do |carrier, spelling|
+        [[carrier, spelling, :value],
+         carrier == :compound_none ? %w[disco layered] : %w[layered]]
+      end
+
+    # Measured: the same algorithms read every spelling from the call options
+    # and from the layoutOptions of the graph or a compound node (a compound
+    # without its own elk.algorithm also moves disco); libavoid only when a
+    # node lacks an input position; vertiflex only the ELK id, from
+    # layoutOptions.
+    node_node = "elk.spacing.nodeNode"
+    layout_option_carriers = %i[root] + compounds
+    node_node_readers =
+      parent_carriers.product(
+        OptionRouteRows.spellings_for(node_node, "spacing_node_node"),
+      ).to_h do |carrier, spelling|
+        readers = %w[box layered mrtree random rectpacking topdownpacking]
+        readers << "disco" if carrier == :compound_none
+        if spelling == node_node && layout_option_carriers.include?(carrier)
+          readers << "vertiflex"
+        end
+        [[carrier, spelling, :value],
+         by_positioning.call(readers, unpositioned: readers + %w[libavoid])]
+      end
 
     {
       "elk.direction" => {
@@ -241,31 +269,17 @@ RSpec.describe Elkrb::Options::Registry do
           [:edge, "direction", :value] => edge_direction,
         }
       },
-      "elk.layered.spacing.nodeNodeBetweenLayers" => {
+      layer_spacing => {
         internal: "layer_spacing", shapes: spacing,
-        carriers: parent_carriers,
-        readers: { [:call_symbol, "layer_spacing", :value] => %w[layered] }
+        carriers: parent_carriers, readers: layer_spacing_readers
       },
       "elk.padding" => {
         internal: "padding", shapes: padding, readers: padding_readers,
         carriers: parent_carriers
       },
-      "elk.spacing.nodeNode" => {
+      node_node => {
         internal: "spacing_node_node", shapes: spacing,
-        carriers: parent_carriers,
-        readers: {
-          [:call_string, "spacing_node_node", :value] =>
-            by_positioning.call(string_readers,
-                                unpositioned: string_readers + %w[libavoid]),
-          [:call_symbol, "spacing_node_node", :value] =>
-            by_positioning.call(string_readers + %w[layered],
-                                unpositioned: string_readers + %w[layered libavoid]),
-          [:compound_other, "spacing_node_node", :value] =>
-            by_positioning.call(string_readers,
-                                unpositioned: string_readers + %w[libavoid]),
-          [:root, "elk.spacing.nodeNode", :value] => %w[vertiflex],
-          **compounds.to_h { |c| [[c, "elk.spacing.nodeNode", :value], %w[vertiflex]] },
-        }
+        carriers: parent_carriers, readers: node_node_readers
       },
     }.each do |id, spec|
       spellings = OptionRouteRows.spellings_for(id, spec.fetch(:internal))
@@ -281,12 +295,77 @@ RSpec.describe Elkrb::Options::Registry do
           .to eq(OptionRouteRows.expected_status(id, rows, moved))
       end
     end
+
+    # The rows above hold node_node_readers to what layout does. An algorithm
+    # the registry lists as a reader makes strict mode accept the key, so it
+    # must move on every route, with every node positioned.
+    it "#{node_node}: the registry's readers are the algorithms every route moves" do
+      every_route = node_node_readers.values.map { |by| by.fetch(true) }
+
+      expect(described_class.all.fetch(node_node).fetch(:readers))
+        .to eq(every_route.reduce(:&).sort)
+    end
   end
 
-  describe "elk.padding note" do
-    it "names the keys a compound node reads padding under" do
-      expect(described_class.note("elk.padding"))
-        .to match(/compound node reads a Hash or Number under padding or elk\.padding/)
+  describe "readers" do
+    algorithms = Elkrb::Layout::AlgorithmRegistry.available_algorithms
+    with_readers = described_class.all.select { |_, entry| entry[:readers] }
+
+    # Keep: the examples after the first pass while no id lists readers; they
+    # become the only check on a new row's readers.
+    it "lists them on at least one id, so the examples below are not vacuous" do
+      expect(with_readers.keys).to include("elk.spacing.nodeNode")
+    end
+
+    it "lists them only on :partial ids" do
+      expect(with_readers.reject { |_, entry| entry[:status] == :partial }.keys)
+        .to eq([])
+    end
+
+    it "names only registered algorithms, in scope for the id" do
+      stray = with_readers.flat_map do |id, entry|
+        scope = entry[:algorithms] == :all ? algorithms : entry[:algorithms]
+        (entry[:readers] - (algorithms & scope)).map { |name| [id, name] }
+      end
+
+      expect(stray).to eq([])
+    end
+
+    it "names every reader in the note, and says nothing about them in it twice" do
+      with_readers.each do |id, entry|
+        expect(described_class.note(id)).to start_with("Read by #{entry[:readers].join(', ')}. ")
+        expect(entry[:note])
+          .not_to match(/\b(?:#{entry[:readers].join('|')})\b/)
+      end
+    end
+
+    it "gives an id without readers its plain note, and an unknown id none" do
+      expect([described_class.note("elk.direction"),
+              described_class.note("elk.nonesuch")])
+        .to eq([described_class.all.fetch("elk.direction").fetch(:note), nil])
+    end
+
+    it "answers read_by? for a reader, a non-reader and an id with none" do
+      expect([
+               described_class.read_by?("elk.spacing.nodeNode", "layered"),
+               described_class.read_by?("elk.spacing.nodeNode", "force"),
+               described_class.read_by?("spacing_node_node", "box"),
+               described_class.read_by?("elk.direction", "layered"),
+               described_class.read_by?("foo.bar", "layered"),
+             ]).to eq([true, false, true, false, false])
+    end
+  end
+
+  describe "partial notes" do
+    # Keep: it passes against any registry whose :partial rows all carry a
+    # note, so it protects nothing until a row is marked :partial without
+    # one, and then it is the only check that the warning has text.
+    it "carries a non-empty note on every :partial id" do
+      missing = described_class.all.select do |id, entry|
+        entry[:status] == :partial && described_class.note(id).to_s.strip.empty?
+      end
+
+      expect(missing.keys).to eq([])
     end
   end
 
@@ -417,7 +496,7 @@ RSpec.describe Elkrb::Options::Registry do
         values: nil,
         parser: nil,
         status: :partial,
-        note: "the spacing_node_node call option is read by layered (Symbol key only), mrtree, box, random, rectpacking, topdownpacking and libavoid (unless every node has an input position); vertiflex reads the ELK id from the layoutOptions of the graph or compound node it lays out; a compound node's layoutOptions reach mrtree, box, random, rectpacking, topdownpacking and libavoid only in some nestings, and reach layered only under Symbol keys, which graph input never produces because it stores their keys as Strings; no other algorithm reads spacing_node_node",
+        note: described_class.note("elk.spacing.nodeNode"),
       )
       expect(rendered["elk.padding"][:parser]).to eq("Elkrb::Options::ElkPadding")
     end

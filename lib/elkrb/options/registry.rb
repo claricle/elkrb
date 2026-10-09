@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative "decimal"
 require_relative "elk_padding"
 require_relative "k_vector"
 require_relative "k_vector_chain"
@@ -17,6 +18,11 @@ module Elkrb
       private_constant :BOOLEAN_LITERALS
       private_constant :ELK_PREFIX
 
+      # A :partial row either lists `readers`, the algorithms that read the id
+      # on every route it can arrive by (the id is partial ACROSS algorithms),
+      # or lists none (it is partial WITHIN each algorithm). With `readers`,
+      # `note` holds only what the list leaves out; .note joins the two.
+      #
       # The OPTIONS constant name/path is private; .all below returns
       # this same frozen object, so use .all (or .canonical/.coerce/
       # .default/.status/.note/.for_algorithm) rather than reaching for
@@ -44,9 +50,9 @@ module Elkrb
         "elk.layered.crossingMinimization.strategy" => { type: :enum, values: %w[LAYER_SWEEP MEDIAN_LAYER_SWEEP INTERACTIVE NONE], default: "LAYER_SWEEP", algorithms: %w[layered], status: :accepted, description: "Crossing minimization strategy; LAYER_SWEEP honoured from S25a" },
         "elk.layered.layering.layerConstraint" => { type: :enum, values: %w[NONE FIRST FIRST_SEPARATE LAST LAST_SEPARATE], default: "NONE", algorithms: %w[layered], status: :accepted, description: "Forces a node to a specific layer position; honoured from S19" },
         "elk.layered.nodePlacement.strategy" => { type: :enum, values: %w[SIMPLE INTERACTIVE LINEAR_SEGMENTS BRANDES_KOEPF NETWORK_SIMPLEX], default: "SIMPLE", algorithms: %w[layered], status: :accepted, description: "Node placement strategy; not honoured today (elkrb implements SIMPLE only, others fall back to it)" },
-        "elk.layered.spacing.nodeNodeBetweenLayers" => { type: :float, default: 60.0, aliases: %w[layer_spacing layered.spacing.nodeNodeBetweenLayers], algorithms: %w[layered], status: :partial, note: "layered reads layer_spacing only under a Symbol key, so a Symbol-keyed call option reaches it and graph input does not, because graph input stores layoutOptions keys as Strings; the ELK id is ignored in layoutOptions and in call options", description: "Spacing between layers (ELK's own default is 20.0; elkrb defaults to 60.0)" },
+        "elk.layered.spacing.nodeNodeBetweenLayers" => { type: :float, default: 60.0, aliases: %w[layer_spacing layered.spacing.nodeNodeBetweenLayers], algorithms: %w[layered], status: :honoured, description: "Spacing between layers (ELK's own default is 20.0; elkrb defaults to 60.0)" },
         "elk.nodeLabels.placement" => { type: :string, default: "INSIDE CENTER", aliases: %w[node.label.placement label.placement], algorithms: :all, status: :honoured, description: "Node label placement" },
-        "elk.padding" => { type: :padding, default: "[top=12,left=12,bottom=12,right=12]", aliases: %w[padding], algorithms: :all, status: :partial, note: "the root reads padding only as a Symbol-keyed Hash in the padding call option; a compound node reads a Hash or Number under padding or elk.padding in its own layoutOptions; the ELK string form is ignored", description: "Padding around the graph" },
+        "elk.padding" => { type: :padding, default: "[top=12,left=12,bottom=12,right=12]", aliases: %w[padding], algorithms: :all, status: :honoured, description: "Padding around the graph" },
         "elk.port.index" => { type: :integer, default: -1, aliases: %w[port.index], algorithms: :all, status: :honoured, description: "Order of a port among its side's ports" },
         "elk.port.side" => { type: :enum, values: %w[NORTH SOUTH EAST WEST UNDEFINED], default: "UNDEFINED", aliases: %w[port.side], algorithms: :all, status: :honoured, description: "Side of the node a port is attached to" },
         "elk.portConstraints" => { type: :enum, values: %w[UNDEFINED FREE FIXED_SIDE FIXED_ORDER FIXED_RATIO FIXED_POS], default: "UNDEFINED", aliases: %w[portConstraints], algorithms: :all, status: :honoured, description: "How strictly port positions are respected" },
@@ -61,7 +67,7 @@ module Elkrb
         "elk.spacing.componentComponent" => { type: :float, default: 20.0, algorithms: %w[disco], status: :honoured, description: "Spacing between disconnected components" },
         "elk.spacing.edgeEdge" => { type: :float, default: 10.0, algorithms: %w[layered], status: :accepted, description: "Spacing between two edges; not honoured today" },
         "elk.spacing.edgeNode" => { type: :float, default: 10.0, algorithms: %w[layered], status: :accepted, description: "Spacing between an edge and a node it does not connect to; not honoured today" },
-        "elk.spacing.nodeNode" => { type: :float, default: 20.0, aliases: %w[spacing.nodeNode spacing_node_node], algorithms: :all, status: :partial, note: "the spacing_node_node call option is read by layered (Symbol key only), mrtree, box, random, rectpacking, topdownpacking and libavoid (unless every node has an input position); vertiflex reads the ELK id from the layoutOptions of the graph or compound node it lays out; a compound node's layoutOptions reach mrtree, box, random, rectpacking, topdownpacking and libavoid only in some nestings, and reach layered only under Symbol keys, which graph input never produces because it stores their keys as Strings; no other algorithm reads spacing_node_node", description: "Spacing between nodes" },
+        "elk.spacing.nodeNode" => { type: :float, default: 20.0, aliases: %w[spacing.nodeNode spacing_node_node], algorithms: :all, status: :partial, readers: %w[box layered mrtree random rectpacking topdownpacking], note: "Every reader takes it under every spelling, from the call options and from the layoutOptions of the graph or compound node it lays out. libavoid also reads it, unless every node has an input position; vertiflex reads only the elk.spacing.nodeNode spelling, from layoutOptions; disco reads it only from a compound node's layoutOptions. No other algorithm reads it", description: "Spacing between nodes" },
         "elk.spline.curvature" => { type: :float, default: 0.5, aliases: %w[spline.curvature], namespace: :elkrb, algorithms: :all, status: :honoured, description: "elkrb-private: curvature factor for SPLINES routing" },
         "elk.stress.desiredEdgeLength" => { type: :float, default: 100.0, algorithms: %w[stress], status: :honoured, description: "Desired edge length for stress majorization" },
         "elk.stress.epsilon" => { type: :float, default: 0.0001, aliases: %w[epsilon], algorithms: %w[stress], status: :honoured, description: "Stress majorization convergence threshold" },
@@ -97,6 +103,7 @@ module Elkrb
         entry[:aliases]&.freeze
         entry[:values]&.freeze
         entry[:algorithms].freeze if entry[:algorithms].is_a?(Array)
+        entry[:readers]&.freeze
       end
 
       ALIAS_LOOKUP = OPTIONS.each_with_object({}) do |(id, entry), lookup|
@@ -119,23 +126,6 @@ module Elkrb
           return ALIAS_LOOKUP[key_str] if ALIAS_LOOKUP.key?(key_str)
 
           suffix_match(key_str)
-        end
-
-        # Scans a layoutOptions map for whatever spelling it carries of the
-        # algorithm selector -- the canonical "elk.algorithm" key, its
-        # "algorithm" alias, or the "org.eclipse.elk.algorithm" long form --
-        # and returns the value under the canonical key when one is
-        # present. When a map carries more than one spelling, the
-        # canonical key wins, so the result never depends on Hash
-        # insertion order.
-        #
-        # @param layout_options [Hash, nil]
-        # @return [String, nil] the algorithm name the map names, or nil
-        def algorithm_selector(layout_options)
-          return nil unless layout_options
-
-          layout_options["elk.algorithm"] ||
-            layout_options.find { |key, _value| canonical(key) == "elk.algorithm" }&.last
         end
 
         # @param id [String, Symbol] any id or alias
@@ -165,9 +155,25 @@ module Elkrb
         end
 
         # @param id [String, Symbol] any id or alias
-        # @return [String, nil] explanatory note for a :partial id
+        # @return [String, nil] explanatory note for a :partial id; for an id
+        #   with readers it names them first
         def note(id)
-          entry_for(id)&.[](:note)
+          entry = entry_for(id)
+          return unless entry
+          return entry[:note] unless entry[:readers]
+
+          "Read by #{entry[:readers].join(', ')}. #{entry[:note]}"
+        end
+
+        # @param id [String, Symbol] any id or alias
+        # @param algorithm [String, nil] a normalised algorithm name
+        # @return [Boolean] whether the id lists the algorithm among its
+        #   readers; false for an id with no readers. Readers are the
+        #   built-in algorithms, matched by registered name: a class
+        #   registered under another name is not one, and a class registered
+        #   over a built-in name is taken to read what that name reads.
+        def read_by?(id, algorithm)
+          Array(entry_for(id)&.[](:readers)).include?(algorithm)
         end
 
         # Membership, not truthfulness: an id's presence here means it's
@@ -220,7 +226,7 @@ module Elkrb
               values: entry[:values],
               parser: parsers[entry[:type]],
               status: entry[:status],
-              note: entry[:note],
+              note: note(id),
             }
           end
 
@@ -288,10 +294,9 @@ module Elkrb
 
           fallback = ElkPadding.parse(default_string)
           ElkPadding.new(
-            top: value[:top] || value["top"] || fallback.top,
-            left: value[:left] || value["left"] || fallback.left,
-            bottom: value[:bottom] || value["bottom"] || fallback.bottom,
-            right: value[:right] || value["right"] || fallback.right,
+            **fallback.to_h.to_h do |side, default|
+              [side, Decimal.component(value, side, default)]
+            end,
           )
         end
       end

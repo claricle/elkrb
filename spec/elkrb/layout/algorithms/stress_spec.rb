@@ -60,4 +60,98 @@ RSpec.describe Elkrb::Layout::Algorithms::Stress do
       expect(distances[0][1]).to eq(Float::INFINITY)
     end
   end
+
+  describe "iteration count" do
+    include GraphPositions
+
+    # One iteration against the 500 default lands the nodes elsewhere, so a
+    # changed layout proves the option was read.
+    let(:graph_hash) do
+      {
+        "id" => "r",
+        "layoutOptions" => { "elk.algorithm" => "stress" },
+        "children" => (0..4).map do |i|
+          { "id" => "n#{i}", "width" => 20, "height" => 20 }
+        end,
+        "edges" => [
+          { "id" => "e", "sources" => ["n0"], "targets" => ["n1"] },
+          { "id" => "f", "sources" => ["n1"], "targets" => ["n2"] },
+        ],
+      }
+    end
+    let!(:default_positions) { laid_out_positions(graph_hash) }
+
+    # The other direction of the two examples below: a fix that dropped the
+    # call's own key would pass them and break every caller that sets it.
+    [:iterations, "iterations"].each do |key|
+      it "is read from the call's #{key.inspect} key" do
+        expect(laid_out_positions(graph_hash, key => 1))
+          .not_to eq(default_positions)
+      end
+    end
+
+    it "falls through an empty String key to the Symbol key" do
+      expect(laid_out_positions(graph_hash, "iterations" => nil, iterations: 1))
+        .to eq(laid_out_positions(graph_hash, iterations: 1))
+    end
+
+    it "is read from elk.stress.iterationLimit in the graph" do
+      one_iteration = laid_out_positions(graph_hash, iterations: 1)
+      graph_hash["layoutOptions"]["elk.stress.iterationLimit"] = 1
+
+      expect(laid_out_positions(graph_hash)).to eq(one_iteration)
+    end
+
+    it "is read from elk.stress.iterationLimit in the call" do
+      expect(laid_out_positions(graph_hash, "elk.stress.iterationLimit" => 1))
+        .to eq(laid_out_positions(graph_hash, iterations: 1))
+    end
+
+    [false, nil].each do |absent|
+      it "treats #{absent.inspect} under the legacy key as not given" do
+        graph_hash["layoutOptions"]["elk.stress.iterationLimit"] = 1
+
+        expect(laid_out_positions(graph_hash, iterations: absent))
+          .to eq(laid_out_positions(graph_hash, iterations: 1))
+      end
+    end
+
+    it "lets the call's legacy iterations key beat the graph's limit" do
+      graph_hash["layoutOptions"]["elk.stress.iterationLimit"] = 1
+
+      expect(laid_out_positions(graph_hash, iterations: 500))
+        .to eq(default_positions)
+    end
+
+    bad_limits = ["abc", "0x10", "", [1]]
+    legacy_keys = [:iterations, "iterations"]
+    limit_error = /elk\.stress\.iterationLimit/
+
+    bad_limits.each do |bad|
+      legacy_keys.each do |key|
+        it "rejects #{bad.inspect} under the call's #{key.inspect} key" do
+          expect { laid_out_positions(graph_hash, key => bad) }
+            .to raise_error(Elkrb::ValidationError, limit_error)
+        end
+      end
+
+      it "rejects #{bad.inspect} as the graph's elk.stress.iterationLimit" do
+        graph_hash["layoutOptions"]["elk.stress.iterationLimit"] = bad
+
+        expect { laid_out_positions(graph_hash) }
+          .to raise_error(Elkrb::ValidationError, limit_error)
+      end
+    end
+
+    it "does not follow force's elk.force.iterations in the graph" do
+      graph_hash["layoutOptions"]["elk.force.iterations"] = 1
+
+      expect(laid_out_positions(graph_hash)).to eq(default_positions)
+    end
+
+    it "does not follow force's elk.force.iterations in the call" do
+      expect(laid_out_positions(graph_hash, "elk.force.iterations": 1))
+        .to eq(default_positions)
+    end
+  end
 end

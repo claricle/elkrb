@@ -2,6 +2,7 @@
 
 require_relative "algorithm_registry"
 require_relative "../options/registry"
+require_relative "../options/resolver"
 
 module Elkrb
   module Layout
@@ -15,24 +16,28 @@ module Elkrb
       # @param options [Hash] Layout options
       # @return [Graph::Graph] The laid out graph
       def layout_hierarchical(graph, options = {})
-        return layout_flat(graph, options) unless graph.hierarchical?
+        # Options are read from the graph being laid out, so each nested
+        # graph uses its own and none inherits its parent's.
+        reading_options_from(graph) do
+          next layout_flat(graph, options) unless graph.hierarchical?
 
-        # First, recursively layout all child nodes
-        layout_children_recursively(graph)
+          # First, recursively layout all child nodes
+          layout_children_recursively(graph)
 
-        # Then layout the top-level graph
-        layout_flat(graph, options)
+          # Then layout the top-level graph
+          layout_flat(graph, options)
 
-        # Apply parent constraints
-        apply_parent_constraints(graph)
+          # Apply parent constraints
+          apply_parent_constraints(graph)
 
-        # Handle cross-hierarchy edges
-        handle_cross_hierarchy_edges(graph)
+          # Handle cross-hierarchy edges
+          handle_cross_hierarchy_edges(graph)
 
-        # Update parent bounds
-        update_parent_bounds(graph)
+          # Update parent bounds
+          update_parent_bounds(graph)
 
-        graph
+          graph
+        end
       end
 
       private
@@ -53,8 +58,8 @@ module Elkrb
           # root graph's -- a node that is itself a graph with a different
           # elk.algorithm gets laid out by that algorithm, not whichever
           # one is already recursing through the hierarchy.
-          processor = child_layout_processor(node_options)
-          processor.layout_hierarchical(child_graph, node_options)
+          processor = child_layout_processor(child_graph)
+          layout_child(processor, child_graph, node_options)
 
           # Apply the layout back to the node
           apply_child_layout(node, child_graph)
@@ -75,6 +80,7 @@ module Elkrb
           children: node.children || [],
           edges: node.edges || [],
           layout_options: node.layout_options,
+          properties: node.properties,
         )
       end
 
@@ -83,18 +89,32 @@ module Elkrb
         node.layout_options || {}
       end
 
-      # Resolves and instantiates the algorithm named by a node's own
-      # layoutOptions (via AlgorithmRegistry.for_layout_options), so a
-      # nested graph's elk.algorithm selector is honoured instead of
-      # ignored. Falls back to the algorithm already recursing (self)
-      # when the node names none, names the algorithm already running,
-      # or names one that isn't registered.
-      def child_layout_processor(node_options)
-        algorithm_class = AlgorithmRegistry.for_layout_options(node_options)
+      # Resolves and instantiates the algorithm named by the nested graph's
+      # own options, read from the same sources as the root graph's
+      # (layoutOptions, the map nested in it, properties), so a nested
+      # graph's elk.algorithm selector is honoured instead of ignored. Falls
+      # back to the algorithm already recursing (self) when the graph names
+      # none, names the algorithm already running, or names one that isn't
+      # registered. A switched-to algorithm gets this one's call options, so
+      # they reach every level.
+      def child_layout_processor(child_graph)
+        name = Options::Resolver.new.get("elk.algorithm", child_graph,
+                                         default: nil)
+        algorithm_class = name && AlgorithmRegistry.get(name)
         different = algorithm_class && !algorithm_class.equal?(self.class)
         return self unless different
 
-        algorithm_class.new(node_options)
+        algorithm_class.new(@options)
+      end
+
+      # A registered class that only implements #layout (the compatible
+      # interface of Elkrb.register_algorithm) has no #layout_hierarchical.
+      def layout_child(processor, child_graph, node_options)
+        if processor.respond_to?(:layout_hierarchical)
+          processor.layout_hierarchical(child_graph, node_options)
+        else
+          processor.layout(child_graph)
+        end
       end
 
       # Apply the child graph layout back to the parent node.

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "decimal"
+
 module Elkrb
   module Options
     # KVector parser for coordinate pairs
@@ -10,8 +12,8 @@ module Elkrb
       attr_reader :x, :y
 
       def initialize(x, y)
-        @x = x.to_f
-        @y = y.to_f
+        @x = Decimal.to_f(x)
+        @y = Decimal.to_f(y)
       end
 
       # Parse KVector from string, hash, or array
@@ -32,10 +34,7 @@ module Elkrb
       # @param hash [Hash] Hash with :x and :y keys
       # @return [KVector] Parsed coordinate object
       def self.from_hash(hash)
-        new(
-          hash[:x] || hash["x"] || 0,
-          hash[:y] || hash["y"] || 0,
-        )
+        new(Decimal.component(hash, :x, 0), Decimal.component(hash, :y, 0))
       end
 
       # Parse from array
@@ -55,7 +54,7 @@ module Elkrb
       def self.from_string(str)
         # Remove parentheses and split by comma
         content = str.strip.gsub(/^\(|\)$/, "")
-        parts = content.split(",").map(&:strip)
+        parts = content.split(",", -1).map(&:strip)
 
         unless parts.size == 2
           raise ArgumentError,

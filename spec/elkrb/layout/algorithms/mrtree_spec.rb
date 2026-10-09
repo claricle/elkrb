@@ -1276,10 +1276,8 @@ RSpec.describe "MRTree forest spacing and component cost" do
   end
 
   it "keeps the configured gap between nodes that share a row" do
-    # Passed as an option, not in the graph's layoutOptions: measured on this
-    # branch, a graph-level "elk.spacing.nodeNode" does not reach mrtree's
-    # node_spacing and the layout silently uses the 20.0 default. Using a
-    # non-default value is what stops this example passing on that default.
+    # A non-default value is what stops this example passing on mrtree's
+    # 20.0 default when the option never reaches node_spacing.
     result = Elkrb.layout(two_trees, algorithm: "mrtree",
                                      spacing_node_node: spacing)
 

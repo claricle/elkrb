@@ -117,6 +117,162 @@ RSpec.describe Elkrb::Layout::HierarchicalProcessor do
     end
   end
 
+  describe "options in a nested graph" do
+    let(:recorder_class) do
+      Class.new(Elkrb::Layout::Algorithms::BaseAlgorithm) do
+        def spacing_by_graph
+          @spacing_by_graph ||= {}
+        end
+
+        def layout_flat(graph, _options = {})
+          spacing_by_graph[graph.id] = option("elk.spacing.nodeNode")
+          graph
+        end
+      end
+    end
+
+    let(:root) do
+      Elkrb::Graph::Graph.new(
+        id: "root",
+        layout_options: { "elk.spacing.nodeNode" => 5 },
+        children: [
+          nested_parent("own", layout_options: { "elk.spacing.nodeNode" => 100 }),
+          nested_parent("props", properties: { "elk.spacing.nodeNode" => 33 }),
+          nested_parent("bare"),
+        ],
+      )
+    end
+
+    it "reads each nested graph's own options, not the root's" do
+      algorithm = recorder_class.new
+      algorithm.layout(root)
+
+      expect(algorithm.spacing_by_graph).to include(
+        "own_children" => 100.0, "props_children" => 33.0,
+        "bare_children" => 20.0
+      )
+    end
+
+    # Keep: it is the only check that the scope is restored after a nested
+    # graph; the root is laid out after its children.
+    it "reads the root's options again once the nested graphs are done" do
+      algorithm = recorder_class.new
+      algorithm.layout(root)
+
+      expect(algorithm.spacing_by_graph["root"]).to eq(5.0)
+    end
+
+    it "lets call-level options reach a nested graph that names none" do
+      algorithm = recorder_class.new("elk.spacing.nodeNode" => 70)
+      algorithm.layout(root)
+
+      expect(algorithm.spacing_by_graph).to include(
+        "own_children" => 100.0, "bare_children" => 70.0,
+      )
+    end
+
+    it "reads a nested graph's options when called without #layout" do
+      algorithm = recorder_class.new
+      algorithm.layout_hierarchical(root)
+
+      expect(algorithm.spacing_by_graph["own_children"]).to eq(100.0)
+    end
+  end
+
+  describe "algorithm selection for a nested graph" do
+    shapes_for = lambda do |algorithm|
+      {
+        "layoutOptions" => { layoutOptions: { "elk.algorithm" => algorithm } },
+        "the deprecated layoutOptions properties map" =>
+          { layoutOptions: { "properties" => { "elk.algorithm" => algorithm } } },
+        "element properties" => { properties: { "elk.algorithm" => algorithm } },
+      }
+    end
+    shapes = shapes_for.call("box")
+
+    # Keep: the examples below compare equal positions; this one is the only
+    # check that box and layered differ on the fixture, so they cannot pass
+    # vacuously.
+    it "differs from the parent's algorithm when it names none" do
+      expect(nested_graph_positions({}))
+        .not_to eq(nested_graph_positions(shapes["layoutOptions"]))
+    end
+
+    # Keep: the opposite direction of the table below; it goes red when a
+    # nested graph that names no algorithm gets the registry default.
+    it "keeps the parent's algorithm when it names none" do
+      expect(nested_graph_positions({}, root_algorithm: "box"))
+        .to eq(nested_graph_positions(shapes["layoutOptions"]))
+    end
+
+    # Keep: it goes red when a nested graph that names no algorithm takes the
+    # call's algorithm over the graph's own.
+    it "does not take the call's algorithm for a graph that names none" do
+      expect(nested_graph_positions({}, root_algorithm: "box",
+                                        call: { algorithm: "layered" }))
+        .to eq(nested_graph_positions({}, root_algorithm: "box"))
+    end
+
+    it "passes the call's options to a nested graph that switches algorithm" do
+      call = { "elk.spacing.nodeNode" => 90 }
+
+      expect(nested_graph_positions(shapes["element properties"], call: call))
+        .to eq(nested_graph_positions(shapes["element properties"],
+                                      root_algorithm: "box", call: call))
+    end
+
+    # Keep: it goes red when a switched-to algorithm takes the nested graph's
+    # own options as its call options, which then reach the graphs below.
+    it "does not let a switching graph's options leak into the graphs below" do
+      call = { "elk.spacing.nodeNode" => 40 }
+      with_own = { layoutOptions: { "elk.spacing.nodeNode" => 90 } }
+
+      expect(grandchild_positions(with_own, call: call))
+        .to eq(grandchild_positions({}, call: call))
+    end
+
+    context "with a registered class that only implements #layout" do
+      let(:compatible_class) do
+        Class.new do
+          def initialize(_options = {}); end
+
+          def layout(graph)
+            graph.children.each { |node| node.x = 777.0 }
+            graph
+          end
+        end
+      end
+
+      around do |example|
+        registry = Elkrb::Layout::AlgorithmRegistry
+        algorithms = registry.instance_variable_get(:@algorithms).dup
+        metadata = registry.instance_variable_get(:@metadata).dup
+        example.run
+      ensure
+        registry.instance_variable_set(:@algorithms, algorithms)
+        registry.instance_variable_set(:@metadata, metadata)
+      end
+
+      shapes_for.call("compatible").each do |source, shape|
+        it "lays out a nested graph that selects it in #{source}" do
+          Elkrb::Layout::AlgorithmRegistry.register("compatible",
+                                                    compatible_class)
+
+          positions = nested_graph_positions(shape)
+
+          expect(positions.map(&:first)).to all(be >= 777.0)
+        end
+      end
+    end
+
+    shapes.each do |source, shape|
+      it "honours elk.algorithm given in #{source}" do
+        expect(nested_graph_positions(shape))
+          .to eq(nested_graph_positions(shapes["layoutOptions"]))
+      end
+    end
+  end
+
   describe "#apply_parent_constraints" do
     it "adjusts children for padding" do
       layout_opts = {}

@@ -6,6 +6,7 @@ require "yaml"
 require "fileutils"
 
 require_relative "../best_effort_write"
+require_relative "../layout_flags"
 
 module Elkrb
   module Commands
@@ -21,9 +22,10 @@ module Elkrb
         # Load graph
         graph = load_graph(@file)
 
-        # Apply layout
-        layout_options = build_layout_options
-        result = Elkrb::Layout::LayoutEngine.layout(graph, layout_options)
+        # Apply layout; explicit flags go onto the root graph, where they
+        # outrank the file's own options
+        graph = Elkrb::LayoutFlags.apply(graph, @options)
+        result = Elkrb::Layout::LayoutEngine.layout(graph, {})
 
         # Determine output format
         output_format = detect_format(@options[:output])
@@ -65,17 +67,6 @@ module Elkrb
 
         require_relative "../format_sniffer"
         Elkrb::FormatSniffer.read(File.read(file), File.extname(file).downcase)
-      end
-
-      def build_layout_options
-        opts = {}
-
-        opts[:algorithm] = @options[:algorithm] if @options[:algorithm]
-        opts[:direction] = @options[:direction] if @options[:direction]
-        opts[:spacing_node_node] = @options[:spacing] if @options[:spacing]
-        opts[:edge_routing] = @options[:edge_routing] if @options[:edge_routing]
-
-        opts
       end
 
       def detect_format(filename)

@@ -13,6 +13,21 @@ RSpec.describe Elkrb::Layout::AlgorithmRegistry do
     described_class.instance_variable_set(:@metadata, metadata_before)
   end
 
+  describe ".registered_name" do
+    {
+      "layered" => "layered", "Layered" => "layered",
+      "org.eclipse.elk.layered" => "layered",
+      "org.eclipse.elk.sporeOverlap" => "spore_overlap",
+      "org.eclipse.elk.mrTree" => "mrtree",
+      "mrTree" => "mrtree", "sporeOverlap" => "spore_overlap",
+      "nonesuch" => nil, "" => nil, ".." => nil, "bad\xFF" => nil
+    }.each do |written, registered|
+      it "answers #{registered.inspect} for #{written.inspect}" do
+        expect(described_class.registered_name(written)).to eq(registered)
+      end
+    end
+  end
+
   describe ".get" do
     it "resolves camelCase, snake_case, and the ELK-prefixed form to the same class" do
       camel = described_class.get("sporeOverlap")

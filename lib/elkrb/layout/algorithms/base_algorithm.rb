@@ -5,6 +5,7 @@ require_relative "../hierarchical_processor"
 require_relative "../label_placer"
 require_relative "../port_constraint_processor"
 require_relative "../constraints/constraint_processor"
+require_relative "../../options/resolver"
 
 module Elkrb
   module Layout
@@ -20,10 +21,11 @@ module Elkrb
         include LabelPlacer
         include PortConstraintProcessor
 
-        attr_reader :options
+        attr_reader :options, :resolver
 
         def initialize(options = {})
           @options = options
+          @resolver = Options::Resolver.new(options)
         end
 
         # Default a node's unset x/y to 0.0, matching Java ELK's treatment
@@ -51,6 +53,8 @@ module Elkrb
         # @param graph [Elkrb::Graph::Graph] The graph to layout
         # @return [Elkrb::Graph::Graph] The graph with updated positions
         def layout(graph)
+          @graph = graph
+
           # Apply port constraints before layout
           apply_port_constraints(graph)
 
@@ -62,7 +66,7 @@ module Elkrb
           # layout_flat, preserving its documented NotImplementedError
           # contract for subclasses that don't override it.
           if graph.children
-            if option("hierarchical", false) || graph.hierarchical?
+            if option("hierarchical", default: false) || graph.hierarchical?
               layout_hierarchical(graph, @options)
             else
               layout_flat(graph, @options)
@@ -76,7 +80,7 @@ module Elkrb
           apply_edge_routing(graph)
 
           # Place labels after layout (unless disabled)
-          unless option("label.placement.disabled", false)
+          unless option("label.placement.disabled", default: false)
             place_labels(graph)
           end
 
@@ -98,35 +102,42 @@ module Elkrb
 
         protected
 
-        # Get an option value with a default fallback
+        # Get an option value, resolved against the graph being laid out and
+        # then the call-level options (see Options::Resolver for the rule).
         #
-        # @param key [String, Symbol] The option key
-        # @param default [Object] The default value if option is not set
+        # @param key [String, Symbol] The option id, alias, or custom key
+        # @param default [Object] Returned when nothing names the option;
+        #   :registry means the registry default, nil means nil
         # @return [Object] The option value or default
-        def option(key, default = nil)
-          key_str = key.to_s
-          @options[key_str] || @options[key.to_sym] || default
+        def option(key, default: :registry)
+          @resolver.get(key, @graph, default: default)
+        end
+
+        # Runs the block with #option reading from graph, then puts the
+        # previous graph back, even when the block raises.
+        #
+        # @param graph [Elkrb::Graph::Graph]
+        # @return [Object] the block's value
+        def reading_options_from(graph)
+          outer = @graph
+          @graph = graph
+          yield
+        ensure
+          @graph = outer
         end
 
         # Get spacing between nodes
         #
         # @return [Float] The node spacing value
         def node_spacing
-          option("spacing_node_node", 20.0).to_f
+          option("elk.spacing.nodeNode").to_f
         end
 
         # Get padding values
         #
         # @return [Hash] Padding values for top, bottom, left, right
         def padding
-          default_padding = { top: 12, bottom: 12, left: 12, right: 12 }
-          padding_opt = option("padding", default_padding)
-
-          if padding_opt.is_a?(Hash)
-            default_padding.merge(padding_opt)
-          else
-            default_padding
-          end
+          option("elk.padding").to_h
         end
 
         # Calculate the bounding box for a set of nodes
@@ -182,17 +193,9 @@ module Elkrb
         # @param graph [Elkrb::Graph::Graph] The graph
         # @return [String] Routing style (ORTHOGONAL, POLYLINE, SPLINES)
         def get_edge_routing_style(graph)
-          return "ORTHOGONAL" unless graph.layout_options
+          style = @resolver.get("elk.edgeRouting", graph)
 
-          style = graph.layout_options["elk.edgeRouting"] ||
-            graph.layout_options["edgeRouting"] ||
-            # legacy snake_case key; S5's resolver takes over alias handling
-            # and deletes this line
-            graph.layout_options["edge_routing"] ||
-            option("elk.edgeRouting") ||
-            option("edgeRouting")
-
-          style ? style.to_s.upcase : "ORTHOGONAL"
+          style == "UNDEFINED" ? "ORTHOGONAL" : style
         end
 
         # Apply pre-layout constraints

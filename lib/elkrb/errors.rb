@@ -36,7 +36,7 @@ module Elkrb
 
     def initialize(algorithm_name)
       @algorithm_name = algorithm_name
-      super("Algorithm not found: #{algorithm_name}")
+      super("Unknown layout algorithm: #{algorithm_name}")
     end
   end
 

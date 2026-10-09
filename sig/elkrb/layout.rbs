@@ -19,6 +19,7 @@ module Elkrb
     class AlgorithmRegistry
       def self.register: (String name, singleton(Algorithms::BaseAlgorithm) algorithm_class, ?algorithmMetadata metadata) -> void
       def self.get: (String name) -> singleton(Algorithms::BaseAlgorithm)?
+      def self.registered_name: (String name) -> String?
       def self.available_algorithms: () -> Array[String]
       def self.algorithm_info: (String name) -> algorithmInfo?
       def self.all_algorithm_info: () -> Array[algorithmInfo]
@@ -45,6 +46,7 @@ module Elkrb
     module Algorithms
       class BaseAlgorithm
         attr_reader options: Hash[String | Symbol, untyped]
+        attr_reader resolver: Options::Resolver
 
         def self.normalize_nil_positions: (Array[Graph::Node] nodes) -> void
 
@@ -53,7 +55,7 @@ module Elkrb
 
         private
 
-        def option: (String | Symbol key, ?untyped default) -> untyped
+        def option: (String | Symbol key, ?default: untyped) -> untyped
         def node_spacing: () -> Float
         def padding: () -> Hash[Symbol, Float]
         def calculate_bounding_box: (Array[Graph::Node] nodes) -> Geometry::Rectangle

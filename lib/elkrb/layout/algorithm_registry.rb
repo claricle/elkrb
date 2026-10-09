@@ -22,18 +22,15 @@ module Elkrb
           @algorithms[resolve_key(name)]
         end
 
-        # The algorithm class named by a layoutOptions map's own algorithm
-        # selector, resolved through Options::Registry.algorithm_selector
-        # -- nil when the map names none or names one that isn't
-        # registered. Used by HierarchicalProcessor so a nested graph's
-        # own elk.algorithm selector is honoured the same way
-        # LayoutEngine honours a root graph's.
-        #
-        # @param layout_options [Hash, nil]
-        # @return [Class, nil]
-        def for_layout_options(layout_options)
-          name = Options::Registry.algorithm_selector(layout_options)
-          name && get(name)
+        # @api private
+        # @param name [String] an algorithm name, in any spelling #get takes
+        # @return [String, nil] the key the algorithm is registered under, or
+        #   nil when none is, as for a name with invalid bytes
+        def registered_name(name)
+          return unless name.to_s.valid_encoding?
+
+          key = resolve_key(name)
+          key if @algorithms.key?(key)
         end
 
         def available_algorithms
@@ -102,13 +99,13 @@ module Elkrb
           # "org.eclipse.elk.sporeOverlap" / "sporeOverlap" / "spore_overlap"
           # all fold to the same "spore_overlap" key.
           name = name.to_s
-          name = name.split(".").last if name.include?(".")
+          name = name.split(".").last.to_s if name.include?(".")
           name.gsub(/([a-z\d])([A-Z])/, '\1_\2').downcase
         end
 
         def legacy_normalize_name(name)
           name = name.to_s
-          name = name.split(".").last if name.include?(".")
+          name = name.split(".").last.to_s if name.include?(".")
           name.downcase
         end
       end

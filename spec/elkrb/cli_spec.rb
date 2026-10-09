@@ -176,7 +176,7 @@ RSpec.describe "elkrb CLI" do
       end
     end
 
-    it "does not print a blank algorithm with --verbose and no --algorithm" do
+    it "prints the resolved algorithm with --verbose and no --algorithm" do
       _stdout, stderr, status = run_elkrb(
         "layout", File.join(CliRunner::ROOT, "spec/fixtures/simple_graph.json"),
         "--verbose"
@@ -185,8 +185,21 @@ RSpec.describe "elkrb CLI" do
       expect(status.exitstatus).to eq(0)
       # RC10: verbose progress lines are on stderr, not stdout -- see
       # "prints only JSON to stdout with --verbose" above.
-      expect(stderr)
-        .to include("Using algorithm: the graph's own, else layered")
+      expect(stderr).to include("Using algorithm: layered")
+    end
+
+    it "prints the algorithm a graph pins with --verbose and no --algorithm" do
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, "pinned.json")
+        pinned = { id: "root", layoutOptions: { "elk.algorithm" => "box" },
+                   children: [{ id: "a", width: 10, height: 10 }] }
+        File.write(path, pinned.to_json)
+
+        _stdout, stderr, status = run_elkrb("layout", path, "--verbose")
+
+        expect(status.exitstatus).to eq(0)
+        expect(stderr).to include("Using algorithm: box")
+      end
     end
 
     # A Thor default would always beat the graph's own elk.algorithm.

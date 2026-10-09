@@ -3,6 +3,8 @@
 require "spec_helper"
 
 RSpec.describe Elkrb::Layout::LayoutEngine do
+  include GraphPositions
+
   let(:simple_graph_json) do
     JSON.parse(File.read("spec/fixtures/simple_graph.json"))
   end
@@ -136,7 +138,145 @@ RSpec.describe Elkrb::Layout::LayoutEngine do
       it "raises an error naming the algorithm that was not found" do
         expect do
           described_class.layout(simple_graph_json, algorithm: "nonexistent")
-        end.to raise_error(Elkrb::Error, /Unknown layout algorithm: nonexistent/)
+        end.to raise_error(Elkrb::AlgorithmNotFoundError, /Unknown layout algorithm: nonexistent/)
+      end
+
+      it "names the algorithm a graph pins when that one is not found" do
+        graph = { id: "r", layoutOptions: { "elk.algorithm" => "nonexistent" } }
+
+        expect { described_class.layout(graph, algorithm: "box") }
+          .to raise_error(Elkrb::AlgorithmNotFoundError, /Unknown layout algorithm: nonexistent/)
+      end
+    end
+
+    context "with a pinned algorithm that differs from the default" do
+      let(:pinned_box_json) do
+        {
+          id: "root",
+          layoutOptions: { "elk.algorithm" => "box" },
+          children: [{ id: "a", width: 30, height: 30 }, { id: "b", width: 30, height: 30 }],
+          edges: [{ id: "e", sources: ["a"], targets: ["b"] }],
+        }
+      end
+
+      it "runs box for a pin and no call option: b sits right of a with 20 spacing" do
+        result = described_class.layout(pinned_box_json, {})
+        a, b = result.children
+
+        expect([b.x, b.y]).to eq([a.x + 30 + 20, a.y])
+      end
+
+      it "keeps the pin when the call passes a different algorithm" do
+        pinned = child_positions(described_class.layout(pinned_box_json, algorithm: "random"))
+
+        expect(pinned).to eq(child_positions(described_class.layout(pinned_box_json, {})))
+      end
+
+      it "uses the call option when the graph pins nothing" do
+        unpinned = pinned_box_json.merge(layoutOptions: {})
+
+        expect(child_positions(described_class.layout(unpinned, algorithm: "box")))
+          .to eq(child_positions(described_class.layout(pinned_box_json, {})))
+      end
+
+      it "reads an algorithm from the graph's properties" do
+        from_properties = pinned_box_json.merge(layoutOptions: {}, properties: { "algorithm" => "box" })
+
+        expect(child_positions(described_class.layout(from_properties, {})))
+          .to eq(child_positions(described_class.layout(pinned_box_json, {})))
+      end
+
+      it "reads spacing from the graph's layoutOptions under the ELK id" do
+        wide = pinned_box_json.merge(layoutOptions: { "elk.algorithm" => "box", "elk.spacing.nodeNode" => 80 })
+        a, b = described_class.layout(wide, {}).children
+
+        expect(b.x - a.x).to eq(30 + 80)
+      end
+    end
+
+    context "with the spacing call option" do
+      it "moves a box layout when spacing_node_node is given" do
+        plain = described_class.layout(simple_graph_json, algorithm: "box")
+        spaced = described_class.layout(simple_graph_json, algorithm: "box", spacing_node_node: 50)
+
+        expect(spaced.children.map(&:x)).not_to eq(plain.children.map(&:x))
+      end
+
+      it "reaches layered under the ELK id, the same as under spacing_node_node" do
+        fan_out = lambda do
+          { id: "r",
+            children: %w[a b c].map { |id| { id: id, width: 100, height: 60 } },
+            edges: [{ id: "e1", sources: ["a"], targets: ["b"] }, { id: "e2", sources: ["a"], targets: ["c"] }] }
+        end
+
+        by_id = described_class.layout(fan_out.call, "elk.spacing.nodeNode" => 80)
+        by_alias = described_class.layout(fan_out.call, spacing_node_node: 80)
+        default = described_class.layout(fan_out.call, {})
+
+        expect(by_id.children.map { |n| [n.x, n.y] }).to eq(by_alias.children.map { |n| [n.x, n.y] })
+        expect(by_id.children.map { |n| [n.x, n.y] }).not_to eq(default.children.map { |n| [n.x, n.y] })
+      end
+
+      it "honours an ELK padding string" do
+        graph = { id: "root", children: [{ id: "a", width: 10, height: 10 }] }
+        result = described_class.layout(graph, "elk.padding" => "[top=50,left=50,bottom=50,right=50]")
+
+        expect(result.width).to eq(110.0)
+      end
+    end
+
+    context "with an accepted-but-unhonoured option in the call" do
+      let(:graph) { { id: "r", children: [] } }
+
+      it "raises Elkrb::Error naming the option under strict: true" do
+        expect { described_class.layout(graph, strict: true, "elk.spacing.edgeNode" => 5) }
+          .to raise_error(Elkrb::Error, /elk\.spacing\.edgeNode/)
+      end
+
+      it "lays out under strict: true when the call carries only engine flags" do
+        expect { described_class.layout(graph, strict: true, hierarchical: true) }
+          .not_to raise_error
+      end
+    end
+
+    context "with an accepted-but-unhonoured option on the graph" do
+      let(:graph) { { id: "r", layoutOptions: { "elk.spacing.edgeNode" => 5 }, children: [] } }
+
+      it "raises Elkrb::Error naming the option under strict: true" do
+        expect { described_class.layout(graph, strict: true) }
+          .to raise_error(Elkrb::Error, /elk\.spacing\.edgeNode/)
+      end
+
+      it "raises before any algorithm runs" do
+        expect(Elkrb::Layout::AlgorithmRegistry.get("layered"))
+          .not_to receive(:new)
+
+        expect { described_class.layout(graph, strict: true) }
+          .to raise_error(Elkrb::Error)
+      end
+
+      it "warns again when the same graph is laid out a second time" do
+        io = StringIO.new
+        previous = Elkrb.logger
+        Elkrb.logger = Logger.new(io, level: Logger::WARN)
+
+        2.times { described_class.layout(graph, {}) }
+
+        expect(io.string.lines.grep(/elk\.spacing\.edgeNode/).size).to eq(2)
+      ensure
+        Elkrb.logger = previous
+      end
+
+      it "warns and lays out when strict is not given" do
+        io = StringIO.new
+        previous = Elkrb.logger
+        Elkrb.logger = Logger.new(io, level: Logger::WARN)
+
+        described_class.layout(graph, {})
+
+        expect(io.string).to match(/option elk\.spacing\.edgeNode is accepted but not honoured/)
+      ensure
+        Elkrb.logger = previous
       end
     end
 
@@ -163,10 +303,10 @@ RSpec.describe Elkrb::Layout::LayoutEngine do
         expect(resolved_algorithm(graph)).to have_received(:get).with("force")
       end
 
-      it "prefers the call-level algorithm over a conflicting graph-carried one" do
+      it "prefers the graph-carried algorithm over a conflicting call-level one" do
         graph = { id: "r", layoutOptions: { "elk.algorithm" => "force" } }
         expect(resolved_algorithm(graph, algorithm: "box"))
-          .to have_received(:get).with("box")
+          .to have_received(:get).with("force")
       end
 
       it "still defaults to layered with no algorithm key anywhere" do
@@ -197,11 +337,10 @@ RSpec.describe Elkrb::Layout::LayoutEngine do
 
       it "scans past an earlier, unrelated recognized key for the alias" do
         # A layout_options Hash where the algorithm selector is NOT the
-        # first entry. Guards aliased_graph_algorithm's actual scan: a
-        # predicate that matched anything Options::Registry recognizes
-        # (rather than specifically "elk.algorithm"), or ignored the block
-        # entirely (Hash#first ignores a block without raising), would both
-        # return "DOWN" here instead of "force".
+        # first entry. Guards the resolver's scan for the alias: a predicate
+        # that matched anything Options::Registry recognizes (rather than
+        # specifically "elk.algorithm") would return "DOWN" here instead of
+        # "force".
         graph = {
           id: "r",
           layoutOptions: { "elk.direction" => "DOWN", "algorithm" => "force" },
@@ -224,12 +363,9 @@ RSpec.describe Elkrb::Layout::LayoutEngine do
 
       it "does not raise when layoutOptions carries no algorithm key at all" do
         # Distinct from "no algorithm key anywhere" above: that graph has NO
-        # layoutOptions attribute at all (Graph.from_hash gives it a nil
-        # layout_options, caught by graph_algorithm's own nil guard
-        # before aliased_graph_algorithm is ever called). This graph HAS a
-        # layoutOptions Hash, just with nothing that resolves to
-        # elk.algorithm, so it is aliased_graph_algorithm's #find that comes
-        # back empty -- guarding the &.last against a bare .last on nil.
+        # layoutOptions attribute at all. This graph HAS a layoutOptions
+        # Hash, just with nothing that resolves to elk.algorithm, so the
+        # resolver's scan of it comes back empty.
         graph = { id: "r", layoutOptions: { "elk.direction" => "DOWN" } }
         expect(resolved_algorithm(graph)).to have_received(:get).with("layered")
       end
