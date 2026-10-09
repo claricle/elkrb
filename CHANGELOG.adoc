@@ -19,6 +19,135 @@ All notable changes to Elkrb are recorded here.
   with a `NoMethodError`, or silently did nothing. Anything passing a wrapper
   or a duck-typed graph has to pass a real `Graph` now.
 
+* Ruby 3.3 or newer is required. Older Rubies cannot load `lutaml-model` 0.8.
+
+* `Elkrb::Graph::LayoutOptions` and its typed getters are gone. `layoutOptions`
+  is an open map read by id, so pass a plain String-keyed Hash. Writing a
+  Symbol key into the returned map in place now stores the Symbol as given;
+  use String keys, or assign the whole map through the setter, which still
+  normalises. (#4, #10)
++
+[source,ruby]
+----
+# before
+Elkrb::Graph::LayoutOptions.new(algorithm: "layered")
+# after
+{ "elk.algorithm" => "layered" }
+----
+
+* Unparseable ELKT raises `Elkrb::ParseError` with a line and column. It used
+  to return an empty graph. Rescue `Elkrb::ParseError` where you relied on
+  the empty graph. (#17)
++
+[source,ruby]
+----
+Elkrb::Parsers::ElktParser.parse("<html><body>not elkt</body></html>")
+# before: {"id":"root","layoutOptions":{},"children":[],"edges":[]}
+# after:  Elkrb::ParseError: Unexpected character "<" at line 1, column 1
+----
+
+* Layered defaults to direction `RIGHT` with a 20px gap between layers, and
+  cross-axis positions are centred. Set `"elk.direction": "DOWN"` and
+  `"elk.layered.spacing.nodeNodeBetweenLayers": 60` to approximate 1.x.
+  Layered reads the direction from `elk.direction` and, as a registered alias,
+  from the bare `direction` key. (#58)
++
+Two nodes joined by one edge, default options:
++
+[source,text]
+----
+before: a (12, 12)   b (12, 102)
+after:  a (12, 12)   b (62, 12)
+----
+
+* Edge sections start and end on node borders instead of node centres, section
+  ids change from `<edge>_section_0` to `<edge>_s0`, and sections gain
+  `incomingShape` and `outgoingShape`. Renderers that clipped centre-based
+  lines themselves should stop doing so. (#67)
++
+[source,text]
+----
+before: {"id":"e_section_0","startPoint":{"x":27.0,"y":27.0},"endPoint":{"x":27.0,"y":117.0}}
+after:  {"id":"e_s0","startPoint":{"x":42.0,"y":27.0},"endPoint":{"x":62.0,"y":27.0},
+         "incomingShape":"a","outgoingShape":"b"}
+----
+
+* Label `x` and `y` are relative to their owner (node, port or edge) instead of
+  absolute, so add the owner's position when drawing. A node label with no
+  `elk.nodeLabels.placement` stays at (0, 0); set
+  `"elk.nodeLabels.placement": "[H_CENTER,V_CENTER,INSIDE]"` to keep it
+  centred. (#65)
++
+A 60x40 node at (12,12) with a 10x10 label:
++
+[source,text]
+----
+before:                      {"text":"A","x":37.0,"y":27.0}
+after, no placement option:  {"text":"A","x":0.0,"y":0.0}
+after, placement as above:   {"text":"A","x":25.0,"y":15.0}
+----
+
+* The `_constraint_*` and `_assigned_layer` scratch keys no longer appear in
+  output `properties`, and constraint violations go through `Elkrb.logger`
+  instead of `Kernel#warn`. `ConstraintProcessor.new` takes `spacing:` and
+  `BaseConstraint#applies_to?` is removed. Stop reading the scratch keys.
+  (#66)
++
+[source,text]
+----
+before: {"id":"a","constraints":{"fixedPosition":false,"layer":1,"positionPriority":0},
+         "properties":{"_constraint_layer":1}}
+after:  {"id":"a","constraints":{"fixedPosition":false,"layer":1,"positionPriority":0}}
+----
+
+* mrtree and radial coordinates follow ELK's geometry. mrtree honours
+  `elk.direction`, and radial reads the graph's edges and centres the root.
+  There is nothing to migrate; the old coordinates did not match ELK. (#55)
++
+Root `r` with children `c1` and `c2`, 30x30 nodes, mrtree:
++
+[source,text]
+----
+before: r (12, 12)   c1 (12, 102)   c2 (62, 102)
+after:  r (45, 20)   c1 (20, 70)    c2 (70, 70)
+----
+
+* Force layout runs a deterministic Fruchterman-Reingold simulation using node
+  sizes, with ELK's 50px default padding; explicit padding still wins. Every
+  force coordinate changes. (#69)
++
+The same graph with `"elk.algorithm": "force"`:
++
+[source,text]
+----
+before: r (12, 12)           c1 (12, 102)          c2 (62, 102)
+after:  r (115.648, 106.874) c1 (50, 163.785)      c2 (181.253, 50)
+----
+
+* libavoid keeps nodes that already have a position and places only the
+  unplaced ones, in a grid to the right of the placed nodes. To get a full
+  re-layout, position every node or none. (#60)
++
+`a` at (5, 7), `b` at (200, 9) and an unplaced `c`:
++
+[source,text]
+----
+before: a (12, 12)   b (62, 12)    c (112, 12)
+after:  a (12, 12)   b (207, 14)   c (257, 12)
+----
+
+* An edge written with the elkjs primitive keys `source` and `target` is now a
+  real edge, so the graph lays out differently. (#16)
++
+[source,text]
+----
+before: {"id":"e"}
+after:  {"id":"e","sources":["a"],"targets":["b"],
+         "sections":[{"id":"e_s0","startPoint":{"x":42.0,"y":27.0},
+                      "endPoint":{"x":62.0,"y":27.0},
+                      "incomingShape":"a","outgoingShape":"b"}]}
+----
+
 === Added
 
 * Edges read the elkjs primitive endpoint keys `source`, `target`,
