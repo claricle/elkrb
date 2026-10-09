@@ -52,9 +52,11 @@ Compaction, Libavoid and VertiFlex.
 Edge routing:: ORTHOGONAL, POLYLINE and SPLINES, with bend points on the
 computed edge sections.
 
-Ports:: ports with an explicit side and index, and port-to-port edges.
+Ports:: ports with an explicit side and index, placed on the node border, and
+port-to-port edges.
 
-Self-loops:: edges whose source and target are the same node.
+Self-loops:: edges whose source and target are the same node, or ports of the
+same node, routed outside the node border.
 
 Hierarchy:: nested graphs laid out recursively.
 
@@ -734,7 +736,9 @@ See `examples/port_constraints_demo.rb` for more.
 
 === Self-loops
 
-An edge whose source and target are the same node is a self-loop:
+An edge whose source and target are the same node, or ports of the same node,
+is a self-loop. It starts and ends on the node (or port) border and its route
+runs outside the node:
 
 [source,ruby]
 ----
@@ -751,6 +755,8 @@ result = Elkrb.layout(graph)
 section = result.edges.first.sections.first
 puts "sections: #{result.edges.first.sections.size}"
 puts "start: (#{section.start_point.x}, #{section.start_point.y})"
+puts "bends: #{section.bend_points.map { |p| [p.x, p.y] }.inspect}"
+puts "end: (#{section.end_point.x}, #{section.end_point.y})"
 ----
 
 Prints:
@@ -758,7 +764,9 @@ Prints:
 [source]
 ----
 sections: 1
-start: (112.0, 42.0)
+start: (112.0, 37.0)
+bends: [[172.0, 37.0], [172.0, 47.0]]
+end: (112.0, 47.0)
 ----
 
 See `examples/self_loop_demo.rb` for more.
@@ -865,9 +873,9 @@ Explicit attachment points on node borders.
 `id`:: Unique identifier
 `x, y`:: Position relative to node
 `width, height`:: Port dimensions
-`side`:: `NORTH`, `SOUTH`, `EAST` or `WEST` (default `UNDEFINED`)
-`index`:: Order along the side (default -1)
-`offset`:: Port offset (default 0.0)
+`side`:: `NORTH`, `SOUTH`, `EAST` or `WEST` (`nil` until set)
+`index`:: Order along the side (`nil` until set or assigned by layout)
+`offset`:: Port offset (`nil` until set)
 `labels`:: Array of Label objects
 `layout_options`:: Port-specific layout options
 `properties`:: Custom properties
