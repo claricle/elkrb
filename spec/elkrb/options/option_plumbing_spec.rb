@@ -66,7 +66,10 @@ RSpec.describe "option plumbing" do
     },
     "elk.edgeRouting" => {
       at: :root, value: "SPLINES",
-      unwired: unread["fixed preserves existing edge routes", only: %w[fixed]]
+      unwired: unread[
+        "fixed preserves existing edge routes; random scatters its own " \
+        "bend points", only: %w[fixed random]
+      ]
     },
     "elk.force.iterations" => { at: :root, value: 5 },
     "elk.force.repulsion" => { at: :root, value: 50.0 },
@@ -118,7 +121,10 @@ RSpec.describe "option plumbing" do
     },
     "elk.selfLoopSide" => {
       at: :loop, value: "WEST", variant: :self_loop_only,
-      unwired: unread["fixed preserves existing edge routes", only: %w[fixed]]
+      unwired: unread[
+        "fixed preserves existing edge routes; random scatters its own " \
+        "bend points", only: %w[fixed random]
+      ]
     },
     "elk.spacing.componentComponent" => {
       at: :root, value: 90.0,
@@ -136,7 +142,7 @@ RSpec.describe "option plumbing" do
       at: :spline_edge, value: 0.9,
       unwired: unread[
         "these algorithms preserve or replace this fixture's generic " \
-        "spline route", only: %w[fixed libavoid mrtree radial]
+        "spline route", only: %w[fixed libavoid mrtree radial random]
       ]
     },
     "elk.stress.desiredEdgeLength" => { at: :root, value: 300.0 },

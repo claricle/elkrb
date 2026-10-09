@@ -27,6 +27,23 @@ RSpec.describe "seeded random layouts" do
     expect(Elkrb.layout(seeded, algorithm: "random")).not_to eq(default)
   end
 
+  it "pads by 15 and anchors an edge's ends on its source, as Java ELK does" do
+    graph = {
+      "id" => "r", "layoutOptions" => { "elk.randomSeed" => 42 },
+      "children" => [{ "id" => "a", "width" => 30, "height" => 30 },
+                     { "id" => "b", "width" => 30, "height" => 30 }],
+      "edges" => [{ "id" => "e", "sources" => ["a"], "targets" => ["b"] }]
+    }
+    laid_out = Elkrb.layout(graph, algorithm: "random")
+    a = laid_out.children.first
+    section = laid_out.edges.first.sections.first
+
+    expect([a.x >= 15, a.y >= 15,
+            section.start_point.x, section.start_point.y,
+            section.end_point.x, section.end_point.y])
+      .to eq([true, true, a.x + 30, a.y + 15, a.x + 15, a.y + 30])
+  end
+
   it "makes force deterministic" do
     expect do
       Elkrb.layout(JSON.parse(graph_json), algorithm: "force")
