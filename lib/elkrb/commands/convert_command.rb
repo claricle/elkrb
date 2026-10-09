@@ -19,6 +19,7 @@ module Elkrb
       def run
         # Load source file
         graph = load_any_format(@file)
+        graph = graph_from_hash(graph) if graph.is_a?(Hash)
 
         # Detect target format
         target_format = detect_format(@options[:output])
@@ -67,6 +68,11 @@ module Elkrb
                   "Cannot detect output format from extension: #{ext}"
           end
         end
+      end
+
+      def graph_from_hash(hash)
+        require_relative "../graph/graph"
+        Elkrb::Graph::Graph.from_hash(hash)
       end
 
       def export_to_format(graph, format)

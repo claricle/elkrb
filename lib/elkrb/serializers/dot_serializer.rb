@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "../options/resolver"
+
 module Elkrb
   module Serializers
     # Serializes ELK graphs to Graphviz DOT format
@@ -43,14 +45,14 @@ module Elkrb
           graph_attrs: {},
           node_attrs: {},
           edge_attrs: {},
+          engine: nil,
         }.merge(options)
 
         @indent_level = 0
-        @node_counter = 0
-        @cluster_counter = 0
 
         # Convert hash to Graph if needed
         @graph = graph.is_a?(Hash) ? hash_to_graph(graph) : graph
+        index_endpoints(@graph)
 
         lines = []
         lines << graph_declaration
@@ -97,18 +99,19 @@ module Elkrb
       # Generate graph declaration
       def graph_declaration
         type = @options[:directed] ? "digraph" : "graph"
-        "#{type} #{@options[:graph_name]}"
+        "#{type} #{quote_id(@options[:graph_name])}"
       end
 
       # Format graph-level attributes
       def format_graph_attributes(graph)
         attrs = @options[:graph_attrs].dup
+        attrs[:compound] = true if @compounds.any?
 
         # Add rankdir from options or graph layout options
         if @options[:rankdir]
           attrs[:rankdir] = @options[:rankdir]
-        elsif (direction = graph.layout_options&.[]("elk.direction") ||
-               graph.layout_options&.[]("direction"))
+        elsif (direction = option_resolver.get("elk.direction", graph,
+                                               default: nil))
           attrs[:rankdir] = elk_direction_to_rankdir(direction)
         end
 
@@ -133,17 +136,10 @@ module Elkrb
           lines.concat(format_subgraph(node))
         else
           # Simple node
-          node_id = sanitize_id(node.id)
+          node_id = quote_id(node.id)
           attrs = build_node_attributes(node)
 
           lines << indent("#{node_id} #{format_attrs(attrs)}")
-        end
-
-        # Process child edges if any
-        if node.edges && !node.edges.empty?
-          node.edges.each do |edge|
-            lines.concat(format_edge(edge))
-          end
         end
 
         lines
@@ -152,16 +148,14 @@ module Elkrb
       # Format a subgraph (hierarchical node)
       def format_subgraph(node)
         lines = []
-        cluster_id = "cluster_#{@cluster_counter}"
-        @cluster_counter += 1
+        cluster_id = @clusters.fetch(node.id)
 
         lines << indent("subgraph #{cluster_id} {")
         @indent_level += 1
 
         # Subgraph label
         if node.labels && !node.labels.empty?
-          label_text = node.labels.first.text
-          lines << indent("label=#{quote_value(label_text)}")
+          lines << indent("label=#{quote_labels(node.labels.map(&:text))}")
         end
 
         # Process children
@@ -190,10 +184,9 @@ module Elkrb
 
         # Label
         if node.labels && !node.labels.empty?
-          label_text = node.labels.map(&:text).join("\\n")
-          attrs[:label] = label_text
+          attrs[:label] = node.labels.map(&:text)
         elsif node.id
-          attrs[:label] = node.id
+          attrs[:label] = [node.id]
         end
 
         # Size (DOT uses inches)
@@ -204,7 +197,7 @@ module Elkrb
         end
 
         # Position (if laid out)
-        if node.x && node.y
+        if neato? && node.x && node.y
           # DOT uses center coordinates, ELK uses top-left
           # Also need to account for height since DOT y goes up
           center_x = node.x + ((node.width || 0) / 2.0)
@@ -231,11 +224,10 @@ module Elkrb
           !edge.targets || edge.targets.empty?
 
         # Get source and target
-        source_id = sanitize_id(edge.sources.first)
-        target_id = sanitize_id(edge.targets.first)
-
         # Build edge attributes
         attrs = build_edge_attributes(edge)
+        source_id = edge_endpoint(edge.sources.first, :source, attrs)
+        target_id = edge_endpoint(edge.targets.first, :target, attrs)
 
         # Edge operator
         op = @options[:directed] ? "->" : "--"
@@ -251,12 +243,11 @@ module Elkrb
 
         # Label
         if edge.labels && !edge.labels.empty?
-          label_text = edge.labels.map(&:text).join("\\n")
-          attrs[:label] = label_text
+          attrs[:label] = edge.labels.map(&:text)
         end
 
         # Edge routing points
-        if edge.sections && !edge.sections.empty?
+        if neato? && edge.sections && !edge.sections.empty?
           section = edge.sections.first
           points = []
 
@@ -281,7 +272,12 @@ module Elkrb
         return "" if attrs.empty?
 
         attr_strs = attrs.map do |key, value|
-          "#{key}=#{quote_value(value)}"
+          rendered = if key == :label && value.is_a?(Array)
+                       quote_labels(value)
+                     else
+                       quote_value(value)
+                     end
+          "#{key}=#{rendered}"
         end
 
         "[#{attr_strs.join(', ')}]"
@@ -291,26 +287,89 @@ module Elkrb
       def quote_value(value)
         value_str = value.to_s
 
-        # Check if value needs quoting
-        if value_str.match?(/[^a-zA-Z0-9_]/) || value_str.empty?
-          # Escape quotes and backslashes
-          escaped = value_str.gsub("\\", "\\\\\\\\").gsub('"', '\\"')
-          "\"#{escaped}\""
-        else
-          value_str
-        end
+        return value_str if bare_id?(value_str)
+
+        quote_string(value_str)
       end
 
-      # Sanitize ID for DOT format
-      def sanitize_id(id)
-        # DOT IDs can contain letters, digits, underscores
-        # If ID contains other characters, quote it
-        sanitized = id.to_s.gsub(/[^a-zA-Z0-9_]/, "_")
+      def quote_id(id)
+        text = id.to_s
+        bare_id?(text) ? text : quote_string(text)
+      end
 
-        # If starts with digit, prepend 'n'
-        sanitized = "n#{sanitized}" if sanitized.match?(/^[0-9]/)
+      def bare_id?(text)
+        identifier = text.match?(/\A[A-Za-z_][A-Za-z0-9_]*\z/)
+        numeral = text.match?(/\A-?(?:\.\d+|\d+(?:\.\d*)?)\z/)
+        (identifier || numeral) && !dot_keyword?(text)
+      end
 
-        sanitized
+      def dot_keyword?(text)
+        %w[node edge graph digraph subgraph strict].include?(text.downcase)
+      end
+
+      def quote_string(text)
+        escaped = text.gsub(/[\\"]/) do |char|
+          char == "\\" ? "\\\\" : '\\"'
+        end
+        "\"#{escaped}\""
+      end
+
+      def quote_labels(labels)
+        escaped = labels.map do |label|
+          label.to_s.gsub(/[\\"]/) do |char|
+            char == "\\" ? "\\\\" : '\\"'
+          end
+        end
+        "\"#{escaped.join('\\n')}\""
+      end
+
+      def edge_endpoint(id, role, attrs)
+        text = id.to_s
+        if (owner = @port_owners[text])
+          return "#{quote_id(owner)}:#{quote_id(text)}"
+        end
+
+        if (compound = @compounds[text])
+          attrs[role == :source ? :ltail : :lhead] = compound[:cluster]
+          return quote_id(compound[:representative])
+        end
+
+        quote_id(text)
+      end
+
+      def index_endpoints(graph)
+        @port_owners = {}
+        @compounds = {}
+        @clusters = {}
+        @cluster_counter = 0
+        Array(graph.children).each { |node| index_node(node) }
+      end
+
+      def index_node(node)
+        Array(node.ports).each { |port| @port_owners[port.id] = node.id }
+        if node.hierarchical?
+          cluster = "cluster_#{@cluster_counter}"
+          @cluster_counter += 1
+          @clusters[node.id] = cluster
+          @compounds[node.id] = {
+            cluster: cluster,
+            representative: representative_id(node),
+          }
+        end
+        Array(node.children).each { |child| index_node(child) }
+      end
+
+      def representative_id(node)
+        child = Array(node.children).first
+        child&.hierarchical? ? representative_id(child) : child&.id
+      end
+
+      def option_resolver
+        @option_resolver ||= Elkrb::Options::Resolver.new
+      end
+
+      def neato?
+        @options[:engine].to_s == "neato"
       end
 
       # Convert ELK direction to DOT rankdir

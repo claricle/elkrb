@@ -4,238 +4,317 @@ require "json"
 
 module Elkrb
   module Serializers
-    # Serializer for ELKT (ELK Text) format
-    # Converts ELK graph structures to textual ELKT representation
+    # Serializes graph models and Hashes to ELK Text.
     class ElktSerializer
+      IDENTIFIER = /\A[A-Za-z_]\w*\z/
+      KEYWORDS = %w[
+        graph node port label edge layout section position size
+        start end bends incoming outgoing true false null
+      ].freeze
+      LABEL_ESCAPES = {
+        "\\" => "\\\\", '"' => '\\"', "\n" => "\\n", "\r" => "\\r",
+        "\t" => "\\t", "\b" => "\\b", "\f" => "\\f"
+      }.freeze
+      private_constant :IDENTIFIER, :KEYWORDS, :LABEL_ESCAPES
+
       def initialize(options = {})
         @indent_size = options[:indent_size] || 2
-        @include_comments = options.fetch(:include_comments, true)
       end
 
       def serialize(graph, _options = {})
         @indent_level = 0
         @output = []
-
-        # Convert to hash using JSON round-trip for Lutaml models
-        @graph_hash = if graph.is_a?(Hash)
-                        graph
-                      elsif graph.respond_to?(:to_json)
-                        JSON.parse(graph.to_json, symbolize_names: true)
-                      else
-                        graph
-                      end
-
+        @graph_hash = graph_hash(graph)
+        prepare_ids(@graph_hash)
         serialize_graph(@graph_hash)
-
         "#{@output.join("\n")}\n"
       end
 
       private
 
+      def graph_hash(graph)
+        return graph if graph.is_a?(Hash)
+        return JSON.parse(graph.to_json, symbolize_names: true) if
+          graph.respond_to?(:to_json)
+
+        graph
+      end
+
       def serialize_graph(graph)
-        # Serialize graph-level layout options
-        layout_opts = graph[:layoutOptions] || graph["layoutOptions"] || {}
-        serialize_layout_options(layout_opts)
+        options = value(graph, :layoutOptions) || {}
+        serialize_layout_options(options)
+        @output << "" if options.any?
 
-        # Add blank line after options if present
-        @output << "" if (graph[:layoutOptions] || {}).any?
-
-        # Serialize nodes
-        (graph[:children] || []).each do |node|
-          serialize_node(node)
-        end
-
-        # Add blank line before edges if both nodes and edges exist
-        if (graph[:children] || []).any? && (graph[:edges] || []).any?
-          @output << ""
-        end
-
-        # Serialize edges
-        (graph[:edges] || []).each do |edge|
-          serialize_edge(edge)
-        end
+        children = value(graph, :children) || []
+        edges = value(graph, :edges) || []
+        children.each { |node| serialize_node(node) }
+        @output << "" if children.any? && edges.any?
+        edges.each { |edge| serialize_edge(edge) }
       end
 
       def serialize_layout_options(options)
-        return if options.empty?
-
-        options.each do |key, value|
-          # Remove elk. prefix for cleaner output
-          display_key = key.to_s.start_with?("elk.") ? key.to_s[4..] : key.to_s
-
-          # Special handling for algorithm and direction
-          @output << if display_key == "algorithm"
-                       "algorithm: #{value}"
-                     elsif display_key == "direction"
-                       "direction: #{value}"
-                     else
-                       "#{display_key}: #{format_value(value)}"
-                     end
+        indent = indentation
+        options.each do |key, option_value|
+          @output << "#{indent}#{property_key(key)}: " \
+                     "#{format_value(option_value)}"
         end
       end
 
       def serialize_node(node)
-        indent = " " * (@indent_level * @indent_size)
-
-        # Check if node has attributes to serialize in a block
-        has_block = node_has_block?(node)
-
-        if has_block
-          @output << "#{indent}node #{node[:id]} {"
-          @indent_level += 1
-
-          serialize_node_block(node)
-
-          @indent_level -= 1
-          @output << "#{indent}}"
+        id = mapped_id(value(node, :id))
+        if node_has_block?(node)
+          open_block("node #{id}") { serialize_node_block(node) }
         else
-          @output << "#{indent}node #{node[:id]}"
+          @output << "#{indentation}node #{id}"
         end
       end
 
       def node_has_block?(node)
-        # Node needs a block if it has:
-        # - Layout attributes (size, position)
-        # - Labels
-        # - Ports
-        # - Children (nested nodes)
-        # - Non-default dimensions
-
-        has_layout = node[:width] && node[:height] &&
-          (node[:width] != 40 || node[:height] != 40)
-        has_position = node[:x] || node[:y]
-        has_labels = (node[:labels] || []).any?
-        has_ports = (node[:ports] || []).any?
-        has_children = (node[:children] || []).any?
-        has_edges = (node[:edges] || []).any?
-
-        has_layout || has_position || has_labels || has_ports ||
-          has_children || has_edges
-      end
-
-      # Position first, then size: this is the order ELK itself writes.
-      def shape_layout_parts(node)
-        parts = []
-        if node[:x] && node[:y]
-          parts << "position: #{format_number(node[:x])}, " \
-                   "#{format_number(node[:y])}"
-        end
-        if node[:width] && node[:height]
-          parts << "size: #{format_number(node[:width])}, " \
-                   "#{format_number(node[:height])}"
-        end
-        parts
+        shape_layout_parts(node).any? ||
+          collection?(node, :labels) || collection?(node, :ports) ||
+          collection?(node, :children) || collection?(node, :edges) ||
+          hash_present?(node, :layoutOptions)
       end
 
       def serialize_node_block(node)
-        indent = " " * (@indent_level * @indent_size)
-
-        # ELKT allows ONE layout block per node, so position and size go in
-        # the same block. Two blocks cannot be read back by the parser.
-        layout = shape_layout_parts(node)
-        @output << "#{indent}layout [ #{layout.join('  ')} ]" if layout.any?
-
-        # Serialize labels
-        (node[:labels] || []).each do |label|
-          @output << "#{indent}label \"#{label[:text]}\""
-        end
-
-        # Serialize ports
-        (node[:ports] || []).each do |port|
-          serialize_port(port)
-        end
-
-        # Serialize nested nodes
-        (node[:children] || []).each do |child|
-          serialize_node(child)
-        end
-
-        # Serialize nested edges
-        (node[:edges] || []).each do |edge|
-          serialize_edge(edge)
-        end
+        serialize_shape_layout(node)
+        serialize_layout_options(value(node, :layoutOptions) || {})
+        (value(node, :labels) || []).each { |label| serialize_label(label) }
+        (value(node, :ports) || []).each { |port| serialize_port(port) }
+        (value(node, :children) || []).each { |child| serialize_node(child) }
+        (value(node, :edges) || []).each { |edge| serialize_edge(edge) }
       end
 
       def serialize_port(port)
-        indent = " " * (@indent_level * @indent_size)
-
+        id = mapped_id(value(port, :id))
         if port_has_block?(port)
-          @output << "#{indent}port #{port[:id]} {"
-          @indent_level += 1
-
-          serialize_port_block(port)
-
-          @indent_level -= 1
-          @output << "#{indent}}"
+          open_block("port #{id}") { serialize_port_block(port) }
         else
-          @output << "#{indent}port #{port[:id]}"
+          @output << "#{indentation}port #{id}"
         end
       end
 
       def port_has_block?(port)
-        (port[:layoutOptions] || {}).any? ||
-          (port[:labels] || []).any?
+        shape_layout_parts(port).any? || collection?(port, :labels) ||
+          hash_present?(port, :layoutOptions)
       end
 
       def serialize_port_block(port)
-        indent = " " * (@indent_level * @indent_size)
-
-        # Serialize port layout options
-        (port[:layoutOptions] || {}).each do |key, value|
-          display_key = key.to_s.start_with?("elk.") ? key.to_s[4..] : key.to_s
-          @output << "#{indent}#{display_key}: #{format_value(value)}"
-        end
-
-        # Serialize port labels
-        (port[:labels] || []).each do |label|
-          @output << "#{indent}label \"#{label[:text]}\""
-        end
+        serialize_shape_layout(port)
+        serialize_layout_options(value(port, :layoutOptions) || {})
+        (value(port, :labels) || []).each { |label| serialize_label(label) }
       end
 
       def serialize_edge(edge)
-        indent = " " * (@indent_level * @indent_size)
+        sources = serialized_endpoints(edge, :source)
+        targets = serialized_endpoints(edge, :target)
+        id = value(edge, :id)
+        prefix = id ? "#{mapped_id(id)}: " : ""
+        declaration = "edge #{prefix}#{sources.join(', ')} -> " \
+                      "#{targets.join(', ')}"
 
-        source = edge[:sources]&.first || edge[:source]
-        target = edge[:targets]&.first || edge[:target]
-
-        # Add port references if present
-        source_ref = if edge[:sourcePort]
-                       "#{source}.#{edge[:sourcePort]}"
-                     else
-                       source
-                     end
-
-        target_ref = if edge[:targetPort]
-                       "#{target}.#{edge[:targetPort]}"
-                     else
-                       target
-                     end
-
-        # Include edge ID if it's not auto-generated
-        @output << if edge[:id] && !edge[:id].to_s.match?(/^e\d+$/)
-                     "#{indent}edge #{edge[:id]}: #{source_ref} -> #{target_ref}"
-                   else
-                     "#{indent}edge #{source_ref} -> #{target_ref}"
-                   end
-      end
-
-      def format_value(value)
-        case value
-        when Float
-          format_number(value)
-        when Integer
-          value
-        when TrueClass, FalseClass
-          value
+        if edge_has_block?(edge)
+          open_block(declaration) { serialize_edge_block(edge) }
         else
-          value.to_s
+          @output << "#{indentation}#{declaration}"
         end
       end
 
-      def format_number(num)
-        # Remove trailing zeros and decimal point if integer
-        formatted = format("%.2f", num).sub(/\.?0+$/, "")
+      def edge_has_block?(edge)
+        hash_present?(edge, :layoutOptions) || collection?(edge, :labels)
+      end
+
+      def serialize_edge_block(edge)
+        serialize_layout_options(value(edge, :layoutOptions) || {})
+        (value(edge, :labels) || []).each { |label| serialize_label(label) }
+      end
+
+      def serialize_label(label)
+        id = value(label, :id)
+        prefix = id ? "#{mapped_id(id)}: " : ""
+        declaration = "label #{prefix}\"#{escape_label(value(label, :text))}\""
+
+        if label_has_block?(label)
+          open_block(declaration) do
+            serialize_shape_layout(label)
+            serialize_layout_options(value(label, :layoutOptions) || {})
+          end
+        else
+          @output << "#{indentation}#{declaration}"
+        end
+      end
+
+      def label_has_block?(label)
+        shape_layout_parts(label).any? || hash_present?(label, :layoutOptions)
+      end
+
+      def serialize_shape_layout(shape)
+        parts = shape_layout_parts(shape)
+        @output << "#{indentation}layout [ #{parts.join('  ')} ]" if parts.any?
+      end
+
+      # Position first, then size: this is the order ELK itself writes.
+      def shape_layout_parts(shape)
+        parts = []
+        x = value(shape, :x)
+        y = value(shape, :y)
+        width = value(shape, :width)
+        height = value(shape, :height)
+        parts << "position: #{format_number(x)}, #{format_number(y)}" if x && y
+        if width && height
+          parts << "size: #{format_number(width)}, #{format_number(height)}"
+        end
+        parts
+      end
+
+      def open_block(declaration)
+        @output << "#{indentation}#{declaration} {"
+        @indent_level += 1
+        yield
+        @indent_level -= 1
+        @output << "#{indentation}}"
+      end
+
+      def endpoint(id)
+        owner = @port_owners[id.to_s]
+        return mapped_id(id) unless owner
+
+        "#{mapped_id(owner)}.#{mapped_id(id)}"
+      end
+
+      def serialized_endpoints(edge, direction)
+        port = value(edge, :"#{direction}Port")
+        node = Array(value(edge, :"#{direction}s")).first ||
+          value(edge, direction)
+        return ["#{mapped_id(node)}.#{mapped_id(port)}"] if port
+
+        Array(value(edge, :"#{direction}s")).map { |id| endpoint(id) }
+      end
+
+      def prepare_ids(graph)
+        @port_owners = {}
+        ids = collect_ids(graph)
+        @id_map = {}
+        used = {}
+
+        valid, invalid = ids.uniq.partition { |id| valid_identifier?(id) }
+        valid.each do |id|
+          @id_map[id] = id
+          used[id] = true
+        end
+
+        invalid.each do |id|
+          base = sanitized_id(id)
+          candidate = base
+          counter = 2
+          while used[candidate]
+            candidate = "#{base}_#{counter}"
+            counter += 1
+          end
+          @id_map[id] = candidate
+          used[candidate] = true
+        end
+      end
+
+      def collect_ids(container, ids = [])
+        collect_member_ids(value(container, :labels), ids)
+        collect_edge_ids(value(container, :edges), ids)
+        Array(value(container, :children)).each do |node|
+          node_id = value(node, :id)&.to_s
+          ids << node_id if node_id
+          Array(value(node, :ports)).each do |port|
+            port_id = value(port, :id)&.to_s
+            next unless port_id
+
+            ids << port_id
+            @port_owners[port_id] = node_id
+            collect_member_ids(value(port, :labels), ids)
+          end
+          collect_ids(node, ids)
+        end
+        ids
+      end
+
+      def collect_edge_ids(edges, ids)
+        Array(edges).each do |edge|
+          edge_id = value(edge, :id)&.to_s
+          ids << edge_id if edge_id
+          collect_member_ids(value(edge, :labels), ids)
+        end
+      end
+
+      def collect_member_ids(members, ids)
+        Array(members).each do |member|
+          id = value(member, :id)&.to_s
+          ids << id if id
+        end
+      end
+
+      def mapped_id(id)
+        @id_map.fetch(id.to_s, sanitized_id(id.to_s))
+      end
+
+      def valid_identifier?(id)
+        IDENTIFIER.match?(id) && !KEYWORDS.include?(id)
+      end
+
+      def sanitized_id(id)
+        sanitized = id.gsub(/\W/, "_")
+        sanitized = "_#{sanitized}" unless sanitized.match?(/\A[A-Za-z_]/)
+        sanitized = "_#{sanitized}" if KEYWORDS.include?(sanitized)
+        sanitized.empty? ? "_id" : sanitized
+      end
+
+      def property_key(key)
+        key.to_s.split(".").map do |segment|
+          KEYWORDS.include?(segment) ? "^#{segment}" : segment
+        end.join(".")
+      end
+
+      def format_value(option_value)
+        case option_value
+        when Float then format_number(option_value)
+        when Integer, TrueClass, FalseClass then option_value.to_s
+        when NilClass then "null"
+        else format_string_value(option_value.to_s)
+        end
+      end
+
+      def format_string_value(text)
+        return text if valid_value_identifier?(text)
+
+        "\"#{escape_label(text)}\""
+      end
+
+      def valid_value_identifier?(text)
+        text.split(".").all? { |part| valid_identifier?(part) }
+      end
+
+      def escape_label(text)
+        text.to_s.gsub(/[\\"\n\r\t\x08\f]/) { |char| LABEL_ESCAPES.fetch(char) }
+      end
+
+      def format_number(number)
+        formatted = format("%.2f", number).sub(/\.?0+$/, "")
         formatted.empty? ? "0" : formatted
+      end
+
+      def indentation
+        " " * (@indent_level * @indent_size)
+      end
+
+      def collection?(object, key)
+        Array(value(object, key)).any?
+      end
+
+      def hash_present?(object, key)
+        (value(object, key) || {}).any?
+      end
+
+      def value(object, key)
+        return object[key] if object.key?(key)
+
+        object[key.to_s]
       end
     end
   end
