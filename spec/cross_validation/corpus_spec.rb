@@ -62,8 +62,6 @@ module CorpusCatalogue
     ["elkjs_layouters_stress", "invariants"] => "S14",
     ["java_elk_random", "invariants"] => "S14",
     ["elkjs_layouters_random", "invariants"] => "S14",
-    ["java_elk_radial", "invariants"] => "S17",
-    ["elkjs_layouters_radial", "invariants"] => "S17",
     ["java_elk_fixed", "invariants"] => "S16",
     ["elkjs_layouters_fixed", "invariants"] => "S16",
   }.freeze
