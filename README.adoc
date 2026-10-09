@@ -371,8 +371,8 @@ Prints:
 [source]
 ----
 Person: (97.0, 112.0)
-Employee: (12.0, 12.0)
-Customer: (182.0, 12.0)
+Employee: (182.0, 12.0)
+Customer: (12.0, 12.0)
 ----
 
 === Layout from YAML
@@ -520,7 +520,7 @@ puts direction[:values].inspect
 
 graph = {
   id: "root",
-  layoutOptions: { "elk.layered.crossingMinimization.strategy" => "LAYER_SWEEP" },
+  layoutOptions: { "elk.layered.nodePlacement.strategy" => "NETWORK_SIMPLEX" },
   children: [{ id: "n1", width: 40, height: 40 }],
 }
 
@@ -537,7 +537,7 @@ Prints:
 ----
 partial
 ["UNDEFINED", "RIGHT", "LEFT", "DOWN", "UP"]
-strict mode: unknown or unhonoured layout option(s): elk.layered.crossingMinimization.strategy (accepted, not honoured)
+strict mode: unknown or unhonoured layout option(s): elk.layered.nodePlacement.strategy (accepted, not honoured)
 ----
 
 A value of the wrong type, such as `"abc"` for `elk.spacing.nodeNode`, raises
@@ -908,7 +908,7 @@ require "elkrb"
 
 graph = Elkrb::Graph::Graph.new(id: "root")
 graph.layout_options = { "elk.direction": "DOWN", "elk.algorithm" => "layered" }
-p graph.layout_options
+p graph.layout_options.keys
 
 begin
   graph.layout_options = { "text" => "a" }
@@ -921,7 +921,7 @@ Prints:
 
 [source]
 ----
-{"elk.direction" => "DOWN", "elk.algorithm" => "layered"}
+["elk.direction", "elk.algorithm"]
 layoutOptions cannot use `text` or `elements` as a key; both are reserved by lutaml-model
 ----
 
