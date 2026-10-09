@@ -1,6 +1,8 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+require "tmpdir"
+
 require_relative "../lib/elkrb"
 
 # Example 1: Simple graph with layout and DOT export
@@ -120,7 +122,7 @@ puts "\n"
 puts "Example 4: Saving to File"
 puts "=" * 50
 
-output_file = "output_graph.dot"
+output_file = File.join(Dir.tmpdir, "output_graph.dot")
 File.write(output_file, dot_output)
 puts "DOT file saved to: #{output_file}"
 puts "You can render it with Graphviz:"

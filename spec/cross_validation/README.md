@@ -132,15 +132,15 @@ Features:
 
 ## Current Results
 
-47 corpus cases. 44 lay out cleanly, 3 error, none time out. All three
-errors are declared in their own fixture with `"expect": "error"`, so a
-healthy dump still exits 0:
+`rake validate:run` prints the totals. 48 corpus cases: 46 lay out cleanly,
+2 error, none time out. Both errors are declared in their own fixture with
+`"expect": "error"`, so a healthy dump still exits 0:
 
 - `duplicate_ids` — the graph declares the same id twice (RC4).
-- `java_elk_sporeOverlap`, `java_elk_sporeCompaction` — both algorithms
-  resolve and then crash on nil arithmetic inside themselves.
+- `hyperedge` — layered rejects an edge that is not exactly one source and
+  one target.
 
-`corpus_spec.rb` runs the same 47 cases as examples and holds each result
+`corpus_spec.rb` runs the same cases as examples and holds each result
 to the layout invariants. Its `KNOWN_FAILURES` ledger is the list of
 cases that are still pending, with the id that tracks each one.
 
@@ -171,7 +171,7 @@ To add custom test cases:
 
 Add to CI pipeline:
 ```bash
-# In .github/workflows/test.yml or similar
+# In a GitHub Actions workflow
 - name: Run cross-validation
   run: |
     bundle exec rake validate:import_all
@@ -183,7 +183,7 @@ Add to CI pipeline:
 When adding new features or algorithms:
 1. Add corresponding test cases to importers
 2. Run validation: `rake validate:all`
-3. Ensure pass rate doesn't decrease
+3. Ensure no case becomes an unexpected failure (`unexpected_failures` in the dump's `summary.json`)
 4. Update this README with any new findings
 
 ## License
