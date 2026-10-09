@@ -300,10 +300,9 @@ RSpec.describe "elkrb CLI" do
       end
     end
 
-    # The counterpart to layout's early-hangup example, and it goes the OTHER
-    # way on purpose. There, the reader hanging up ends a run that SUCCEEDED,
-    # so the status stays 0. Here the validation genuinely failed, and the
-    # status must stay 1 whether or not anyone read the report.
+    # The counterpart to layout's early-hangup example. The validation report
+    # belongs on stderr, and a consumer closing that diagnostic stream must
+    # not turn a genuine validation failure into success.
     #
     # This used to depend on the size of the error list: below the 64 KiB pipe
     # buffer `elkrb validate bad.json | head` exited 1, and above it the EPIPE
@@ -325,7 +324,7 @@ RSpec.describe "elkrb CLI" do
         reader, writer = IO.pipe
         pid = Process.spawn(RbConfig.ruby, "-I#{CliRunner::LIB}",
                             CliRunner::EXE, "validate", path,
-                            out: writer, err: File::NULL)
+                            out: File::NULL, err: writer)
         writer.close
         reader.readpartial(1)
         reader.close

@@ -24,14 +24,12 @@ module Elkrb
         if errors.empty?
           puts "✅ #{@file} is valid"
         else
-          # One summary, printed and raised, so the reported count and the
-          # raised count cannot drift apart. The printing is best-effort --
-          # see Elkrb::BestEffortWrite -- because this report goes out BEFORE
-          # the raise, so a dead stdout used to take the raise with it.
           summary = "#{@file} has #{errors.length} error(s)"
           BestEffortWrite.attempt do
-            puts "❌ #{summary}:"
-            errors.each { |e| puts "  • #{e}" }
+            $stderr.puts "❌ #{summary}:" # rubocop:disable Style/StderrPuts
+            errors.each do |error|
+              $stderr.puts "  • #{error}" # rubocop:disable Style/StderrPuts
+            end
           end
           raise Elkrb::CommandFailed, summary
         end
@@ -42,12 +40,43 @@ module Elkrb
       def load_any_format(file)
         raise ArgumentError, "File not found: #{file}" unless File.exist?(file)
 
-        require_relative "../format_sniffer"
-        graph = Elkrb::FormatSniffer.read(File.read(file), File.extname(file).downcase)
+        content = File.read(file)
 
-        return graph if graph.is_a?(Hash)
+        case File.extname(file).downcase
+        when ".json" then parse_json(content)
+        when ".yml", ".yaml" then YAML.safe_load(content)
+        when ".elkt" then parse_elkt(content)
+        else sniff_format(content)
+        end
+      end
 
-        JSON.parse(graph.to_json, symbolize_names: true)
+      def parse_json(content)
+        JSON.parse(content, symbolize_names: true)
+      end
+
+      def parse_elkt(content)
+        require_relative "../parsers/elkt_parser"
+        Elkrb::Parsers::ElktParser.parse(content)
+      end
+
+      def sniff_format(content)
+        stripped = content.lstrip
+
+        if stripped.start_with?("{", "[")
+          begin
+            return parse_json(content)
+          rescue JSON::ParserError
+            nil
+          end
+        end
+
+        yaml = YAML.safe_load(content)
+        return yaml if yaml.is_a?(Hash) || yaml.is_a?(Array)
+
+        parse_elkt(content)
+      rescue Psych::SyntaxError, Elkrb::ParseError
+        raise ArgumentError,
+              "Unable to parse input file. Supported formats: JSON, YAML, ELKT"
       end
 
       def validate_graph(graph)
@@ -60,17 +89,19 @@ module Elkrb
         # Check required fields
         errors << "Graph missing 'id' field" unless graph[:id] || graph["id"]
 
+        ids, duplicate_errors = collect_ids(graph)
+        errors.concat(duplicate_errors)
+
         # Validate children (nodes)
         children = graph[:children] || graph["children"] || []
         children.each_with_index do |node, idx|
-          errors.concat(validate_node(node, "children[#{idx}]"))
+          errors.concat(validate_node(node, "children[#{idx}]", ids))
         end
 
         # Validate edges
         edges = graph[:edges] || graph["edges"] || []
         edges.each_with_index do |edge, idx|
-          errors.concat(validate_edge(edge, "edges[#{idx}]",
-                                      collect_node_ids(graph)))
+          errors.concat(validate_edge(edge, "edges[#{idx}]", ids))
         end
 
         # Strict mode: additional checks
@@ -81,7 +112,7 @@ module Elkrb
         errors
       end
 
-      def validate_node(node, path)
+      def validate_node(node, path, ids)
         errors = []
 
         errors << "#{path}: Node must be a Hash" unless node.is_a?(Hash)
@@ -111,7 +142,7 @@ module Elkrb
         # Validate nested children
         children = node[:children] || node["children"] || []
         children.each_with_index do |child, idx|
-          errors.concat(validate_node(child, "#{path}.children[#{idx}]"))
+          errors.concat(validate_node(child, "#{path}.children[#{idx}]", ids))
         end
 
         # Validate ports
@@ -120,10 +151,15 @@ module Elkrb
           errors.concat(validate_port(port, "#{path}.ports[#{idx}]"))
         end
 
+        edges = node[:edges] || node["edges"] || []
+        edges.each_with_index do |edge, idx|
+          errors.concat(validate_edge(edge, "#{path}.edges[#{idx}]", ids))
+        end
+
         errors
       end
 
-      def validate_edge(edge, path, valid_node_ids)
+      def validate_edge(edge, path, valid_ids)
         errors = []
 
         errors << "#{path}: Edge must be a Hash" unless edge.is_a?(Hash)
@@ -147,17 +183,20 @@ module Elkrb
           errors << "#{path}: Edge '#{edge_id}' targets must be an array"
         end
 
-        # Check that sources and targets reference valid nodes (in strict mode)
-        if @options[:strict] && sources.is_a?(Array) && targets.is_a?(Array)
+        if sources.is_a?(Array)
           sources.each do |source|
-            unless valid_node_ids.include?(source)
-              errors << "#{path}: Edge '#{edge_id}' references unknown source node '#{source}'"
+            unless valid_ids.include?(source)
+              errors << "#{path}: Edge '#{edge_id}' references unknown " \
+                        "source node or port '#{source}'"
             end
           end
+        end
 
+        if targets.is_a?(Array)
           targets.each do |target|
-            unless valid_node_ids.include?(target)
-              errors << "#{path}: Edge '#{edge_id}' references unknown target node '#{target}'"
+            unless valid_ids.include?(target)
+              errors << "#{path}: Edge '#{edge_id}' references unknown " \
+                        "target node or port '#{target}'"
             end
           end
         end
@@ -190,18 +229,64 @@ module Elkrb
         errors
       end
 
-      def collect_node_ids(graph, ids = [])
-        children = graph[:children] || graph["children"] || []
+      def collect_ids(graph)
+        endpoint_ids = Set.new
+        all_ids = Set.new
+        errors = []
 
-        children.each do |node|
-          node_id = node[:id] || node["id"]
-          ids << node_id if node_id
+        collect_container_ids(graph, endpoint_ids, all_ids, errors)
 
-          # Recursively collect from nested children
-          collect_node_ids(node, ids)
+        [endpoint_ids, errors]
+      end
+
+      def collect_container_ids(container, endpoint_ids, all_ids, errors)
+        children = container[:children] || container["children"] || []
+        if children.is_a?(Array)
+          children.each do |node|
+            collect_node_id(node, endpoint_ids, all_ids, errors)
+          end
         end
 
-        ids
+        edges = container[:edges] || container["edges"] || []
+        return unless edges.is_a?(Array)
+
+        edges.each do |edge|
+          next unless edge.is_a?(Hash)
+
+          record_id(edge[:id] || edge["id"], all_ids, errors)
+        end
+      end
+
+      def collect_node_id(node, endpoint_ids, all_ids, errors)
+        return unless node.is_a?(Hash)
+
+        record_endpoint_id(node[:id] || node["id"], endpoint_ids,
+                           all_ids, errors)
+
+        ports = node[:ports] || node["ports"] || []
+        if ports.is_a?(Array)
+          ports.each do |port|
+            next unless port.is_a?(Hash)
+
+            record_endpoint_id(port[:id] || port["id"], endpoint_ids,
+                               all_ids, errors)
+          end
+        end
+
+        collect_container_ids(node, endpoint_ids, all_ids, errors)
+      end
+
+      def record_endpoint_id(id, endpoint_ids, all_ids, errors)
+        return unless id
+
+        endpoint_ids.add(id)
+        record_id(id, all_ids, errors)
+      end
+
+      def record_id(id, all_ids, errors)
+        return unless id
+
+        errors << "duplicate id: #{id}" unless all_ids.add?(id)
       end
     end
   end

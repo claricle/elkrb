@@ -473,7 +473,7 @@ RSpec.describe "library callers keep control of their own process" do
     # The same invariant, one layer earlier and strictly harder. `layout`
     # reports THROUGH fail_command, so guarding fail_command covers it.
     # `validate` reports from inside the command, BEFORE any raise, so a dead
-    # stdout used to kill the report and the raise together: the EPIPE escaped
+    # stderr must not kill the report and the raise together: the EPIPE escaped
     # to Thor, which rescues it and calls exit(true), and the caller died at
     # exit 0 with no exception it could ever have caught.
     it "keeps the caller's error when a validation report cannot be printed" do
@@ -486,17 +486,17 @@ RSpec.describe "library callers keep control of their own process" do
         stdout = survives(<<~RUBY)
           require "elkrb"
           require "elkrb/cli"
-          saved = $stdout.dup
+          saved = $stderr.dup
           reader, writer = IO.pipe
           reader.close
-          $stdout.reopen(writer)
+          $stderr.reopen(writer)
           outcome = begin
             Elkrb::Cli.start(["validate", #{path.inspect}])
             "NO RAISE"
           rescue StandardError => e
             "RESCUED \#{e.class}: \#{e.message}"
           ensure
-            $stdout.reopen(saved)
+            $stderr.reopen(saved)
           end
           puts outcome
           puts #{CliRunner::SENTINEL.inspect}
@@ -619,7 +619,7 @@ RSpec.describe "library callers keep control of their own process" do
     # using the documented `rescue Elkrb::CommandFailed` idiom saw no failure
     # at all, and one rescuing StandardError got a pipe error where the real
     # fault was an invalid graph.
-    it "reports an invalid graph as CommandFailed even when stdout is dead" do
+    it "reports an invalid graph as CommandFailed even when stderr is dead" do
       Dir.mktmpdir do |dir|
         path = File.join(dir, "invalid.json")
         File.write(path,
@@ -629,17 +629,17 @@ RSpec.describe "library callers keep control of their own process" do
         stdout = survives(<<~RUBY)
           require "elkrb"
           require "elkrb/commands/validate_command"
-          saved = $stdout.dup
+          saved = $stderr.dup
           reader, writer = IO.pipe
           reader.close
-          $stdout.reopen(writer)
+          $stderr.reopen(writer)
           outcome = begin
             Elkrb::Commands::ValidateCommand.new(#{path.inspect}, {}).run
             "NO RAISE"
           rescue StandardError => e
             "RESCUED \#{e.class}: \#{e.message}"
           ensure
-            $stdout.reopen(saved)
+            $stderr.reopen(saved)
           end
           puts outcome
           puts #{CliRunner::SENTINEL.inspect}
