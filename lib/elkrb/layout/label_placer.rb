@@ -19,9 +19,6 @@ module Elkrb
 
         # Place edge labels
         place_edge_labels(graph) if graph.edges
-
-        # Recursively place labels in hierarchical graphs
-        place_hierarchical_labels(graph) if graph.hierarchical?
       end
 
       private
@@ -305,24 +302,6 @@ module Elkrb
         # after routing, but we handle the case anyway
         label.x = 0
         label.y = 0
-      end
-
-      # Place labels in hierarchical child nodes.
-      def place_hierarchical_labels(graph)
-        return unless graph.children
-
-        graph.children.each do |node|
-          next unless node.hierarchical?
-
-          # Create temporary graph for children
-          child_graph = Graph::Graph.new(
-            children: node.children,
-            edges: node.edges,
-          )
-
-          # Recursively place labels
-          place_labels(child_graph)
-        end
       end
 
       # Get the label placement an element names, or nil. The element's own

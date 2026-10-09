@@ -73,7 +73,6 @@ module Elkrb
         "elk.stress.desiredEdgeLength" => { type: :float, default: 100.0, algorithms: %w[stress], status: :honoured, description: "Desired edge length for stress majorization" },
         "elk.stress.epsilon" => { type: :float, default: 0.0001, aliases: %w[epsilon], algorithms: %w[stress], status: :honoured, description: "Stress majorization convergence threshold" },
         "elk.stress.iterationLimit" => { type: :integer, default: 500, algorithms: %w[stress], status: :honoured, description: "Stress majorization iteration limit" },
-        "hierarchical" => { type: :boolean, default: false, namespace: :elkrb, algorithms: :all, status: :honoured, description: "elkrb-private: recurse into compound nodes per level (not org.eclipse.elk.hierarchyHandling)" },
         "label.margin" => { type: :float, default: 5.0, namespace: :elkrb, algorithms: :all, status: :honoured, description: "elkrb-private: outer label margin" },
         "label.padding" => { type: :float, default: 5.0, namespace: :elkrb, algorithms: :all, status: :honoured, description: "elkrb-private: inner label padding" },
         "label.placement.disabled" => { type: :boolean, default: false, namespace: :elkrb, algorithms: :all, status: :honoured, description: "elkrb-private: skip automatic label placement entirely" },

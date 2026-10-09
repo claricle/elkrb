@@ -796,7 +796,7 @@ RSpec.describe Elkrb::Options::Resolver do
 
       it "stays silent for honoured call keys and engine flags, even strict" do
         strict = described_class.new(
-          strict: true, hierarchical: true, algorithm: "box",
+          strict: true, algorithm: "box",
           edge_routing: "ORTHOGONAL", iterations: 10, "not.a.key" => 1
         )
 

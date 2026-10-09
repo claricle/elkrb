@@ -43,46 +43,34 @@ module Elkrb
           end
         end
 
-        # Main layout method - automatically handles hierarchical graphs and labels
+        # Main layout method - handles hierarchical graphs and labels.
         #
         # Subclasses should implement #layout_flat for their specific
-        # algorithm logic. This method will automatically handle hierarchical
-        # graphs by calling layout_hierarchical when needed, and place labels
-        # after layout is complete.
+        # algorithm logic. This method sizes compound children bottom-up, then
+        # lays out this level and places its labels.
         #
         # @param graph [Elkrb::Graph::Graph] The graph to layout
         # @return [Elkrb::Graph::Graph] The graph with updated positions
         def layout(graph)
           @graph = graph
 
-          # Apply port constraints before layout
-          apply_port_constraints(graph)
+          # Compound sizes must be known before their own ports or the parent
+          # level are laid out. Each child algorithm recursively sizes deeper
+          # compounds before returning.
+          size_compound_children(graph) if graph.hierarchical?
 
-          # Apply pre-layout constraints (marks nodes)
+          apply_port_constraints(graph)
           apply_pre_layout_constraints(graph)
 
-          # Perform layout. Only nil (children key absent from deserialized
+          # Only nil (children key absent from deserialized
           # input) skips dispatch — an explicit empty array still reaches
           # layout_flat, preserving its documented NotImplementedError
           # contract for subclasses that don't override it.
-          if graph.children
-            if option("hierarchical", default: false) || graph.hierarchical?
-              layout_hierarchical(graph, @options)
-            else
-              layout_flat(graph, @options)
-            end
-          end
-
-          # Enforce post-layout constraints (adjust positions)
+          layout_flat(graph, @options) if graph.children
           enforce_post_layout_constraints(graph)
-
-          # Apply edge routing
           apply_edge_routing(graph)
-
-          # Place labels after layout (unless disabled)
-          unless option("label.placement.disabled", default: false)
-            place_labels(graph)
-          end
+          place_labels(graph) unless
+            option("label.placement.disabled", default: false)
 
           graph
         end
@@ -115,19 +103,6 @@ module Elkrb
 
         def rng
           @rng ||= ::Random.new(option("elk.randomSeed").to_i)
-        end
-
-        # Runs the block with #option reading from graph, then puts the
-        # previous graph back, even when the block raises.
-        #
-        # @param graph [Elkrb::Graph::Graph]
-        # @return [Object] the block's value
-        def reading_options_from(graph)
-          outer = @graph
-          @graph = graph
-          yield
-        ensure
-          @graph = outer
         end
 
         # Get spacing between nodes

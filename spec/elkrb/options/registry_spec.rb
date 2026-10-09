@@ -118,15 +118,17 @@ RSpec.describe Elkrb::Options::Registry do
     end
 
     it "passes booleans through and parses the literal string true (any case)" do
-      expect(described_class.coerce("hierarchical", true)).to be(true)
-      expect(described_class.coerce("hierarchical", false)).to be(false)
-      expect(described_class.coerce("hierarchical", "true")).to be(true)
-      expect(described_class.coerce("hierarchical", "TRUE")).to be(true)
+      id = "label.placement.disabled"
+      expect(described_class.coerce(id, true)).to be(true)
+      expect(described_class.coerce(id, false)).to be(false)
+      expect(described_class.coerce(id, "true")).to be(true)
+      expect(described_class.coerce(id, "TRUE")).to be(true)
     end
 
     it "treats non-'true' strings as false, including '1' and 'yes' (strict, no numeric/word aliases)" do
-      expect(described_class.coerce("hierarchical", "1")).to be(false)
-      expect(described_class.coerce("hierarchical", "yes")).to be(false)
+      id = "label.placement.disabled"
+      expect(described_class.coerce(id, "1")).to be(false)
+      expect(described_class.coerce(id, "yes")).to be(false)
     end
 
     it "coerces a numeric string to Integer" do

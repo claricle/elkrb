@@ -233,7 +233,7 @@ RSpec.describe Elkrb::Layout::LayoutEngine do
       end
 
       it "lays out under strict: true when the call carries only engine flags" do
-        expect { described_class.layout(graph, strict: true, hierarchical: true) }
+        expect { described_class.layout(graph, strict: true, algorithm: "box") }
           .not_to raise_error
       end
     end
@@ -552,9 +552,7 @@ RSpec.describe Elkrb::Layout::LayoutEngine do
         }
 
         expect do
-          described_class.layout(
-            graph, algorithm: "layered", hierarchical: true
-          )
+          described_class.layout(graph, algorithm: "layered")
         end.not_to raise_error
       end
     end

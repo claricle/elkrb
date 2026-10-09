@@ -83,12 +83,7 @@ module Elkrb
         #     "elk.force.repulsion" => 5.0
         #   )
         #
-        # @example With hierarchical layout
-        #   result = Elkrb::Layout::LayoutEngine.layout(
-        #     graph,
-        #     algorithm: "layered",
-        #     hierarchical: true
-        #   )
+        # Hierarchy is detected from compound nodes; no call flag is needed.
         def layout(graph, options = {})
           graph = graph_argument(graph)
 

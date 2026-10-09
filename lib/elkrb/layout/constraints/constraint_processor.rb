@@ -113,20 +113,7 @@ module Elkrb
         def has_constraints?(graph)
           return false unless graph.children
 
-          graph.children.any? do |node|
-            has_constraints_recursive?(node)
-          end
-        end
-
-        private
-
-        # Check if node or its children have constraints
-        def has_constraints_recursive?(node)
-          return true if node.constraints
-
-          return false unless node.children
-
-          node.children.any? { |child| has_constraints_recursive?(child) }
+          graph.children.any?(&:constraints)
         end
       end
     end

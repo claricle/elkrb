@@ -130,12 +130,6 @@ RSpec.describe "option plumbing" do
     "elk.stress.desiredEdgeLength" => { at: :root, value: 300.0 },
     "elk.stress.epsilon" => { at: :root, value: 1e9 },
     "elk.stress.iterationLimit" => { at: :root, value: 1 },
-    "hierarchical" => {
-      at: :root, value: true,
-      read_only: read_only[
-        "layout_hierarchical hands a graph with no compound node to flat",
-      ]
-    },
     "label.margin" => {
       at: :node, value: 30.0,
       with: { node: { "label.placement" => "OUTSIDE V_TOP" } }
