@@ -280,7 +280,7 @@ RSpec.describe Elkrb::Options::Registry do
       parent_carriers.product(
         OptionRouteRows.spellings_for(node_node, "spacing_node_node"),
       ).to_h do |carrier, spelling|
-        readers = %w[box layered mrtree random rectpacking topdownpacking]
+        readers = %w[box force layered mrtree random rectpacking topdownpacking]
         readers << "disco" if carrier == :compound_none
         if carrier != :edge
           readers << "vertiflex"
@@ -380,7 +380,7 @@ RSpec.describe Elkrb::Options::Registry do
                described_class.read_by?("spacing_node_node", "box"),
                described_class.read_by?("elk.direction", "layered"),
                described_class.read_by?("foo.bar", "layered"),
-             ]).to eq([true, false, true, true, false])
+             ]).to eq([true, true, true, true, false])
     end
   end
 

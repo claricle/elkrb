@@ -9,7 +9,9 @@ RSpec.describe Elkrb::Options::UnhonouredReport do
   node_node = "elk.spacing.nodeNode"
   # registry_spec ("status agrees with what layout reads") holds these to
   # what layout does and to the registry's readers.
-  readers = %w[box layered mrtree random rectpacking topdownpacking vertiflex]
+  readers = %w[
+    box force layered mrtree random rectpacking topdownpacking vertiflex
+  ]
   algorithms = Elkrb::Layout::AlgorithmRegistry.available_algorithms
   unhonoured = /strict mode.*#{Regexp.escape(node_node)} \(partial/
 
@@ -171,12 +173,12 @@ RSpec.describe Elkrb::Options::UnhonouredReport do
     # [root algorithm, the compound's own algorithm, raises?]
     [
       ["force", "layered", false],
-      ["layered", "force", true],
+      ["layered", "force", false],
       ["layered", nil, false],
-      ["force", nil, true],
+      ["force", nil, false],
       ["layered", "Layered", false],
       ["force", "org.eclipse.elk.layered", false],
-      ["force", "nonesuch", true],
+      ["force", "nonesuch", :missing_algorithm],
       ["layered", "nonesuch", :missing_algorithm],
     ].each do |root, own, raises|
       it "#{raises ? 'refuses' : 'accepts'} a compound's key under root " \
@@ -199,7 +201,7 @@ RSpec.describe Elkrb::Options::UnhonouredReport do
     end
 
     # [algorithm pinned in the root's layoutOptions, call algorithm, raises?]
-    [["force", nil, true], ["layered", "force", false]]
+    [["force", nil, false], ["layered", "force", false]]
       .each do |pinned, called, raises|
       it "judges a root pinning #{pinned} with call algorithm " \
          "#{called.inspect} by the pin" do
@@ -229,7 +231,7 @@ RSpec.describe Elkrb::Options::UnhonouredReport do
 
     # [root, middle compound, raises?]: the inner compound names no algorithm
     # and carries the key, so it is laid out by the middle one's.
-    [["force", "layered", false], ["layered", "force", true]]
+    [["force", "layered", false], ["layered", "force", false]]
       .each do |root, middle, raises|
       it "lays out an inner compound by its parent's, #{root} > #{middle}" do
         inner = { id: "inner", layoutOptions: { node_node => 30 },
@@ -260,12 +262,12 @@ RSpec.describe Elkrb::Options::UnhonouredReport do
     # One compound object under two parents is laid out once per parent, by
     # that parent's algorithm, whichever parent comes first.
     [%w[layered force], %w[force layered]].each do |first, second|
-      it "refuses a shared compound's key when #{second} lays it out " \
+      it "accepts a shared compound's key when #{second} lays it out " \
          "beside #{first}" do
         graph = shared_compound_graph(first, second, node_node)
 
         expect { Elkrb.layout(graph, algorithm: "box", strict: true) }
-          .to raise_error(Elkrb::Error, unhonoured)
+          .not_to raise_error
       end
     end
 
@@ -278,8 +280,8 @@ RSpec.describe Elkrb::Options::UnhonouredReport do
       end
     end
 
-    let(:force_strictly) do
-      { algorithm: "force", strict: true, node_node => 30 }
+    let(:fixed_strictly) do
+      { algorithm: "fixed", strict: true, node_node => 30 }
     end
 
     it "accepts a call key when any level's algorithm reads it" do
@@ -287,7 +289,7 @@ RSpec.describe Elkrb::Options::UnhonouredReport do
         compound: { layoutOptions: { "elk.algorithm" => "layered" } },
       )
 
-      expect { Elkrb.layout(graph, force_strictly) }.not_to raise_error
+      expect { Elkrb.layout(graph, fixed_strictly) }.not_to raise_error
     end
 
     it "refuses a call key when no level's algorithm reads it" do
@@ -295,7 +297,7 @@ RSpec.describe Elkrb::Options::UnhonouredReport do
         compound: { layoutOptions: { "elk.algorithm" => "stress" } },
       )
 
-      expect { Elkrb.layout(graph, force_strictly) }
+      expect { Elkrb.layout(graph, fixed_strictly) }
         .to raise_error(Elkrb::Error, unhonoured)
     end
 
@@ -325,10 +327,11 @@ RSpec.describe Elkrb::Options::UnhonouredReport do
     it "warns once, naming the readers, when it does not" do
       graph, = option_carried(:root, node_node, 30)
 
-      Elkrb.layout(graph, algorithm: "force")
+      Elkrb.layout(graph, algorithm: "fixed")
 
       expect(warnings.string.lines.size).to eq(1)
-      expect(warnings.string).to include(node_node, "Read by box, layered")
+      expect(warnings.string)
+        .to include(node_node, "Read by box, force, layered")
     end
   end
 end
