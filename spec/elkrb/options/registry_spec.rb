@@ -188,7 +188,7 @@ RSpec.describe Elkrb::Options::Registry do
     end
 
     it "reports :accepted for a self-loop id with no wired read today" do
-      expect(described_class.status("elk.selfLoopOffset")).to eq(:accepted)
+      expect(described_class.status("elk.selfLoopRouting")).to eq(:accepted)
     end
 
     it "reports :accepted for edgeNode/edgeEdge spacing (sirena emits them; not honoured today)" do

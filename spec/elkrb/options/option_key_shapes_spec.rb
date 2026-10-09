@@ -178,11 +178,11 @@ RSpec.describe Elkrb::Options::Resolver, "key shapes" do
   end
 
   describe "#report_unhonoured" do
-    reported = "elk.selfLoopOffset"
+    reported = "elk.selfLoopRouting"
     honoured = "elk.edgeRouting"
     report_spellings = [
       reported,
-      "org.eclipse.elk.selfLoopOffset",
+      "org.eclipse.elk.selfLoopRouting",
       *Elkrb::Options::Registry.all.fetch(reported).fetch(:aliases),
     ]
     # A Hash default that looks like an options map, nested one included.
