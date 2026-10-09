@@ -114,17 +114,32 @@ module Elkrb
             (slots_by_edge[slot.edge] ||= []) << slot
           end
           graph.edges.to_a.each do |edge|
-            add_edge_dummy_bends(edge, slots_by_edge[edge])
+            add_edge_dummy_bends(edge, slots_by_edge[edge], graph)
           end
         end
 
-        def add_edge_dummy_bends(edge, slots)
+        def add_edge_dummy_bends(edge, slots, graph)
           return if slots.nil? || slots.empty? || edge.sections.to_a.empty?
 
           section = edge.sections.first
-          section.bend_points = slots.sort_by do |slot|
-            squared_distance(section.start_point, slot)
-          end.map { |slot| dummy_center(slot) }
+          section.bend_points = ordered_dummy_anchors(
+            section.start_point, slots, graph
+          )
+        end
+
+        def ordered_dummy_anchors(start_point, slots, graph)
+          ordered = slots.sort_by { |slot| squared_distance(start_point, slot) }
+          ordered.each_with_index.map do |slot, index|
+            dummy_anchor(slot, graph, anchor_for(index, ordered.length))
+          end
+        end
+
+        def anchor_for(index, length)
+          return :center if length == 1
+          return :leading if index.zero?
+          return :trailing if index == length - 1
+
+          :center
         end
 
         def squared_distance(point, slot)
@@ -132,11 +147,48 @@ module Elkrb
             ((slot.y + (slot.height / 2.0) - point.y)**2)
         end
 
+        def dummy_anchor(slot, graph, anchor)
+          direction = resolver.get("elk.direction", graph)
+          return dummy_center(slot) if anchor == :center
+          return vertical_dummy_anchor(slot, direction, anchor) if
+            %w[DOWN UP].include?(direction)
+
+          Geometry::Point.new(
+            x: horizontal_anchor(slot, direction, anchor),
+            y: slot.y + (slot.height / 2.0),
+          )
+        end
+
+        def vertical_dummy_anchor(slot, direction, anchor)
+          Geometry::Point.new(
+            x: slot.x + (slot.width / 2.0),
+            y: vertical_anchor(slot, direction, anchor),
+          )
+        end
+
         def dummy_center(slot)
           Geometry::Point.new(
             x: slot.x + (slot.width / 2.0),
             y: slot.y + (slot.height / 2.0),
           )
+        end
+
+        def horizontal_anchor(slot, direction, anchor)
+          leading, trailing = if direction == "LEFT"
+                                [slot.x + slot.width, slot.x]
+                              else
+                                [slot.x, slot.x + slot.width]
+                              end
+          anchor == :leading ? leading : trailing
+        end
+
+        def vertical_anchor(slot, direction, anchor)
+          leading, trailing = if direction == "UP"
+                                [slot.y + slot.height, slot.y]
+                              else
+                                [slot.y, slot.y + slot.height]
+                              end
+          anchor == :leading ? leading : trailing
         end
 
         def minimize_crossings(graph, layers, index)
