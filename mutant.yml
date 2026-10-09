@@ -18,5 +18,6 @@ requires:
   - elkrb/commands/batch_command
   - elkrb/commands/convert_command
   - elkrb/commands/diagram_command
+  - elkrb/commands/options_command
   - elkrb/commands/render_command
   - elkrb/commands/validate_command

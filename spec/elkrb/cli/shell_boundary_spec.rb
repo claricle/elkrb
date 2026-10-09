@@ -286,7 +286,8 @@ RSpec.describe "elkrb CLI shell boundary" do
         expect(status.exitstatus).to eq(1)
         expect(stdout).to eq("")
         expect(stderr).to eq("Error: Unable to parse input file. " \
-                             "Supported formats: JSON, YAML, ELKT\n")
+                             "Supported formats: JSON, YAML, ELKT\n" \
+                             "Try: elkrb help layout\n")
       end
     end
 
@@ -300,7 +301,8 @@ RSpec.describe "elkrb CLI shell boundary" do
         expect(status.exitstatus).to eq(1)
         expect(stdout).to eq("")
         expect(stderr).to eq("Error: Unable to parse input file. " \
-                             "Supported formats: JSON, YAML, ELKT\n")
+                             "Supported formats: JSON, YAML, ELKT\n" \
+                             "Try: elkrb help layout\n")
       end
     end
 
@@ -318,7 +320,8 @@ RSpec.describe "elkrb CLI shell boundary" do
         expect(status.exitstatus).to eq(1)
         expect(stdout).to eq("")
         expect(stderr).to eq("Error: Unable to parse input file. " \
-                             "Supported formats: JSON, YAML, ELKT\n")
+                             "Supported formats: JSON, YAML, ELKT\n" \
+                             "Try: elkrb help layout\n")
       end
     end
 
@@ -332,7 +335,8 @@ RSpec.describe "elkrb CLI shell boundary" do
         expect(status.exitstatus).to eq(1)
         expect(stdout).to eq("")
         expect(stderr).to eq("Error: Unable to parse input file. " \
-                             "Supported formats: JSON, YAML, ELKT\n")
+                             "Supported formats: JSON, YAML, ELKT\n" \
+                             "Try: elkrb help layout\n")
       end
     end
   end
@@ -547,7 +551,8 @@ RSpec.describe "a file whose extension already names the format" do
 
       expect(status.exitstatus).to eq(1)
       expect(stderr)
-        .to eq("Error: expected node, port, label, edge at line 1, column 1\n")
+        .to eq("Error: expected node, port, label, edge at line 1, column 1\n" \
+               "Try: elkrb help layout\n")
     end
   end
 
