@@ -116,8 +116,7 @@ RSpec.describe "option plumbing" do
       variant: { "libavoid" => :unpositioned },
       unwired: unread[
         "these algorithms do not read it today",
-        only: %w[disco fixed force radial spore_compaction
-                 spore_overlap stress],
+        only: %w[disco fixed radial spore_compaction spore_overlap stress],
       ]
     },
     "elk.spline.curvature" => {
