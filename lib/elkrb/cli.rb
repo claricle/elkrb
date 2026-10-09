@@ -93,7 +93,7 @@ module Elkrb
                   desc: "Print the list as JSON on stdout"
     def algorithms
       algos = Layout::LayoutEngine.known_layout_algorithms
-      return say(algorithms_json(algos)) if options[:json]
+      return say(json_for_algorithms(algos)) if options[:json]
 
       say "Available Layout Algorithms:", :green
       say ""
@@ -206,7 +206,7 @@ module Elkrb
       YAML_EXTENSIONS.include?(extension) ? "yaml" : "json"
     end
 
-    def algorithms_json(algos)
+    def json_for_algorithms(algos)
       keys = %i[id name description category supports_hierarchy
                 supported_options]
       JSON.generate("algorithms" => algos.map { |algo| algo.slice(*keys) })
