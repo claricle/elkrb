@@ -14,14 +14,15 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
       }
     end
 
-    # ELK's long edge runs straight along its dummy's lane: one bend where it
-    # enters the dummy's layer and one where it leaves, never one at the centre.
+    # ELK's long edge runs straight along its dummy's lane: it leaves its
+    # node into the first gap, runs the lane, and drops into the last gap --
+    # two bends per gap it turns in, never one at the centre.
     it "routes a two-layer edge around the intervening node" do
       result = Elkrb.layout(long_edge_graph(%w[a b c]), algorithm: "layered")
       section = result.edges.find { |edge| edge.id == "long" }.sections.first
       obstacle = result.children.find { |node| node.id == "b" }
 
-      expect(section.bend_points.length).to eq(2)
+      expect(section.bend_points.length).to eq(4)
       expect(route_interior_crossings(section, obstacle)).to be_empty
     end
 
@@ -31,7 +32,7 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
       top = result.children.map(&:y).min
 
       expect(section.bend_points.map(&:y).min).to be < top
-      expect(section.bend_points.map(&:y).min - 0.5).to eq(12.0)
+      expect(section.bend_points.map(&:y).min).to eq(12.0)
     end
 
     it "visits a reversed edge's bends from its own start" do
@@ -47,13 +48,15 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
       expect(bend_x).to eq(bend_x.sort.reverse)
     end
 
-    it "adds one bend for each of two intermediate layers" do
+    it "runs two intermediate layers along one lane" do
       result = Elkrb.layout(
         long_edge_graph(%w[a b c d]), algorithm: "layered"
       )
       section = result.edges.find { |edge| edge.id == "long" }.sections.first
 
-      expect(section.bend_points.length).to eq(2)
+      lane = section.bend_points.map(&:y).min
+      expect(section.bend_points.map(&:y).count(lane)).to eq(2)
+      expect(section.bend_points.length).to eq(4)
     end
 
     it "never exposes dummy ids as graph children or JSON" do
