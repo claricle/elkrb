@@ -130,7 +130,7 @@ module OptionPlumbing
               "edges" => [{ "id" => "e", "sources" => ["p"],
                             "targets" => ["b"],
                             "layoutOptions" => edge_options }] }
-    laid = laid_out(graph, "fixed", call_options)
+    laid = laid_out(graph, "box", call_options)
     laid["edges"][0]["sections"][0].fetch("bendPoints", [])
   end
 
@@ -156,7 +156,7 @@ module OptionPlumbing
     loop_edge = { "id" => "l", "sources" => ["a"], "targets" => ["a"],
                   "layoutOptions" => edge_options }
     graph = laid_out({ "id" => "r", "children" => [node],
-                       "edges" => [loop_edge] }, "fixed")
+                       "edges" => [loop_edge] }, "box")
     graph.dig("edges", 0, "sections", 0, "bendPoints")
   end
 

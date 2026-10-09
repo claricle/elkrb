@@ -12,6 +12,8 @@ RSpec.describe Elkrb::Graph::Graph do
       expect(graph.y).to eq(0.0)
       expect(graph.width).to eq(0.0)
       expect(graph.height).to eq(0.0)
+      expect(graph.labels).to eq([])
+      expect(graph.ports).to eq([])
       expect(graph.children).to eq([])
       expect(graph.edges).to eq([])
     end
@@ -53,6 +55,26 @@ RSpec.describe Elkrb::Graph::Graph do
       expect(graph.children[0].id).to eq("n1")
       expect(graph.edges.size).to eq(1)
       expect(graph.edges[0].id).to eq("e1")
+    end
+
+    it "retains typed root labels and ports through JSON serialization" do
+      graph = described_class.from_hash(
+        "id" => "root",
+        "labels" => [{ "text" => "Title" }],
+        "ports" => [
+          { "id" => "p", "labels" => [{ "text" => "Port label" }] },
+        ],
+      )
+
+      expect(graph.labels.first).to be_a(Elkrb::Graph::Label)
+      expect(graph.ports.first).to be_a(Elkrb::Graph::Port)
+      expect(graph.ports.first.labels.first).to be_a(Elkrb::Graph::Label)
+
+      serialized = JSON.parse(graph.to_json)
+      expect(serialized.dig("labels", 0, "text")).to eq("Title")
+      expect(serialized.dig("ports", 0, "id")).to eq("p")
+      expect(serialized.dig("ports", 0, "labels", 0, "text"))
+        .to eq("Port label")
     end
   end
 

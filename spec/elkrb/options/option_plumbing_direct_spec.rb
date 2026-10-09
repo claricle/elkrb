@@ -4,23 +4,23 @@ require "spec_helper"
 
 # Rows that need a hand-built graph rather than the table's 4-node fixture.
 RSpec.describe "option plumbing, direct rows" do
-  describe "elk.edgeRouting on an edge, under fixed" do
-    let(:legacy) { bends({ "edge.routing" => "orthogonal" }, "fixed") }
+  describe "elk.edgeRouting on an edge, under box" do
+    let(:legacy) { bends({ "edge.routing" => "orthogonal" }, "box") }
 
     it "gives the bend points the private edge.routing key gave" do
-      expect(bends({ "elk.edgeRouting" => "ORTHOGONAL" }, "fixed"))
+      expect(bends({ "elk.edgeRouting" => "ORTHOGONAL" }, "box"))
         .to eq(legacy)
     end
 
     it "is case-insensitive, as the lowercase legacy value was" do
-      expect(bends({ "elk.edgeRouting" => "orthogonal" }, "fixed"))
+      expect(bends({ "elk.edgeRouting" => "orthogonal" }, "box"))
         .to eq(legacy)
     end
 
     it "bends where the unrouted edge does not" do
-      orthogonal = bends({ "elk.edgeRouting" => "ORTHOGONAL" }, "fixed")
+      orthogonal = bends({ "elk.edgeRouting" => "ORTHOGONAL" }, "box")
 
-      expect([bends({}, "fixed").size, orthogonal.size]).to eq([0, 2])
+      expect([bends({}, "box").size, orthogonal.size]).to eq([0, 2])
     end
   end
 
@@ -29,11 +29,11 @@ RSpec.describe "option plumbing, direct rows" do
     let(:orthogonal) { { "elk.edgeRouting" => "ORTHOGONAL" } }
 
     it "lets the graph's POLYLINE beat the call's ORTHOGONAL" do
-      expect(bends({}, "fixed", polyline, orthogonal)).to eq([])
+      expect(bends({}, "box", polyline, orthogonal)).to eq([])
     end
 
     it "bends where the graph says ORTHOGONAL" do
-      expect(bends({}, "fixed", orthogonal).size).to eq(2)
+      expect(bends({}, "box", orthogonal).size).to eq(2)
     end
   end
 
@@ -54,20 +54,20 @@ RSpec.describe "option plumbing, direct rows" do
 
   describe "elk.direction on an edge, under SPLINES" do
     let(:splines) { { "elk.edgeRouting" => "SPLINES" } }
-    let(:down) { bends({ "elk.direction" => "DOWN" }, "fixed", splines) }
+    let(:down) { bends({ "elk.direction" => "DOWN" }, "box", splines) }
 
     it "reads the direction case-insensitively" do
-      expect(bends({ "elk.direction" => "down" }, "fixed", splines))
+      expect(bends({ "elk.direction" => "down" }, "box", splines))
         .to eq(down)
     end
 
     it "moves the spline's bend points" do
-      expect(down).not_to eq(bends({}, "fixed", splines))
+      expect(down).not_to eq(bends({}, "box", splines))
     end
 
     it "steers DOWN differently from RIGHT" do
       expect(down)
-        .not_to eq(bends({ "elk.direction" => "RIGHT" }, "fixed", splines))
+        .not_to eq(bends({ "elk.direction" => "RIGHT" }, "box", splines))
     end
   end
 

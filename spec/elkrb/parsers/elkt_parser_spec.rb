@@ -89,9 +89,8 @@ RSpec.describe Elkrb::Parsers::ElktParser do
     end
   end
 
-  # Everything Graph#to_json cannot show. The model has no root labels or
-  # ports, no Edge port attribute, and no recursive Label, so the corpus layer
-  # is blind to all of it.
+  # Parser-only shapes Graph#to_json cannot show. The model has no Edge port
+  # attribute and no recursive Label, so the corpus layer is blind to them.
   describe "the parser Hash" do
     it "emits no sourcePort or targetPort" do
       edge = parse_fixture("port_refs")[:edges].first
@@ -204,7 +203,7 @@ RSpec.describe Elkrb::Parsers::ElktParser do
     end
 
     it "keeps labels and ports declared on the root graph" do
-      # Graph has neither attribute, so Graph#to_json drops both silently.
+      # Pin the parser's raw Hash keys independently from Graph conversion.
       graph = parse(%(label "root label"\nport rp\nnode n\n))
 
       expect(graph[:labels].first[:text]).to eq("root label")

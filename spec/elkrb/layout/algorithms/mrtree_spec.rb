@@ -1250,16 +1250,9 @@ RSpec.describe "MRTree on rootless cycles that share ONE component" do
 end
 
 RSpec.describe "MRTree on a chain deep enough to reach the stack limit" do
-  # `layout_tree` recurses once per LEVEL, so every Ruby frame standing
-  # between one level and the next is paid once per level. Putting the
-  # child loop in a `layout_children` helper added a third frame per level
-  # and cut the depth this algorithm can handle by a third: measured by
-  # bisection on ruby 3.4.8, ~2,042 against origin/v2's ~2,975.
-  #
-  # 2,500 is between those two numbers on purpose. A bound this example
-  # could satisfy from either side would not be a regression test, and a
-  # bound at the very edge would be flaky as ruby's own frame size moves,
-  # so it sits in the gap the regression actually opened.
+  # Deep, input-controlled trees must not consume Ruby call-stack depth.
+  # Keep this large enough to fail a recursive traversal under the reduced
+  # stack configured below while remaining cheap for the iterative one.
   def chain(size)
     { "id" => "g",
       "children" => Array.new(size) do |i|

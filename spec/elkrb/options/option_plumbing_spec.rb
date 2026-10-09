@@ -14,6 +14,7 @@ require "spec_helper"
 RSpec.describe "option plumbing" do
   registry = Elkrb::Options::Registry
   algorithms = Elkrb::Layout::AlgorithmRegistry.available_algorithms
+  live_statuses = %i[honoured partial]
 
   # The registry says :honoured but no code reads the id today. The example
   # asserts the output does NOT move, so wiring the id turns it red and the
@@ -44,20 +45,26 @@ RSpec.describe "option plumbing" do
       at: :root,
       value: ->(name) { name == "radial" ? "box" : "radial" },
     },
-    "elk.aspectRatio" => { at: :root, value: 3.0 },
+    "elk.aspectRatio" => { at: :root, value: 10.0 },
     "elk.bendPoints" => {
-      at: :edge, value: "(1,2; 3,4)",
-      unwired: unread["no algorithm reads it yet; card 22 wires it for fixed"]
+      at: :spline_edge, value: "(1,2; 3,4)",
+      unwired: unread[
+        "only fixed applies explicit bend points",
+        only: algorithms - %w[fixed],
+      ]
     },
     "elk.direction" => {
       at: :root, value: "RIGHT",
-      unwired: unread["layered and mrtree do not read it yet; cards 13, 23"]
+      unwired: unread["layered does not read it yet", only: %w[layered]]
     },
     "elk.edgeLabels.placement" => {
       at: :edge, value: "TAIL",
       unwired: unread["nothing reads it yet; card 17"]
     },
-    "elk.edgeRouting" => { at: :root, value: "SPLINES" },
+    "elk.edgeRouting" => {
+      at: :root, value: "SPLINES",
+      unwired: unread["fixed preserves existing edge routes", only: %w[fixed]]
+    },
     "elk.force.iterations" => { at: :root, value: 5 },
     "elk.force.repulsion" => { at: :root, value: 50.0 },
     "elk.force.temperature" => { at: :root, value: 0.5 },
@@ -83,19 +90,23 @@ RSpec.describe "option plumbing" do
       unwired: unread["nothing reads it yet; card 18"]
     },
     "elk.portLabels.placement" => { at: :port, value: "INSIDE" },
-    "elk.position" => {
-      at: :node, value: "(5,5)",
-      unwired: unread["fixed does not read it yet; card 22"]
+    "elk.position" => { at: :node, value: "(5,5)" },
+    "elk.radial.centerOnRoot" => {
+      at: :root, value: true,
+      read_only: read_only[
+        "the fixture's inferred root is already its first node",
+        only: %w[radial],
+      ]
     },
-    "elk.radial.radius" => {
-      at: :root, value: 300.0,
-      unwired: unread["radial reads no option for it yet; card 23"]
-    },
+    "elk.radial.radius" => { at: :root, value: 300.0 },
     "elk.randomSeed" => {
       at: :root, value: 7,
-      variant: { "force" => :unpositioned },
+      variant: { "force" => :unpositioned }
     },
-    "elk.selfLoopSide" => { at: :loop, value: "WEST" },
+    "elk.selfLoopSide" => {
+      at: :loop, value: "WEST",
+      unwired: unread["fixed preserves existing edge routes", only: %w[fixed]]
+    },
     "elk.spacing.componentComponent" => {
       at: :root, value: 90.0,
       unwired: unread["disco reads disco.componentSpacing only"]
@@ -112,8 +123,8 @@ RSpec.describe "option plumbing" do
     "elk.spline.curvature" => {
       at: :spline_edge, value: 0.9,
       unwired: unread[
-        "libavoid routes its own connectors and never hands them to the " \
-        "SPLINES router", only: %w[libavoid]
+        "these algorithms preserve or replace this fixture's generic " \
+        "spline route", only: %w[fixed libavoid mrtree radial]
       ]
     },
     "elk.stress.desiredEdgeLength" => { at: :root, value: 300.0 },
@@ -184,7 +195,7 @@ RSpec.describe "option plumbing" do
 
     it "has a row for every honoured or partial id except direct rows" do
       covered = algorithms.flat_map { |name| registry.for_algorithm(name) }
-        .select { |id| %i[honoured partial].include?(registry.status(id)) }
+        .select { |id| live_statuses.include?(registry.status(id)) }
         .uniq - direct_ids
 
       expect(cases.keys.sort).to eq(covered.sort)

@@ -108,10 +108,9 @@ RSpec.describe "elkrb CLI shell boundary" do
     # A `graph <id>` header, a root label, or a root port with nothing else
     # are real ElkGraph.xtext declarations whose parsed hash has no
     # children/edges/layoutOptions -- the declared-path hollow guard must not
-    # reject them for that. `convert`, not `layout`, on purpose: this tests
-    # what FormatSniffer accepts and how the parser represents it, not what
-    # Graph model serialization does with a root-level label or port
-    # afterward -- that is a separate, model-layer concern out of scope here.
+    # reject them for that. `convert`, not `layout`, on purpose: this exercises
+    # declared-format sniffing, parser output, Graph conversion, and JSON
+    # serialization without asking a layout algorithm to alter the graph.
     {
       "a graph-header-only file" =>
         ["graph G\n", ->(g) { g["id"] == "G" }],

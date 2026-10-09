@@ -520,6 +520,12 @@ RSpec.describe Elkrb::GraphvizWrapper do
       FileUtils.chmod(0o755, path)
     end
 
+    def write_dot(directory)
+      name = Gem.win_platform? ? "dot.exe" : "dot"
+      ENV["PATHEXT"] = ".EXE" if Gem.win_platform?
+      write_executable(File.join(directory, name))
+    end
+
     context "on Windows (Gem.win_platform? stubbed true)" do
       before { allow(Gem).to receive(:win_platform?).and_return(true) }
 
@@ -589,6 +595,7 @@ RSpec.describe Elkrb::GraphvizWrapper do
         in_sandbox do
           stub_const("File::ALT_SEPARATOR", "\\")
           candidate = "bin\\dot.exe"
+          FileUtils.mkdir_p("bin")
           File.write(candidate, "")
           FileUtils.chmod(0o755, candidate)
           ENV["PATH"] = "/nonexistent-bin"
@@ -684,7 +691,8 @@ RSpec.describe Elkrb::GraphvizWrapper do
     describe "PATH entries starting with ~" do
       it "expands a bare ~ PATH entry against HOME" do
         in_sandbox do |dir|
-          write_executable(File.join(dir, "dot"))
+          write_dot(dir)
+          allow(Dir).to receive(:home).and_return(dir)
           ENV["HOME"] = dir
           ENV["PATH"] = "~"
 
@@ -694,7 +702,8 @@ RSpec.describe Elkrb::GraphvizWrapper do
 
       it "expands a ~/subdir PATH entry against HOME" do
         in_sandbox do |dir|
-          write_executable(File.join(dir, "bin", "dot"))
+          write_dot(File.join(dir, "bin"))
+          allow(Dir).to receive(:home).and_return(dir)
           ENV["HOME"] = dir
           ENV["PATH"] = "~/bin"
 
@@ -704,6 +713,7 @@ RSpec.describe Elkrb::GraphvizWrapper do
 
       it "refuses a ~ PATH entry when HOME does not contain the candidate" do
         in_sandbox do |dir|
+          allow(Dir).to receive(:home).and_return(dir)
           ENV["HOME"] = dir
           ENV["PATH"] = "~/bin"
 
@@ -719,7 +729,7 @@ RSpec.describe Elkrb::GraphvizWrapper do
       # "wrongly expanded to HOME", since both would fail to resolve.
       it "leaves a ~user entry unexpanded rather than guessing" do
         in_sandbox do |dir|
-          write_executable(File.join(dir, "dot"))
+          write_dot(dir)
           ENV["HOME"] = dir
           ENV["PATH"] = "~someoneelse"
 
@@ -766,7 +776,7 @@ RSpec.describe Elkrb::GraphvizWrapper do
       # is the case that distinguishes "starts with ~" from "empty rest".
       it "walks a single-character non-~ PATH entry literally" do
         in_sandbox do
-          write_executable(File.join("x", "dot"))
+          write_dot("x")
           ENV["HOME"] = "/should-not-be-consulted"
           ENV["PATH"] = "x"
 

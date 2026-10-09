@@ -23,32 +23,59 @@ RSpec.describe "mutant.yml requires" do
   let(:requires) do
     YAML.safe_load_file(File.join(repo_root, "mutant.yml"))["requires"]
   end
-
-  it "loads every file under lib/ once mutant.yml's requires: run" do
+  let(:probe_result) do
     probe = <<~RUBY
       requires = #{requires.inspect}
       requires.each { |r| require r }
-      loaded = $LOADED_FEATURES.select { |f| f.include?("/lib/elkrb/") || f.end_with?("/lib/elkrb.rb") }
-      puts loaded.map { |f| f.sub(%r{.*/lib/}, "") }.sort
+      puts $LOADED_FEATURES
     RUBY
 
     out = IO.popen(
-      ["bundle", "exec", RbConfig.ruby, "-Ilib", "-e", probe],
+      # This spec already runs under Bundler. Invoking its `bundle` wrapper
+      # again sends the multiline `-e` argument through bundle.bat on
+      # Windows, where it is truncated before `puts $LOADED_FEATURES`.
+      [RbConfig.ruby, "-rbundler/setup", "-Ilib", "-e", probe],
       chdir: repo_root,
       err: %i[child out],
       &:read
     )
-    status = $CHILD_STATUS
 
-    expect(status).to be_success, "subprocess failed:\n#{out}"
+    [out, $CHILD_STATUS]
+  end
+  let(:probe_output) { probe_result.fetch(0) }
+  subject(:loaded_lib_files) do
+    probe_output.lines(chomp: true).filter_map do |feature|
+      path = feature.delete_suffix("\r").tr("\\", "/")
+      path[%r{(?:\A|/)lib/(elkrb(?:/.*)?\.rb)\z}, 1]
+    end.sort
+  end
 
-    loaded = out.split("\n")
+  it "loads every file under lib/ once mutant.yml's requires: run" do
+    expect(probe_result.fetch(1)).to be_success,
+                                     "subprocess failed:\n#{probe_output}"
     all_lib_files = Dir.glob("**/*.rb", base: File.join(repo_root, "lib")).sort
-    missing = all_lib_files - loaded
+    missing = all_lib_files - loaded_lib_files
 
     expect(missing).to eq([]), "mutant.yml's requires do not load: " \
                                "#{missing.join(', ')} -- rake mutant will " \
                                "silently report 0 subjects for these files"
+  end
+
+  context "with Windows loaded-feature paths" do
+    let(:probe_output) do
+      [
+        "D:\\a\\elkrb\\elkrb\\lib\\elkrb.rb\r\n",
+        "lib\\elkrb\\cli.rb\r\n",
+        "D:/a/elkrb/elkrb/lib\\elkrb\\version.rb\r\r\n",
+        "D:\\Ruby\\lib\\yaml.rb\r\n",
+      ].join
+    end
+
+    it "normalizes absolute, relative, mixed, and CR-tailed paths" do
+      expect(loaded_lib_files).to eq(
+        ["elkrb.rb", "elkrb/cli.rb", "elkrb/version.rb"],
+      )
+    end
   end
 
   it "requires only files that actually exist" do

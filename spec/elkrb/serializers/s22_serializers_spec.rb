@@ -93,6 +93,26 @@ RSpec.describe "S22 serializers" do
         .to eq(graph.edges.map { |edge| [edge.id, edge.sources, edge.targets] })
     end
 
+    it "round-trips root labels and ports through the shared ID map" do
+      graph = Elkrb::Graph::Graph.from_hash(
+        id: "root",
+        labels: [{ id: "root-label", text: "Title" }],
+        ports: [{
+          id: "root.port",
+          labels: [{ id: "port-label", text: "Port label" }],
+        }],
+      )
+
+      elkt = serializer.serialize(graph)
+      parsed = Elkrb::Parsers::ElktParser.parse(elkt)
+
+      expect(elkt).to include('label root_label: "Title"', "port root_port")
+      expect(parsed.dig(:labels, 0)).to include(id: "root_label", text: "Title")
+      expect(parsed.dig(:ports, 0, :id)).to eq("root_port")
+      expect(parsed.dig(:ports, 0, :labels, 0))
+        .to include(id: "port_label", text: "Port label")
+    end
+
     it "round-trips complex edges through one deterministic ID map" do
       graph = Elkrb::Graph::Graph.from_json(
         File.read("spec/fixtures/elkjs_bug7_complex.json"),
@@ -126,6 +146,12 @@ RSpec.describe "S22 serializers" do
       Elkrb::Graph::Graph.from_json(JSON.generate(document))
     end
 
+    def capture_dot(format, dot)
+      Open3.capture3("dot", format, stdin_data: dot)
+    rescue Errno::ENOENT
+      skip "Graphviz is not installed; skipping external DOT acceptance"
+    end
+
     it "quotes distinct DOT IDs and produces input Graphviz accepts" do
       graph = graph_model(
         id: "root",
@@ -139,11 +165,10 @@ RSpec.describe "S22 serializers" do
       )
 
       dot = serializer.serialize(graph)
-      _stdout, stderr, status = Open3.capture3("dot", "-Tcanon",
-                                               stdin_data: dot)
-
-      expect(status).to be_success, stderr
       expect(dot).to include('"1st"', '"a-b" -> "a.b"', '"node"')
+
+      _stdout, stderr, status = capture_dot("-Tcanon", dot)
+      expect(status).to be_success, stderr
     end
 
     it "emits nested and port edges once without phantom port nodes" do
@@ -165,11 +190,10 @@ RSpec.describe "S22 serializers" do
       )
 
       dot = serializer.serialize(graph)
-      plain, stderr, status = Open3.capture3("dot", "-Tplain",
-                                             stdin_data: dot)
-
-      expect(status).to be_success, stderr
       expect(dot.scan("n1:p1 -> n2:p2").length).to eq(1)
+
+      plain, stderr, status = capture_dot("-Tplain", dot)
+      expect(status).to be_success, stderr
       expect(plain.lines.grep(/^node /).length).to eq(2)
     end
 

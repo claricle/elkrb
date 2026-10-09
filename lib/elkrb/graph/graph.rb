@@ -10,6 +10,8 @@ module Elkrb
       attribute :y, :float
       attribute :width, :float
       attribute :height, :float
+      attribute :labels, Label, collection: true
+      attribute :ports, Port, collection: true
       attribute :children, Node, collection: true
       attribute :edges, Edge, collection: true
       attribute :layout_options, :hash
@@ -21,6 +23,8 @@ module Elkrb
         map "y", to: :y
         map "width", to: :width
         map "height", to: :height
+        map "labels", to: :labels
+        map "ports", to: :ports
         map "children", to: :children
         map "edges", to: :edges
         map "layoutOptions", to: :layout_options
@@ -33,6 +37,8 @@ module Elkrb
         map "y", to: :y
         map "width", to: :width
         map "height", to: :height
+        map "labels", to: :labels
+        map "ports", to: :ports
         map "children", to: :children
         map "edges", to: :edges
         map "layout_options", to: :layout_options
@@ -46,11 +52,18 @@ module Elkrb
         @y ||= 0.0
         @width ||= 0.0
         @height ||= 0.0
-        @children ||= []
-        @edges ||= []
+        set_collection_defaults
         @properties ||= {}
         @layout_options ||= {}
       end
+
+      def set_collection_defaults
+        @labels = [] if @labels.nil?
+        @ports = [] if @ports.nil?
+        @children = [] if @children.nil?
+        @edges = [] if @edges.nil?
+      end
+      private :set_collection_defaults
 
       # Normalizes a Symbol key however the options arrive — a constructor,
       # a plain setter, or lutaml's own deserialization, which routes through

@@ -330,27 +330,36 @@ module Elkrb
         # A floored level can exceed the relaxation bound: r0 -> a -> b -> c
         # with c -> a closing it puts c at level 6 across four nodes. Cyclic
         # components therefore come out taller than they need to be.
-        def build_subtree(node, adjacent, visited, levels, floor)
-          visited << node.id
+        # Use an explicit stack because the walk's depth is controlled by the
+        # input graph, not by this implementation.
+        def build_subtree(root, adjacent, visited, levels, floor)
+          visited << root.id
+          tree = subtree_node(root, levels, floor)
+          stack = [[root, tree]]
 
-          tree = {
+          until stack.empty?
+            node, node_tree = stack.pop
+            children = adjacent[node.id]
+                       .reject { |child| visited.include?(child.id) }
+            children.each { |child| visited << child.id }
+
+            child_floor = node_tree[:level] + 1
+            child_trees = children.map do |child|
+              subtree_node(child, levels, child_floor)
+            end
+            node_tree[:children] = child_trees
+            children.zip(child_trees).reverse_each { |pair| stack << pair }
+          end
+
+          tree
+        end
+
+        def subtree_node(node, levels, floor)
+          {
             node: node,
             children: [],
             level: [levels.fetch(node.id), floor].max,
           }
-
-          children = adjacent[node.id]
-                     .reject { |child| visited.include?(child.id) }
-          # The whole child list is settled before any of it is recursed into,
-          # so each sibling is claimed now — otherwise the first sibling's
-          # subtree can reach a later one and place it a second time.
-          children.each { |child| visited << child.id }
-
-          tree[:children] = children.map do |child|
-            build_subtree(child, adjacent, visited, levels, tree[:level] + 1)
-          end
-
-          tree
         end
 
         # `placed` collects every node of the tree being laid out, in post
@@ -362,38 +371,65 @@ module Elkrb
         # level is quadratic on a deep tree. Instrumented on a chain before
         # this change -- 20,099 visits for 200 nodes and 320,399 for 800.
         # That is (n+2)(n-1)/2, not n^2/2; the shape is what matters, and
-        # doubling n multiplies the visits by four.
-        # The child loop is INLINE, not a `layout_children` helper, and that
-        # is a stack-depth decision rather than a style one. Every frame
-        # standing between one level's `layout_tree` and the next is paid
-        # once per level of the tree: with the helper in the middle a chain
-        # of ~2,042 nodes raised SystemStackError on ruby 3.4.8 where
-        # origin/v2 managed ~2,975 -- measured by bisection, and the ratio
-        # is the 3-frames-per-level against 2 that the backtrace shows.
-        # `settle_subtree` below is a helper and costs nothing, because it
-        # runs AFTER the recursion has returned and so is never on the
-        # stack during the descent.
-        def layout_tree(tree, x_offset, y_offset, placed = [], offsets = {})
-          start = placed.size
+        # doubling n multiplies the visits by four. This walk is iterative
+        # because its depth is likewise controlled by the input graph.
+        LayoutFrame = Struct.new(:tree, :x_offset, :y_offset, :start,
+                                 :child_x, :left, :right, :index)
+        private_constant :LayoutFrame
 
+        def layout_tree(tree, x_offset, y_offset, placed = [], offsets = {})
           if tree[:children].empty?
             return place_leaf(tree, x_offset, y_offset, placed, offsets)
           end
 
-          child_x = x_offset
-          left = nil
-          right = nil
-          tree[:children].each do |child_tree|
-            consumed, child_left, child_right =
-              layout_tree(child_tree, child_x, y_offset, placed, offsets)
-            child_x += consumed
-            left = child_left if left.nil? || child_left < left
-            right = child_right if right.nil? || child_right > right
+          stack = [layout_frame(tree, x_offset, y_offset, placed.size)]
+          result = nil
+
+          until stack.empty?
+            frame = stack.last
+            if frame.index < frame.tree[:children].size
+              advance_layout(frame, stack, placed, offsets)
+            else
+              stack.pop
+              result = finish_layout(frame, stack.last, placed, offsets)
+            end
           end
 
-          centre_over_children(tree, y_offset, offsets)
-          placed << tree[:node]
-          settle_subtree(tree[:node], placed, start, x_offset, [left, right])
+          result
+        end
+
+        def layout_frame(tree, x_offset, y_offset, start)
+          LayoutFrame.new(tree, x_offset, y_offset, start,
+                          x_offset, nil, nil, 0)
+        end
+
+        def advance_layout(frame, stack, placed, offsets)
+          child = frame.tree[:children][frame.index]
+          frame.index += 1
+
+          if child[:children].empty?
+            extend_layout(frame,
+                          *place_leaf(child, frame.child_x, frame.y_offset,
+                                      placed, offsets))
+          else
+            stack << layout_frame(child, frame.child_x, frame.y_offset,
+                                  placed.size)
+          end
+        end
+
+        def finish_layout(frame, parent, placed, offsets)
+          centre_over_children(frame.tree, frame.y_offset, offsets)
+          placed << frame.tree[:node]
+          result = settle_subtree(frame.tree[:node], placed, frame.start,
+                                  frame.x_offset, [frame.left, frame.right])
+          extend_layout(parent, *result) if parent
+          result
+        end
+
+        def extend_layout(frame, consumed, left, right)
+          frame.child_x += consumed
+          frame.left = left if frame.left.nil? || left < frame.left
+          frame.right = right if frame.right.nil? || right > frame.right
         end
 
         # The width CONSUMED, measured from where the nodes actually landed.

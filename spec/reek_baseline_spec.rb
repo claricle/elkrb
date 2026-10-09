@@ -150,12 +150,16 @@ RSpec.describe ".reek.yml" do
       "Elkrb::Parsers::Elkt::Parser#parse_members",
       "Elkrb::Parsers::Elkt::Parser#parse_section_body",
       "Elkrb::Serializers::ElktSerializer#serialize_edge",
+      "Elkrb::Serializers::ElktSerializer#serialize_edge_block",
       "Elkrb::Serializers::ElktSerializer#serialize_graph",
+      "Elkrb::Serializers::ElktSerializer#serialize_label",
       "Elkrb::Serializers::ElktSerializer#serialize_layout_options",
       "Elkrb::Serializers::ElktSerializer#serialize_node",
       "Elkrb::Serializers::ElktSerializer#serialize_node_block",
       "Elkrb::Serializers::ElktSerializer#serialize_port",
       "Elkrb::Serializers::ElktSerializer#serialize_port_block",
+      "Elkrb::Serializers::ElktSerializer#serialize_shape_layout",
+      "Elkrb::Serializers::ElktSerializer#serialized_endpoints",
     ]
   end
 
