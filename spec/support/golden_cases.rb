@@ -13,10 +13,6 @@
 # The reasons are locals, not constants, so the table below is the only
 # thing this file exposes and nothing can reach past it to a single reason.
 module GoldenCases
-  spore_scaling =
-    "sporeOverlap: our push-apart loop exhausts its 50 iterations with an " \
-    "overlap left (134x101.5); elkjs separates the diamond to 122x122"
-
   # The 29 cases whose golden is a laid-out graph, compared field by field.
   # `hyperedge` is deliberately absent -- its golden is an error hash, it
   # goes through a different code path in the matcher, and it lives in
@@ -61,7 +57,7 @@ module GoldenCases
       pending: nil },
     { name: "stress_path4", tier: :structural, pending: nil },
     { name: "random3", tier: :structural, pending: nil },
-    { name: "spore_overlap4", tier: :structural, pending: spore_scaling },
+    { name: "spore_overlap4", tier: :structural, pending: nil },
   ].each(&:freeze).freeze
 
   # The sole error-case golden: elkjs raises rather than laying the graph

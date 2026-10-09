@@ -28,7 +28,7 @@ module CorpusCatalogue
   # of PR #15 onto v2, 2026-09-17) and is being settled empirically by the
   # ledger-honesty guard example at the bottom rather than guessed here --
   # see that entry for either D5 remnant below. RC14
-  # (java_elk_sporeOverlap, java_elk_sporeCompaction) was reported fixed on
+  # (java_elk_sporeCompaction) was reported fixed on
   # one branch and still-failing on the other for the same reason; kept
   # listed here so the guard measures it rather than assuming either.
   #
@@ -50,7 +50,6 @@ module CorpusCatalogue
     # duplicate_ids below.
     ["hyperedge", "no_crash"] => "RC-hyperedge",
     ["hyperedge", "invariants"] => "RC-hyperedge",
-    ["java_elk_sporeOverlap", "invariants"] => "RC14",
     ["java_elk_sporeCompaction", "invariants"] => "RC14",
     ["java_elk_stress", "invariants"] => "S14",
     ["java_elk_random", "invariants"] => "S14",

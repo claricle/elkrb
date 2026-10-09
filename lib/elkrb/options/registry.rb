@@ -82,7 +82,7 @@ module Elkrb
         "libavoid.segmentPenalty" => { type: :float, default: 1.0, namespace: :elkrb, algorithms: %w[libavoid], status: :honoured, description: "Penalty per routed segment" },
         "libavoid.stepSize" => { type: :float, default: 10.0, namespace: :elkrb, algorithms: %w[libavoid], status: :honoured, description: "Grid step of the connector search" },
         "spore.compactionDirection" => { type: :string, values: %w[both horizontal vertical], default: "both", namespace: :elkrb, algorithms: %w[spore_compaction], status: :honoured, description: "Direction(s) SPOrE compaction runs in" },
-        "spore.maxIterations" => { type: :integer, default: 50, namespace: :elkrb, algorithms: %w[spore_overlap], status: :honoured, description: "Maximum overlap-removal iterations" },
+        "spore.maxIterations" => { type: :integer, default: 64, namespace: :elkrb, algorithms: %w[spore_overlap], status: :honoured, description: "Maximum overlap-removal iterations" },
         "spore.nodeSpacing" => { type: :float, default: 10.0, namespace: :elkrb, algorithms: %w[spore_overlap spore_compaction], status: :honoured, description: "Minimum spacing enforced by the SPOrE algorithms" },
         "topdownpacking.aspectRatio" => { type: :float, default: 1.0, namespace: :elkrb, algorithms: %w[topdownpacking], status: :honoured, description: "Target cell aspect ratio" },
         "topdownpacking.nodeWidth" => { type: :float, default: nil, namespace: :elkrb, algorithms: %w[topdownpacking], status: :honoured, description: "Explicit node width override" },

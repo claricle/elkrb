@@ -167,6 +167,55 @@ RSpec.describe Elkrb::Layout::Algorithms::SporeOverlap do
       end
     end
 
+    context "with the node box grown by spacing" do
+      it "stretches the line between the centres until the boxes touch" do
+        a, b = spore_pair({ id: "b", x: 10, y: 10, width: 30, height: 30 })
+          .children
+
+        expect([b.x - a.x, b.y - a.y]).to eq([38.0, 38.0])
+      end
+
+      it "carries a child along with its parent before stretching it" do
+        row = Array.new(3) do |i|
+          { id: "n#{i}", x: i * 25, y: 0, width: 30, height: 30 }
+        end
+        result = Elkrb.layout({ id: "root", children: row },
+                              algorithm: "spore_overlap")
+
+        expect(result.children.each_cons(2).map { |a, b| b.x - a.x })
+          .to eq([38.0, 38.0])
+      end
+
+      it "keeps the direction between the centres" do
+        a, b = spore_pair({ id: "b", x: 20, y: 5, width: 30, height: 30 })
+          .children
+
+        expect((b.y - a.y) / (b.x - a.x)).to be_within(1e-9).of(5.0 / 20.0)
+      end
+    end
+
+    context "with generated inputs" do
+      let(:seeds) { 0...40 }
+
+      it "leaves no two nodes closer than the spacing, without warning" do
+        seeds.each do |seed|
+          result = nil
+          expect do
+            result = Elkrb.layout(spore_scatter(seed),
+                                  algorithm: "spore_overlap")
+          end
+            .not_to output.to_stderr
+
+          result.children.combination(2).each do |first, second|
+            expect(box_gap(first, second)).to(
+              be >= 8.0 - 1e-3,
+              "seed #{seed}: #{first.id} and #{second.id} overlap",
+            )
+          end
+        end
+      end
+    end
+
     context "with nil positions" do
       it "does not crash on nil x/y and lays out with finite coordinates" do
         result = Elkrb.layout(
