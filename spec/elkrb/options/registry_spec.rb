@@ -216,13 +216,16 @@ RSpec.describe Elkrb::Options::Registry do
       elk_string: [5, 50].map { |v| "[top=#{v},left=#{v},bottom=#{v},right=#{v}]" },
     }
 
-    # Measured: direction reaches SPLINES routing from an edge or the call
-    # options under every resolver spelling, except that fixed and
-    # spore_compaction give the same output at both directions when no node
-    # has an input position.
+    # Measured: an edge's own direction orients SPLINES routing everywhere
+    # except in an algorithm that routes its own connectors and never hands
+    # them to the SPLINES router (libavoid), and fixed and spore_compaction
+    # give the same output at both directions when no node has an input
+    # position.
+    own_connector_routers = %w[libavoid]
+    spline_routed = algorithms - own_connector_routers
     edge_direction = by_positioning.call(
-      algorithms, unpositioned: algorithms - %w[fixed spore_compaction],
-                  first_only: algorithms
+      spline_routed, unpositioned: spline_routed - %w[fixed spore_compaction],
+                     first_only: spline_routed
     )
     direction = "elk.direction"
     direction_readers =
@@ -368,6 +371,25 @@ RSpec.describe Elkrb::Options::Registry do
       end
 
       expect(missing.keys).to eq([])
+    end
+  end
+
+  # libavoid_spec.rb ("with an edgeRouting style and an edge direction set")
+  # holds the behaviour these two rows describe.
+  describe "the edge routing options libavoid does not apply to its own routes" do
+    %w[elk.edgeRouting elk.spline.curvature].each do |id|
+      it "records #{id} as partial, read by every algorithm but libavoid" do
+        expect(described_class.status(id)).to eq(:partial)
+        expect(described_class.read_by?(id, "layered")).to be(true)
+        expect(described_class.read_by?(id, "libavoid")).to be(false)
+        expect(described_class.note(id)).to include("libavoid ")
+      end
+
+      it "lists as readers exactly the algorithms registered but libavoid" do
+        readers = described_class.all.fetch(id)[:readers]
+        expect(readers.sort)
+          .to eq(Elkrb::Layout::AlgorithmRegistry.available_algorithms - %w[libavoid])
+      end
     end
   end
 
