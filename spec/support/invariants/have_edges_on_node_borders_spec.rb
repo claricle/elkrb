@@ -68,4 +68,20 @@ RSpec.describe "have_edges_on_node_borders" do
 
     expect(graph).not_to have_edges_on_node_borders
   end
+
+  it "checks nested endpoints in their owner's coordinate frame" do
+    graph = graph_with_section(
+      start_point: point(30, 35), end_point: point(100, 35),
+    )
+    source = graph.children.shift
+    source.x = 10
+    source.y = 5
+    compound = Elkrb::Graph::Node.new(
+      id: "compound", x: 20, y: 15, children: [source],
+    )
+    graph.children.unshift(compound)
+    graph.edges.first.sections.first.start_point = point(70, 35)
+
+    expect(graph).to have_edges_on_node_borders
+  end
 end

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "../errors"
+require_relative "../geometry/point"
 
 module Elkrb
   module Layout
@@ -17,6 +18,45 @@ module Elkrb
       def self.build(graph)
         new(graph)
       end
+
+      # Indexes every hierarchy level while retaining each level's namespace.
+      # The offset is the sum of ancestor node coordinates; a node's own x/y
+      # remain local and are not included in its entry.
+      def self.build_deep(graph)
+        entries = {}
+        build_deep_level(graph, Geometry::Point.new, entries)
+        entries
+      end
+
+      def self.build_deep_level(graph, offset, entries)
+        index = build(graph)
+        children = graph.children || []
+        children.each { |node| record_deep_entries(entries, index, node, offset) }
+        build_deep_children(children, offset, entries)
+      end
+      private_class_method :build_deep_level
+
+      def self.build_deep_children(children, offset, entries)
+        children.select(&:hierarchical?).each do |node|
+          build_deep_level(node, descendant_offset(offset, node), entries)
+        end
+      end
+      private_class_method :build_deep_children
+
+      def self.descendant_offset(offset, node)
+        Geometry::Point.new(
+          x: offset.x + (node.x || 0.0),
+          y: offset.y + (node.y || 0.0),
+        )
+      end
+      private_class_method :descendant_offset
+
+      def self.record_deep_entries(entries, index, node, offset)
+        [node.id, *node.ports.to_a.map(&:id)].each do |id|
+          (entries[id] ||= []) << [index.node(id), offset]
+        end
+      end
+      private_class_method :record_deep_entries
 
       def node(id)
         @nodes_by_id[id]

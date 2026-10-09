@@ -98,6 +98,102 @@ module Elkrb
 
       private
 
+      def route_cross_level_edges(graph)
+        hierarchy = @resolver.get("elk.hierarchyHandling", graph)
+        return unless hierarchy == "INCLUDE_CHILDREN"
+
+        deep_index = NodeIndex.build_deep(graph)
+        level_index = NodeIndex.build(graph)
+        graph.edges&.each do |edge|
+          route_cross_level_edge(edge, graph, level_index, deep_index)
+        end
+      end
+
+      def route_cross_level_edge(edge, graph, level_index, deep_index)
+        return unless edge.sources&.any? && edge.targets&.any?
+
+        source = unique_deep_endpoint(deep_index, edge.sources.first)
+        target = unique_deep_endpoint(deep_index, edge.targets.first)
+        return unless source && target
+        return if self_loop?(edge)
+        return if level_index.node(edge.sources.first) &&
+          level_index.node(edge.targets.first)
+
+        start_point, end_point = absolute_endpoint_points(
+          edge, source, target
+        )
+        section = reset_section(edge, graph)
+        section.start_point = start_point
+        section.end_point = end_point
+        section.bend_points = []
+        route_cross_level_bends(section, edge, graph)
+      end
+
+      def unique_deep_endpoint(deep_index, id)
+        matches = deep_index[id] || []
+        if matches.length > 1
+          raise Elkrb::ValidationError, "ambiguous id across levels: #{id}"
+        end
+
+        matches.first
+      end
+
+      def absolute_endpoint_points(edge, source, target)
+        source_node, source_offset = source
+        target_node, target_offset = target
+        source_rect = offset_rectangle(source_node, source_offset)
+        target_rect = offset_rectangle(target_node, target_offset)
+        source_port = find_port_by_id(edge.sources.first, source_node)
+        target_port = find_port_by_id(edge.targets.first, target_node)
+        source_anchor = absolute_endpoint_anchor(source_node, source_offset,
+                                                 source_port, source_rect)
+        target_anchor = absolute_endpoint_anchor(target_node, target_offset,
+                                                 target_port, target_rect)
+
+        start_point = if source_port
+                        source_anchor
+                      else
+                        clip_to_border(source_rect, source_anchor,
+                                       target_anchor)
+                      end
+        end_point = if target_port
+                      target_anchor
+                    else
+                      clip_to_border(target_rect, target_anchor,
+                                     source_anchor)
+                    end
+        [start_point, end_point]
+      end
+
+      def offset_rectangle(node, offset)
+        Geometry::Rectangle.new(
+          (node.x || 0.0) + offset.x,
+          (node.y || 0.0) + offset.y,
+          node.width || 0.0,
+          node.height || 0.0,
+        )
+      end
+
+      def absolute_endpoint_anchor(node, offset, port, rectangle)
+        return rectangle.center unless port
+
+        Geometry::Point.new(
+          x: offset.x + (node.x || 0.0) + (port.x || 0.0),
+          y: offset.y + (node.y || 0.0) + (port.y || 0.0),
+        )
+      end
+
+      def route_cross_level_bends(section, edge, graph)
+        case get_edge_routing_style(graph, edge)
+        when "ORTHOGONAL"
+          add_orthogonal_bend_points(section, section.start_point,
+                                     section.end_point)
+        when "SPLINES"
+          add_spline_control_points(section, section.start_point,
+                                    section.end_point, edge)
+        end
+      end
+
       # Check if edge should use port-based routing
       def edge_uses_ports?(edge, source_node, target_node)
         find_port_by_id(edge.sources.first, source_node) ||

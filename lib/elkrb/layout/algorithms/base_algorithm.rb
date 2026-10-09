@@ -69,6 +69,7 @@ module Elkrb
           layout_flat(graph, @options) if graph.children
           enforce_post_layout_constraints(graph)
           apply_edge_routing(graph)
+          route_cross_level_edges(graph)
           place_labels(graph) unless
             option("label.placement.disabled", default: false)
 

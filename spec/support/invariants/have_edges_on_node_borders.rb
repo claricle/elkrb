@@ -30,7 +30,7 @@ RSpec::Matchers.define :have_edges_on_node_borders do
   define_method(:edge_context) do |edge, index, owner|
     return unless border_checked_edge?(edge, owner)
 
-    source, target = endpoint_nodes(edge, index)
+    source, target = endpoint_entries(edge, index, owner)
     [edge, source, target] if source && target
   end
 
@@ -38,8 +38,19 @@ RSpec::Matchers.define :have_edges_on_node_borders do
     edge.sections&.any? && !port_edge?(edge, owner)
   end
 
-  define_method(:endpoint_nodes) do |edge, index|
-    [index.owner(edge.sources&.first), index.owner(edge.targets&.first)]
+  define_method(:endpoint_entries) do |edge, index, owner|
+    deep_index = Elkrb::Layout::NodeIndex.build_deep(owner)
+    [edge.sources&.first, edge.targets&.first].map do |id|
+      endpoint_entry(index, deep_index, id)
+    end
+  end
+
+  define_method(:endpoint_entry) do |index, deep_index, id|
+    node = index.node(id)
+    return [node, Elkrb::Geometry::Point.new] if node
+
+    matches = deep_index[id]
+    matches.first if matches&.one?
   end
 
   define_method(:port_edge?) do |edge, owner|
@@ -89,23 +100,26 @@ RSpec::Matchers.define :have_edges_on_node_borders do
     nil
   end
 
-  define_method(:check_border) do |point, node, path|
+  define_method(:check_border) do |point, endpoint, path|
     return @violations << "#{path} is missing" unless point
-    return if on_border?(point, node)
+
+    node, offset = endpoint
+    return if on_border?(point, node, offset)
 
     @violations << "#{path} (#{point.x}, #{point.y}) is not on " \
                    "#{node.id}'s border"
   end
 
-  define_method(:on_border?) do |point, node|
-    left, top, right, bottom = border_box(node)
+  define_method(:on_border?) do |point, node, offset|
+    left, top, right, bottom = border_box(node, offset)
     on_vertical_border?(point, left, right, top, bottom) ||
       on_horizontal_border?(point, top, bottom, left, right)
   end
 
-  define_method(:border_box) do |node|
+  define_method(:border_box) do |node, offset|
     x, y, width, height = InvariantGeometry.box(node)
-    [x, y, x + width, y + height]
+    [x + offset.x, y + offset.y,
+     x + offset.x + width, y + offset.y + height]
   end
 
   define_method(:on_vertical_border?) do |point, left, right, top, bottom|
