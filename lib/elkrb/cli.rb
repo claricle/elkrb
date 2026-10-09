@@ -7,6 +7,7 @@ require "yaml"
 require_relative "errors"
 require_relative "best_effort_write"
 require_relative "layout_flags"
+require_relative "cli/layout_flag_options"
 require_relative "options/resolver"
 
 module Elkrb
@@ -34,38 +35,36 @@ module Elkrb
     # value that matches this class actually being a library.
     def self.exit_on_failure? = false
 
-    # No Thor default: an absent --algorithm must stay nil so the graph's own
-    # elk.algorithm can be read before falling back to layered.
-    ALGORITHM_OPTION_DESC = "Layout algorithm to use (default: the graph's " \
-                            "own elk.algorithm, else layered)"
+    # The line that follows a usage error: help for the command the user
+    # named, else for the CLI as a whole.
+    #
+    # @param argv [Array<String>] the arguments the CLI was started with
+    # @return [String]
+    def self.usage_hint(argv)
+      name = argv.first
+      known = name && all_commands.key?(normalize_command_name(name))
+      known ? "Try: elkrb help #{name}" : "Try: elkrb help"
+    end
+
+    YAML_EXTENSIONS = %w[.yml .yaml].freeze
+    private_constant :YAML_EXTENSIONS
+
+    extend LayoutFlagOptions
+
+    # A mistyped flag is an error, not a positional argument: without this
+    # `elkrb layout --bogus` tries to read a file named "--bogus".
+    check_unknown_options!
 
     class_option :verbose, type: :boolean, default: false,
                            desc: "Enable verbose output"
 
     desc "layout FILE", "Layout a graph from a JSON, YAML, or ELKT file"
-    option :algorithm, type: :string, desc: ALGORITHM_OPTION_DESC
     option :output, type: :string, aliases: "-o",
                     desc: "Output file (default: stdout)"
-    option :format, type: :string, default: "json",
-                    enum: %w[json yaml],
-                    desc: "Output format"
-    option :spacing, type: :numeric,
-                     desc: "Node spacing"
-    option :layer_spacing, type: :numeric,
-                           desc: "Layer spacing (for layered algorithm)"
-    option :direction, type: :string,
-                       desc: "Layout direction (e.g., DOWN, RIGHT); " \
-                             "applied by layered and mrtree algorithms"
-    option :edge_routing, type: :string,
-                          desc: "Edge routing strategy"
-    option :padding_top, type: :numeric,
-                         desc: "Top padding"
-    option :padding_bottom, type: :numeric,
-                            desc: "Bottom padding"
-    option :padding_left, type: :numeric,
-                          desc: "Left padding"
-    option :padding_right, type: :numeric,
-                           desc: "Right padding"
+    option :format, type: :string, enum: %w[json yaml],
+                    desc: "Output format (default: from the --output " \
+                          "extension, .yml/.yaml for YAML, else json)"
+    layout_flags
     def layout(file)
       verbose_output "Loading graph from #{file}..."
 
@@ -86,12 +85,15 @@ module Elkrb
 
       verbose_output "Layout complete!"
     rescue StandardError => e
-      fail_command(e)
+      fail_command(e, "layout")
     end
 
     desc "algorithms", "List available layout algorithms"
+    option :json, type: :boolean, default: false,
+                  desc: "Print the list as JSON on stdout"
     def algorithms
       algos = Layout::LayoutEngine.known_layout_algorithms
+      return say(json_for_algorithms(algos)) if options[:json]
 
       say "Available Layout Algorithms:", :green
       say ""
@@ -106,26 +108,31 @@ module Elkrb
       end
     end
 
+    desc "options [ALGORITHM]",
+         "List layout options, or those one algorithm supports"
+    option :json, type: :boolean, default: false,
+                  desc: "Print the options as JSON on stdout"
+    def options_list(algorithm = nil)
+      require_relative "commands/options_command"
+      Commands::OptionsCommand.new(algorithm, options).run
+    rescue StandardError => e
+      fail_command(e, "options")
+    end
+    map "options" => :options_list
+
     desc "diagram FILE", "Create diagram from ELK graph file"
-    option :algorithm, type: :string, desc: ALGORITHM_OPTION_DESC
-    option :direction, type: :string,
-                       desc: "Layout direction (e.g., DOWN, RIGHT); " \
-                             "applied by layered and mrtree algorithms"
-    option :spacing, type: :numeric,
-                     desc: "Node spacing"
-    option :edge_routing, type: :string,
-                          desc: "Edge routing strategy"
     option :output, type: :string, aliases: "-o", required: true,
                     desc: "Output file path"
     option :format, type: :string,
                     desc: "Output format (auto-detected from extension)"
     option :preview, type: :boolean, default: false,
                      desc: "Open result in default viewer"
+    layout_flags
     def diagram(file)
       require_relative "commands/diagram_command"
       Commands::DiagramCommand.new(file, options).run
     rescue StandardError => e
-      fail_command(e)
+      fail_command(e, "diagram")
     end
 
     desc "convert FILE", "Convert between formats (JSON/YAML/DOT/ELKT)"
@@ -137,7 +144,7 @@ module Elkrb
       require_relative "commands/convert_command"
       Commands::ConvertCommand.new(file, options).run
     rescue StandardError => e
-      fail_command(e)
+      fail_command(e, "convert")
     end
 
     desc "render DOT_FILE", "Render DOT to image (requires Graphviz)"
@@ -151,7 +158,7 @@ module Elkrb
       require_relative "commands/render_command"
       Commands::RenderCommand.new(dot_file, options).run
     rescue StandardError => e
-      fail_command(e)
+      fail_command(e, "render")
     end
 
     desc "validate FILE", "Validate ELK graph structure"
@@ -161,7 +168,7 @@ module Elkrb
       require_relative "commands/validate_command"
       Commands::ValidateCommand.new(file, options).run
     rescue StandardError => e
-      fail_command(e)
+      fail_command(e, "validate")
     end
 
     desc "batch DIR", "Process multiple files in a directory"
@@ -169,17 +176,12 @@ module Elkrb
                         desc: "Output directory for generated files"
     option :format, type: :string, default: "svg",
                     desc: "Output format for all files"
-    option :algorithm, type: :string, desc: ALGORITHM_OPTION_DESC
-    option :direction, type: :string,
-                       desc: "Layout direction (e.g., DOWN, RIGHT); " \
-                             "applied by layered and mrtree algorithms"
-    option :edge_routing, type: :string,
-                          desc: "Edge routing strategy"
+    layout_flags
     def batch(directory)
       require_relative "commands/batch_command"
       Commands::BatchCommand.new(directory, options).run
     rescue StandardError => e
-      fail_command(e)
+      fail_command(e, "batch")
     end
 
     desc "version", "Show elkrb version"
@@ -194,8 +196,24 @@ module Elkrb
       Elkrb::FormatSniffer.read(File.read(file), File.extname(file).downcase)
     end
 
+    # --format wins; without it the --output extension decides, because
+    # `--output result.yml` asking for YAML is the one reading that cannot
+    # surprise anyone.
+    def output_format
+      return options[:format] if options[:format]
+
+      extension = File.extname(options[:output].to_s).downcase
+      YAML_EXTENSIONS.include?(extension) ? "yaml" : "json"
+    end
+
+    def json_for_algorithms(algos)
+      keys = %i[id name description category supports_hierarchy
+                supported_options]
+      JSON.generate("algorithms" => algos.map { |algo| algo.slice(*keys) })
+    end
+
     def output_result(result)
-      output = case options[:format]
+      output = case output_format
                when "yaml"
                  result.to_yaml
                else
@@ -252,12 +270,27 @@ module Elkrb
     # The report is best-effort; see Elkrb::BestEffortWrite for why, and wrap
     # any new non-result write -- a report, a progress line, anything that
     # is not the write emitting the command's actual output -- the same way.
-    def fail_command(error)
-      raise error if error.is_a?(CommandFailed) || error.is_a?(Errno::EPIPE)
+    def fail_command(error, command)
+      hint = failure_hint(error, command)
+      raise error if error.is_a?(Errno::EPIPE)
+
+      if error.is_a?(CommandFailed)
+        BestEffortWrite.attempt { error_output hint }
+        raise error
+      end
 
       message = error.message
-      BestEffortWrite.attempt { error_output "Error: #{message}" }
+      BestEffortWrite.attempt do
+        error_output "Error: #{message}"
+        error_output hint
+      end
       raise CommandFailed, message
+    end
+
+    def failure_hint(error, command)
+      return "Try: elkrb algorithms" if error.is_a?(AlgorithmNotFoundError)
+
+      "Try: elkrb help #{command}"
     end
   end
 end
