@@ -666,21 +666,34 @@ f_score = Float::INFINITY, direction = nil)
 
         # Position nodes if they don't have positions
         def position_nodes_if_needed(graph)
-          return if graph.children.all? { |n| n.x && n.y }
+          pending = graph.children.reject { |n| n.x && n.y }
+          return if pending.empty?
 
-          # Use simple box layout for positioning
+          anchored = graph.children - pending
+          if anchored.empty?
+            place_in_grid(pending, 0.0, 0.0)
+          else
+            place_beside(pending, anchored)
+          end
+        end
+
+        # Positioned nodes are never moved: a connector router that shifts
+        # the caller's layout is not routing, it is re-laying-out.
+        def place_beside(pending, anchored)
+          origin_x = anchored.map { |n| n.x + n.width }.max + node_spacing
+          origin_y = anchored.map(&:y).min
+          place_in_grid(pending, origin_x, origin_y)
+        end
+
+        def place_in_grid(nodes, origin_x, origin_y)
           spacing = node_spacing
-          max_width = graph.children.map(&:width).max
-          max_height = graph.children.map(&:height).max
+          max_width = nodes.map(&:width).max
+          max_height = nodes.map(&:height).max
+          cols = [Math.sqrt(nodes.length * 1.6).ceil, 1].max
 
-          cols = Math.sqrt(graph.children.length * 1.6).ceil
-          cols = [cols, 1].max
-
-          graph.children.each_with_index do |node, i|
-            row = i / cols
-            col = i % cols
-            node.x = col * (max_width + spacing)
-            node.y = row * (max_height + spacing)
+          nodes.each_with_index do |node, i|
+            node.x = origin_x + ((i % cols) * (max_width + spacing))
+            node.y = origin_y + ((i / cols) * (max_height + spacing))
           end
         end
 

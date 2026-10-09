@@ -5,6 +5,7 @@ require "bundler/setup"
 require "elkrb"
 require "json"
 require "benchmark"
+require "optparse"
 
 # ElkRb Performance Benchmark
 class ElkrbBenchmark
@@ -15,11 +16,16 @@ class ElkrbBenchmark
     topdownpacking libavoid vertiflex
   ].freeze
 
-  def initialize
+  # @param max_ms [Numeric, nil] when set, #run reports every measured
+  #   average above this many milliseconds
+  def initialize(max_ms: nil)
     @graphs = load_graphs
     @results = {}
+    @max_ms = max_ms
   end
 
+  # @return [Array<String>] one line per graph and algorithm whose average
+  #   exceeded the budget; empty without a budget
   def run
     puts "ElkRb Performance Benchmark"
     puts "=" * 60
@@ -35,6 +41,7 @@ class ElkrbBenchmark
 
     save_results
     generate_report
+    over_budget
   end
 
   private
@@ -112,6 +119,19 @@ class ElkrbBenchmark
     end
   end
 
+  def over_budget
+    return [] unless @max_ms
+
+    @results.flat_map do |graph, by_algorithm|
+      by_algorithm.filter_map do |algorithm, result|
+        avg = result[:avg]
+        next unless avg && avg > @max_ms
+
+        "#{graph} / #{algorithm}: #{avg.round(2)}ms > #{@max_ms}ms"
+      end
+    end
+  end
+
   def save_results
     File.write(
       "benchmarks/results/elkrb_results.json",
@@ -141,5 +161,17 @@ end
 
 # Run benchmark when executed directly
 if __FILE__ == $PROGRAM_NAME
-  ElkrbBenchmark.new.run
+  max_ms = nil
+  OptionParser.new do |opts|
+    opts.banner = "Usage: elkrb_benchmark.rb [--assert-max-ms MS]"
+    opts.on("--assert-max-ms MS", Float, "Exit 1 when any average exceeds MS") do |value|
+      max_ms = value
+    end
+  end.parse!
+
+  failures = ElkrbBenchmark.new(max_ms: max_ms).run
+  unless failures.empty?
+    warn "Over budget:", *failures.map { |line| "  #{line}" }
+    exit 1
+  end
 end

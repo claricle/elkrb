@@ -364,6 +364,41 @@ RSpec.describe Elkrb::Layout::Algorithms::Libavoid do
         end
       end
 
+      context "when only some nodes are positioned" do
+        def build_graph(third_x)
+          Elkrb::Graph::Graph.new(
+            id: "root",
+            children: [
+              Elkrb::Graph::Node.new(id: "a", x: 5, y: 7, width: 50, height: 50),
+              Elkrb::Graph::Node.new(id: "b", x: 200, y: 9, width: 50, height: 50),
+              Elkrb::Graph::Node.new(id: "c", x: third_x, y: third_x && 7, width: 50, height: 90),
+            ],
+            edges: [Elkrb::Graph::Edge.new(id: "e", sources: ["a"], targets: ["b"])],
+          )
+        end
+
+        def positions(graph)
+          graph.children.to_h { |n| [n.id, [n.x, n.y]] }
+        end
+
+        it "leaves the positioned nodes where the caller put them" do
+          partial = build_graph(nil)
+          full = build_graph(400)
+          described_class.new.layout(partial)
+          described_class.new.layout(full)
+
+          expect(positions(partial).slice("a", "b")).to eq(positions(full).slice("a", "b"))
+        end
+
+        it "places the unpositioned node clear of the positioned ones" do
+          graph = build_graph(nil)
+          described_class.new.layout(graph)
+          a, b, c = graph.children
+
+          expect(c.x).to be >= [a, b].map { |n| n.x + n.width }.max
+        end
+      end
+
       it "sets graph dimensions" do
         algorithm.layout(graph)
 

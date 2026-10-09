@@ -16,6 +16,11 @@ module Elkrb
       #   node.constraints = NodeConstraints.new(fixed_position: true)
       #   # After layout, node remains at (500, 800)
       class FixedPositionConstraint < BaseConstraint
+        def initialize
+          super
+          @originals = {}
+        end
+
         # Apply fixed position constraint (pre-layout)
         #
         # Stores original positions of fixed nodes so they can be
@@ -28,11 +33,7 @@ module Elkrb
             next unless node.constraints&.fixed_position
             next if node.x.nil? || node.y.nil?
 
-            # Store original position
-            node.properties ||= {}
-            node.properties["_constraint_fixed"] = true
-            node.properties["_constraint_original_x"] = node.x
-            node.properties["_constraint_original_y"] = node.y
+            @originals[node.id] = [node.x, node.y]
           end
 
           graph
@@ -47,11 +48,10 @@ module Elkrb
         # @return [Graph::Graph] The modified graph
         def restore_fixed_positions(graph)
           all_nodes(graph).each do |node|
-            next unless node.properties&.[]("_constraint_fixed")
+            original = fixed_original(node)
+            next unless original
 
-            # Restore original position
-            node.x = node.properties["_constraint_original_x"]
-            node.y = node.properties["_constraint_original_y"]
+            node.x, node.y = original
           end
 
           graph
@@ -67,10 +67,8 @@ module Elkrb
           errors = []
 
           all_nodes(graph).each do |node|
-            next unless node.properties&.[]("_constraint_fixed")
-
-            original_x = node.properties["_constraint_original_x"]
-            original_y = node.properties["_constraint_original_y"]
+            original_x, original_y = fixed_original(node)
+            next unless original_x
 
             if node.x != original_x || node.y != original_y
               errors << "Node '#{node.id}' has fixed_position constraint " \
@@ -80,6 +78,17 @@ module Elkrb
           end
 
           errors
+        end
+
+        private
+
+        # The recorded position of a node that is still fixed, or nil. The
+        # constraint is read from the node every time, so clearing
+        # fixed_position releases a node recorded earlier.
+        def fixed_original(node)
+          return unless node.constraints&.fixed_position
+
+          @originals[node.id]
         end
       end
     end

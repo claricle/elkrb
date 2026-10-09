@@ -60,14 +60,14 @@ module Elkrb
           size_compound_children(graph) if graph.hierarchical?
 
           apply_port_constraints(graph)
-          apply_pre_layout_constraints(graph)
+          processor = apply_pre_layout_constraints(graph)
 
           # Only nil (children key absent from deserialized
           # input) skips dispatch — an explicit empty array still reaches
           # layout_flat, preserving its documented NotImplementedError
           # contract for subclasses that don't override it.
           layout_flat(graph, @options) if graph.children
-          enforce_post_layout_constraints(graph)
+          enforce_post_layout_constraints(graph, processor)
           apply_edge_routing(graph)
           route_cross_level_edges(graph)
           place_labels(graph) unless
@@ -173,12 +173,19 @@ module Elkrb
 
         # Apply pre-layout constraints
         #
-        # These constraints mark nodes for special algorithm handling.
-        #
         # @param graph [Elkrb::Graph::Graph] The graph
+        # @return [Constraints::ConstraintProcessor] the processor holding the
+        #   state #enforce_post_layout_constraints needs
         def apply_pre_layout_constraints(graph)
-          processor = Constraints::ConstraintProcessor.new
+          # Only read the spacing option when a constraint needs it, so a
+          # graph without constraints never resolves an option it did not
+          # resolve before.
+          constrained = graph.children&.any?(&:constraints)
+          processor = Constraints::ConstraintProcessor.new(
+            spacing: constrained ? node_spacing : 0.0,
+          )
           processor.apply_pre_layout(graph)
+          processor
         end
 
         # Enforce post-layout constraints
@@ -186,18 +193,13 @@ module Elkrb
         # These constraints adjust positions after layout algorithm runs.
         #
         # @param graph [Elkrb::Graph::Graph] The graph
-        def enforce_post_layout_constraints(graph)
-          processor = Constraints::ConstraintProcessor.new
+        # @param processor [Constraints::ConstraintProcessor] the processor
+        #   returned by #apply_pre_layout_constraints
+        def enforce_post_layout_constraints(graph, processor)
           processor.enforce_post_layout(graph)
 
-          # Validate all constraints
-          errors = processor.validate_all(graph)
-
-          return if errors.empty?
-
-          # Log warnings for constraint violations
-          errors.each do |error|
-            warn "Layout constraint violation: #{error}"
+          processor.validate_all(graph).each do |error|
+            Elkrb.logger.warn("Layout constraint violation: #{error}")
           end
         end
       end

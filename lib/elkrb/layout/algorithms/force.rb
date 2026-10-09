@@ -18,6 +18,10 @@ module Elkrb
       # - Mind maps
       # - General undirected graphs
       class Force < BaseAlgorithm
+        DEFAULT_SPACING = 80.0
+        MIN_DISTANCE = 0.01
+        PERCENTAGE_BASE = 100.0
+
         # The registry owns these; the constants stay for existing callers.
         DEFAULT_ITERATIONS = Options::Registry.default("elk.force.iterations")
         DEFAULT_REPULSION = Options::Registry.default("elk.force.repulsion")
@@ -26,41 +30,41 @@ module Elkrb
         def layout_flat(graph, _options = {})
           return graph if graph.children.nil? || graph.children.empty?
 
-          # Get configuration
-          iterations = option("elk.force.iterations")
-          repulsion = option("elk.force.repulsion")
-          temperature = option("elk.force.temperature")
+          iterations = option("elk.force.iterations", default: 300)
+          spacing = option("elk.spacing.nodeNode", default: DEFAULT_SPACING)
+          area = layout_area(graph.children, spacing)
+          side = Math.sqrt(area)
+          ideal_length = [
+            Math.sqrt(area / graph.children.length),
+            MIN_DISTANCE,
+          ].max
 
-          # Initialize positions randomly if not set
-          initialize_positions(graph)
-
-          # Resolve edge endpoints to force-array positions once, before
-          # the iteration loop (not per edge per iteration)
+          initialize_positions(graph, side)
           resolved_edges = resolve_edge_positions(graph)
+          repulsion = repulsion_scale
+          initial_temperature = side / 10.0 * temperature_scale
 
-          # Run force simulation
           iterations.times do |i|
-            apply_forces(graph, resolved_edges, repulsion, temperature, i,
-                         iterations)
+            temperature = initial_temperature * (1.0 - (i.to_f / iterations))
+            apply_forces(graph.children, resolved_edges, ideal_length,
+                         repulsion, temperature)
           end
 
-          # Apply padding and set graph dimensions
           apply_padding(graph)
-
           graph
         end
 
         private
 
-        def initialize_positions(graph)
-          # Calculate approximate area needed
-          total_area = graph.children.sum do |n|
-            ((n.width || 0.0) + 20) * ((n.height || 0.0) + 20)
+        def layout_area(nodes, spacing)
+          nodes.sum do |node|
+            ((node.width || 0.0) + spacing) *
+              ((node.height || 0.0) + spacing)
           end
-          side = Math.sqrt(total_area)
+        end
 
+        def initialize_positions(graph, side)
           graph.children.each do |node|
-            # Set random position if not already set
             unless node.x && node.y
               node.x = rng.rand * side
               node.y = rng.rand * side
@@ -84,87 +88,135 @@ module Elkrb
             target_node = index.node(target_id)
             next unless source_node && target_node
 
-            [positions[source_node.id], positions[target_node.id]]
+            source_position = positions[source_node.id]
+            target_position = positions[target_node.id]
+            next unless source_position && target_position
+            next if source_position == target_position
+
+            [source_position, target_position]
           end
         end
 
-        def apply_forces(graph, resolved_edges, repulsion, temperature,
-                         iteration, max_iterations)
-          # Calculate temperature decay
-          temp = temperature * (1.0 - (iteration.to_f / max_iterations))
+        def temperature_scale
+          option("elk.force.temperature", default: DEFAULT_TEMPERATURE).to_f /
+            DEFAULT_TEMPERATURE
+        end
 
-          # Calculate forces for each node
-          forces = calculate_forces(graph, resolved_edges, repulsion)
+        def repulsion_scale
+          option("elk.force.repulsion", default: DEFAULT_REPULSION).to_f /
+            PERCENTAGE_BASE
+        end
 
-          # Apply forces with temperature
-          graph.children.each_with_index do |node, i|
-            force = forces[i]
-            magnitude = Math.sqrt((force[:x]**2) + (force[:y]**2))
+        def apply_forces(nodes, resolved_edges, ideal_length, repulsion,
+                         temperature)
+          forces = calculate_forces(nodes, resolved_edges, ideal_length,
+                                    repulsion)
+
+          nodes.each_with_index do |node, i|
+            force_x, force_y = forces[i]
+            magnitude = Math.hypot(force_x, force_y)
 
             next if magnitude.zero?
 
-            # Apply displacement with temperature
-            displacement = [magnitude, temp].min
-            node.x += (force[:x] / magnitude) * displacement
-            node.y += (force[:y] / magnitude) * displacement
+            displacement = [magnitude, temperature].min
+            node.x += (force_x / magnitude) * displacement
+            node.y += (force_y / magnitude) * displacement
           end
         end
 
-        def calculate_forces(graph, resolved_edges, repulsion)
-          forces = graph.children.map { { x: 0.0, y: 0.0 } }
+        def calculate_forces(nodes, resolved_edges, ideal_length, repulsion)
+          forces = Array.new(nodes.length) { [0.0, 0.0] }
 
-          # Repulsive forces between all pairs
-          graph.children.each_with_index do |node1, i|
-            graph.children.each_with_index do |node2, j|
-              next if i >= j
-
-              apply_repulsive_force(node1, node2, forces[i], forces[j],
-                                    repulsion)
+          nodes.each_index do |i|
+            ((i + 1)...nodes.length).each do |j|
+              apply_repulsive_force(nodes[i], nodes[j], forces[i], forces[j],
+                                    ideal_length, repulsion)
             end
           end
 
-          # Attractive forces for edges
           resolved_edges.each do |source_idx, target_idx|
             apply_attractive_force(
-              graph.children[source_idx],
-              graph.children[target_idx],
+              nodes[source_idx],
+              nodes[target_idx],
               forces[source_idx],
               forces[target_idx],
+              ideal_length,
             )
           end
 
           forces
         end
 
-        def apply_repulsive_force(node1, node2, force1, force2, repulsion)
-          dx = node2.x - node1.x
-          dy = node2.y - node1.y
-          distance_sq = (dx**2) + (dy**2)
-
-          # Avoid division by zero
-          return if distance_sq < 0.01
-
-          # Repulsive force inversely proportional to distance
-          force = repulsion / distance_sq
-          force1[:x] -= (dx / Math.sqrt(distance_sq)) * force
-          force1[:y] -= (dy / Math.sqrt(distance_sq)) * force
-          force2[:x] += (dx / Math.sqrt(distance_sq)) * force
-          force2[:y] += (dy / Math.sqrt(distance_sq)) * force
+        def apply_repulsive_force(node1, node2, force1, force2, ideal_length,
+                                  repulsion)
+          direction_x, direction_y, distance = border_vector(node1, node2)
+          magnitude = repulsion * (ideal_length**2) / distance
+          apply_force_pair(force1, force2, direction_x, direction_y,
+                           -magnitude)
         end
 
-        def apply_attractive_force(node1, node2, force1, force2)
-          dx = node2.x - node1.x
-          dy = node2.y - node1.y
-          distance = Math.sqrt((dx**2) + (dy**2))
+        def apply_attractive_force(node1, node2, force1, force2, ideal_length)
+          direction_x, direction_y, distance = border_vector(node1, node2)
+          magnitude = (distance**2) / ideal_length
+          apply_force_pair(force1, force2, direction_x, direction_y, magnitude)
+        end
 
-          return if distance.zero?
+        def border_vector(node1, node2)
+          dx = center_x(node2) - center_x(node1)
+          dy = center_y(node2) - center_y(node1)
 
-          # Spring force proportional to distance
-          force = distance / 10.0
-          force1[:x] += (dx / distance) * force
-          force1[:y] += (dy / distance) * force
-          force2[:x] -= (dx / distance) * force
-          force2[:y] -= (dy / distance) * force
+          if dx.zero? && dy.zero?
+            angle = rng.rand * 2.0 * Math::PI
+            dx = Math.cos(angle) * MIN_DISTANCE
+            dy = Math.sin(angle) * MIN_DISTANCE
+          end
+
+          center_distance = Math.hypot(dx, dy)
+          direction_x = dx / center_distance
+          direction_y = dy / center_distance
+          horizontal_gap = [dx.abs - half_widths(node1, node2), 0.0].max
+          vertical_gap = [dy.abs - half_heights(node1, node2), 0.0].max
+          distance = [
+            Math.hypot(horizontal_gap, vertical_gap),
+            MIN_DISTANCE,
+          ].max
+
+          [direction_x, direction_y, distance]
+        end
+
+        def apply_force_pair(force1, force2, direction_x, direction_y,
+                             magnitude)
+          force_x = direction_x * magnitude
+          force_y = direction_y * magnitude
+          force1[0] += force_x
+          force1[1] += force_y
+          force2[0] -= force_x
+          force2[1] -= force_y
+        end
+
+        def center_x(node)
+          node.x + ((node.width || 0.0) / 2.0)
+        end
+
+        def center_y(node)
+          node.y + ((node.height || 0.0) / 2.0)
+        end
+
+        def half_widths(node1, node2)
+          ((node1.width || 0.0) + (node2.width || 0.0)) / 2.0
+        end
+
+        def half_heights(node1, node2)
+          ((node1.height || 0.0) + (node2.height || 0.0)) / 2.0
+        end
+
+        # ELK's force layout uses 50px padding even though the shared core
+        # registry default is 12px. An explicit graph/call option still wins.
+        def padding
+          option(
+            "elk.padding",
+            default: { left: 50.0, top: 50.0, right: 50.0, bottom: 50.0 },
+          ).to_h
         end
       end
     end
