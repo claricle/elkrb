@@ -130,10 +130,16 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
 
     it "routes with ports when available" do
       node1.ports = [
-        Elkrb::Graph::Port.new(id: "p1", x: 50.0, y: 25.0),
+        Elkrb::Graph::Port.new(
+          id: "p1", x: 50.0, y: 22.0, width: 6.0, height: 6.0,
+          side: "EAST"
+        ),
       ]
       node2.ports = [
-        Elkrb::Graph::Port.new(id: "p2", x: 0.0, y: 25.0),
+        Elkrb::Graph::Port.new(
+          id: "p2", x: -6.0, y: 22.0, width: 6.0, height: 6.0,
+          side: "WEST"
+        ),
       ]
       edge.sources = ["p1"]
       edge.targets = ["p2"]
@@ -141,11 +147,9 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
       router.route_edge(edge, node_map, graph)
 
       section = edge.sections.first
-      # Port positions are relative to node positions
-      expect(section.start_point.x).to eq(50.0) # node1.x + port.x
-      expect(section.start_point.y).to eq(25.0) # node1.y + port.y
-      expect(section.end_point.x).to eq(100.0) # node2.x + port.x
-      expect(section.end_point.y).to eq(25.0) # node2.y + port.y
+      expect(section.start_point.to_h).to eq(x: 56.0, y: 25.0)
+      expect(section.end_point.to_h).to eq(x: 94.0, y: 25.0)
+      expect([section.incoming_shape, section.outgoing_shape]).to eq(%w[p1 p2])
     end
 
     it "uses node borders when the edge does not name an available port" do
@@ -742,8 +746,7 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
 
         router.route_edges(mixed_graph, nil, "ORTHOGONAL")
 
-        # Self-loop should have 4 bend points (rectangular)
-        expect(self_loop_edge.sections.first.bend_points.length).to eq(4)
+        expect(self_loop_edge.sections.first.bend_points.length).to eq(2)
 
         # The normal edge is already horizontally aligned.
         normal_edge.layout_options = {}

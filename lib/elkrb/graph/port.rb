@@ -13,9 +13,9 @@ module Elkrb
       attribute :labels, Label, collection: true
       attribute :layout_options, :hash
       attribute :properties, :hash
-      attribute :side, :string, default: -> { "UNDEFINED" }
-      attribute :index, :integer, default: -> { -1 }
-      attribute :offset, :float, default: -> { 0.0 }
+      attribute :side, :string
+      attribute :index, :integer
+      attribute :offset, :float
 
       # Port sides
       NORTH = "NORTH"
@@ -68,19 +68,10 @@ module Elkrb
         instance_variable_set(:@layout_options, NormalizeOptionKeys.call(cast))
       end
 
-      # Validate and set port side
-      #
-      # @param value [String] The port side (NORTH, SOUTH, EAST, WEST, UNDEFINED)
-      # @raise [ArgumentError] If the side value is invalid
-      def side=(value)
-        return if value.nil?
-
-        normalized = value.to_s.upcase
-        unless SIDES.include?(normalized)
-          raise ArgumentError,
-                "Invalid port side: #{value}. Must be one of #{SIDES.join(', ')}"
-        end
-        @side = normalized
+      # @param value [Object] candidate side
+      # @return [Boolean] whether the value is a canonical port side
+      def valid_side?(value)
+        SIDES.include?(value)
       end
 
       # Detect port side from position relative to node

@@ -5,12 +5,17 @@ require "elkrb/graph/graph"
 require "elkrb/graph/node"
 require "elkrb/graph/port"
 require "elkrb/layout/port_constraint_processor"
+require "elkrb/options/resolver"
 
 RSpec.describe Elkrb::Layout::PortConstraintProcessor do
   # Create a test class that includes the module
   let(:processor_class) do
     Class.new do
       include Elkrb::Layout::PortConstraintProcessor
+
+      def initialize(options = {})
+        @resolver = Elkrb::Options::Resolver.new(options)
+      end
     end
   end
 
@@ -55,6 +60,99 @@ RSpec.describe Elkrb::Layout::PortConstraintProcessor do
         expect(node.ports[0].index).to be >= 0
         expect(node.ports[1].index).to be >= 0
       end
+    end
+
+    it "keeps FIXED_POS coordinates while recording the detected side" do
+      port = Elkrb::Graph::Port.new(id: "p", x: 100, y: 10)
+      node = Elkrb::Graph::Node.new(
+        id: "n", width: 100, height: 60, ports: [port],
+        layout_options: { "elk.portConstraints" => "FIXED_POS" }
+      )
+      graph.children = [node]
+
+      processor.apply_port_constraints(graph)
+
+      expect([port.x, port.y, port.side]).to eq([100.0, 10.0, "EAST"])
+    end
+
+    it "reads fixed side and order from elkjs properties" do
+      ports = [
+        Elkrb::Graph::Port.new(
+          id: "later",
+          properties: { "port.side" => "NORTH", "port.index" => "1" },
+        ),
+        Elkrb::Graph::Port.new(
+          id: "first",
+          properties: { "port.side" => "NORTH", "port.index" => "0" },
+        ),
+      ]
+      node = Elkrb::Graph::Node.new(
+        id: "n", width: 90, height: 60, ports: ports,
+        properties: { "portConstraints" => "FIXED_ORDER" }
+      )
+      graph.children = [node]
+
+      processor.apply_port_constraints(graph)
+
+      values = ports.map do |port|
+        [port.id, port.side, port.index, port.x, port.y]
+      end
+      expect(values)
+        .to contain_exactly(
+          ["first", "NORTH", 0, 30.0, 0.0],
+          ["later", "NORTH", 1, 60.0, 0.0],
+        )
+    end
+
+    it "uses input order for fixed-side ports without indices" do
+      ports = %w[first second].map do |id|
+        Elkrb::Graph::Port.new(
+          id: id, layout_options: { "elk.port.side" => "SOUTH" },
+        )
+      end
+      node = Elkrb::Graph::Node.new(
+        id: "n", width: 90, height: 60, ports: ports,
+        layout_options: { "elk.portConstraints" => "FIXED_SIDE" }
+      )
+      graph.children = [node]
+
+      processor.apply_port_constraints(graph)
+
+      expect(ports.map { |port| [port.id, port.x, port.y] }).to eq(
+        [["first", 30.0, 60.0], ["second", 60.0, 60.0]],
+      )
+    end
+
+    it "processes ports on nested nodes" do
+      port = Elkrb::Graph::Port.new(
+        id: "nested_port", properties: { "port.side" => "WEST" },
+      )
+      nested = Elkrb::Graph::Node.new(
+        id: "nested", width: 40, height: 30, ports: [port],
+      )
+      compound = Elkrb::Graph::Node.new(id: "compound", children: [nested])
+      graph.children = [compound]
+
+      processor.apply_port_constraints(graph)
+
+      expect([port.x, port.y, port.side]).to eq([0.0, 15.0, "WEST"])
+    end
+
+    it "places an unpositioned source port on the outgoing side" do
+      port = Elkrb::Graph::Port.new(id: "p", width: 6, height: 6)
+      source = Elkrb::Graph::Node.new(
+        id: "source", width: 30, height: 30, ports: [port],
+      )
+      target = Elkrb::Graph::Node.new(id: "target", width: 30, height: 30)
+      edge = Elkrb::Graph::Edge.new(
+        id: "edge", sources: ["p"], targets: ["target"],
+      )
+      graph.children = [source, target]
+      graph.edges = [edge]
+
+      processor.apply_port_constraints(graph)
+
+      expect([port.x, port.y, port.side]).to eq([30.0, 12.0, "EAST"])
     end
   end
 
@@ -446,7 +544,7 @@ RSpec.describe Elkrb::Layout::PortConstraintProcessor do
 
       it "does not process ports" do
         processor.send(:process_node_ports, node_zero_dims)
-        expect(node_zero_dims.ports[0].side).to eq("UNDEFINED")
+        expect(node_zero_dims.ports[0].side).to be_nil
       end
     end
 
@@ -460,7 +558,7 @@ RSpec.describe Elkrb::Layout::PortConstraintProcessor do
             ports: [Elkrb::Graph::Port.new(id: "p1", x: 0, y: 30)]
           )
           processor.send(:process_node_ports, node)
-          expect(node.ports[0].side).to eq("UNDEFINED")
+          expect(node.ports[0].side).to be_nil
         end
       end
     end
