@@ -55,6 +55,21 @@ module SirenaContract
     hash
   end
 
+  # a fans out to b and c, declared c before b: b and c tie on barycenter, so
+  # only model order decides which one goes first.
+  def model_order_tie_hash(options)
+    node = ->(id) { { "id" => id, "width" => 40, "height" => 30 } }
+    {
+      "id" => "tie",
+      "layoutOptions" => options,
+      "children" => %w[a c b].map(&node),
+      "edges" => %w[a-b a-c].map do |pair|
+        source, target = pair.split("-")
+        { "id" => pair, "sources" => [source], "targets" => [target] }
+      end,
+    }
+  end
+
   # Two layers whose input order crosses every edge.
   def reversed_bipartite_hash(options)
     node = ->(id) { { "id" => id, "width" => 40, "height" => 30 } }

@@ -44,7 +44,7 @@ RSpec.describe "sirena consumer contract" do
           layout_consumer("flowchart_td",
                           down.merge("elk.spacing.nodeNode" => spacing)),
         )
-        positions["Failure"][0] - positions["Success"][0]
+        (positions["Failure"][0] - positions["Success"][0]).abs
       end
 
       expect(gap.call(80) - gap.call(50)).to eq(30)
@@ -143,16 +143,17 @@ RSpec.describe "sirena consumer contract" do
       expect(crossings.call("NONE")).not_to eq(crossings.call("LAYER_SWEEP"))
     end
 
-    it "elk.layered.considerModelOrder.strategy changes the crossing count" do
-      crossings = lambda do |strategy|
+    it "elk.layered.considerModelOrder.strategy breaks ties by input order" do
+      left_to_right = lambda do |strategy|
         options = down.merge(
           "elk.layered.considerModelOrder.strategy" => strategy,
         )
-        crossing_count(layout_hash(reversed_bipartite_hash(options)))
+        positions = positions_by_id(layout_hash(model_order_tie_hash(options)))
+        %w[b c].sort_by { |id| positions[id][0] }
       end
 
-      expect(crossings.call("NODES_AND_EDGES"))
-        .not_to eq(crossings.call("NONE"))
+      expect(left_to_right.call("NODES_AND_EDGES")).to eq(%w[c b])
+      expect(left_to_right.call("NONE")).to eq(%w[b c])
     end
   end
 
