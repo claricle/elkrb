@@ -188,15 +188,9 @@ module Elkrb
           route_edges(graph, nil, routing_style)
         end
 
-        # Get edge routing style from graph options
-        #
-        # @param graph [Elkrb::Graph::Graph] The graph
-        # @return [String] Routing style (ORTHOGONAL, POLYLINE, SPLINES)
-        def get_edge_routing_style(graph)
-          style = @resolver.get("elk.edgeRouting", graph)
-
-          style == "UNDEFINED" ? "ORTHOGONAL" : style
-        end
+        # Defined in EdgeRouter. Released as a protected method here, so
+        # subclasses override it and call super.
+        protected :get_edge_routing_style
 
         # Apply pre-layout constraints
         #

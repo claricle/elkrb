@@ -19,34 +19,19 @@ module Elkrb
           components = find_connected_components(graph)
 
           # Layout each component independently
-          component_algo = graph.layout_options&.[]("disco.componentAlgorithm") || "layered"
+          component_algo = resolver.get("disco.componentAlgorithm", graph)
           components.each do |component|
             layout_component(component, component_algo)
           end
 
           # Arrange components
-          spacing = graph.layout_options&.[]("disco.componentSpacing") || 20.0
+          spacing = resolver.get("disco.componentSpacing", graph)
           arrange_components(components, graph, spacing)
 
           # Apply padding
           apply_padding(graph)
 
           graph
-        end
-
-        # README.adoc (matching upstream ELK) documents this option as
-        # "disco.componentCompaction.strategy" with values NONE/ROW/COLUMN/GRID.
-        # "disco.componentArrangement" was never a real ELK key -- it was made
-        # up here and silently ignored anything set under the documented name.
-        # Read the documented key first, keep the made-up one as a fallback so
-        # existing callers using it do not break, and normalise case since ELK
-        # values are upper-case while this algorithm compares lower-case.
-        def self.component_arrangement(graph)
-          options = graph.layout_options
-          raw = options&.[]("disco.componentCompaction.strategy") ||
-            options&.[]("disco.componentArrangement") ||
-            "row"
-          raw.to_s.downcase
         end
 
         private
@@ -119,10 +104,22 @@ module Elkrb
           component[:edges].each { |edge| edge.sections = nil }
         end
 
+        # disco.componentCompaction.strategy is ELK's key, and its one value,
+        # POLYOMINO, reads as a row. disco.componentArrangement is the older
+        # elkrb key and takes ROW, COLUMN or GRID. The graph names either key
+        # before the call does: the first reader sees the graph alone.
+        def component_arrangement(graph)
+          keys = %w[disco.componentCompaction.strategy disco.componentArrangement]
+          raw = [Options::Resolver.new, resolver].product(keys)
+            .filter_map { |reader, key| reader.get(key, graph, default: nil) }
+            .first || resolver.get(keys.last, graph)
+          raw.to_s.downcase
+        end
+
         def arrange_components(components, graph, spacing)
           return if components.empty?
 
-          arrangement = self.class.component_arrangement(graph)
+          arrangement = component_arrangement(graph)
 
           case arrangement
           when "grid"

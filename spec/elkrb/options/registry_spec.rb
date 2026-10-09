@@ -216,13 +216,19 @@ RSpec.describe Elkrb::Options::Registry do
       elk_string: [5, 50].map { |v| "[top=#{v},left=#{v},bottom=#{v},right=#{v}]" },
     }
 
-    # Measured: an edge's own direction orients SPLINES routing everywhere,
-    # except that fixed and spore_compaction give the same output at both
-    # directions when no node has an input position.
+    # Measured: direction reaches SPLINES routing from an edge or the call
+    # options under every resolver spelling, except that fixed and
+    # spore_compaction give the same output at both directions when no node
+    # has an input position.
     edge_direction = by_positioning.call(
       algorithms, unpositioned: algorithms - %w[fixed spore_compaction],
                   first_only: algorithms
     )
+    direction = "elk.direction"
+    direction_readers =
+      (%i[call_string call_symbol edge].product(
+        OptionRouteRows.spellings_for(direction, "direction"),
+      )).to_h { |carrier, spelling| [[carrier, spelling, :value], edge_direction] }
     # Measured: every carrier an option applies to reads padding in every
     # shape and spelling, for every algorithm.
     padding_spellings = OptionRouteRows.spellings_for("elk.padding", "padding")
@@ -244,17 +250,16 @@ RSpec.describe Elkrb::Options::Registry do
     # Measured: the same algorithms read every spelling from the call options
     # and from the layoutOptions of the graph or a compound node (a compound
     # without its own elk.algorithm also moves disco); libavoid only when a
-    # node lacks an input position; vertiflex only the ELK id, from
-    # layoutOptions.
+    # node lacks an input position; vertiflex from call options or
+    # layoutOptions under every spelling.
     node_node = "elk.spacing.nodeNode"
-    layout_option_carriers = %i[root] + compounds
     node_node_readers =
       parent_carriers.product(
         OptionRouteRows.spellings_for(node_node, "spacing_node_node"),
       ).to_h do |carrier, spelling|
         readers = %w[box layered mrtree random rectpacking topdownpacking]
         readers << "disco" if carrier == :compound_none
-        if spelling == node_node && layout_option_carriers.include?(carrier)
+        if carrier != :edge
           readers << "vertiflex"
         end
         [[carrier, spelling, :value],
@@ -262,12 +267,9 @@ RSpec.describe Elkrb::Options::Registry do
       end
 
     {
-      "elk.direction" => {
+      direction => {
         internal: "direction", shapes: { value: %w[RIGHT DOWN] },
-        readers: {
-          [:edge, "elk.direction", :value] => edge_direction,
-          [:edge, "direction", :value] => edge_direction,
-        }
+        readers: direction_readers
       },
       layer_spacing => {
         internal: "layer_spacing", shapes: spacing,

@@ -143,6 +143,33 @@ RSpec.describe Elkrb::Layout::Algorithms::Disco do
       end
     end
 
+    context "with the arrangement named in the graph and in the call" do
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          layout_options: { "disco.componentArrangement" => "column" },
+          children: Array.new(3) do |i|
+            Elkrb::Graph::Node.new(id: "n#{i}", width: 50, height: 30)
+          end,
+          edges: [],
+        )
+      end
+
+      it "keeps the graph's legacy key over the call's documented key" do
+        described_class.new("disco.componentCompaction.strategy" => "POLYOMINO")
+          .layout(graph)
+
+        expect(graph.children.map(&:x).uniq.size).to eq(1)
+      end
+
+      it "takes the call's documented key when the graph names neither" do
+        graph.layout_options = nil
+        described_class.new("disco.componentCompaction.strategy" => "COLUMN")
+          .layout(graph)
+
+        expect(graph.children.map(&:x).uniq.size).to eq(1)
+      end
+    end
+
     context "with component spacing option" do
       it "respects custom component spacing" do
         graph = Elkrb::Graph::Graph.new

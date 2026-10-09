@@ -8,7 +8,7 @@ module Elkrb
   module Layout
     # Module to add hierarchical graph layout support to algorithms.
     # Handles recursive layout, parent-child constraints, and cross-hierarchy
-    # edges.
+    # edges. The including class sets @resolver, as BaseAlgorithm does.
     module HierarchicalProcessor
       # Layout a graph and all its hierarchical children recursively.
       #
@@ -155,36 +155,7 @@ module Elkrb
 
       # Get padding for a node from its layout options.
       def get_padding(node)
-        return default_padding unless node.layout_options
-
-        padding_option = node.layout_options["padding"] ||
-          node.layout_options["elk.padding"]
-
-        return default_padding unless padding_option
-
-        parse_padding(padding_option)
-      end
-
-      # Default padding values.
-      def default_padding
-        { top: 12.0, right: 12.0, bottom: 12.0, left: 12.0 }
-      end
-
-      # Parse padding from various formats.
-      def parse_padding(padding)
-        case padding
-        when Hash
-          {
-            top: padding[:top] || padding["top"] || 12.0,
-            right: padding[:right] || padding["right"] || 12.0,
-            bottom: padding[:bottom] || padding["bottom"] || 12.0,
-            left: padding[:left] || padding["left"] || 12.0,
-          }
-        when Numeric
-          { top: padding, right: padding, bottom: padding, left: padding }
-        else
-          default_padding
-        end
+        @resolver.get("elk.padding", node).to_h
       end
 
       # Adjust children positions to account for parent padding.

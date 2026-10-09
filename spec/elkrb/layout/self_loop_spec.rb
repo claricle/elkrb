@@ -3,12 +3,7 @@
 require "spec_helper"
 
 RSpec.describe "Self-loop Support" do
-  let(:router_class) do
-    Class.new do
-      include Elkrb::Layout::EdgeRouter
-    end
-  end
-  let(:router) { router_class.new }
+  let(:router) { RouterHost.new }
 
   describe "self-loop detection" do
     it "detects self-loop when source equals target" do

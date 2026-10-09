@@ -333,6 +333,25 @@ RSpec.describe Elkrb::Layout::HierarchicalProcessor do
 
       expect(padding).to eq({ top: 20, right: 20, bottom: 20, left: 20 })
     end
+
+    it "parses ELK string padding, which fell back to the default before" do
+      node = Elkrb::Graph::Node.new(
+        id: "n1",
+        layout_options: { "elk.padding" => "[top=1,left=2,bottom=3,right=4]" },
+      )
+
+      expect(processor.send(:get_padding, node))
+        .to eq({ top: 1.0, left: 2.0, bottom: 3.0, right: 4.0 })
+    end
+
+    it "reads the org.eclipse.elk.padding spelling" do
+      node = Elkrb::Graph::Node.new(
+        id: "n1",
+        layout_options: { "org.eclipse.elk.padding" => 7 },
+      )
+
+      expect(processor.send(:get_padding, node)).to eq({ top: 7.0, left: 7.0, bottom: 7.0, right: 7.0 })
+    end
   end
 
   describe "#calculate_children_bounds" do

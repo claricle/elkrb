@@ -51,13 +51,13 @@ module Elkrb
         # 1. The graph's own selector -- layoutOptions under "elk.algorithm",
         #    "algorithm" or the "org.eclipse.elk.algorithm" long form, then
         #    properties
-        # 2. options[:algorithm] or options["algorithm"]
+        # 2. The :algorithm call option, under a Symbol or String key
         # 3. Default: "layered"
         #
         # A graph that pins an algorithm keeps it; the caller's option is
         # the fallback for graphs that pin none.
         #
-        # With options[:strict] set to true, an option in the graph's
+        # With the call option strict: true, an option in the graph's
         # layoutOptions that elkrb does not know, or does not fully honour,
         # raises Elkrb::Error instead of logging a warning. So does a
         # registered option in an element's properties or in +options+ that

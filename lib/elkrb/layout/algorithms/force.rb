@@ -18,17 +18,18 @@ module Elkrb
       # - Mind maps
       # - General undirected graphs
       class Force < BaseAlgorithm
-        DEFAULT_ITERATIONS = 300
-        DEFAULT_REPULSION = 5.0
-        DEFAULT_TEMPERATURE = 0.001
+        # The registry owns these; the constants stay for existing callers.
+        DEFAULT_ITERATIONS = Options::Registry.default("elk.force.iterations")
+        DEFAULT_REPULSION = Options::Registry.default("elk.force.repulsion")
+        DEFAULT_TEMPERATURE = Options::Registry.default("elk.force.temperature")
 
         def layout_flat(graph, _options = {})
           return graph if graph.children.nil? || graph.children.empty?
 
           # Get configuration
-          iterations = option("iterations", default: DEFAULT_ITERATIONS).to_i
-          repulsion = option("repulsion", default: DEFAULT_REPULSION).to_f
-          temperature = option("temperature", default: DEFAULT_TEMPERATURE).to_f
+          iterations = option("elk.force.iterations")
+          repulsion = option("elk.force.repulsion")
+          temperature = option("elk.force.temperature")
 
           # Initialize positions randomly if not set
           initialize_positions(graph)
