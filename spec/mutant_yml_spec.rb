@@ -51,7 +51,7 @@ RSpec.describe "mutant.yml requires" do
 
     expect(status).to be_success, "subprocess failed:\n#{out}"
 
-    loaded = out.split("\n")
+    loaded = out.lines(chomp: true)
     all_lib_files = Dir.glob("**/*.rb", base: File.join(repo_root, "lib")).sort
     missing = all_lib_files - loaded
 

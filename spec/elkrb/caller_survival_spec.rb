@@ -87,9 +87,9 @@ RSpec.describe "library callers keep control of their own process" do
         stdout = survives(<<~RUBY)
           require "elkrb"
           require "elkrb/cli"
-          saved = $stdout.dup
+          saved = $stdout
           reader, writer = IO.pipe
-          $stdout.reopen(writer)
+          $stdout = writer
           reader.close
           outcome = begin
             Elkrb::Cli.start(["layout", #{path.inspect}])
@@ -97,7 +97,7 @@ RSpec.describe "library callers keep control of their own process" do
           rescue StandardError => e
             "RESCUED \#{e.class}"
           ensure
-            $stdout.reopen(saved)
+            $stdout = saved
           end
           puts outcome
           puts #{CliRunner::SENTINEL.inspect}
@@ -183,9 +183,9 @@ RSpec.describe "library callers keep control of their own process" do
         stdout = survives(<<~RUBY)
           require "elkrb"
           require "elkrb/cli"
-          saved = $stdout.dup
+          saved = $stdout
           reader, writer = IO.pipe
-          $stdout.reopen(writer)
+          $stdout = writer
           reader.close
           outcome = begin
             Elkrb::Cli.start(["layout", #{missing.inspect}])
@@ -193,7 +193,7 @@ RSpec.describe "library callers keep control of their own process" do
           rescue StandardError => e
             "RESCUED \#{e.class}: \#{e.message} CAUSE=\#{e.cause.class}"
           ensure
-            $stdout.reopen(saved)
+            $stdout = saved
           end
           puts outcome
           puts #{CliRunner::SENTINEL.inspect}
@@ -231,9 +231,9 @@ RSpec.describe "library callers keep control of their own process" do
         stdout = survives(<<~RUBY)
           require "elkrb"
           require "elkrb/cli"
-          saved = $stderr.dup
+          saved = $stderr
           reader, writer = IO.pipe
-          $stderr.reopen(writer)
+          $stderr = writer
           reader.close
           outcome = begin
             Elkrb::Cli.start(["layout", #{missing.inspect}, "--verbose"])
@@ -241,7 +241,7 @@ RSpec.describe "library callers keep control of their own process" do
           rescue StandardError => e
             "RESCUED \#{e.class}: \#{e.message} CAUSE=\#{e.cause.class}"
           ensure
-            $stderr.reopen(saved)
+            $stderr = saved
           end
           puts outcome
           puts #{CliRunner::SENTINEL.inspect}
@@ -307,9 +307,9 @@ RSpec.describe "library callers keep control of their own process" do
           stdout = survives(<<~RUBY)
             require "elkrb"
             require "elkrb/cli"
-            saved = $stdout.dup
+            saved = $stdout
             reader, writer = IO.pipe
-            $stdout.reopen(writer)
+            $stdout = writer
             reader.close
             outcome = begin
               Elkrb::Cli.start(#{argv.inspect})
@@ -317,7 +317,7 @@ RSpec.describe "library callers keep control of their own process" do
             rescue StandardError => e
               "RESCUED \#{e.class}: \#{e.message}"
             ensure
-              $stdout.reopen(saved)
+              $stdout = saved
             end
             puts outcome
             puts #{CliRunner::SENTINEL.inspect}
@@ -349,9 +349,9 @@ RSpec.describe "library callers keep control of their own process" do
           stdout = survives(<<~RUBY)
             require "elkrb"
             require "elkrb/cli"
-            saved = $stdout.dup
+            saved = $stdout
             reader, writer = IO.pipe
-            $stdout.reopen(writer)
+            $stdout = writer
             reader.close
             outcome = begin
               Elkrb::Cli.start(["render", #{dot_file.inspect}, "-o", #{output.inspect}])
@@ -359,7 +359,7 @@ RSpec.describe "library callers keep control of their own process" do
             rescue StandardError => e
               "RESCUED \#{e.class}: \#{e.message}"
             ensure
-              $stdout.reopen(saved)
+              $stdout = saved
             end
             puts outcome
             puts #{CliRunner::SENTINEL.inspect}
@@ -400,9 +400,9 @@ RSpec.describe "library callers keep control of their own process" do
         source = <<~RUBY
           require "elkrb"
           require "elkrb/cli"
-          saved = $stdout.dup
+          saved = $stdout
           reader, writer = IO.pipe
-          $stdout.reopen(writer)
+          $stdout = writer
           reader.close
           outcome = begin
             Elkrb::Cli.start(["batch", #{input_dir.inspect},
@@ -412,7 +412,7 @@ RSpec.describe "library callers keep control of their own process" do
           rescue StandardError => e
             "RESCUED \#{e.class}: \#{e.message}"
           ensure
-            $stdout.reopen(saved)
+            $stdout = saved
           end
           puts outcome
           puts #{CliRunner::SENTINEL.inspect}
@@ -453,9 +453,9 @@ RSpec.describe "library callers keep control of their own process" do
         stdout = survives(<<~RUBY)
           require "elkrb"
           require "elkrb/cli"
-          saved = $stdout.dup
+          saved = $stdout
           reader, writer = IO.pipe
-          $stdout.reopen(writer)
+          $stdout = writer
           reader.close
           outcome = begin
             Elkrb::Cli.start(["batch", #{input_dir.inspect},
@@ -464,7 +464,7 @@ RSpec.describe "library callers keep control of their own process" do
           rescue StandardError => e
             "RESCUED \#{e.class}: \#{e.message}"
           ensure
-            $stdout.reopen(saved)
+            $stdout = saved
           end
           puts outcome
           puts #{CliRunner::SENTINEL.inspect}
@@ -490,17 +490,17 @@ RSpec.describe "library callers keep control of their own process" do
         stdout = survives(<<~RUBY)
           require "elkrb"
           require "elkrb/cli"
-          saved = $stderr.dup
+          saved = $stderr
           reader, writer = IO.pipe
+          $stderr = writer
           reader.close
-          $stderr.reopen(writer)
           outcome = begin
             Elkrb::Cli.start(["validate", #{path.inspect}])
             "NO RAISE"
           rescue StandardError => e
             "RESCUED \#{e.class}: \#{e.message}"
           ensure
-            $stderr.reopen(saved)
+            $stderr = saved
           end
           puts outcome
           puts #{CliRunner::SENTINEL.inspect}
@@ -633,17 +633,17 @@ RSpec.describe "library callers keep control of their own process" do
         stdout = survives(<<~RUBY)
           require "elkrb"
           require "elkrb/commands/validate_command"
-          saved = $stderr.dup
+          saved = $stderr
           reader, writer = IO.pipe
+          $stderr = writer
           reader.close
-          $stderr.reopen(writer)
           outcome = begin
             Elkrb::Commands::ValidateCommand.new(#{path.inspect}, {}).run
             "NO RAISE"
           rescue StandardError => e
             "RESCUED \#{e.class}: \#{e.message}"
           ensure
-            $stderr.reopen(saved)
+            $stderr = saved
           end
           puts outcome
           puts #{CliRunner::SENTINEL.inspect}
