@@ -71,6 +71,12 @@ RSpec.describe "option plumbing" do
     "elk.force.iterations" => { at: :root, value: 5 },
     "elk.force.repulsion" => { at: :root, value: 50.0 },
     "elk.force.temperature" => { at: :root, value: 0.5 },
+    "elk.layered.considerModelOrder.strategy" => {
+      at: :root, value: "NODES_AND_EDGES", variant: :reversed_layered_tie
+    },
+    "elk.layered.crossingMinimization.strategy" => {
+      at: :root, value: "NONE", variant: :reversed_layered_tie
+    },
     "elk.layered.layering.layerConstraint" => {
       at: :node, value: "LAST_SEPARATE"
     },
