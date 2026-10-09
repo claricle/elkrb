@@ -71,8 +71,12 @@ module Elkrb
         private
 
         def place_nodes(graph, layers)
+          direction = option("elk.direction")
+          direction = "RIGHT" if direction == "UNDEFINED"
+
           Layered::NodePlacer.new(
             graph, layers,
+            direction: direction,
             layer_spacing: option("elk.layered.spacing.nodeNodeBetweenLayers"),
             node_spacing: node_spacing
           ).place_nodes

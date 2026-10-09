@@ -356,6 +356,6 @@ RSpec.describe "cross-hierarchy edges owned by the graph" do
       [node.id, node]
     end
 
-    expect(by_id["p2"].y).to be > by_id["p1"].y
+    expect(by_id["p2"].x).to be > by_id["p1"].x
   end
 end

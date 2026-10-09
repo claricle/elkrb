@@ -148,8 +148,14 @@ RSpec.describe Elkrb::Options::Registry do
   end
 
   describe ".default" do
-    it "returns the ELK-real default for elk.direction" do
-      expect(described_class.default("elk.direction")).to eq("UNDEFINED")
+    it "returns RIGHT as the public default for elk.direction" do
+      expect(described_class.default("elk.direction")).to eq("RIGHT")
+    end
+
+    it "returns ELK's 20px default layered gap" do
+      expect(described_class.default(
+               "elk.layered.spacing.nodeNodeBetweenLayers",
+             )).to eq(20.0)
     end
 
     it "returns nil for an id with no default" do
@@ -231,19 +237,18 @@ RSpec.describe Elkrb::Options::Registry do
       first_only: algorithms - %w[fixed libavoid mrtree radial],
     )
     direction = "elk.direction"
-    direction_spellings = OptionRouteRows.spellings_for(direction, "direction")
-    direction_readers = %i[call_string call_symbol]
-      .product(direction_spellings).to_h do |carrier, spelling|
-      [[carrier, spelling, :value], call_direction]
-    end
-    direction_readers.merge!(
-      %i[edge].product(direction_spellings).to_h do |carrier, spelling|
-        [[carrier, spelling, :value], edge_direction]
-      end,
-    )
-    %i[root compound_none compound_same compound_other]
-      .product(direction_spellings).each do |carrier, spelling|
-      direction_readers[[carrier, spelling, :value]] = %w[mrtree]
+    direction_spellings =
+      OptionRouteRows.spellings_for(direction, "direction")
+    direction_readers = OptionRouteRows::CARRIERS.product(direction_spellings)
+      .to_h do |carrier, spelling|
+      readers =
+        case carrier
+        when :call_string, :call_symbol then call_direction
+        when :edge then edge_direction
+        when :compound_none then %w[disco layered mrtree]
+        else %w[layered mrtree]
+        end
+      [[carrier, spelling, :value], readers]
     end
     # Measured: every carrier an option applies to reads padding in every
     # shape and spelling, for every algorithm.
@@ -358,9 +363,12 @@ RSpec.describe Elkrb::Options::Registry do
     end
 
     it "gives an id without readers its plain note, and an unknown id none" do
-      expect([described_class.note("elk.direction"),
+      expected = [
+        described_class.all.fetch("elk.hierarchyHandling").fetch(:note), nil
+      ]
+      expect([described_class.note("elk.hierarchyHandling"),
               described_class.note("elk.nonesuch")])
-        .to eq([described_class.all.fetch("elk.direction").fetch(:note), nil])
+        .to eq(expected)
     end
 
     it "answers read_by? for a reader, a non-reader and an id with none" do
@@ -370,7 +378,7 @@ RSpec.describe Elkrb::Options::Registry do
                described_class.read_by?("spacing_node_node", "box"),
                described_class.read_by?("elk.direction", "layered"),
                described_class.read_by?("foo.bar", "layered"),
-             ]).to eq([true, false, true, false, false])
+             ]).to eq([true, false, true, true, false])
     end
   end
 
@@ -411,7 +419,8 @@ RSpec.describe Elkrb::Options::Registry do
 
   describe "elk.direction outside layout" do
     it "says DOT export reads it as elk.direction or direction" do
-      expect(described_class.note("elk.direction")).to match(/DOT export.*elk\.direction or direction/)
+      expect(described_class.note("elk.direction"))
+        .to match(/DOT export.*every registered spelling/)
     end
 
     directions = %w[RIGHT DOWN]

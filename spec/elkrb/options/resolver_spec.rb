@@ -123,7 +123,7 @@ RSpec.describe Elkrb::Options::Resolver do
         resolver = described_class.new({})
 
         expect(resolver.get("elk.direction", option_element))
-          .to eq("UNDEFINED")
+          .to eq("RIGHT")
         expect(resolver.get("elk.direction", option_element, graph))
           .to eq("RIGHT")
       end

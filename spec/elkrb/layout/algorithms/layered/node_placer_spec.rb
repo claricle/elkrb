@@ -3,6 +3,58 @@
 require "spec_helper"
 
 RSpec.describe Elkrb::Layout::Algorithms::Layered::NodePlacer do
+  describe "directional placement" do
+    let(:layers) do
+      [
+        [Elkrb::Graph::Node.new(id: "a", width: 30.0, height: 20.0)],
+        [
+          Elkrb::Graph::Node.new(id: "b", width: 10.0, height: 10.0),
+          Elkrb::Graph::Node.new(id: "c", width: 20.0, height: 20.0),
+        ],
+      ]
+    end
+
+    it "centres RIGHT layers on the cross axis" do
+      described_class.new(
+        Elkrb::Graph::Graph.new(id: "r"), layers,
+        direction: "RIGHT", layer_spacing: 7.0, node_spacing: 5.0
+      ).place_nodes
+
+      expect(layers.flatten.map { |node| [node.x, node.y] })
+        .to eq([[0.0, 7.5], [37.0, 0.0], [37.0, 15.0]])
+    end
+
+    it "maps DOWN onto y and stacks nodes along x" do
+      described_class.new(
+        Elkrb::Graph::Graph.new(id: "r"), layers,
+        direction: "DOWN", layer_spacing: 7.0, node_spacing: 5.0
+      ).place_nodes
+
+      expect(layers.flatten.map { |node| [node.x, node.y] })
+        .to eq([[2.5, 0.0], [0.0, 27.0], [15.0, 27.0]])
+    end
+
+    it "mirrors LEFT within the placed bounding box" do
+      described_class.new(
+        Elkrb::Graph::Graph.new(id: "r"), layers,
+        direction: "LEFT", layer_spacing: 7.0, node_spacing: 5.0
+      ).place_nodes
+
+      expect(layers.flatten.map { |node| [node.x, node.y] })
+        .to eq([[27.0, 7.5], [10.0, 0.0], [0.0, 15.0]])
+    end
+
+    it "mirrors UP within the placed bounding box" do
+      described_class.new(
+        Elkrb::Graph::Graph.new(id: "r"), layers,
+        direction: "UP", layer_spacing: 7.0, node_spacing: 5.0
+      ).place_nodes
+
+      expect(layers.flatten.map { |node| [node.x, node.y] })
+        .to eq([[2.5, 27.0], [0.0, 10.0], [15.0, 0.0]])
+    end
+  end
+
   describe "#calculate_layer_widths" do
     # place_nodes reads this array by layer index, so an empty layer has to
     # contribute an entry at its own position. A `return` inside the map
