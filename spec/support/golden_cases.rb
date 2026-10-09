@@ -25,10 +25,6 @@ module GoldenCases
   rc7_long_edge_routing =
     "RC7: layered has no crossing minimisation or dummy-node routing " \
     "for long edges"
-  rc8_absolute_node_labels =
-    "RC8: node labels are absolute, not owner-relative"
-  rc8_label_placement_unread =
-    "RC8: ELK node label placement keys are never read"
 
   # The 29 cases whose golden is a laid-out graph, compared field by field.
   # `hyperedge` is deliberately absent -- its golden is an error hash, it
@@ -49,10 +45,9 @@ module GoldenCases
       pending: rc7_long_edge_routing },
     { name: "ports_simple", tier: :structural,
       pending: rc7_direction_and_layer_gap },
-    { name: "labeled_node", tier: :exact,
-      pending: rc8_absolute_node_labels },
-    { name: "labeled_node_placement", tier: :exact,
-      pending: rc8_label_placement_unread },
+    { name: "labeled_node", tier: :exact, fields: %i[labels], pending: nil },
+    { name: "labeled_node_placement", tier: :exact, fields: %i[labels],
+      pending: nil },
     { name: "compound_chain", tier: :exact,
       fields: %i[nodes graph sections], pending: nil },
     { name: "compound_nested", tier: :structural, fields: %i[nodes graph],
