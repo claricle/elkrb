@@ -17,9 +17,6 @@ module GoldenCases
     "stress: elkjs seeds with its ELK Force layout and pads by 50, so the " \
     "path comes out horizontal at 428.7x155.4; ours seeds on a circle and " \
     "pads by 12 (87.8x351.4)"
-  spore_scaling =
-    "sporeOverlap: our push-apart loop exhausts its 50 iterations with an " \
-    "overlap left (134x101.5); elkjs separates the diamond to 122x122"
 
   # The 29 cases whose golden is a laid-out graph, compared field by field.
   # `hyperedge` is deliberately absent -- its golden is an error hash, it
@@ -65,7 +62,7 @@ module GoldenCases
       pending: nil },
     { name: "stress_path4", tier: :structural, pending: stress_seeding },
     { name: "random3", tier: :structural, pending: nil },
-    { name: "spore_overlap4", tier: :structural, pending: spore_scaling },
+    { name: "spore_overlap4", tier: :structural, pending: nil },
   ].each(&:freeze).freeze
 
   # The sole error-case golden: elkjs raises rather than laying the graph
