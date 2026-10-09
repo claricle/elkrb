@@ -212,8 +212,21 @@ after:  Unknown switches "--bogus"
 
 * `sig/` is deleted and `rbs` is no longer a runtime dependency; the
   signatures did not load. The gem ships an explicit file list (`lib`, `exe`,
-  `README.adoc`, `LICENSE`, `CHANGELOG.adoc`, `docs`) instead of every tracked
-  file, so benchmarks, examples and dotfiles are no longer packaged. (#77)
+  `README.adoc`, `LICENSE`, `CHANGELOG.adoc`) instead of every tracked file,
+  so benchmarks, examples, docs and dotfiles are no longer packaged. (#77, #84)
+
+* Layered routes an edge that spans more than one layer around the nodes in
+  between, through a dummy lane with bend points. Nodes in the spanned layers
+  can move on the cross axis to make room. Nothing to migrate: the old route
+  could cross straight through a node. (#76)
++
+Edges a->b, b->c and a->c, default options:
++
+[source,text]
+----
+before: b (62, 12)   a->c bends []
+after:  b (62, 37)   a->c bends [(77, 2)]
+----
 
 === Added
 
