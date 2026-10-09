@@ -171,6 +171,15 @@ RSpec.describe Elkrb::Options::Registry do
     it "returns an ElkPadding for elk.padding's default" do
       expect(described_class.default("elk.padding")).to be_a(Elkrb::Options::ElkPadding)
     end
+
+    it "returns ELK's stress epsilon of 0.001" do
+      expect(described_class.default("elk.stress.epsilon")).to eq(0.001)
+    end
+
+    it "returns ELK's stress iteration limit of Integer.MAX_VALUE" do
+      expect(described_class.default("elk.stress.iterationLimit"))
+        .to eq(2_147_483_647)
+    end
   end
 
   describe ".status" do

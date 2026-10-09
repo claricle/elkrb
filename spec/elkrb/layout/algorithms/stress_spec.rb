@@ -93,6 +93,61 @@ RSpec.describe Elkrb::Layout::Algorithms::Stress do
     end
   end
 
+  describe "iterations run" do
+    let(:counting_class) do
+      Class.new(described_class) do
+        attr_reader :iterations_run
+
+        private
+
+        def optimize_positions(*)
+          @iterations_run = iterations_run.to_i + 1
+          super
+        end
+      end
+    end
+
+    def chain_with(count, layout_options)
+      Elkrb::Graph::Graph.from_hash(
+        "id" => "r",
+        "layoutOptions" => layout_options,
+        "children" => Array.new(count) do |i|
+          { "id" => "n#{i}", "width" => 10, "height" => 10 }
+        end,
+        "edges" => Array.new(count - 1) do |i|
+          { "id" => "e#{i}", "sources" => ["n#{i}"],
+            "targets" => ["n#{i + 1}"] }
+        end,
+      )
+    end
+
+    def iterations_run_with(layout_options, count: 30)
+      algorithm = counting_class.new
+      algorithm.layout(chain_with(count, layout_options))
+      algorithm.iterations_run
+    end
+
+    # Java ELK's do/while tests the limit after an iteration has run.
+    it "runs one more iteration than the limit when the limit comes first" do
+      expect(iterations_run_with({ "elk.stress.iterationLimit" => 5 }))
+        .to eq(6)
+    end
+
+    # The default limit is Integer.MAX_VALUE, so each of these would run for
+    # as long as the limit allows if the stop test did not end the loop.
+    {
+      "an epsilon of zero" => { "elk.stress.epsilon" => 0 },
+      "a negative epsilon" => { "elk.stress.epsilon" => -1 },
+      "a stress that overflows" => { "elk.stress.desiredEdgeLength" => 1e200 },
+    }.each do |name, layout_options|
+      it "stops before the limit with #{name}" do
+        limited = layout_options.merge("elk.stress.iterationLimit" => 400)
+
+        expect(iterations_run_with(limited)).to be < 401
+      end
+    end
+  end
+
   describe "#calculate_distances (private)" do
     it "resolves port-id edge endpoints to their owning node's row/column" do
       node_a = Elkrb::Graph::Node.new(
@@ -154,7 +209,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Stress do
   describe "iteration count" do
     include GraphPositions
 
-    # One iteration against the 500 default lands the nodes elsewhere, so a
+    # One iteration against the default limit lands the nodes elsewhere, so a
     # changed layout proves the option was read.
     let(:graph_hash) do
       {
@@ -207,10 +262,11 @@ RSpec.describe Elkrb::Layout::Algorithms::Stress do
     end
 
     it "lets the call's legacy iterations key beat the graph's limit" do
+      from_call = laid_out_positions(graph_hash, iterations: 500)
       graph_hash["layoutOptions"]["elk.stress.iterationLimit"] = 1
 
       expect(laid_out_positions(graph_hash, iterations: 500))
-        .to eq(default_positions)
+        .to eq(from_call)
     end
 
     bad_limits = ["abc", "0x10", "", [1]]

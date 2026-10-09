@@ -43,7 +43,9 @@ module Elkrb
           weights = pair_weights(distances)
           reachable = reachable_pairs(distances)
           old_stress = calculate_stress(xpos, ypos, distances, reachable)
-          iterations.times do |_i|
+          # Java ELK's do/while checks the limit after an iteration has run,
+          # so a limit of N allows N + 1 iterations.
+          (iterations.clamp(0..) + 1).times do
             optimize_positions(xpos, ypos, distances, weights, reachable)
             new_stress = calculate_stress(xpos, ypos, distances, reachable)
 
@@ -67,8 +69,16 @@ module Elkrb
 
         # Same stop test as Java ELK: the stress improvement relative to the
         # previous stress, so graphs of any size stop at the same quality.
+        # The default iteration limit is Java's Integer.MAX_VALUE, so this is
+        # what ends the loop: a non-finite stress or an iteration that made
+        # no progress also stops, whatever the epsilon, or the loop would
+        # never end for an epsilon of zero or less.
         def converged?(old_stress, new_stress, epsilon)
-          old_stress.zero? || ((old_stress - new_stress) / old_stress) < epsilon
+          return true unless old_stress.finite? && new_stress.finite?
+          return true if old_stress.zero?
+
+          improvement = (old_stress - new_stress) / old_stress
+          improvement <= 0 || improvement < epsilon
         end
 
         # The registry reads "iterations" as force's elk.force.iterations, so
