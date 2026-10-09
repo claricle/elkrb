@@ -3,6 +3,12 @@
 require "spec_helper"
 
 RSpec.describe Elkrb::Layout::Algorithms::Layered::LayerAssigner do
+  def real_layer_ids(layers)
+    layers.map do |layer|
+      layer.reject { |item| item.respond_to?(:dummy?) }.map(&:id)
+    end
+  end
+
   describe "#assign_layers" do
     # Through the real pipeline, CycleBreaker always resolves a cycle before
     # LayerAssigner ever sees it. This class is still directly instantiable
@@ -42,7 +48,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::LayerAssigner do
         "root for this branch\n",
       ).to_stderr
 
-      expect(layers.map { |layer| layer.map(&:id) }).to eq(
+      expect(real_layer_ids(layers)).to eq(
         [["b"], ["c"], ["a"]],
       )
     end
@@ -99,7 +105,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::LayerAssigner do
         graph, Elkrb::Layout::NodeIndex.build(graph)
       ).assign_layers
 
-      expect(layers.map { |layer| layer.map(&:id) }).to eq([["a"], ["b"]])
+      expect(real_layer_ids(layers)).to eq([["a"], ["b"]])
     end
 
     it "assigns a node's layer from the longest predecessor path, not " \
@@ -122,7 +128,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::LayerAssigner do
         graph, Elkrb::Layout::NodeIndex.build(graph)
       ).assign_layers
 
-      expect(layers.map { |layer| layer.map(&:id) }).to eq(
+      expect(real_layer_ids(layers)).to eq(
         [["a"], ["b"], ["c"]],
       )
     end
@@ -156,7 +162,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::LayerAssigner do
       expect { layers = assigner.assign_layers }.not_to output.to_stderr
 
       expect(assigner).to have_received(:assign_layer).exactly(4).times
-      expect(layers.map { |layer| layer.map(&:id) }).to eq(
+      expect(real_layer_ids(layers)).to eq(
         [["c"], %w[a b], ["d"]],
       )
     end
@@ -256,7 +262,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::LayerAssigner do
         graph, Elkrb::Layout::NodeIndex.build(graph)
       ).assign_layers
 
-      expect(layers.map { |layer| layer.map(&:id) }).to eq(
+      expect(real_layer_ids(layers)).to eq(
         [["a"], ["b"], ["c"], ["d"]],
       )
     end

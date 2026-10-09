@@ -51,29 +51,93 @@ module Elkrb
           validate_edges(index)
           return graph if graph.children.nil? || graph.children.empty?
 
-          # Phase 1: Find the back edges
-          cycle_breaker = Layered::CycleBreaker.new(graph, index)
-          reversed_edges = cycle_breaker.break_cycles
-
-          # Phase 2: Assign layers
-          layer_assigner = Layered::LayerAssigner.new(
-            graph, index, reversed_edges
-          )
-          layers = layer_assigner.assign_layers
+          layers = assign_layers(graph, index)
 
           # Phase 3: Minimize crossings within the assigned layers
           layers = minimize_crossings(graph, layers, index)
+          @dummy_slots = dummy_slots(layers)
 
           # Phase 4: Place nodes
           place_nodes(graph, layers, index)
 
           # Apply padding and set graph dimensions
-          apply_padding(graph)
+          apply_padding_with_dummies(graph)
 
           graph
         end
 
         private
+
+        def assign_layers(graph, index)
+          # Phase 1: Find the back edges
+          reversed_edges = Layered::CycleBreaker.new(graph, index).break_cycles
+
+          # Phase 2: Assign layers and insert long-edge dummy slots
+          Layered::LayerAssigner.new(
+            graph, index, reversed_edges
+          ).assign_layers
+        end
+
+        def apply_edge_routing(graph)
+          super
+          add_long_edge_bends(graph)
+        end
+
+        def apply_padding_with_dummies(graph)
+          shift_x, shift_y = padding_shift(graph)
+          shift_dummy_slots(shift_x, shift_y)
+        end
+
+        def padding_shift(graph)
+          first = graph.children.first
+          before = first && [first.x, first.y]
+          apply_padding(graph)
+          return [0.0, 0.0] unless before
+
+          [first.x - before[0], first.y - before[1]]
+        end
+
+        def shift_dummy_slots(shift_x, shift_y)
+          @dummy_slots.each do |slot|
+            slot.x += shift_x
+            slot.y += shift_y
+          end
+        end
+
+        def dummy_slots(layers)
+          layers.flatten.select { |item| item.respond_to?(:dummy?) }
+        end
+
+        def add_long_edge_bends(graph)
+          slots_by_edge = {}.compare_by_identity
+          @dummy_slots.to_a.each do |slot|
+            (slots_by_edge[slot.edge] ||= []) << slot
+          end
+          graph.edges.to_a.each do |edge|
+            add_edge_dummy_bends(edge, slots_by_edge[edge])
+          end
+        end
+
+        def add_edge_dummy_bends(edge, slots)
+          return if slots.nil? || slots.empty? || edge.sections.to_a.empty?
+
+          section = edge.sections.first
+          section.bend_points = slots.sort_by do |slot|
+            squared_distance(section.start_point, slot)
+          end.map { |slot| dummy_center(slot) }
+        end
+
+        def squared_distance(point, slot)
+          ((slot.x + (slot.width / 2.0) - point.x)**2) +
+            ((slot.y + (slot.height / 2.0) - point.y)**2)
+        end
+
+        def dummy_center(slot)
+          Geometry::Point.new(
+            x: slot.x + (slot.width / 2.0),
+            y: slot.y + (slot.height / 2.0),
+          )
+        end
 
         def minimize_crossings(graph, layers, index)
           Layered::CrossingMinimizer.new(

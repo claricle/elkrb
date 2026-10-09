@@ -5,6 +5,7 @@
 # rubocop:disable Lint/RedundantRequireStatement
 require "set"
 # rubocop:enable Lint/RedundantRequireStatement
+require_relative "dummy_slot"
 
 module Elkrb
   module Layout
@@ -42,6 +43,8 @@ module Elkrb
             predecessors = build_predecessors(nodes)
             assign_predecessor_layers(nodes, predecessors)
             build_layers(nodes)
+            insert_dummy_slots
+            @layers
           end
 
           def get_layer(node_id)
@@ -167,6 +170,27 @@ module Elkrb
             end
 
             @layers
+          end
+
+          def insert_dummy_slots
+            @index.edges.each_with_index do |edge, edge_order|
+              source_id, target_id = oriented_endpoints(edge)
+              source_layer = @node_layers[source_id]
+              target_layer = @node_layers[target_id]
+              next unless source_layer && target_layer
+              next unless (source_layer - target_layer).abs > 1
+
+              intermediate_layers(source_layer, target_layer).each do |layer|
+                @layers[layer] << DummySlot.new(
+                  edge: edge, layer_index: layer, edge_order: edge_order,
+                )
+              end
+            end
+          end
+
+          def intermediate_layers(source_layer, target_layer)
+            low, high = [source_layer, target_layer].minmax
+            ((low + 1)...high).to_a
           end
 
           def usable_edge?(source_id, target_id, nodes)

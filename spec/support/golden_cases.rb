@@ -22,9 +22,6 @@ module GoldenCases
   rc7_branch_routing =
     "RC7: layered has no crossing minimisation or dummy-node routing " \
     "for branching graphs"
-  rc7_long_edge_routing =
-    "RC7: layered has no crossing minimisation or dummy-node routing " \
-    "for long edges"
   rc8_absolute_node_labels =
     "RC8: node labels are absolute, not owner-relative"
   rc8_label_placement_unread =
@@ -45,8 +42,8 @@ module GoldenCases
       fields: %i[nodes sections], pending: nil },
     { name: "self_loop", tier: :structural,
       pending: rc7_direction_and_layer_gap },
-    { name: "long_edge", tier: :structural,
-      pending: rc7_long_edge_routing },
+    { name: "long_edge", tier: :structural, fields: %i[nodes sections],
+      pending: nil },
     { name: "ports_simple", tier: :structural,
       pending: rc7_direction_and_layer_gap },
     { name: "labeled_node", tier: :exact,

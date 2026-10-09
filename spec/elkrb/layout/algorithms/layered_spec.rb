@@ -3,6 +3,44 @@
 require "spec_helper"
 
 RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
+  describe "S25b long-edge dummies" do
+    def long_edge_graph(ids)
+      {
+        id: "root",
+        children: ids.map { |id| { id: id, width: 100, height: 60 } },
+        edges: ids.each_cons(2).with_index.map do |(source, target), index|
+          { id: "chain_#{index}", sources: [source], targets: [target] }
+        end + [{ id: "long", sources: [ids.first], targets: [ids.last] }],
+      }
+    end
+
+    it "routes a two-layer edge around the intervening node" do
+      result = Elkrb.layout(long_edge_graph(%w[a b c]), algorithm: "layered")
+      section = result.edges.find { |edge| edge.id == "long" }.sections.first
+      obstacle = result.children.find { |node| node.id == "b" }
+
+      expect(section.bend_points.length).to eq(1)
+      expect(route_interior_crossings(section, obstacle)).to be_empty
+    end
+
+    it "adds one bend for each of two intermediate layers" do
+      result = Elkrb.layout(
+        long_edge_graph(%w[a b c d]), algorithm: "layered"
+      )
+      section = result.edges.find { |edge| edge.id == "long" }.sections.first
+
+      expect(section.bend_points.length).to eq(2)
+    end
+
+    it "never exposes dummy ids as graph children or JSON" do
+      input_ids = %w[a b c]
+      result = Elkrb.layout(long_edge_graph(input_ids), algorithm: "layered")
+
+      expect(result.children.map(&:id)).to eq(input_ids)
+      expect(result.to_json).not_to include("__elkrb_dummy")
+    end
+  end
+
   describe "S25a crossing minimization" do
     let(:crossing_graph) do
       {
