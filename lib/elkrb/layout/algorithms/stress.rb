@@ -41,10 +41,11 @@ module Elkrb
           xpos = graph.children.map(&:x)
           ypos = graph.children.map(&:y)
           weights = pair_weights(distances)
-          old_stress = calculate_stress(xpos, ypos, distances)
+          reachable = reachable_pairs(distances)
+          old_stress = calculate_stress(xpos, ypos, distances, reachable)
           iterations.times do |_i|
-            optimize_positions(xpos, ypos, distances, weights)
-            new_stress = calculate_stress(xpos, ypos, distances)
+            optimize_positions(xpos, ypos, distances, weights, reachable)
+            new_stress = calculate_stress(xpos, ypos, distances, reachable)
 
             # Stop if converged
             break if (old_stress - new_stress).abs < epsilon
@@ -152,21 +153,38 @@ module Elkrb
           end
         end
 
-        def calculate_stress(xpos, ypos, ideal_distances)
+        # For each node, the other nodes it has a finite ideal distance to.
+        def reachable_pairs(ideal_distances)
+          ideal_distances.each_with_index.map do |row, i|
+            row.each_index.select { |j| j != i && row[j] != Float::INFINITY }
+          end
+        end
+
+        # The loops below are plain whiles over precomputed index lists:
+        # blocks here slow a 200-node layout down several times.
+        def calculate_stress(xpos, ypos, ideal_distances, reachable)
           stress = 0.0
+
+          i = 0
           n = xpos.length
-
-          n.times do |i|
+          while i < n
             row = ideal_distances[i]
-            (i + 1).upto(n - 1) do |j|
-              ideal_dist = row[j]
-              next if ideal_dist == Float::INFINITY
-
-              dx = xpos[j] - xpos[i]
-              dy = ypos[j] - ypos[i]
-              diff = Math.sqrt((dx * dx) + (dy * dy)) - ideal_dist
-              stress += diff * diff
+            node_x = xpos[i]
+            node_y = ypos[i]
+            others = reachable[i]
+            k = 0
+            count = others.length
+            while k < count
+              j = others[k]
+              if j > i
+                dx = xpos[j] - node_x
+                dy = ypos[j] - node_y
+                diff = Math.sqrt((dx * dx) + (dy * dy)) - row[j]
+                stress += diff * diff
+              end
+              k += 1
             end
+            i += 1
           end
 
           stress
@@ -174,44 +192,48 @@ module Elkrb
 
         # Updates xpos and ypos in place, one node at a time, so each node sees
         # the already-moved positions of the nodes before it.
-        def optimize_positions(xpos, ypos, ideal_distances, weights)
-          xpos.length.times do |i|
-            sum_x, sum_y, sum_weight =
-              pull_sums(xpos, ypos, i, ideal_distances[i], weights[i])
-            next unless sum_weight.positive?
-
-            xpos[i] = sum_x / sum_weight
-            ypos[i] = sum_y / sum_weight
+        def optimize_positions(xpos, ypos, ideal_distances, weights, reachable)
+          i = 0
+          n = xpos.length
+          while i < n
+            sum_x, sum_y, sum_weight = pull_sums(
+              [xpos, ypos], i, ideal_distances[i], weights[i], reachable[i]
+            )
+            if sum_weight.positive?
+              xpos[i] = sum_x / sum_weight
+              ypos[i] = sum_y / sum_weight
+            end
+            i += 1
           end
         end
 
-        def pull_sums(xpos, ypos, node, row, weight_row)
+        def pull_sums(coordinates, node, row, weight_row, others)
+          xpos, ypos = coordinates
           node_x = xpos[node]
           node_y = ypos[node]
           sum_x = 0.0
           sum_y = 0.0
           sum_weight = 0.0
 
-          xpos.length.times do |j|
-            next if node == j
-
-            ideal_dist = row[j]
-            next if ideal_dist == Float::INFINITY
-
+          k = 0
+          count = others.length
+          while k < count
+            j = others[k]
             other_x = xpos[j]
             other_y = ypos[j]
             dx = other_x - node_x
             dy = other_y - node_y
             actual_dist = Math.sqrt((dx * dx) + (dy * dy))
 
-            next if actual_dist.zero?
+            unless actual_dist.zero?
+              weight = weight_row[j]
+              ratio = row[j] / actual_dist
 
-            weight = weight_row[j]
-            ratio = ideal_dist / actual_dist
-
-            sum_x += weight * (other_x - (ratio * dx))
-            sum_y += weight * (other_y - (ratio * dy))
-            sum_weight += weight
+              sum_x += weight * (other_x - (ratio * dx))
+              sum_y += weight * (other_y - (ratio * dy))
+              sum_weight += weight
+            end
+            k += 1
           end
 
           [sum_x, sum_y, sum_weight]

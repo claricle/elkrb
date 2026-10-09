@@ -224,19 +224,20 @@ RSpec.describe Elkrb::Options::Registry do
     }
 
     # Measured: direction reaches SPLINES routing from an edge or the call
-    # options under every resolver spelling. Fixed preserves edge routes and
-    # libavoid routes its own connectors; spore_compaction gives the same
+    # options under every resolver spelling. Fixed preserves edge routes,
+    # libavoid routes its own connectors and random scatters its own bend
+    # points; spore_compaction gives the same
     # output at both directions when no node has an input position. MRTree
     # also reads direction from parent options.
     call_direction = by_positioning.call(
-      algorithms - %w[fixed libavoid radial],
-      unpositioned: algorithms - %w[fixed libavoid radial spore_compaction],
-      first_only: algorithms - %w[fixed libavoid radial],
+      algorithms - %w[fixed libavoid radial random],
+      unpositioned: algorithms - %w[fixed libavoid radial random spore_compaction],
+      first_only: algorithms - %w[fixed libavoid radial random],
     )
     edge_direction = by_positioning.call(
-      algorithms - %w[fixed libavoid mrtree radial],
-      unpositioned: algorithms - %w[fixed libavoid mrtree radial spore_compaction],
-      first_only: algorithms - %w[fixed libavoid mrtree radial],
+      algorithms - %w[fixed libavoid mrtree radial random],
+      unpositioned: algorithms - %w[fixed libavoid mrtree radial random spore_compaction],
+      first_only: algorithms - %w[fixed libavoid mrtree radial random],
     )
     direction = "elk.direction"
     direction_spellings =
@@ -401,8 +402,8 @@ RSpec.describe Elkrb::Options::Registry do
   # holds the behaviour these two rows describe.
   describe "the edge routing options libavoid does not apply to its own routes" do
     {
-      "elk.edgeRouting" => %w[fixed libavoid],
-      "elk.spline.curvature" => %w[fixed libavoid mrtree radial],
+      "elk.edgeRouting" => %w[fixed libavoid random],
+      "elk.spline.curvature" => %w[fixed libavoid mrtree radial random],
     }.each do |id, nonreaders|
       it "records #{id} as partial and not read by libavoid" do
         expect(described_class.status(id)).to eq(:partial)

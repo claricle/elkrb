@@ -16,7 +16,7 @@ module CorpusCatalogue
   # 5, "S<n>" is the slice that owns the fix). A listed check is `pending`;
   # the guard example at the bottom fails if a listed check now passes,
   # forcing this ledger to be edited when a slice fixes the underlying bug.
-  # Re-authored against origin/v2 (slice 1, a008889: nil-safe LayoutOptions,
+  # Re-authored against origin/v2 (slice 1, a008889: nil-safe option reads,
   # self-loop fixes in layered/mrtree, size-less nodes/labels treated as 0
   # at read sites, nil collections). self_loop, java_elk_self_loops, and
   # compound_unsized no longer crash AND now produce finite invariants

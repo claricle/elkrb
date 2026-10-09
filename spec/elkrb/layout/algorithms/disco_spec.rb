@@ -143,6 +143,35 @@ RSpec.describe Elkrb::Layout::Algorithms::Disco do
       end
     end
 
+    context "with each componentCompaction.strategy value" do
+      include DiscoStrategyPositions
+
+      it "stacks COLUMN components down one x" do
+        xs, ys = disco_positions_for("COLUMN").transpose
+
+        expect(xs.uniq.size).to eq(1)
+        expect(ys.each_cons(2).map { |a, b| b - a }).to all(eq(50.0))
+      end
+
+      it "sets GRID components in a 2x2 block" do
+        xs, ys = disco_positions_for("GRID").transpose
+
+        expect([xs.uniq.size, ys.uniq.size]).to eq([2, 2])
+      end
+
+      it "sets ROW components along one y, 70 apart" do
+        xs, ys = disco_positions_for("ROW").transpose
+
+        expect(ys.uniq.size).to eq(1)
+        expect(xs.each_cons(2).map { |a, b| b - a }).to all(eq(70.0))
+      end
+
+      it "lays POLYOMINO out as a row, since no polyomino packing exists" do
+        expect(disco_positions_for("POLYOMINO"))
+          .to eq(disco_positions_for("ROW"))
+      end
+    end
+
     context "with the arrangement named in the graph and in the call" do
       let(:graph) do
         Elkrb::Graph::Graph.new(
