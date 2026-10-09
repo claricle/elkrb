@@ -228,6 +228,75 @@ before: b (62, 12)   a->c bends []
 after:  b (62, 37)   a->c bends [(77, 2)]
 ----
 
+* A graph's own `elk.algorithm` now wins over the `algorithm:` keyword of
+  `Elkrb.layout`. Before, the keyword won and the graph's value was ignored.
+  The keyword is now the fallback for graphs that name no algorithm. To force
+  an algorithm on a graph that already names one, set `elk.algorithm` on the
+  graph. (#50)
++
+A graph with `"elk.algorithm": "box"`, two 30x30 nodes, called with
+`algorithm: "force"`:
++
+[source,text]
+----
+before: runs force   a (12, 12)  b (23.09, 14.34)
+after:  runs box     a (15, 15)  b (60, 15)
+----
+
+* A duplicate node id, or a duplicate port id, within one level raises
+  `Elkrb::ValidationError` (`duplicate id: a`). Before, a duplicate node
+  failed with a `NoMethodError` and a duplicate port was silently accepted.
+  The same id may still appear at different levels. Duplicate edge ids are
+  not checked. (#5)
+
+* Layered raises `Elkrb::UnsupportedConfigurationException` for an edge with
+  more than one source or more than one target (`layered does not support
+  hyperedges (edge e)`); it used to lay the graph out.
+  Layered also no longer rewrites your edges to break cycles, so a back edge
+  keeps its source and target and `properties["reversed"]` is never written.
+  Stop reading that key.
++
+[source,text]
+----
+cycle a->b, b->c, c->a
+before: e3 {"sources":["a"],"targets":["c"],"properties":{"reversed":true}}
+after:  e3 {"sources":["c"],"targets":["a"]}
+----
+
+* The `hierarchical` option does nothing. Hierarchy is detected from nodes that
+  have `children`, as before when the option was unset, and `hierarchical`
+  is now reported as an unknown option under `strict: true`. A compound node
+  is laid out before its parent level, so the parent level places its siblings
+  against the compound's computed size instead of the `width` and `height` it
+  declared. A compound that names its own `elk.algorithm` is still laid out by
+  it, but an unknown name now raises `Elkrb::AlgorithmNotFoundError` where
+  the parent's algorithm used to be used quietly. (#63)
++
+Compound `c` declaring 500x500 and holding two 20x20 nodes, with a sibling
+`z` linked from `c`:
++
+[source,text]
+----
+before: c 84x44   z (532, 252)
+after:  c 84x44   z (116, 24)
+----
+
+* `fixed` keeps each node where its `x` and `y` put it, and reads
+  `elk.position`. It used to move the nodes so the top-left one sat at the
+  padding origin and to ignore `elk.position`. `box` uses a different packing,
+  so box coordinates and the graph size change. (#59)
++
+[source,text]
+----
+fixed, a at (100, 50) and b at (200, 80):
+before: a (12, 12)   b (112, 42)
+after:  a (100, 50)  b (200, 80)
+
+box, four 30x30 nodes:
+before: 154x104   n0 (12, 12)  n1 (62, 12)  n2 (112, 12)  n3 (12, 62)
+after:  105x105   n0 (15, 15)  n1 (60, 15)  n2 (15, 60)   n3 (60, 60)
+----
+
 === Added
 
 * Edges read the elkjs primitive endpoint keys `source`, `target`,
