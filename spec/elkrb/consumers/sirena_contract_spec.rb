@@ -137,10 +137,11 @@ RSpec.describe "sirena consumer contract" do
         options = down.merge(
           "elk.layered.crossingMinimization.strategy" => strategy,
         )
-        crossing_count(layout_hash(reversed_bipartite_hash(options)))
+        crossing_count(layout_hash(sweep_sensitive_hash(options)))
       end
 
-      expect(crossings.call("NONE")).not_to eq(crossings.call("LAYER_SWEEP"))
+      expect([crossings.call("NONE"), crossings.call("LAYER_SWEEP")])
+        .to eq([2, 1])
     end
 
     it "elk.layered.considerModelOrder.strategy breaks ties by input order" do

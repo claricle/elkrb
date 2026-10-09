@@ -34,9 +34,8 @@ coordinates; cases in the looser `structural` tier do not, and a case that
 carries a `pending:` reason in `spec/support/golden_cases.rb` is known to
 differ.
 
-Layered implements only the `SIMPLE` node placement strategy; Brandes-Köpf
-is deferred, so branching graphs such as fan-out stay structurally equivalent
-to elkjs rather than coordinate-identical.
+Layered places nodes with Brandes-Köpf only; every `nodePlacement.strategy`
+value falls back to it.
 
 Not every option ELK defines changes the result here. Each option elkrb knows
 carries a status (`honoured`, `partial`, `accepted` or `unsupported`); see

@@ -85,14 +85,105 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
       expect(LayeredCrossings.count(result)).to eq(0)
     end
 
-    it "keeps insertion order when crossing minimization is NONE" do
+    context "with a graph whose creation order the sweep improves" do
+      let(:sweep_graph) do
+        {
+          id: "root",
+          children: %w[a d c e b f].map do |id|
+            { id: id, width: 100, height: 60 }
+          end,
+          edges: %w[a-e b-e a-c a-d b-d a-f].map do |pair|
+            source, target = pair.split("-")
+            { id: pair, sources: [source], targets: [target] }
+          end,
+        }
+      end
+
+      def ids_by_height(result, ids)
+        result.children.select { |node| ids.include?(node.id) }
+          .sort_by(&:y).map(&:id)
+      end
+
+      def layout_with(strategy)
+        Elkrb.layout(
+          sweep_graph,
+          algorithm: "layered",
+          "elk.layered.crossingMinimization.strategy" => strategy,
+        )
+      end
+
+      it "leaves the orders elkjs leaves when crossing minimization is NONE" do
+        result = layout_with("NONE")
+
+        expect(ids_by_height(result, %w[a b])).to eq(%w[b a])
+        expect(ids_by_height(result, %w[c d e f])).to eq(%w[e c d f])
+        expect(LayeredCrossings.count(result)).to eq(2)
+      end
+
+      it "sweeps the same graph to fewer crossings by default" do
+        result = layout_with("LAYER_SWEEP")
+
+        expect(ids_by_height(result, %w[a b])).to eq(%w[a b])
+        expect(ids_by_height(result, %w[c d e f])).to eq(%w[c f e d])
+        expect(LayeredCrossings.count(result)).to eq(1)
+      end
+    end
+
+    # Orders measured with elkjs 0.11.0: under NONE its greedy switch still
+    # runs on graphs under 40 nodes, so b and c end up the same way whatever
+    # order they were created in.
+    def none_order(children, edges)
       result = Elkrb.layout(
-        crossing_graph,
+        {
+          id: "root",
+          children: children.map { |id| { id: id, width: 100, height: 60 } },
+          edges: edges.map do |source, target|
+            { id: "#{source}#{target}", sources: [source], targets: [target] }
+          end,
+        },
         algorithm: "layered",
         "elk.layered.crossingMinimization.strategy" => "NONE",
       )
+      result.children.select { |node| %w[b c].include?(node.id) }
+        .sort_by(&:y).map(&:id)
+    end
 
-      expect(LayeredCrossings.count(result)).to eq(1)
+    creations = %w[dbc dcb bcd cbd]
+    {
+      "fan-in" => [%w[c b], [%w[b d], %w[c d]]],
+      "fan-out" => [%w[b c], [%w[d b], %w[d c]]],
+    }.each do |name, (order, edges)|
+      creations.each do |creation|
+        it "orders a #{name} created as #{creation} as elkjs does under NONE" do
+          expect(none_order(creation.chars, edges)).to eq(order)
+        end
+      end
+    end
+
+    it "stops the greedy switch at 40 nodes, as elkjs does" do
+      fan_in = [%w[b d], %w[c d]]
+      filler = ->(count) { Array.new(count) { |i| "z#{i}" } }
+
+      expect(none_order(%w[d b c] + filler.call(36), fan_in)).to eq(%w[c b])
+      expect(none_order(%w[d b c] + filler.call(37), fan_in)).to eq(%w[b c])
+    end
+
+    it "places nodes the same way for every nodePlacement.strategy value" do
+      values = Elkrb::Options::Registry.all
+        .fetch("elk.layered.nodePlacement.strategy").fetch(:values)
+      branching = crossing_graph.merge(
+        edges: crossing_graph[:edges] +
+          [{ id: "3", sources: ["a"], targets: ["c"] }],
+      )
+      layouts = values.map do |value|
+        Elkrb.layout(
+          branching,
+          algorithm: "layered",
+          "elk.layered.nodePlacement.strategy" => value,
+        ).to_json
+      end
+
+      expect(layouts.uniq.length).to eq(1)
     end
 
     it "reports both crossing options as honoured" do

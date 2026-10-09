@@ -495,6 +495,14 @@ RSpec.describe Elkrb::Options::Registry do
       expect(described_class.default("disco.componentArrangement")).to eq("row")
     end
 
+    it "describes elk.layered.nodePlacement.strategy as Brandes-Koepf only" do
+      id = "elk.layered.nodePlacement.strategy"
+
+      expect(described_class.default(id)).to eq("BRANDES_KOEPF")
+      expect(described_class.all[id][:description])
+        .to include("BRANDES_KOEPF only")
+    end
+
     it "sorts every row by canonical id" do
       expect(described_class.all.keys).to eq(described_class.all.keys.sort)
     end
