@@ -16,9 +16,13 @@ module GoldenCases
   rc2_2_algorithm_pin =
     "RC2.2: graph-level elk.algorithm pin is never read, " \
     "LayoutEngine always defaults to layered"
-  rc7_branch_routing =
-    "RC7: layered has no crossing minimisation or dummy-node routing " \
-    "for branching graphs"
+  fan_out_parent_position =
+    "layered centres a on its targets (y 37); elk aligns a's first " \
+    "edge straight with b (y 17)"
+  branch_layer_order =
+    "layered orders the branching layer [b, c]; elk orders it [c, b] " \
+    "(cause undetermined), and parents sit centred rather than " \
+    "aligned with one target"
 
   # The 29 cases whose golden is a laid-out graph, compared field by field.
   # `hyperedge` is deliberately absent -- its golden is an error hash, it
@@ -28,9 +32,10 @@ module GoldenCases
     { name: "chain2", tier: :exact, fields: %i[nodes graph], pending: nil },
     { name: "chain3", tier: :exact,
       fields: %i[nodes graph sections], pending: nil },
-    { name: "fan_out", tier: :structural, pending: rc7_branch_routing },
-    { name: "fan_in", tier: :structural, pending: rc7_branch_routing },
-    { name: "diamond", tier: :structural, pending: rc7_branch_routing },
+    { name: "fan_out", tier: :structural,
+      pending: fan_out_parent_position },
+    { name: "fan_in", tier: :structural, pending: branch_layer_order },
+    { name: "diamond", tier: :structural, pending: branch_layer_order },
     { name: "cycle3", tier: :structural,
       fields: %i[nodes sections], pending: nil },
     { name: "self_loop", tier: :structural, fields: %i[nodes sections],
