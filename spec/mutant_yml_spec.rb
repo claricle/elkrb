@@ -31,7 +31,10 @@ RSpec.describe "mutant.yml requires" do
     RUBY
 
     out = IO.popen(
-      ["bundle", "exec", RbConfig.ruby, "-Ilib", "-e", probe],
+      # This spec already runs under Bundler. Invoking its `bundle` wrapper
+      # again sends the multiline `-e` argument through bundle.bat on
+      # Windows, where it is truncated before `puts $LOADED_FEATURES`.
+      [RbConfig.ruby, "-rbundler/setup", "-Ilib", "-e", probe],
       chdir: repo_root,
       err: %i[child out],
       &:read
