@@ -71,14 +71,15 @@ module SirenaContract
   end
 
   # Two layers whose input order crosses every edge.
-  def reversed_bipartite_hash(options)
+  # Six nodes whose layer sweep leaves one crossing and whose creation order
+  # leaves two; the same orders elkjs produces.
+  def sweep_sensitive_hash(options)
     node = ->(id) { { "id" => id, "width" => 40, "height" => 30 } }
-    ids = %w[a b c x y z]
     {
-      "id" => "bipartite",
+      "id" => "sweep_sensitive",
       "layoutOptions" => options,
-      "children" => ids.map(&node),
-      "edges" => %w[a-z b-y c-x].map do |pair|
+      "children" => %w[a d c e b f].map(&node),
+      "edges" => %w[a-e b-e a-c a-d b-d a-f].map do |pair|
         source, target = pair.split("-")
         { "id" => pair, "sources" => [source], "targets" => [target] }
       end,

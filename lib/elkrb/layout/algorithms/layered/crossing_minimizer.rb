@@ -17,6 +17,8 @@ module Elkrb
         class CrossingMinimizer
           STRATEGY = "elk.layered.crossingMinimization.strategy"
           MODEL_ORDER = "elk.layered.considerModelOrder.strategy"
+          # ELK only runs its greedy switch on graphs smaller than this.
+          GREEDY_SWITCH_NODE_LIMIT = 40
 
           # @return [PortOrder] the port lists as the last sweep left them
           attr_reader :port_order
@@ -28,16 +30,93 @@ module Elkrb
               resolver.get(MODEL_ORDER, graph) == "NODES_AND_EDGES"
             @input_order = input_order(graph, layers)
             @port_order = PortOrder.new(layers, index)
+            @node_count = (graph.children || []).length
           end
 
           def minimize
-            return @layers if @strategy == "NONE"
-
-            sweep_until_stable
+            if @strategy == "NONE"
+              greedy_switch
+            else
+              sweep_until_stable
+            end
             @layers
           end
 
           private
+
+          # NONE does not sweep, but ELK still runs its two-sided greedy
+          # switch over the layering's own order: adjacent nodes swap while
+          # that lowers the crossings against both neighbouring layers, in
+          # the port order the edges were created in. The first sweep runs
+          # backward, which is the direction ELK's seeded generator picks.
+          def greedy_switch
+            return if @node_count >= GREEDY_SWITCH_NODE_LIMIT
+
+            forward = false
+            loop do
+              first, *free = (0...@layers.length).to_a
+              first, *free = [first, *free].reverse unless forward
+              improved = switch_once?(first)
+              free.each { |index| improved |= switch_until_stable(index) }
+              forward = !forward
+              break unless improved
+            end
+          end
+
+          def switch_until_stable(index)
+            improved = false
+            improved = true while switch_once?(index)
+            improved
+          end
+
+          def switch_once?(index)
+            layer = @layers[index]
+            sides = switch_sides(index)
+            Array.new([layer.length - 1, 0].max) do |upper|
+              swap_if_pays?(layer, upper, sides)
+            end.any?
+          end
+
+          def swap_if_pays?(layer, upper, sides)
+            return false unless switch_pays?(layer[upper], layer[upper + 1],
+                                             sides)
+
+            layer[upper], layer[upper + 1] = layer[upper + 1], layer[upper]
+            true
+          end
+
+          def switch_sides(index)
+            { west: neighbour_ranks(index - 1, :east),
+              east: neighbour_ranks(index + 1, :west) }
+          end
+
+          def neighbour_ranks(index, side)
+            return {}.compare_by_identity unless index.between?(
+              0, @layers.length - 1
+            )
+
+            port_ranks(@layers[index], side)
+          end
+
+          def switch_pays?(upper, lower, sides)
+            crossings_below(upper, lower, sides) >
+              crossings_below(lower, upper, sides)
+          end
+
+          # Crossings between the edges of `above` and `below` when `above`
+          # sits on top.
+          def crossings_below(above, below, sides)
+            sides.sum do |side, ranks|
+              far_ranks(above, side, ranks).product(
+                far_ranks(below, side, ranks),
+              ).count { |high, low| high > low }
+            end
+          end
+
+          def far_ranks(item, side, ranks)
+            @port_order.visual(item.id, side).flat_map(&:others)
+              .map { |other| ranks.fetch(other) }
+          end
 
           def sweep_until_stable
             forward = true
