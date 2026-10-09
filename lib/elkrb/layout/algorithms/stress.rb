@@ -47,8 +47,7 @@ module Elkrb
             optimize_positions(xpos, ypos, distances, weights, reachable)
             new_stress = calculate_stress(xpos, ypos, distances, reachable)
 
-            # Stop if converged
-            break if (old_stress - new_stress).abs < epsilon
+            break if converged?(old_stress, new_stress, epsilon)
 
             old_stress = new_stress
           end
@@ -65,6 +64,12 @@ module Elkrb
         end
 
         private
+
+        # Same stop test as Java ELK: the stress improvement relative to the
+        # previous stress, so graphs of any size stop at the same quality.
+        def converged?(old_stress, new_stress, epsilon)
+          old_stress.zero? || ((old_stress - new_stress) / old_stress) < epsilon
+        end
 
         # The registry reads "iterations" as force's elk.force.iterations, so
         # the resolver alone would let force's option change a stress layout.

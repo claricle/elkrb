@@ -56,6 +56,43 @@ RSpec.describe Elkrb::Layout::Algorithms::Stress do
     end
   end
 
+  describe "convergence" do
+    let(:chain_thirty) do
+      {
+        "id" => "r",
+        "children" => Array.new(30) do |i|
+          { "id" => "n#{i}", "width" => 10, "height" => 10 }
+        end,
+        "edges" => Array.new(29) do |i|
+          { "id" => "e#{i}", "sources" => ["n#{i}"],
+            "targets" => ["n#{i + 1}"] }
+        end,
+      }
+    end
+
+    def positions_with_limit(graph, limit)
+      input = graph.merge(
+        "layoutOptions" => { "elk.stress.iterationLimit" => limit },
+      )
+      Elkrb.layout(input, algorithm: "stress").children.map do |node|
+        [node.x, node.y]
+      end
+    end
+
+    # Stopping on the improvement relative to the previous stress ends this
+    # chain well before 200 iterations. An absolute difference keeps going
+    # until the limit, so a larger limit would move the nodes again.
+    it "stops before the limit once the relative improvement is small" do
+      expect(positions_with_limit(chain_thirty, 2000))
+        .to eq(positions_with_limit(chain_thirty, 200))
+    end
+
+    it "still stops at the iteration limit when it comes first" do
+      expect(positions_with_limit(chain_thirty, 20))
+        .not_to eq(positions_with_limit(chain_thirty, 200))
+    end
+  end
+
   describe "#calculate_distances (private)" do
     it "resolves port-id edge endpoints to their owning node's row/column" do
       node_a = Elkrb::Graph::Node.new(
