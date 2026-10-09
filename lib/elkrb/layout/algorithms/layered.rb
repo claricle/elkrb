@@ -3,6 +3,7 @@
 require_relative "base_algorithm"
 require_relative "../node_index"
 require_relative "layered/cycle_breaker"
+require_relative "layered/crossing_minimizer"
 require_relative "layered/layer_assigner"
 require_relative "layered/node_placer"
 
@@ -18,7 +19,8 @@ module Elkrb
       #    the reversal is a private orientation the next phase borrows.
       # 2. Layer assignment - assign nodes to horizontal layers, reading
       #    each back edge in its reversed direction
-      # 3. Node placement - position nodes within layers
+      # 3. Crossing minimization - reorder nodes within assigned layers
+      # 4. Node placement - position nodes within layers
       #
       # Ideal for:
       # - UML class diagrams
@@ -59,8 +61,11 @@ module Elkrb
           )
           layers = layer_assigner.assign_layers
 
-          # Phase 3: Place nodes
-          place_nodes(graph, layers)
+          # Phase 3: Minimize crossings within the assigned layers
+          layers = minimize_crossings(graph, layers, index)
+
+          # Phase 4: Place nodes
+          place_nodes(graph, layers, index)
 
           # Apply padding and set graph dimensions
           apply_padding(graph)
@@ -70,16 +75,24 @@ module Elkrb
 
         private
 
-        def place_nodes(graph, layers)
+        def minimize_crossings(graph, layers, index)
+          Layered::CrossingMinimizer.new(
+            graph, layers, index, resolver
+          ).minimize
+        end
+
+        def place_nodes(graph, layers, index)
           direction = option("elk.direction")
           direction = "RIGHT" if direction == "UNDEFINED"
 
-          Layered::NodePlacer.new(
+          placer = Layered::NodePlacer.new(
             graph, layers,
             direction: direction,
             layer_spacing: option("elk.layered.spacing.nodeNodeBetweenLayers"),
             node_spacing: node_spacing
-          ).place_nodes
+          )
+          placer.index = index
+          placer.place_nodes
         end
 
         def validate_edges(index)

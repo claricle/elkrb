@@ -457,8 +457,6 @@ RSpec.describe Elkrb::Options::Registry do
         elk.spacing.edgeNode
         elk.spacing.edgeEdge
         elk.layered.nodePlacement.strategy
-        elk.layered.considerModelOrder.strategy
-        elk.layered.crossingMinimization.strategy
         elk.layered.compaction.postCompaction.strategy
         elk.box.packingMode
         elk.disco.componentCompaction.strategy
@@ -468,6 +466,12 @@ RSpec.describe Elkrb::Options::Registry do
         expect(described_class.status(id)).to eq(:accepted),
                                               "#{id} should be :accepted"
       end
+      expect(described_class.status(
+               "elk.layered.considerModelOrder.strategy",
+             )).to eq(:honoured)
+      expect(described_class.status(
+               "elk.layered.crossingMinimization.strategy",
+             )).to eq(:honoured)
       expect(described_class.status("elk.radial.centerOnRoot")).to eq(:honoured)
       expect(described_class.status("elk.layered.layering.layerConstraint"))
         .to eq(:honoured)

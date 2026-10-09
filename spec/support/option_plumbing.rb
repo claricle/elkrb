@@ -67,6 +67,12 @@ module OptionPlumbing
         node["y"] = y
       end
     end,
+    # Put the two equally ranked targets in reverse id order. Layered's
+    # default tie-break sorts them by id, while model-order preservation and
+    # disabled crossing minimization retain this input order.
+    reversed_layered_tie: lambda do |nodes|
+      nodes[1], nodes[2] = nodes[2], nodes[1]
+    end,
   }.freeze
 
   # The 4-node fixture: a-b and a-c edges (a labelled one, a port on a), and
