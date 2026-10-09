@@ -63,4 +63,31 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::LayerSweep do
       end
     end
   end
+
+  # Port keys are fractions: 5/3 and 1 must not both truncate to 1, or two
+  # ports that elkjs tells apart stay in their input order.
+  describe "ports whose neighbours average to a fraction" do
+    # The routes elkjs 0.11.0 drew for the "UP forward 8" graph of
+    # spec/fixtures/layered_junctions/cases.json.
+    {
+      "e2" => [[47.66666666666667, 128], [47.66666666666667, 118],
+               [51, 118], [51, 108]],
+      "e5" => [[47.66666666666667, 128], [47.66666666666667, 118],
+               [37, 118], [37, 108]],
+      "e6" => [[37, 128], [37, 108]],
+    }.each do |edge_id, expected|
+      it "routes #{edge_id} as elkjs does" do
+        path = File.join(__dir__, "../../../../fixtures/layered_junctions",
+                         "cases.json")
+        cases = JSON.parse(File.read(path))
+        graph = cases.find { |c| c["name"] == "UP forward 8" }["graph"]
+        section = Elkrb.layout(graph).edges.find { |e| e.id == edge_id }
+          .sections.first
+
+        route = [section.start_point, *section.bend_points, section.end_point]
+        expect(route.flat_map { |q| [q.x, q.y] })
+          .to match(expected.flatten.map { |v| be_within(1e-6).of(v) })
+      end
+    end
+  end
 end

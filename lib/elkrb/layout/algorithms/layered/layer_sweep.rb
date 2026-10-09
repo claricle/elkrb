@@ -163,7 +163,7 @@ module Elkrb
             sign = side == :west ? -1 : 1
             @port_order.sort!(item.id, side) do |port|
               sign * port.others.sum { |other| ranks.fetch(other) } /
-                port.others.length
+                port.others.length.to_f
             end
           end
 
