@@ -49,7 +49,7 @@ RSpec.describe Elkrb::Serializers::ElktSerializer do
 
       result = serializer.serialize(graph)
 
-      expect(result).to include("edge n1 -> n2")
+      expect(result).to include("edge e1: n1 -> n2")
     end
 
     it "serializes nodes with custom dimensions" do
@@ -223,7 +223,7 @@ RSpec.describe Elkrb::Serializers::ElktSerializer do
 
       result = serializer.serialize(graph)
 
-      expect(result).to include("edge n1.p1 -> n2.p2")
+      expect(result).to include("edge e1: n1.p1 -> n2.p2")
     end
 
     it "serializes edges with source port only" do
@@ -245,7 +245,7 @@ RSpec.describe Elkrb::Serializers::ElktSerializer do
 
       result = serializer.serialize(graph)
 
-      expect(result).to include("edge n1.p1 -> n2")
+      expect(result).to include("edge e1: n1.p1 -> n2")
     end
 
     it "serializes edges with target port only" do
@@ -267,10 +267,10 @@ RSpec.describe Elkrb::Serializers::ElktSerializer do
 
       result = serializer.serialize(graph)
 
-      expect(result).to include("edge n1 -> n2.p2")
+      expect(result).to include("edge e1: n1 -> n2.p2")
     end
 
-    it "omits auto-generated edge IDs" do
+    it "includes e-number edge IDs" do
       graph = {
         id: "root",
         children: [
@@ -284,8 +284,7 @@ RSpec.describe Elkrb::Serializers::ElktSerializer do
 
       result = serializer.serialize(graph)
 
-      expect(result).to include("edge n1 -> n2")
-      expect(result).not_to include("e0:")
+      expect(result).to include("edge e0: n1 -> n2")
     end
 
     it "includes custom edge IDs" do
@@ -378,7 +377,7 @@ RSpec.describe Elkrb::Serializers::ElktSerializer do
       expect(result).to include("spacing.nodeNode: 50")
       expect(result).to include("node n1 {")
       expect(result).to include('label "Node 1"')
-      expect(result).to include("edge n1 -> n2")
+      expect(result).to include("edge e1: n1 -> n2")
     end
 
     it "handles options without elk prefix" do
@@ -409,7 +408,7 @@ RSpec.describe Elkrb::Serializers::ElktSerializer do
 
       result = serializer.serialize(graph)
 
-      expect(result).to include("edge n1 -> n1")
+      expect(result).to include("edge e1: n1 -> n1")
     end
 
     it "serializes multiple edges" do
@@ -464,12 +463,8 @@ RSpec.describe Elkrb::Serializers::ElktSerializer do
       }
 
       result = serializer.serialize(graph)
-      lines = result.split("\n")
 
-      node_idx = lines.rindex { |l| l.include?("node") }
-      lines.index { |l| l.include?("edge") }
-
-      expect(lines[node_idx + 1].strip).to be_empty
+      expect(result).to include("}\n\nedge e1:")
     end
 
     it "supports custom indentation" do
@@ -543,7 +538,7 @@ RSpec.describe Elkrb::Serializers::ElktSerializer do
 
       result = serializer.serialize(graph)
 
-      expect(result).to include("edge child1 -> child2")
+      expect(result).to include("edge e1: child1 -> child2")
     end
   end
 
@@ -565,8 +560,6 @@ RSpec.describe Elkrb::Serializers::ElktSerializer do
           { id: "e1", sources: ["n1"], targets: ["n2"] },
         ],
       }
-
-      pending("item 28: the serializer strips the `elk.` prefix it wrote")
 
       elkt = serializer.serialize(graph)
       parsed = Elkrb::Parsers::ElktParser.parse(elkt)

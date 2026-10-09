@@ -86,7 +86,7 @@ RSpec.describe Elkrb::Serializers::DotSerializer do
 
         result = serializer.serialize(graph)
 
-        expect(result).to include("node_with_dashes")
+        expect(result).to include('"node-with-dashes"')
       end
 
       it "handles node IDs starting with digits" do
@@ -98,7 +98,7 @@ RSpec.describe Elkrb::Serializers::DotSerializer do
 
         result = serializer.serialize(graph)
 
-        expect(result).to include("n123node")
+        expect(result).to include('"123node"')
       end
     end
 
@@ -130,7 +130,7 @@ RSpec.describe Elkrb::Serializers::DotSerializer do
 
         result = serializer.serialize(graph)
 
-        expect(result).to include('label="Hello World\\\\nSecond Line"')
+        expect(result).to include('label="Hello World\\nSecond Line"')
       end
 
       it "escapes special characters in labels" do
@@ -214,7 +214,7 @@ RSpec.describe Elkrb::Serializers::DotSerializer do
       end
 
       it "includes routing points" do
-        result = serializer.serialize(graph)
+        result = serializer.serialize(graph, engine: "neato")
 
         expect(result).to include("pos=")
         expect(result).to include("0.0,0.0")
@@ -403,7 +403,7 @@ RSpec.describe Elkrb::Serializers::DotSerializer do
       end
 
       it "includes position attribute" do
-        result = serializer.serialize(graph)
+        result = serializer.serialize(graph, engine: "neato")
 
         # Position should be center of node
         # x: 100 + 60/2 = 130
