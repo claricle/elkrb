@@ -57,7 +57,7 @@ module Elkrb
         node_map = coerce_node_map(node_map || NodeIndex.build(graph))
         graph.edges&.each do |edge|
           style = routing_style || get_edge_routing_style(graph, edge)
-          if self_loop?(edge)
+          if self_loop?(edge, node_map)
             route_self_loop(edge, node_map, graph, style)
           else
             route_edge_with_style(edge, node_map, graph, style)
@@ -115,7 +115,7 @@ module Elkrb
         source = unique_deep_endpoint(deep_index, edge.sources.first)
         target = unique_deep_endpoint(deep_index, edge.targets.first)
         return unless source && target
-        return if self_loop?(edge)
+        return if self_loop?(edge, level_index)
         return if level_index.node(edge.sources.first) &&
           level_index.node(edge.targets.first)
 
@@ -486,14 +486,19 @@ module Elkrb
         @resolver.get("elk.direction", edge, default: nil)
       end
 
-      # Check if edge is a self-loop (source == target)
-      def self_loop?(edge)
+      # Check if an edge's endpoints belong to the same node.
+      def self_loop?(edge, node_map = nil)
         sources = edge.sources || []
         targets = edge.targets || []
 
         return false if sources.empty? || targets.empty?
+        return sources.first == targets.first unless node_map
 
-        sources.first == targets.first
+        source_node = node_map.node(sources.first)
+        target_node = node_map.node(targets.first)
+        return sources.first == targets.first unless source_node || target_node
+
+        source_node&.equal?(target_node)
       end
 
       # Route a self-loop edge
@@ -504,17 +509,8 @@ module Elkrb
         return unless node
 
         # Get self-loop index for multiple loops on same node
-        loop_index = get_self_loop_index(edge, node, graph)
-
-        # Create edge section if not exists
-        edge.sections ||= []
-        if edge.sections.empty?
-          edge.sections << Graph::EdgeSection.new(
-            id: "#{edge.id}_section_0",
-          )
-        end
-
-        section = edge.sections.first
+        loop_index = get_self_loop_index(edge, node, graph, node_map)
+        section = reset_section(edge, graph)
 
         # Check if edge uses ports
         if edge_uses_ports_for_self_loop?(edge, node)
@@ -534,16 +530,16 @@ module Elkrb
       end
 
       # Get self-loop index for multiple loops on same node
-      def get_self_loop_index(edge, node, graph)
+      def get_self_loop_index(edge, node, graph,
+                              node_map = NodeIndex.build(graph))
         return 0 unless graph.edges
 
-        # Find all self-loops on this node
         self_loops = graph.edges.select do |e|
-          self_loop?(e) && e.sources&.first == node.id
+          source_node = node_map.node(e.sources&.first)
+          self_loop?(e, node_map) && source_node.equal?(node)
         end
 
-        # Return index of current edge
-        self_loops.index(edge) || 0
+        self_loops.index { |candidate| candidate.equal?(edge) } || 0
       end
 
       # Route orthogonal self-loop (rectangular path)
@@ -558,7 +554,6 @@ module Elkrb
         width = ((node.width || 50.0) * 0.4) + offset
         height = ((node.height || 50.0) * 0.4) + offset
 
-        # Calculate start/end points based on side
         case side
         when "EAST"
           route_east_self_loop(section, node, width, height)
@@ -569,114 +564,89 @@ module Elkrb
         when "SOUTH"
           route_south_self_loop(section, node, width, height)
         else
-          # Default: EAST
           route_east_self_loop(section, node, width, height)
         end
       end
 
       # Route self-loop on EAST side
-      def route_east_self_loop(section, node, width, height)
+      def route_east_self_loop(section, node, width, _height)
         node_x = node.x || 0.0
         node_y = node.y || 0.0
         node_width = node.width || 50.0
         node_height = node.height || 50.0
 
-        # Start point (right middle of node)
         start_x = node_x + node_width
-        start_y = node_y + (node_height / 2.0)
-
-        # End point (slightly below start)
+        start_y = node_y + (node_height / 2.0) - 5.0
         end_x = start_x
         end_y = start_y + 10.0
 
         section.start_point = Geometry::Point.new(x: start_x, y: start_y)
         section.end_point = Geometry::Point.new(x: end_x, y: end_y)
 
-        # Bend points forming rectangular loop
         section.bend_points = [
           Geometry::Point.new(x: start_x + width, y: start_y),
-          Geometry::Point.new(x: start_x + width, y: start_y - height),
-          Geometry::Point.new(x: start_x + width, y: start_y + height),
-          Geometry::Point.new(x: end_x, y: end_y - 5.0),
+          Geometry::Point.new(x: start_x + width, y: end_y),
         ]
       end
 
       # Route self-loop on WEST side
-      def route_west_self_loop(section, node, width, height)
+      def route_west_self_loop(section, node, width, _height)
         node_x = node.x || 0.0
         node_y = node.y || 0.0
         node_height = node.height || 50.0
 
-        # Start point (left middle of node)
         start_x = node_x
-        start_y = node_y + (node_height / 2.0)
-
-        # End point (slightly below start)
+        start_y = node_y + (node_height / 2.0) - 5.0
         end_x = start_x
         end_y = start_y + 10.0
 
         section.start_point = Geometry::Point.new(x: start_x, y: start_y)
         section.end_point = Geometry::Point.new(x: end_x, y: end_y)
 
-        # Bend points forming rectangular loop
         section.bend_points = [
           Geometry::Point.new(x: start_x - width, y: start_y),
-          Geometry::Point.new(x: start_x - width, y: start_y - height),
-          Geometry::Point.new(x: start_x - width, y: start_y + height),
-          Geometry::Point.new(x: end_x, y: end_y - 5.0),
+          Geometry::Point.new(x: start_x - width, y: end_y),
         ]
       end
 
       # Route self-loop on NORTH side
-      def route_north_self_loop(section, node, width, height)
+      def route_north_self_loop(section, node, _width, height)
         node_x = node.x || 0.0
         node_y = node.y || 0.0
         node_width = node.width || 50.0
 
-        # Start point (top middle of node)
-        start_x = node_x + (node_width / 2.0)
+        start_x = node_x + (node_width / 2.0) - 5.0
         start_y = node_y
-
-        # End point (slightly to the right of start)
         end_x = start_x + 10.0
         end_y = start_y
 
         section.start_point = Geometry::Point.new(x: start_x, y: start_y)
         section.end_point = Geometry::Point.new(x: end_x, y: end_y)
 
-        # Bend points forming rectangular loop
         section.bend_points = [
           Geometry::Point.new(x: start_x, y: start_y - height),
-          Geometry::Point.new(x: start_x - width, y: start_y - height),
-          Geometry::Point.new(x: start_x + width, y: start_y - height),
-          Geometry::Point.new(x: end_x - 5.0, y: end_y),
+          Geometry::Point.new(x: end_x, y: start_y - height),
         ]
       end
 
       # Route self-loop on SOUTH side
-      def route_south_self_loop(section, node, width, height)
+      def route_south_self_loop(section, node, _width, height)
         node_x = node.x || 0.0
         node_y = node.y || 0.0
         node_width = node.width || 50.0
         node_height = node.height || 50.0
 
-        # Start point (bottom middle of node)
-        start_x = node_x + (node_width / 2.0)
+        start_x = node_x + (node_width / 2.0) - 5.0
         start_y = node_y + node_height
-
-        # End point (slightly to the right of start)
         end_x = start_x + 10.0
         end_y = start_y
 
         section.start_point = Geometry::Point.new(x: start_x, y: start_y)
         section.end_point = Geometry::Point.new(x: end_x, y: end_y)
 
-        # Bend points forming rectangular loop
         section.bend_points = [
           Geometry::Point.new(x: start_x, y: start_y + height),
-          Geometry::Point.new(x: start_x - width, y: start_y + height),
-          Geometry::Point.new(x: start_x + width, y: start_y + height),
-          Geometry::Point.new(x: end_x - 5.0, y: end_y),
+          Geometry::Point.new(x: end_x, y: start_y + height),
         ]
       end
 
@@ -699,7 +669,7 @@ module Elkrb
         case side
         when "EAST"
           start_x = node_x + node_width
-          start_y = node_y + (node_height / 2.0)
+          start_y = node_y + (node_height / 2.0) - 5.0
           end_x = start_x
           end_y = start_y + 10.0
 
@@ -714,7 +684,7 @@ module Elkrb
           )
         when "WEST"
           start_x = node_x
-          start_y = node_y + (node_height / 2.0)
+          start_y = node_y + (node_height / 2.0) - 5.0
           end_x = start_x
           end_y = start_y + 10.0
 
@@ -728,7 +698,7 @@ module Elkrb
             y: start_y + radius,
           )
         when "NORTH"
-          start_x = node_x + (node_width / 2.0)
+          start_x = node_x + (node_width / 2.0) - 5.0
           start_y = node_y
           end_x = start_x + 10.0
           end_y = start_y
@@ -743,7 +713,7 @@ module Elkrb
             y: start_y - radius,
           )
         when "SOUTH"
-          start_x = node_x + (node_width / 2.0)
+          start_x = node_x + (node_width / 2.0) - 5.0
           start_y = node_y + node_height
           end_x = start_x + 10.0
           end_y = start_y
@@ -760,7 +730,7 @@ module Elkrb
         else
           # Default: EAST
           start_x = node_x + node_width
-          start_y = node_y + (node_height / 2.0)
+          start_y = node_y + (node_height / 2.0) - 5.0
           end_x = start_x
           end_y = start_y + 10.0
 
@@ -821,27 +791,12 @@ module Elkrb
         source_port = find_port_by_id(source_id, node)
         target_port = find_port_by_id(target_id, node)
 
-        # Get port positions
-        start_point = if source_port
-                        get_port_absolute_position(source_port, node)
-                      else
-                        get_node_center(node)
-                      end
-
-        end_point = if target_port
-                      get_port_absolute_position(target_port, node)
-                    else
-                      get_node_center(node)
-                    end
-
-        section.start_point = start_point
-        section.end_point = end_point
-
-        # Calculate offset
         offset = calculate_loop_offset(loop_index)
-
-        # Route between ports with appropriate style
         if source_port && target_port
+          start_point = get_port_absolute_position(source_port, node)
+          end_point = get_port_absolute_position(target_port, node)
+          section.start_point = start_point
+          section.end_point = end_point
           route_port_to_port_self_loop(
             section,
             start_point,
@@ -852,33 +807,52 @@ module Elkrb
             routing_style,
           )
         else
-          # Fallback to regular self-loop routing
-          case routing_style
-          when "SPLINES"
-            route_spline_self_loop(section, edge, node, loop_index)
+          port = source_port || target_port
+          port_point = get_port_absolute_position(port, node)
+          side = port.side || get_self_loop_side(edge, node)
+          node_x = node.x || 0.0
+          node_y = node.y || 0.0
+          node_width = node.width || 0.0
+          node_height = node.height || 0.0
+          node_point = case side
+                       when "WEST", "EAST"
+                         candidate = [port_point.y + 10.0,
+                                      node_y + node_height].min
+                         Geometry::Point.new(
+                           x: side == "EAST" ? node_x + node_width : node_x,
+                           y: candidate,
+                         )
+                       else
+                         candidate = [port_point.x + 10.0,
+                                      node_x + node_width].min
+                         Geometry::Point.new(
+                           x: candidate,
+                           y: side == "SOUTH" ? node_y + node_height : node_y,
+                         )
+                       end
+          start_point = source_port ? port_point : node_point
+          end_point = target_port ? port_point : node_point
+          section.start_point = start_point
+          section.end_point = end_point
+          if routing_style == "SPLINES"
+            route_spline_port_self_loop(section, start_point, end_point,
+                                        side, side, offset)
           else
-            route_orthogonal_self_loop(section, edge, node, loop_index)
+            route_orthogonal_port_self_loop(section, start_point, end_point,
+                                            side, side, offset)
           end
         end
       end
 
       # Get absolute position of a port
       def get_port_absolute_position(port, node)
-        Geometry::Point.new(
-          x: (node.x || 0.0) + (port.x || 0.0),
-          y: (node.y || 0.0) + (port.y || 0.0),
-        )
+        get_port_position(port.id, node, nil)
       end
 
       # Route self-loop from port to port
       def route_port_to_port_self_loop(section, start_point, end_point,
                                          source_port, target_port, offset,
                                          routing_style)
-        # Calculate midpoint for loop
-        (start_point.x + end_point.x) / 2.0
-        (start_point.y + end_point.y) / 2.0
-
-        # Determine loop direction based on port sides
         source_side = source_port.side || "EAST"
         target_side = target_port.side || "EAST"
 
@@ -908,43 +882,84 @@ module Elkrb
       # Route orthogonal self-loop between ports
       def route_orthogonal_port_self_loop(section, start_point, end_point,
                                             source_side, target_side, offset)
-        section.bend_points = []
-
-        # Create bend points based on port sides
+        extension = offset + 30.0
         case [source_side, target_side]
         when ["EAST", "EAST"], ["WEST", "WEST"]
-          # Both on same vertical side - create horizontal loop
-          extension = offset + 30.0
-          mid_y = (start_point.y + end_point.y) / 2.0
-
-          if source_side == "EAST"
-            section.add_bend_point(start_point.x + extension, start_point.y)
-            section.add_bend_point(start_point.x + extension, mid_y)
-            section.add_bend_point(end_point.x + extension, end_point.y)
-          else
-            section.add_bend_point(start_point.x - extension, start_point.y)
-            section.add_bend_point(start_point.x - extension, mid_y)
-            section.add_bend_point(end_point.x - extension, end_point.y)
+          direction = source_side == "EAST" ? 1 : -1
+          outer_x = start_point.x + (direction * extension)
+          section.bend_points = [
+            Geometry::Point.new(x: outer_x, y: start_point.y),
+            Geometry::Point.new(x: outer_x, y: end_point.y),
+          ]
+          if start_point.x == end_point.x && start_point.y == end_point.y
+            section.bend_points[1].y += 10.0
+            section.bend_points << Geometry::Point.new(
+              x: end_point.x, y: end_point.y + 10.0,
+            )
           end
         when ["NORTH", "NORTH"], ["SOUTH", "SOUTH"]
-          # Both on same horizontal side - create vertical loop
-          extension = offset + 30.0
-          mid_x = (start_point.x + end_point.x) / 2.0
-
-          if source_side == "NORTH"
-            section.add_bend_point(start_point.x, start_point.y - extension)
-            section.add_bend_point(mid_x, start_point.y - extension)
-            section.add_bend_point(end_point.x, end_point.y - extension)
-          else
-            section.add_bend_point(start_point.x, start_point.y + extension)
-            section.add_bend_point(mid_x, start_point.y + extension)
-            section.add_bend_point(end_point.x, end_point.y + extension)
+          direction = source_side == "SOUTH" ? 1 : -1
+          outer_y = start_point.y + (direction * extension)
+          section.bend_points = [
+            Geometry::Point.new(x: start_point.x, y: outer_y),
+            Geometry::Point.new(x: end_point.x, y: outer_y),
+          ]
+          if start_point.x == end_point.x && start_point.y == end_point.y
+            section.bend_points[1].x += 10.0
+            section.bend_points << Geometry::Point.new(
+              x: end_point.x + 10.0, y: end_point.y,
+            )
           end
         else
-          # Different sides - create L-shaped path
-          mid_x = (start_point.x + end_point.x) / 2.0
-          section.add_bend_point(mid_x, start_point.y)
-          section.add_bend_point(mid_x, end_point.y)
+          deltas = {
+            "EAST" => [extension, 0.0],
+            "WEST" => [-extension, 0.0],
+            "SOUTH" => [0.0, extension],
+            "NORTH" => [0.0, -extension],
+          }
+          source_delta = deltas.fetch(source_side, [0.0, 0.0])
+          target_delta = deltas.fetch(target_side, [0.0, 0.0])
+          source_outer = Geometry::Point.new(
+            x: start_point.x + source_delta[0],
+            y: start_point.y + source_delta[1],
+          )
+          target_outer = Geometry::Point.new(
+            x: end_point.x + target_delta[0],
+            y: end_point.y + target_delta[1],
+          )
+          opposite = [["EAST", "WEST"], ["WEST", "EAST"],
+                      ["NORTH", "SOUTH"], ["SOUTH", "NORTH"]]
+            .include?([source_side, target_side])
+          vertical_sides = %w[EAST WEST].include?(source_side)
+          section.bend_points = if opposite && vertical_sides
+                                  corridor = [source_outer.y,
+                                              target_outer.y].min - extension
+                                  [source_outer,
+                                   Geometry::Point.new(x: source_outer.x,
+                                                       y: corridor),
+                                   Geometry::Point.new(x: target_outer.x,
+                                                       y: corridor),
+                                   target_outer]
+                                elsif opposite
+                                  corridor = [source_outer.x,
+                                              target_outer.x].max + extension
+                                  [source_outer,
+                                   Geometry::Point.new(x: corridor,
+                                                       y: source_outer.y),
+                                   Geometry::Point.new(x: corridor,
+                                                       y: target_outer.y),
+                                   target_outer]
+                                elsif vertical_sides
+                                  [source_outer,
+                                   Geometry::Point.new(x: source_outer.x,
+                                                       y: target_outer.y),
+                                   target_outer]
+                                else
+                                  [source_outer,
+                                   Geometry::Point.new(x: target_outer.x,
+                                                       y: source_outer.y),
+                                   target_outer]
+                                end
         end
       end
 
@@ -997,6 +1012,16 @@ module Elkrb
           (start_point.y + end_point.y) / 2.0
           control1 = Geometry::Point.new(x: mid_x, y: start_point.y)
           control2 = Geometry::Point.new(x: mid_x, y: end_point.y)
+        end
+
+        if start_point.x == end_point.x && start_point.y == end_point.y
+          if %w[EAST WEST].include?(source_side)
+            control1.y -= 5.0
+            control2.y += 5.0
+          else
+            control1.x -= 5.0
+            control2.x += 5.0
+          end
         end
 
         section.bend_points = [control1, control2]

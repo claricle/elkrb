@@ -80,13 +80,11 @@ RSpec.describe "Self-loop Support" do
         router.route_edges(graph, nil, "ORTHOGONAL")
 
         section = edge.sections.first
-        expect(section.start_point).to be_a(Elkrb::Geometry::Point)
-        expect(section.end_point).to be_a(Elkrb::Geometry::Point)
-        expect(section.bend_points.length).to eq(4)
-
-        # Start should be on right side of node
-        expect(section.start_point.x).to eq(180.0)
-        expect(section.start_point.y).to eq(130.0)
+        expect(section.start_point.to_h).to eq(x: 180.0, y: 125.0)
+        expect(section.bend_points.map(&:to_h)).to eq(
+          [{ x: 232.0, y: 125.0 }, { x: 232.0, y: 135.0 }],
+        )
+        expect(section.end_point.to_h).to eq(x: 180.0, y: 135.0)
       end
 
       it "creates rectangular self-loop on WEST side" do
@@ -96,10 +94,11 @@ RSpec.describe "Self-loop Support" do
         router.route_edges(graph, nil, "ORTHOGONAL")
 
         section = edge.sections.first
-        expect(section.bend_points.length).to eq(4)
-
-        # Start should be on left side of node
-        expect(section.start_point.x).to eq(100.0)
+        expect(section.start_point.to_h).to eq(x: 100.0, y: 125.0)
+        expect(section.bend_points.map(&:to_h)).to eq(
+          [{ x: 48.0, y: 125.0 }, { x: 48.0, y: 135.0 }],
+        )
+        expect(section.end_point.to_h).to eq(x: 100.0, y: 135.0)
       end
 
       it "creates rectangular self-loop on NORTH side" do
@@ -109,10 +108,11 @@ RSpec.describe "Self-loop Support" do
         router.route_edges(graph, nil, "ORTHOGONAL")
 
         section = edge.sections.first
-        expect(section.bend_points.length).to eq(4)
-
-        # Start should be on top of node
-        expect(section.start_point.y).to eq(100.0)
+        expect(section.start_point.to_h).to eq(x: 135.0, y: 100.0)
+        expect(section.bend_points.map(&:to_h)).to eq(
+          [{ x: 135.0, y: 56.0 }, { x: 145.0, y: 56.0 }],
+        )
+        expect(section.end_point.to_h).to eq(x: 145.0, y: 100.0)
       end
 
       it "creates rectangular self-loop on SOUTH side" do
@@ -122,28 +122,32 @@ RSpec.describe "Self-loop Support" do
         router.route_edges(graph, nil, "ORTHOGONAL")
 
         section = edge.sections.first
-        expect(section.bend_points.length).to eq(4)
-
-        # Start should be on bottom of node
-        expect(section.start_point.y).to eq(160.0)
+        expect(section.start_point.to_h).to eq(x: 135.0, y: 160.0)
+        expect(section.bend_points.map(&:to_h)).to eq(
+          [{ x: 135.0, y: 204.0 }, { x: 145.0, y: 204.0 }],
+        )
+        expect(section.end_point.to_h).to eq(x: 145.0, y: 160.0)
       end
 
       it "defaults to EAST side when not specified" do
         router.route_edges(graph, nil, "ORTHOGONAL")
 
         section = edge.sections.first
-        expect(section.start_point.x).to eq(180.0)
+        expect(section.start_point.to_h).to eq(x: 180.0, y: 125.0)
       end
 
       it "creates edge section with proper structure" do
         router.route_edges(graph, nil, "ORTHOGONAL")
 
-        expect(edge.sections).not_to be_empty
+        edge.sections = [Elkrb::Graph::EdgeSection.new(id: "stale")]
+
+        router.route_edges(graph, nil, "ORTHOGONAL")
+
+        expect(edge.sections.length).to eq(1)
         section = edge.sections.first
-        expect(section.id).to eq("e1_section_0")
-        expect(section.start_point).to be_a(Elkrb::Geometry::Point)
-        expect(section.end_point).to be_a(Elkrb::Geometry::Point)
-        expect(section.bend_points).to be_an(Array)
+        expect(section.id).to eq("e1_s0")
+        expect(section.incoming_shape).to eq("n1")
+        expect(section.outgoing_shape).to eq("n1")
       end
     end
 
@@ -216,7 +220,9 @@ RSpec.describe "Self-loop Support" do
 
         section = edge.sections.first
         # Polyline delegates to orthogonal
-        expect(section.bend_points.length).to eq(4)
+        expect(section.bend_points.map(&:to_h)).to eq(
+          [{ x: 232.0, y: 125.0 }, { x: 232.0, y: 135.0 }],
+        )
       end
     end
   end
@@ -422,6 +428,9 @@ RSpec.describe "Self-loop Support" do
       expect(section.start_point.y).to eq(120.0) # node.y + port.y
       expect(section.end_point.x).to eq(180.0)
       expect(section.end_point.y).to eq(140.0)
+      expect(section.bend_points.map(&:to_h)).to eq(
+        [{ x: 230.0, y: 120.0 }, { x: 230.0, y: 140.0 }],
+      )
     end
 
     it "routes spline self-loop between ports on same side" do
@@ -450,7 +459,7 @@ RSpec.describe "Self-loop Support" do
       expect(section.bend_points[1]).to be_a(Elkrb::Geometry::Point)
     end
 
-    it "routes aligned ports on different sides directly" do
+    it "routes ports on different sides outside the node" do
       port1 = Elkrb::Graph::Port.new(id: "p1", x: 80.0, y: 30.0, side: "EAST")
       port2 = Elkrb::Graph::Port.new(id: "p2", x: 0.0, y: 30.0, side: "WEST")
       node.ports = [port1, port2]
@@ -472,7 +481,86 @@ RSpec.describe "Self-loop Support" do
       section = edge.sections.first
       expect(section.start_point.to_h).to eq(x: 180.0, y: 130.0)
       expect(section.end_point.to_h).to eq(x: 100.0, y: 130.0)
-      expect(section.bend_points).to be_empty
+      expect(section.bend_points.map(&:to_h)).to eq(
+        [
+          { x: 230.0, y: 130.0 },
+          { x: 230.0, y: 80.0 },
+          { x: 50.0, y: 80.0 },
+          { x: 50.0, y: 130.0 },
+        ],
+      )
+    end
+
+    it "routes a same-port loop with distinct points" do
+      port = Elkrb::Graph::Port.new(
+        id: "p1", x: 80.0, y: 20.0, width: 8.0, height: 8.0, side: "EAST",
+      )
+      node.ports = [port]
+      edge = Elkrb::Graph::Edge.new(
+        id: "e1", sources: ["p1"], targets: ["p1"],
+      )
+      graph = Elkrb::Graph::Graph.new(
+        id: "g1", children: [node], edges: [edge],
+      )
+
+      router.route_edges(graph, nil, "ORTHOGONAL")
+
+      section = edge.sections.first
+      points = [section.start_point, *section.bend_points, section.end_point]
+      expect(points.map(&:to_h).uniq.length).to eq(4)
+      expect(points.map(&:to_h)).to eq(
+        [
+          { x: 188.0, y: 124.0 },
+          { x: 238.0, y: 124.0 },
+          { x: 238.0, y: 134.0 },
+          { x: 188.0, y: 134.0 },
+          { x: 188.0, y: 124.0 },
+        ],
+      )
+    end
+
+    it "gives same-port loops distinct paths" do
+      port = Elkrb::Graph::Port.new(
+        id: "p1", x: 80.0, y: 20.0, width: 8.0, height: 8.0, side: "EAST",
+      )
+      node.ports = [port]
+      edges = %w[e1 e2].map do |id|
+        Elkrb::Graph::Edge.new(id: id, sources: ["p1"], targets: ["p1"])
+      end
+      graph = Elkrb::Graph::Graph.new(
+        id: "g1", children: [node], edges: edges,
+      )
+
+      router.route_edges(graph, nil, "ORTHOGONAL")
+
+      paths = edges.map do |loop|
+        section = loop.sections.first
+        [section.start_point, *section.bend_points, section.end_point]
+          .map(&:to_h)
+      end
+      expect(paths.first).not_to eq(paths.last)
+    end
+
+    it "anchors a node-to-port loop on both borders" do
+      port = Elkrb::Graph::Port.new(
+        id: "p1", x: 80.0, y: 20.0, width: 8.0, height: 8.0, side: "EAST",
+      )
+      node.ports = [port]
+      edge = Elkrb::Graph::Edge.new(
+        id: "e1", sources: ["n1"], targets: ["p1"],
+      )
+      graph = Elkrb::Graph::Graph.new(
+        id: "g1", children: [node], edges: [edge],
+      )
+
+      router.route_edges(graph, nil, "ORTHOGONAL")
+
+      section = edge.sections.first
+      expect(section.start_point.to_h).to eq(x: 180.0, y: 134.0)
+      expect(section.end_point.to_h).to eq(x: 188.0, y: 124.0)
+      expect(section.bend_points.map(&:to_h)).to eq(
+        [{ x: 230.0, y: 134.0 }, { x: 230.0, y: 124.0 }],
+      )
     end
   end
 
