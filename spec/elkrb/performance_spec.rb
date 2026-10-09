@@ -12,7 +12,7 @@ RSpec.describe "Performance budgets", :perf,
                skip: (ENV["ELKRB_PERF"] == "1" ? false : "set ELKRB_PERF=1") do
   [
     ["layered", 4000, 15],
-    ["stress", 200, 180],
+    ["stress", 200, 30],
     ["force", 100, 15],
   ].each do |algorithm, size, budget_seconds|
     it "lays out a #{size}-node #{algorithm} chain within #{budget_seconds}s" do
