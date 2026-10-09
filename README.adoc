@@ -904,7 +904,7 @@ require "elkrb"
 
 graph = Elkrb::Graph::Graph.new(id: "root")
 graph.layout_options = { "elk.direction": "DOWN", "elk.algorithm" => "layered" }
-p graph.layout_options
+p graph.layout_options.keys
 
 begin
   graph.layout_options = { "text" => "a" }
@@ -917,7 +917,7 @@ Prints:
 
 [source]
 ----
-{"elk.direction" => "DOWN", "elk.algorithm" => "layered"}
+["elk.direction", "elk.algorithm"]
 layoutOptions cannot use `text` or `elements` as a key; both are reserved by lutaml-model
 ----
 
