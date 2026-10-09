@@ -1,36 +1,38 @@
 # frozen_string_literal: true
 
+require_relative "../spore/placement"
+require_relative "../spore/edge_cost"
+require_relative "../spore/triangulation"
+require_relative "../spore/spanning_tree"
+require_relative "../spore/depth_first_compaction"
+
 module Elkrb
   module Layout
     module Algorithms
-      # SPOrE Compaction algorithm
+      # SPOrE compaction ("ShrinkTree"): closes the gaps in an overlap-free
+      # layout without changing its topology.
       #
-      # Compacts the layout by removing whitespace while preserving
-      # the relative ordering and structure of nodes.
+      # The node centres are joined by a Delaunay triangulation, a spanning
+      # tree of it is grown from the root node, and the tree is compacted
+      # depth first: each subtree slides toward its parent until it would
+      # touch another node.
+      #
+      # Ties between equally cheap tree edges are broken by discovery order,
+      # where Java ELK breaks them by hash-set order. Nodes that start on
+      # the same point are nudged apart at random, as Java does.
       class SporeCompaction < BaseAlgorithm
+        include Spore::Placement
+
         def layout_flat(graph, _options = {})
           return graph if graph.children.empty?
 
           self.class.normalize_nil_positions(graph.children)
 
-          # Compact in both directions
-          direction = resolver.get("spore.compactionDirection", graph)
-          min_spacing = resolver.get("spore.nodeSpacing", graph)
+          spacing = node_gap(graph)
+          bodies = build_bodies(graph.children, spacing)
+          compact(bodies, graph) if bodies.size > 1
 
-          case direction
-          when "horizontal"
-            compact_horizontal(graph.children, min_spacing)
-          when "vertical"
-            compact_vertical(graph.children, min_spacing)
-          else
-            compact_horizontal(graph.children, min_spacing)
-            compact_vertical(graph.children, min_spacing)
-          end
-
-          # Normalize to start at origin
-          normalize_positions(graph.children)
-
-          # Apply padding
+          bodies.each { |body| place(body) }
           apply_padding(graph)
 
           graph
@@ -38,102 +40,55 @@ module Elkrb
 
         private
 
-        def compact_horizontal(nodes, min_spacing)
-          # Sort nodes by x coordinate
-          sorted_nodes = nodes.sort_by(&:x)
+        # spore.nodeSpacing, else ELK's own spacing id, else ELK's default.
+        def node_gap(graph)
+          resolver.get("spore.nodeSpacing", graph, default: nil) ||
+            resolver.get("elk.spacing.nodeNode", graph,
+                         default: DEFAULT_SPACING)
+        end
 
-          # Compact from left to right
-          sorted_nodes.each_with_index do |node, index|
-            next if index.zero?
+        def compact(bodies, graph)
+          root = select_root(bodies, graph)
+          Spore::DepthFirstCompaction.compact(grow_tree(bodies, root, graph),
+                                              mode: mode(graph))
+        end
 
-            # Find the rightmost x position among nodes to the left
-            # that don't vertically overlap with current node
-            max_left_x = find_max_left_x(node, sorted_nodes[0...index],
-                                         min_spacing)
+        def select_root(bodies, graph)
+          return most_central(bodies, graph) unless
+            resolver.get("elk.processingOrder.rootSelection", graph) == "FIXED"
 
-            # Move node left if there's space
-            if max_left_x && max_left_x < node.x
-              node.x = max_left_x
-            end
+          wanted = resolver.get("elk.processingOrder.preferredRoot", graph)
+          named = bodies.select { |body| body.source.id == wanted } if wanted
+          named&.last || bodies.first
+        end
+
+        def grow_tree(bodies, root, graph)
+          cost = Spore::EdgeCost.for(
+            resolver.get("elk.processingOrder.spanningTreeCostFunction", graph),
+            root,
+          )
+          sign = maximum_tree?(graph) ? -1 : 1
+          Spore::SpanningTree.build(triangulated_edges(bodies), root) do |a, b|
+            sign * cost.call(a, b)
           end
         end
 
-        def find_max_left_x(node, left_nodes, min_spacing)
-          # Find nodes that vertically overlap with current node
-          overlapping = left_nodes.select do |left_node|
-            vertically_overlaps?(node, left_node)
-          end
-
-          return 0.0 if overlapping.empty?
-
-          # Find the rightmost position among overlapping nodes
-          rightmost = overlapping.map { |n| n.x + n.width }.max
-          rightmost + min_spacing
+        def maximum_tree?(graph)
+          resolver.get("elk.processingOrder.treeConstruction", graph) ==
+            "MAXIMUM_SPANNING_TREE"
         end
 
-        def compact_vertical(nodes, min_spacing)
-          # Sort nodes by y coordinate
-          sorted_nodes = nodes.sort_by(&:y)
-
-          # Compact from top to bottom
-          sorted_nodes.each_with_index do |node, index|
-            next if index.zero?
-
-            # Find the bottommost y position among nodes above
-            # that don't horizontally overlap with current node
-            max_top_y = find_max_top_y(node, sorted_nodes[0...index],
-                                       min_spacing)
-
-            # Move node up if there's space
-            if max_top_y && max_top_y < node.y
-              node.y = max_top_y
-            end
-          end
+        def triangulated_edges(bodies)
+          by_origin = bodies.to_h { |body| [body.origin, body] }
+          Spore::Triangulation.triangulate(by_origin.keys)
+            .map { |u, v| [by_origin[u], by_origin[v]] }
         end
 
-        def find_max_top_y(node, top_nodes, min_spacing)
-          # Find nodes that horizontally overlap with current node
-          overlapping = top_nodes.select do |top_node|
-            horizontally_overlaps?(node, top_node)
-          end
+        def mode(graph)
+          direction = resolver.get("spore.compactionDirection", graph)
+          return direction.to_sym unless direction == "both"
 
-          return 0.0 if overlapping.empty?
-
-          # Find the bottommost position among overlapping nodes
-          bottommost = overlapping.map { |n| n.y + n.height }.max
-          bottommost + min_spacing
-        end
-
-        def vertically_overlaps?(node1, node2)
-          top1 = node1.y
-          bottom1 = node1.y + node1.height
-          top2 = node2.y
-          bottom2 = node2.y + node2.height
-
-          !(bottom1 <= top2 || bottom2 <= top1)
-        end
-
-        def horizontally_overlaps?(node1, node2)
-          left1 = node1.x
-          right1 = node1.x + node1.width
-          left2 = node2.x
-          right2 = node2.x + node2.width
-
-          !(right1 <= left2 || right2 <= left1)
-        end
-
-        def normalize_positions(nodes)
-          return if nodes.empty?
-
-          # Find minimum x and y
-          min_x = nodes.map(&:x).min
-          min_y = nodes.map(&:y).min
-
-          # Shift all nodes to start at origin
-          nodes.each do |node|
-            node.x -= min_x
-            node.y -= min_y
-          end
+          resolver.get("elk.compaction.orthogonal", graph) ? :orthogonal : :free
         end
       end
     end

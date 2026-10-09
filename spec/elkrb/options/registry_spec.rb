@@ -235,17 +235,15 @@ RSpec.describe Elkrb::Options::Registry do
     # Measured: direction reaches SPLINES routing from an edge or the call
     # options under every resolver spelling. Fixed preserves edge routes,
     # libavoid routes its own connectors and random scatters its own bend
-    # points; spore_compaction gives the same
-    # output at both directions when no node has an input position. MRTree
-    # also reads direction from parent options.
+    # points. MRTree also reads direction from parent options.
     call_direction = by_positioning.call(
       algorithms - %w[fixed libavoid radial random],
-      unpositioned: algorithms - %w[fixed libavoid radial random spore_compaction],
+      unpositioned: algorithms - %w[fixed libavoid radial random],
       first_only: algorithms - %w[fixed libavoid radial random],
     )
     edge_direction = by_positioning.call(
       algorithms - %w[fixed libavoid mrtree radial random],
-      unpositioned: algorithms - %w[fixed libavoid mrtree radial random spore_compaction],
+      unpositioned: algorithms - %w[fixed libavoid mrtree radial random],
       first_only: algorithms - %w[fixed libavoid mrtree radial random],
     )
     direction = "elk.direction"
@@ -283,20 +281,26 @@ RSpec.describe Elkrb::Options::Registry do
     # Measured: the same algorithms read every spelling from the call options
     # and from the layoutOptions of the graph or a compound node (a compound
     # without its own elk.algorithm also moves disco); libavoid only when a
-    # node lacks an input position; vertiflex from call options or
-    # layoutOptions under every spelling.
+    # node lacks an input position; spore_compaction only when some node has one
+    # (unpositioned nodes all sit at the origin and have nothing to compact);
+    # vertiflex from call options or layoutOptions under every spelling.
     node_node = "elk.spacing.nodeNode"
     node_node_readers =
       parent_carriers.product(
         OptionRouteRows.spellings_for(node_node, "spacing_node_node"),
       ).to_h do |carrier, spelling|
-        readers = %w[box force layered mrtree random rectpacking topdownpacking]
+        readers = %w[box force layered mrtree random rectpacking spore_compaction
+                     topdownpacking]
         readers << "disco" if carrier == :compound_none
         if carrier != :edge
           readers << "vertiflex"
         end
         [[carrier, spelling, :value],
-         by_positioning.call(readers, unpositioned: readers + %w[libavoid])]
+         by_positioning.call(
+           readers,
+           unpositioned: readers - %w[spore_compaction] + %w[libavoid],
+           first_only: readers + %w[libavoid],
+         )]
       end
 
     {

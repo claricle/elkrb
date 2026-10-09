@@ -27,10 +27,7 @@ module CorpusCatalogue
   # is unreconciled between two histories merged into this file (rebase
   # of PR #15 onto v2, 2026-09-17) and is being settled empirically by the
   # ledger-honesty guard example at the bottom rather than guessed here --
-  # see that entry for either D5 remnant below. RC14
-  # (java_elk_sporeCompaction) was reported fixed on
-  # one branch and still-failing on the other for the same reason; kept
-  # listed here so the guard measures it rather than assuming either.
+  # see that entry for either D5 remnant below.
   #
   # S0a wired `INVARIANTS` into `assert_layout_invariants` below. Every
   # entry added since traces to an already-open TODO.remediation item or
@@ -50,6 +47,9 @@ module CorpusCatalogue
     # duplicate_ids below.
     ["hyperedge", "no_crash"] => "RC-hyperedge",
     ["hyperedge", "invariants"] => "RC-hyperedge",
+    # Twenty unpositioned nodes all sit at the origin, so every edge is a
+    # zero-length point that is on no node's border; elkjs lays out the same
+    # input into the same degenerate edges.
     ["java_elk_sporeCompaction", "invariants"] => "RC14",
     ["java_elk_stress", "invariants"] => "S14",
     ["java_elk_random", "invariants"] => "S14",
