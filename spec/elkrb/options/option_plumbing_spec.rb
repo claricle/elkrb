@@ -54,8 +54,8 @@ RSpec.describe "option plumbing" do
       ]
     },
     "elk.direction" => {
-      at: :root, value: "RIGHT",
-      unwired: unread["layered does not read it yet", only: %w[layered]]
+      at: :root,
+      value: ->(name) { name == "mrtree" ? "RIGHT" : "DOWN" },
     },
     "elk.edgeLabels.placement" => {
       at: :edge, value: "TAIL",

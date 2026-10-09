@@ -47,18 +47,25 @@ RSpec.describe Elkrb::Options::UnhonouredReport do
     end
   end
 
-  # Keep: the refusing rows below pass on code that reports every partial
-  # key. They hold the report to the registry's readers, so a reader added
-  # by mistake goes red here and nowhere else.
-  describe "a key that is partial within every algorithm" do
-    { "elk.direction" => "RIGHT",
-      "elk.hierarchyHandling" => "INCLUDE_CHILDREN" }.each do |key, value|
+  describe "partial keys" do
+    partial_keys = {
+      "elk.direction" => ["RIGHT", %w[layered mrtree]],
+      "elk.hierarchyHandling" => ["INCLUDE_CHILDREN", []],
+    }
+    partial_keys.each do |key, (value, key_readers)|
       readers.each do |algorithm|
-        it "still raises for #{key} under #{algorithm}" do
+        reads = key_readers.include?(algorithm)
+        it "#{reads ? 'accepts' : 'refuses'} #{key} under #{algorithm}" do
           graph, = option_carried(:root, key, value)
 
-          expect { Elkrb.layout(graph, algorithm: algorithm, strict: true) }
-            .to raise_error(Elkrb::Error, /#{Regexp.escape(key)} \(partial/)
+          if reads
+            expect do
+              Elkrb.layout(graph, algorithm: algorithm, strict: true)
+            end.not_to raise_error
+          else
+            expect { Elkrb.layout(graph, algorithm: algorithm, strict: true) }
+              .to raise_error(Elkrb::Error, /#{Regexp.escape(key)} \(partial/)
+          end
         end
       end
     end

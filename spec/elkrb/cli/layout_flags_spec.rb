@@ -139,6 +139,14 @@ RSpec.describe "elkrb CLI layout flags" do
       )
     end
 
+    it "applies DOWN and echoes its canonical key" do
+      default, = run_elkrb_json("layout", chain_path)
+      down, = run_elkrb_json("layout", chain_path, "--direction", "DOWN")
+
+      expect(layout_coordinates(down)).not_to eq(layout_coordinates(default))
+      expect(down["layoutOptions"]).to include("elk.direction" => "DOWN")
+    end
+
     %w[layout diagram batch].each do |command|
       it "tells #{command} --help that no algorithm applies --direction yet" do
         stdout, _err, status = run_elkrb("help", command)

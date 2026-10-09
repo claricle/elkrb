@@ -222,9 +222,9 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::CycleBreaker do
           laid_out = Elkrb.layout(graph, algorithm: "layered")
         end.not_to output.to_stderr
 
-        y = laid_out.children.to_h { |node| [node.id, node.y] }
-        expect(y["a"]).to be < y["b"]
-        expect(y["c"]).to be < y["d"]
+        x = laid_out.children.to_h { |node| [node.id, node.x] }
+        expect(x["a"]).to be < x["b"]
+        expect(x["c"]).to be < x["d"]
       end
     end
 

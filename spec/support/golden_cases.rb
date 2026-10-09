@@ -21,17 +21,12 @@ module GoldenCases
   rc7_direction_and_layer_gap =
     "RC7: layered ignores elk.direction and uses a 60px layer gap " \
     "instead of ELK's RIGHT/20 defaults"
-  rc7_direction_unread =
-    "RC7: elk.direction is not read by the layered algorithm"
   rc7_branch_routing =
     "RC7: layered has no crossing minimisation or dummy-node routing " \
     "for branching graphs"
   rc7_long_edge_routing =
     "RC7: layered has no crossing minimisation or dummy-node routing " \
     "for long edges"
-  rc7_cycle_breaker =
-    "RC7: cycle breaker permanently reverses edges and layered lacks " \
-    "crossing minimisation"
   rc8_absolute_node_labels =
     "RC8: node labels are absolute, not owner-relative"
   rc8_label_placement_unread =
@@ -42,12 +37,12 @@ module GoldenCases
   # goes through a different code path in the matcher, and it lives in
   # ERROR_CASE below. That is the whole of the 29-versus-30 asymmetry.
   COMPARISON_CASES = [
-    { name: "chain2", tier: :exact, pending: rc7_direction_and_layer_gap },
-    { name: "chain3", tier: :exact, pending: rc7_direction_and_layer_gap },
+    { name: "chain2", tier: :exact, fields: %i[nodes graph], pending: nil },
+    { name: "chain3", tier: :exact, fields: %i[nodes graph], pending: nil },
     { name: "fan_out", tier: :structural, pending: rc7_branch_routing },
     { name: "fan_in", tier: :structural, pending: rc7_branch_routing },
     { name: "diamond", tier: :structural, pending: rc7_branch_routing },
-    { name: "cycle3", tier: :structural, pending: rc7_cycle_breaker },
+    { name: "cycle3", tier: :structural, fields: %i[nodes], pending: nil },
     { name: "self_loop", tier: :structural,
       pending: rc7_direction_and_layer_gap },
     { name: "long_edge", tier: :structural,
@@ -62,10 +57,10 @@ module GoldenCases
       pending: rc5_parent_sized_first },
     { name: "compound_nested", tier: :structural,
       pending: rc5_parent_sized_first },
-    { name: "direction_down", tier: :exact,
-      pending: rc7_direction_unread },
-    { name: "spacing_override", tier: :exact,
-      pending: rc7_direction_unread },
+    { name: "direction_down", tier: :exact, fields: %i[nodes graph],
+      pending: nil },
+    { name: "spacing_override", tier: :exact, fields: %i[nodes],
+      pending: nil },
     { name: "sizeless", tier: :exact, pending: rc7_direction_and_layer_gap },
     { name: "two_components", tier: :structural,
       pending: rc7_direction_and_layer_gap },

@@ -3,13 +3,83 @@
 require "spec_helper"
 
 RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
+  describe "S9 direction and spacing" do
+    let(:chain) do
+      {
+        id: "root",
+        children: %w[n1 n2 n3].map do |id|
+          { id: id, width: 30, height: 30 }
+        end,
+        edges: [
+          { id: "e1", sources: ["n1"], targets: ["n2"] },
+          { id: "e2", sources: ["n2"], targets: ["n3"] },
+        ],
+      }
+    end
+
+    it "keeps LEFT inside the graph and reverses RIGHT's layer order" do
+      right = Elkrb.layout(Marshal.load(Marshal.dump(chain)),
+                           algorithm: "layered", "elk.direction" => "RIGHT")
+      left = Elkrb.layout(Marshal.load(Marshal.dump(chain)),
+                          algorithm: "layered", "elk.direction" => "LEFT")
+
+      expect(left.children).to all(satisfy do |node|
+        node.x >= 0 && node.y >= 0 && node.x + node.width <= left.width &&
+          node.y + node.height <= left.height
+      end)
+      expect(right.children.map(&:x)).to eq(right.children.map(&:x).sort)
+      expect(left.children.map(&:x)).to eq(left.children.map(&:x).sort.reverse)
+    end
+
+    it "keeps UP inside the graph and reverses DOWN's layer order" do
+      down = Elkrb.layout(Marshal.load(Marshal.dump(chain)),
+                          algorithm: "layered", "elk.direction" => "DOWN")
+      up = Elkrb.layout(Marshal.load(Marshal.dump(chain)),
+                        algorithm: "layered", "elk.direction" => "UP")
+
+      expect(up.children).to all(satisfy do |node|
+        node.x >= 0 && node.y >= 0 && node.x + node.width <= up.width &&
+          node.y + node.height <= up.height
+      end)
+      expect(down.children.map(&:y)).to eq(down.children.map(&:y).sort)
+      expect(up.children.map(&:y)).to eq(up.children.map(&:y).sort.reverse)
+    end
+
+    it "treats UNDEFINED as RIGHT" do
+      right = Elkrb.layout(Marshal.load(Marshal.dump(chain)),
+                           algorithm: "layered", "elk.direction" => "RIGHT")
+      undefined = Elkrb.layout(
+        Marshal.load(Marshal.dump(chain)), algorithm: "layered",
+        "elk.direction" => "UNDEFINED"
+      )
+
+      expect(undefined.children.map { |node| [node.x, node.y] })
+        .to eq(right.children.map { |node| [node.x, node.y] })
+    end
+
+    it "reads the canonical layer gap and its call-level alias" do
+      canonical_graph = Marshal.load(Marshal.dump(chain))
+      canonical_graph[:layoutOptions] = {
+        "elk.layered.spacing.nodeNodeBetweenLayers" => 40,
+      }
+      canonical = Elkrb.layout(canonical_graph, algorithm: "layered")
+      aliased = Elkrb.layout(Marshal.load(Marshal.dump(chain)),
+                             algorithm: "layered", layer_spacing: 40)
+      first, second = canonical.children
+
+      expect(second.x).to eq(first.x + first.width + 40)
+      expect(aliased.children.map { |node| [node.x, node.y] })
+        .to eq(canonical.children.map { |node| [node.x, node.y] })
+    end
+  end
+
   describe "#layout" do
     it "lays out edges that reference port ids into separate layers" do
       graph = JSON.parse(File.read("spec/fixtures/elkjs_bug7_complex.json"))
 
       result = Elkrb.layout(graph, algorithm: "layered")
 
-      expect(result.children.map(&:y).uniq.size).to be > 1
+      expect(result.children.map(&:x).uniq.size).to be > 1
     end
 
     it "raises Elkrb::ValidationError for a duplicate node id" do
@@ -56,7 +126,7 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
       # Both edges are one source and one target, so the validator has
       # nothing to say about either: the self-loop is dropped when layers
       # are assigned, not refused at the door.
-      expect(b.y).to be > a.y
+      expect(b.x).to be > a.x
     end
 
     it "preserves cyclic edge directions and assigns three layers" do
@@ -91,8 +161,8 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
       a = result.children.find { |n| n.id == "a" }
       b = result.children.find { |n| n.id == "b" }
       c = result.children.find { |n| n.id == "c" }
-      expect(a.y).to be < b.y
-      expect(b.y).to be < c.y
+      expect(a.x).to be < b.x
+      expect(b.x).to be < c.x
     end
 
     it "raises for a hyperedge with multiple sources" do
@@ -142,17 +212,17 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
       }
 
       result = Elkrb.layout(graph, algorithm: "layered")
-      y = result.children.to_h { |node| [node.id, node.y] }
+      x = result.children.to_h { |node| [node.id, node.x] }
 
-      # Both edges took effect: each target sits a layer below its source.
-      expect(y["a"]).to be < y["b"]
-      expect(y["c"]).to be < y["d"]
+      # Both edges took effect: each target sits a layer right of its source.
+      expect(x["a"]).to be < x["b"]
+      expect(x["c"]).to be < x["d"]
     end
 
     # The reversal set holds edge OBJECTS compared by identity. Keyed by id
     # instead, the anonymous back edge b -> a puts `nil` in the set, and
     # every other anonymous edge in the graph then reads as reversed: c -> d
-    # is laid out as d -> c and d comes out ABOVE c.
+    # is laid out as d -> c and d comes before c on the layer axis.
     it "reverses only the anonymous edge that closes the cycle" do
       graph = {
         id: "r",
@@ -165,9 +235,9 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
       }
 
       result = Elkrb.layout(graph, algorithm: "layered")
-      y = result.children.to_h { |node| [node.id, node.y] }
+      x = result.children.to_h { |node| [node.id, node.x] }
 
-      expect(y["c"]).to be < y["d"]
+      expect(x["c"]).to be < x["d"]
     end
 
     it "still accepts two edges carrying different real ids" do
@@ -200,10 +270,10 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
       }
 
       result = Elkrb.layout(graph, algorithm: "layered")
-      y = result.children.to_h { |node| [node.id, node.y] }
+      x = result.children.to_h { |node| [node.id, node.x] }
 
-      expect(y["a"]).to be < y["b"]
-      expect(y["b"]).to be < y["c"]
+      expect(x["a"]).to be < x["b"]
+      expect(x["b"]).to be < x["c"]
     end
 
     # An edge id is optional in ELK, so an error message could name the
@@ -296,10 +366,10 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
       }
 
       laid_out = Elkrb.layout(graph, algorithm: "layered")
-      y = laid_out.children.to_h { |node| [node.id, node.y] }
+      x = laid_out.children.to_h { |node| [node.id, node.x] }
 
-      expect(y.keys).to contain_exactly("", "b")
-      expect(y[""]).to be < y["b"]
+      expect(x.keys).to contain_exactly("", "b")
+      expect(x[""]).to be < x["b"]
     end
 
     # An unresolvable endpoint is skipped, not rejected -- and "" is not a
@@ -325,7 +395,7 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
         laid_out.children.map { |node| [node.id, node.x, node.y] }
       end
 
-      unlinked = [["a", 12.0, 12.0], ["b", 42.0, 12.0]]
+      unlinked = [["a", 12.0, 12.0], ["b", 12.0, 42.0]]
       expect(positions.call("nosuchnode")).to eq(unlinked)
       ["", "  ", "no such node", "A"].each do |absent|
         expect(positions.call(absent)).to eq(unlinked)
@@ -373,7 +443,7 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
       result = Elkrb.layout(graph, algorithm: "layered")
 
       expect(result.children.size).to eq(count)
-      expect(result.children.map(&:y).uniq.size).to eq(count)
+      expect(result.children.map(&:x).uniq.size).to eq(count)
     end
 
     it "leaves a nested edge whose ids alias this level's ports alone" do
@@ -397,7 +467,7 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
       # roots. The aliased nested edge made b a layer of its own.
       result = Elkrb.layout(cross_level_graph, algorithm: "layered")
 
-      expect(result.children.map(&:y).uniq.size).to eq(1)
+      expect(result.children.map(&:x).uniq.size).to eq(1)
     end
   end
 

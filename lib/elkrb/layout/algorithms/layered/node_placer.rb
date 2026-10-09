@@ -11,9 +11,10 @@ module Elkrb
         class NodePlacer
           # @param layer_spacing [Numeric] gap between consecutive layers
           # @param node_spacing [Numeric] gap between nodes in one layer
-          def initialize(graph, layers, layer_spacing: 60.0, node_spacing: 20.0)
-            @graph = graph
+          def initialize(_graph, layers, direction: "RIGHT",
+                         layer_spacing: 20.0, node_spacing: 20.0)
             @layers = layers
+            @direction = direction
             @layer_spacing = layer_spacing
             @node_spacing = node_spacing
           end
@@ -21,64 +22,98 @@ module Elkrb
           def place_nodes
             return unless @layers && !@layers.empty?
 
-            # Calculate layer widths
-            layer_widths = calculate_layer_widths
+            cross_extents = horizontal? ? calculate_layer_heights :
+              calculate_layer_widths
+            layer_extents = calculate_layer_extents
+            layer_positions = calculate_layer_positions(layer_extents)
+            max_cross_extent = cross_extents.max || 0
 
-            # Calculate y positions for each layer
-            y_positions = calculate_layer_y_positions
-
-            # Place nodes in each layer
             @layers.each_with_index do |layer_nodes, layer_index|
-              place_layer(layer_nodes, layer_index, layer_widths[layer_index],
-                          y_positions[layer_index])
+              cross_offset =
+                (max_cross_extent - cross_extents[layer_index]) / 2.0
+              place_layer(layer_nodes, layer_positions[layer_index],
+                          cross_offset)
             end
+
+            mirror_layers(layer_positions, layer_extents)
           end
 
           private
 
           def calculate_layer_widths
-            # One entry per layer: place_nodes indexes this by layer.
-            # `return` here hands back a bare Integer instead, and
-            # Integer#[] is bit reference, not element access -- the
-            # caller reads 0 for every layer rather than raising.
-            #
-            # place_layer discards the entry it is handed today, so a
-            # wrong value moves no node yet. It still has to be right
-            # and stay one-per-layer: cross-axis centring is the reader
-            # this array is waiting for.
-            @layers.map do |layer_nodes|
-              next 0 if layer_nodes.empty?
+            calculate_cross_extents(:width)
+          end
 
-              total_width = layer_nodes.sum { |n| n.width || 0 }
-              total_spacing = (layer_nodes.length - 1) * @node_spacing
-              total_width + total_spacing
+          def calculate_layer_heights
+            calculate_cross_extents(:height)
+          end
+
+          def calculate_cross_extents(dimension)
+            @layers.map do |nodes|
+              next 0 if nodes.empty?
+
+              nodes.sum { |node| size(node, dimension) } +
+                (nodes.length - 1) * @node_spacing
             end
           end
 
-          def calculate_layer_y_positions
-            y = 0
-            positions = []
-
-            @layers.each do |layer_nodes|
-              positions << y
-              max_height = layer_nodes.map { |n| n.height || 0 }.max || 0
-              y += max_height + @layer_spacing
+          def calculate_layer_extents
+            dimension = horizontal? ? :width : :height
+            @layers.map do |nodes|
+              nodes.map { |node| size(node, dimension) }.max || 0
             end
-
-            positions
           end
 
-          def place_layer(nodes, _layer_index, _layer_width, y_pos)
-            return if nodes.empty?
+          def calculate_layer_positions(extents)
+            position = 0
+            extents.map do |extent|
+              position.tap { position += extent + @layer_spacing }
+            end
+          end
 
-            # Center the layer horizontally
-            x = 0
-
+          def place_layer(nodes, layer_position, cross_position)
             nodes.each do |node|
-              node.x = x
-              node.y = y_pos
-              x += (node.width || 0) + @node_spacing
+              place_node(node, layer_position, cross_position)
+              cross_position += cross_size(node) + @node_spacing
             end
+          end
+
+          def place_node(node, layer_position, cross_position)
+            if horizontal?
+              node.x = layer_position
+              node.y = cross_position
+            else
+              node.x = cross_position
+              node.y = layer_position
+            end
+          end
+
+          def mirror_layers(layer_positions, layer_extents)
+            return unless %w[LEFT UP].include?(@direction)
+
+            bound = layer_positions.zip(layer_extents)
+              .map { |position, extent| position + extent }.max
+            dimension = @direction == "LEFT" ? :width : :height
+            coordinate = @direction == "LEFT" ? :x : :y
+
+            @layers.flatten.each do |node|
+              node.public_send(
+                "#{coordinate}=", bound - node.public_send(coordinate) -
+                  size(node, dimension)
+              )
+            end
+          end
+
+          def horizontal?
+            %w[RIGHT LEFT].include?(@direction)
+          end
+
+          def cross_size(node)
+            size(node, horizontal? ? :height : :width)
+          end
+
+          def size(node, dimension)
+            node.public_send(dimension) || 0
           end
         end
       end
