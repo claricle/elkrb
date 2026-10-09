@@ -75,11 +75,35 @@ module Elkrb
           def place_all_layers(layer_positions, cross)
             @layers.each_with_index do |nodes, layer_index|
               lead = overhang(nodes, :west)
+              extent = layer_extent(nodes)
               nodes.each do |node|
-                place_node(node, layer_positions[layer_index] + lead,
+                offset = dummy?(node) ? lead : layer_offset(node, nodes, extent)
+                place_node(node, layer_positions[layer_index] + offset,
                            cross.fetch(node.id) - dummy_lead(node))
               end
             end
+          end
+
+          # Where a node sits across its layer's width: nodes with more
+          # outgoing than incoming ports lean toward the far side, so
+          # unequal nodes meet their edges on the shared side of the gap.
+          # Declared ports stay inside the layer, so the node leans within
+          # the room they leave.
+          def layer_offset(node, nodes, extent)
+            room = extent - overhang(nodes, :west) - overhang(nodes, :east)
+            overhang(nodes, :west) +
+              ((room - size(node, layer_dimension)) * alignment_ratio(node))
+          end
+
+          def alignment_ratio(node)
+            outgoing = port_order.visual(node.id, :east).size
+            incoming = port_order.visual(node.id, :west).size
+            total = outgoing + incoming
+            total.zero? ? 0.5 : outgoing.fdiv(total)
+          end
+
+          def layer_dimension
+            horizontal? ? :width : :height
           end
 
           def cross_coordinates
@@ -164,11 +188,12 @@ module Elkrb
           end
 
           def calculate_layer_extents
-            dimension = horizontal? ? :width : :height
-            @layers.map do |nodes|
-              widest = nodes.map { |node| size(node, dimension) }.max || 0
-              overhang(nodes, :west) + widest + overhang(nodes, :east)
-            end
+            @layers.map { |nodes| layer_extent(nodes) }
+          end
+
+          def layer_extent(nodes)
+            widest = nodes.map { |node| size(node, layer_dimension) }.max || 0
+            overhang(nodes, :west) + widest + overhang(nodes, :east)
           end
 
           def calculate_layer_positions(extents, gap_widths = [])
