@@ -6,6 +6,7 @@ require_relative "layered/cycle_breaker"
 require_relative "layered/crossing_minimizer"
 require_relative "layered/layer_assigner"
 require_relative "layered/node_placer"
+require_relative "layered/orthogonal_router"
 
 module Elkrb
   module Layout
@@ -52,6 +53,7 @@ module Elkrb
           return graph if graph.children.nil? || graph.children.empty?
 
           layers = assign_layers(graph, index)
+          @routed_layers = nil
 
           # Phase 3: Minimize crossings within the assigned layers
           layers = minimize_crossings(graph, layers, index)
@@ -59,6 +61,7 @@ module Elkrb
 
           # Phase 4: Place nodes
           place_nodes(graph, layers, index)
+          @routed_layers = [layers, index]
 
           # Apply padding and set graph dimensions
           apply_padding_with_dummies(graph)
@@ -80,7 +83,109 @@ module Elkrb
 
         def apply_edge_routing(graph)
           super
-          add_long_edge_bends(graph)
+          routed = route_orthogonal_edges(graph)
+          add_long_edge_bends(graph, routed)
+        end
+
+        # Replaces the generic route of every edge that crosses a layer gap
+        # with the layer-gap route, when its style is ORTHOGONAL.
+        #
+        # @return [Array<Graph::Edge>] the edges it routed
+        def route_orthogonal_edges(graph)
+          return [] unless @routed_layers
+
+          routes = orthogonal_router.routes(method(:along_range))
+          graph.edges.to_a.select do |edge|
+            points = routes[edge]
+            next false unless points && level_edge?(edge)
+            next false unless orthogonal_edge?(graph, edge)
+
+            apply_route(edge, points, graph)
+            true
+          end
+        end
+
+        # A cross-hierarchy edge names a nested node; its route is not this
+        # level's to draw.
+        def level_edge?(edge)
+          index = @routed_layers.last
+          [edge.sources.first, edge.targets.first].all? { |id| index.node(id) }
+        end
+
+        def orthogonal_edge?(graph, edge)
+          get_edge_routing_style(graph, edge) == "ORTHOGONAL"
+        end
+
+        def apply_route(edge, points, graph)
+          section = reset_section(edge, graph)
+          start, *bends, finish = points
+          section.start_point = point_at(start)
+          section.end_point = point_at(finish)
+          section.bend_points = []
+          bends.each { |x, y| section.add_bend_point(x, y) }
+        end
+
+        def point_at(coordinates)
+          Geometry::Point.new(x: coordinates[0], y: coordinates[1])
+        end
+
+        def orthogonal_router
+          layers, index = @routed_layers
+          Layered::OrthogonalRouter.new(
+            layers, @port_order, index,
+            direction: layer_direction, measure: router_measure
+          )
+        end
+
+        def router_measure
+          Layered::OrthogonalRouter::Measure.new(
+            start: method(:cross_start), extent: method(:cross_extent),
+            port: method(:port_cross_extent)
+          )
+        end
+
+        def layer_direction
+          direction = option("elk.direction")
+          direction == "UNDEFINED" ? "RIGHT" : direction
+        end
+
+        def vertical_layers?
+          %w[DOWN UP].include?(layer_direction)
+        end
+
+        def along_range(item)
+          start, size = along_of(item)
+          start ||= 0.0
+          [start, start + (size || 0.0)]
+        end
+
+        def along_of(item)
+          vertical_layers? ? [item.y, item.height] : [item.x, item.width]
+        end
+
+        def cross_extent(item)
+          thickness = Layered::NodePlacer::EDGE_THICKNESS
+          return thickness if item.respond_to?(:dummy?)
+
+          (vertical_layers? ? item.width : item.height) || 0
+        end
+
+        def cross_start(item)
+          start = (vertical_layers? ? item.x : item.y) || 0.0
+          return start unless item.respond_to?(:dummy?)
+
+          spare = cross_slot_size(item) - Layered::NodePlacer::EDGE_THICKNESS
+          start + (spare / 2.0)
+        end
+
+        def cross_slot_size(slot)
+          vertical_layers? ? slot.width : slot.height
+        end
+
+        def port_cross_extent(port)
+          return 0 unless port.declared
+
+          (vertical_layers? ? port.declared.width : port.declared.height) || 0
         end
 
         def apply_padding_with_dummies(graph)
@@ -165,12 +270,14 @@ module Elkrb
           layers.flatten.select { |item| item.respond_to?(:dummy?) }
         end
 
-        def add_long_edge_bends(graph)
+        def add_long_edge_bends(graph, routed)
           slots_by_edge = {}.compare_by_identity
           @dummy_slots.to_a.each do |slot|
             (slots_by_edge[slot.edge] ||= []) << slot
           end
           graph.edges.to_a.each do |edge|
+            next if routed.any? { |done| done.equal?(edge) }
+
             add_edge_dummy_bends(edge, slots_by_edge[edge], graph)
           end
         end
@@ -282,6 +389,7 @@ module Elkrb
           )
           placer.index = index
           placer.port_order = @port_order
+          placer.orthogonal = get_edge_routing_style(graph) == "ORTHOGONAL"
           placer.place_nodes
         end
 

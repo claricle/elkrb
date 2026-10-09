@@ -2,6 +2,7 @@
 
 require_relative "bk_node_placer"
 require_relative "port_order"
+require_relative "orthogonal_router"
 
 module Elkrb
   module Layout
@@ -17,7 +18,7 @@ module Elkrb
           # Gap between a long edge and a node, or another long edge, beside it.
           EDGE_SPACING = 10.0
 
-          attr_writer :index, :port_order
+          attr_writer :index, :port_order, :orthogonal
 
           # @param layer_spacing [Numeric] gap between consecutive layers
           # @param node_spacing [Numeric] gap between nodes in one layer
@@ -32,13 +33,14 @@ module Elkrb
           def place_nodes
             return unless @layers && !@layers.empty?
 
-            size_dummy_slots
-            @dummy_ids = @layers.flatten.select { |item| dummy?(item) }
-              .to_set(&:id)
+            mark_dummy_slots
+            cross = cross_coordinates
             layer_extents = calculate_layer_extents
-            layer_positions = calculate_layer_positions(layer_extents)
+            layer_positions = calculate_layer_positions(
+              layer_extents, gap_widths(cross)
+            )
 
-            place_all_layers(layer_positions)
+            place_all_layers(layer_positions, cross)
             mirror_layers(layer_positions, layer_extents)
           end
 
@@ -70,11 +72,11 @@ module Elkrb
             item.respond_to?(:dummy?) && item.dummy?
           end
 
-          def place_all_layers(layer_positions)
-            cross = cross_coordinates
+          def place_all_layers(layer_positions, cross)
             @layers.each_with_index do |nodes, layer_index|
+              lead = overhang(nodes, :west)
               nodes.each do |node|
-                place_node(node, layer_positions[layer_index],
+                place_node(node, layer_positions[layer_index] + lead,
                            cross.fetch(node.id) - dummy_lead(node))
               end
             end
@@ -108,6 +110,53 @@ module Elkrb
             dummies.zero? ? @node_spacing : EDGE_SPACING
           end
 
+          def port_order
+            @port_order ||= PortOrder.new(@layers, @index)
+          end
+
+          # How far the declared ports of a layer's nodes stick out of the
+          # nodes on one side; the layer keeps clear of them.
+          def overhang(nodes, side)
+            nodes.flat_map { |node| port_order.visual(node.id, side) }
+              .filter_map(&:declared)
+              .map { |declared| size(declared, horizontal? ? :width : :height) }
+              .max || 0
+          end
+
+          def mark_dummy_slots
+            size_dummy_slots
+            dummies = @layers.flatten.select { |item| dummy?(item) }
+            @dummy_ids = dummies.to_set(&:id)
+          end
+
+          # Width of each gap between two layers. Orthogonal routes need room
+          # for one routing slot per parallel run, with a clear margin at both
+          # ends; a gap never drops below the layer spacing.
+          def gap_widths(cross)
+            return [] unless @orthogonal
+
+            router_for(cross).slot_counts.map do |slots|
+              next @layer_spacing if slots.zero?
+
+              runs = (slots - 1) * OrthogonalRouter::EDGE_SPACING
+              margins = 2 * OrthogonalRouter::EDGE_NODE_SPACING
+              width = runs + margins
+              [width, @layer_spacing].max
+            end
+          end
+
+          def router_for(cross)
+            OrthogonalRouter.new(
+              @layers, port_order, @index,
+              direction: @direction,
+              measure: OrthogonalRouter::Measure.new(
+                start: ->(item) { cross.fetch(item.id) },
+                extent: method(:placed_cross_size),
+                port: method(:port_cross_size),
+              )
+            )
+          end
+
           def port_cross_size(port)
             return 0 unless port.declared
 
@@ -117,14 +166,17 @@ module Elkrb
           def calculate_layer_extents
             dimension = horizontal? ? :width : :height
             @layers.map do |nodes|
-              nodes.map { |node| size(node, dimension) }.max || 0
+              widest = nodes.map { |node| size(node, dimension) }.max || 0
+              overhang(nodes, :west) + widest + overhang(nodes, :east)
             end
           end
 
-          def calculate_layer_positions(extents)
+          def calculate_layer_positions(extents, gap_widths = [])
             position = 0
-            extents.map do |extent|
-              position.tap { position += extent + @layer_spacing }
+            extents.each_with_index.map do |extent, i|
+              position.tap do
+                position += extent + gap_widths.fetch(i, @layer_spacing)
+              end
             end
           end
 

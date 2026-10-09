@@ -1,0 +1,801 @@
+[
+  {
+    "name": "readme fork",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered",
+        "elk.direction": "DOWN",
+        "elk.edgeRouting": "ORTHOGONAL"
+      },
+      "children": [
+        {
+          "id": "a",
+          "width": 60,
+          "height": 40
+        },
+        {
+          "id": "b",
+          "width": 60,
+          "height": 40
+        },
+        {
+          "id": "c",
+          "width": 60,
+          "height": 40
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "sources": [
+            "a"
+          ],
+          "targets": [
+            "b"
+          ]
+        },
+        {
+          "id": "e2",
+          "sources": [
+            "a"
+          ],
+          "targets": [
+            "c"
+          ]
+        }
+      ]
+    },
+    "positions": {
+      "a": [
+        22,
+        12
+      ],
+      "b": [
+        12,
+        72
+      ],
+      "c": [
+        92,
+        72
+      ]
+    },
+    "routes": {
+      "e1": [
+        [
+          42,
+          52
+        ],
+        [
+          42,
+          72
+        ]
+      ],
+      "e2": [
+        [
+          62,
+          52
+        ],
+        [
+          62,
+          62
+        ],
+        [
+          122,
+          62
+        ],
+        [
+          122,
+          72
+        ]
+      ]
+    }
+  },
+  {
+    "name": "fork join right",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered",
+        "elk.direction": "RIGHT",
+        "elk.edgeRouting": "ORTHOGONAL"
+      },
+      "children": [
+        {
+          "id": "a",
+          "width": 60,
+          "height": 40
+        },
+        {
+          "id": "b",
+          "width": 60,
+          "height": 40
+        },
+        {
+          "id": "c",
+          "width": 60,
+          "height": 40
+        },
+        {
+          "id": "d",
+          "width": 60,
+          "height": 40
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "sources": [
+            "a"
+          ],
+          "targets": [
+            "b"
+          ]
+        },
+        {
+          "id": "e2",
+          "sources": [
+            "a"
+          ],
+          "targets": [
+            "c"
+          ]
+        },
+        {
+          "id": "e3",
+          "sources": [
+            "b"
+          ],
+          "targets": [
+            "d"
+          ]
+        },
+        {
+          "id": "e3b",
+          "sources": [
+            "c"
+          ],
+          "targets": [
+            "d"
+          ]
+        }
+      ]
+    },
+    "positions": {
+      "a": [
+        12,
+        18.666666666666664
+      ],
+      "b": [
+        92,
+        72
+      ],
+      "c": [
+        92,
+        12
+      ],
+      "d": [
+        172,
+        18.666666666666664
+      ]
+    },
+    "routes": {
+      "e1": [
+        [
+          72,
+          45.333333333333336
+        ],
+        [
+          82,
+          45.333333333333336
+        ],
+        [
+          82,
+          92
+        ],
+        [
+          92,
+          92
+        ]
+      ],
+      "e2": [
+        [
+          72,
+          32
+        ],
+        [
+          92,
+          32
+        ]
+      ],
+      "e3": [
+        [
+          152,
+          92
+        ],
+        [
+          162,
+          92
+        ],
+        [
+          162,
+          45.333333333333336
+        ],
+        [
+          172,
+          45.333333333333336
+        ]
+      ],
+      "e3b": [
+        [
+          152,
+          32
+        ],
+        [
+          172,
+          32
+        ]
+      ]
+    }
+  },
+  {
+    "name": "fork join down",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered",
+        "elk.direction": "DOWN",
+        "elk.edgeRouting": "ORTHOGONAL"
+      },
+      "children": [
+        {
+          "id": "a",
+          "width": 60,
+          "height": 40
+        },
+        {
+          "id": "b",
+          "width": 60,
+          "height": 40
+        },
+        {
+          "id": "c",
+          "width": 60,
+          "height": 40
+        },
+        {
+          "id": "d",
+          "width": 60,
+          "height": 40
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "sources": [
+            "a"
+          ],
+          "targets": [
+            "b"
+          ]
+        },
+        {
+          "id": "e2",
+          "sources": [
+            "a"
+          ],
+          "targets": [
+            "c"
+          ]
+        },
+        {
+          "id": "e3",
+          "sources": [
+            "b"
+          ],
+          "targets": [
+            "d"
+          ]
+        },
+        {
+          "id": "e3b",
+          "sources": [
+            "c"
+          ],
+          "targets": [
+            "d"
+          ]
+        }
+      ]
+    },
+    "positions": {
+      "a": [
+        22,
+        12
+      ],
+      "b": [
+        92,
+        72
+      ],
+      "c": [
+        12,
+        72
+      ],
+      "d": [
+        22,
+        132
+      ]
+    },
+    "routes": {
+      "e1": [
+        [
+          62,
+          52
+        ],
+        [
+          62,
+          62
+        ],
+        [
+          122,
+          62
+        ],
+        [
+          122,
+          72
+        ]
+      ],
+      "e2": [
+        [
+          42,
+          52
+        ],
+        [
+          42,
+          72
+        ]
+      ],
+      "e3": [
+        [
+          122,
+          112
+        ],
+        [
+          122,
+          122
+        ],
+        [
+          62,
+          122
+        ],
+        [
+          62,
+          132
+        ]
+      ],
+      "e3b": [
+        [
+          42,
+          112
+        ],
+        [
+          42,
+          132
+        ]
+      ]
+    }
+  },
+  {
+    "name": "fork join left",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered",
+        "elk.direction": "LEFT",
+        "elk.edgeRouting": "ORTHOGONAL"
+      },
+      "children": [
+        {
+          "id": "a",
+          "width": 60,
+          "height": 40
+        },
+        {
+          "id": "b",
+          "width": 60,
+          "height": 40
+        },
+        {
+          "id": "c",
+          "width": 60,
+          "height": 40
+        },
+        {
+          "id": "d",
+          "width": 60,
+          "height": 40
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "sources": [
+            "a"
+          ],
+          "targets": [
+            "b"
+          ]
+        },
+        {
+          "id": "e2",
+          "sources": [
+            "a"
+          ],
+          "targets": [
+            "c"
+          ]
+        },
+        {
+          "id": "e3",
+          "sources": [
+            "b"
+          ],
+          "targets": [
+            "d"
+          ]
+        },
+        {
+          "id": "e3b",
+          "sources": [
+            "c"
+          ],
+          "targets": [
+            "d"
+          ]
+        }
+      ]
+    },
+    "positions": {
+      "a": [
+        172,
+        18.666666666666664
+      ],
+      "b": [
+        92,
+        72
+      ],
+      "c": [
+        92,
+        12
+      ],
+      "d": [
+        12,
+        18.666666666666664
+      ]
+    },
+    "routes": {
+      "e1": [
+        [
+          172,
+          45.333333333333336
+        ],
+        [
+          162,
+          45.333333333333336
+        ],
+        [
+          162,
+          92
+        ],
+        [
+          152,
+          92
+        ]
+      ],
+      "e2": [
+        [
+          172,
+          32
+        ],
+        [
+          152,
+          32
+        ]
+      ],
+      "e3": [
+        [
+          92,
+          92
+        ],
+        [
+          82,
+          92
+        ],
+        [
+          82,
+          45.333333333333336
+        ],
+        [
+          72,
+          45.333333333333336
+        ]
+      ],
+      "e3b": [
+        [
+          92,
+          32
+        ],
+        [
+          72,
+          32
+        ]
+      ]
+    }
+  },
+  {
+    "name": "fork join up",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered",
+        "elk.direction": "UP",
+        "elk.edgeRouting": "ORTHOGONAL"
+      },
+      "children": [
+        {
+          "id": "a",
+          "width": 60,
+          "height": 40
+        },
+        {
+          "id": "b",
+          "width": 60,
+          "height": 40
+        },
+        {
+          "id": "c",
+          "width": 60,
+          "height": 40
+        },
+        {
+          "id": "d",
+          "width": 60,
+          "height": 40
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "sources": [
+            "a"
+          ],
+          "targets": [
+            "b"
+          ]
+        },
+        {
+          "id": "e2",
+          "sources": [
+            "a"
+          ],
+          "targets": [
+            "c"
+          ]
+        },
+        {
+          "id": "e3",
+          "sources": [
+            "b"
+          ],
+          "targets": [
+            "d"
+          ]
+        },
+        {
+          "id": "e3b",
+          "sources": [
+            "c"
+          ],
+          "targets": [
+            "d"
+          ]
+        }
+      ]
+    },
+    "positions": {
+      "a": [
+        22,
+        132
+      ],
+      "b": [
+        92,
+        72
+      ],
+      "c": [
+        12,
+        72
+      ],
+      "d": [
+        22,
+        12
+      ]
+    },
+    "routes": {
+      "e1": [
+        [
+          62,
+          132
+        ],
+        [
+          62,
+          122
+        ],
+        [
+          122,
+          122
+        ],
+        [
+          122,
+          112
+        ]
+      ],
+      "e2": [
+        [
+          42,
+          132
+        ],
+        [
+          42,
+          112
+        ]
+      ],
+      "e3": [
+        [
+          122,
+          72
+        ],
+        [
+          122,
+          62
+        ],
+        [
+          62,
+          62
+        ],
+        [
+          62,
+          52
+        ]
+      ],
+      "e3b": [
+        [
+          42,
+          72
+        ],
+        [
+          42,
+          52
+        ]
+      ]
+    }
+  },
+  {
+    "name": "long edge",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered",
+        "elk.direction": "RIGHT",
+        "elk.edgeRouting": "ORTHOGONAL"
+      },
+      "children": [
+        {
+          "id": "a",
+          "width": 60,
+          "height": 40
+        },
+        {
+          "id": "b",
+          "width": 60,
+          "height": 40
+        },
+        {
+          "id": "c",
+          "width": 60,
+          "height": 40
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "sources": [
+            "a"
+          ],
+          "targets": [
+            "b"
+          ]
+        },
+        {
+          "id": "e2",
+          "sources": [
+            "b"
+          ],
+          "targets": [
+            "c"
+          ]
+        },
+        {
+          "id": "e3",
+          "sources": [
+            "a"
+          ],
+          "targets": [
+            "c"
+          ]
+        }
+      ]
+    },
+    "positions": {
+      "a": [
+        12,
+        16.333333333333332
+      ],
+      "b": [
+        92,
+        23
+      ],
+      "c": [
+        172,
+        16.333333333333332
+      ]
+    },
+    "routes": {
+      "e1": [
+        [
+          72,
+          43
+        ],
+        [
+          92,
+          43
+        ]
+      ],
+      "e2": [
+        [
+          152,
+          43
+        ],
+        [
+          172,
+          43
+        ]
+      ],
+      "e3": [
+        [
+          72,
+          29.666666666666664
+        ],
+        [
+          82,
+          29.666666666666664
+        ],
+        [
+          82,
+          12
+        ],
+        [
+          162,
+          12
+        ],
+        [
+          162,
+          29.666666666666664
+        ],
+        [
+          172,
+          29.666666666666664
+        ]
+      ]
+    }
+  }
+]

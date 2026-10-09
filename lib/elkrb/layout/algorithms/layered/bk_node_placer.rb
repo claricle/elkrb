@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "port_order"
+require_relative "port_spread"
 require_relative "bk/view"
 require_relative "bk/aligner"
 require_relative "bk/compactor"
@@ -32,7 +34,8 @@ module Elkrb
             @sizes = layers.flatten.to_h do |item|
               [item.id, size_of.call(item)]
             end
-            @offsets = port_offsets(port_size_of)
+            @offsets = PortSpread.offsets(layers, port_order, @sizes,
+                                          port_size_of)
             @marked = type_one_conflicts
           end
 
@@ -96,33 +99,6 @@ module Elkrb
           def median(values)
             middle = values.sort[1..2]
             middle.sum / 2.0
-          end
-
-          # Cross offset of each port's centre from the top of its item.
-          # Ports share the side evenly, as ELK spaces free ports.
-          def port_offsets(port_size_of)
-            offsets = {}.compare_by_identity
-            @layers.flatten.each do |item|
-              PortOrder::SIDES.each do |side|
-                ports = @port_order.visual(item.id, side)
-                spread(ports, @sizes[item.id], port_size_of, offsets)
-              end
-            end
-            offsets
-          end
-
-          def spread(ports, extent, port_size_of, offsets)
-            widths = ports.map { |port| port_size_of.call(port) }
-            ports.zip(centres(widths, extent)) do |port, centre|
-              offsets[port] = centre
-            end
-          end
-
-          def centres(widths, extent)
-            gap = (extent - widths.sum) / (widths.length + 1)
-            widths.each_with_index.map do |width, i|
-              widths.first(i).sum + (gap * (i + 1)) + (width / 2.0)
-            end
           end
 
           # Type 1 conflicts: a segment crossing an inner segment (both ends
