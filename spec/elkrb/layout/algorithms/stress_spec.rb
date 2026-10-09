@@ -4,6 +4,63 @@ require "spec_helper"
 require "benchmark"
 
 RSpec.describe Elkrb::Layout::Algorithms::Stress do
+  describe "Force initialization" do
+    let(:path) do
+      Elkrb::Graph::Graph.from_hash(
+        "id" => "root",
+        "children" => %w[a b c d].map do |id|
+          { "id" => id, "width" => 30, "height" => 30 }
+        end,
+        "edges" => Array.new(3) do |i|
+          {
+            "id" => "e#{i}", "sources" => [%w[a b c][i]],
+            "targets" => [%w[b c d][i]]
+          }
+        end,
+      )
+    end
+
+    it "matches the ELK Force pass used to seed stress" do
+      algorithm = described_class.new
+      algorithm.instance_variable_set(:@graph, path)
+
+      algorithm.send(:initialize_positions, path)
+
+      expected = [
+        [105.29442563928431, 109.46813021157331],
+        [50.0, 50.0],
+        [185.25720332272306, 66.43948028376938],
+        [246.32229196624166, 194.517839506084],
+      ]
+      path.children.zip(expected).each do |node, (x, y)|
+        expect(node.x).to be_within(1e-9).of(x)
+        expect(node.y).to be_within(1e-9).of(y)
+      end
+    end
+
+    it "uses Force padding by default and honours an explicit override" do
+      default = described_class.new
+      override = described_class.new(
+        "elk.padding" => "[top=1,left=2,bottom=3,right=4]",
+      )
+
+      expect(default.send(:padding))
+        .to eq(top: 50.0, left: 50.0, bottom: 50.0, right: 50.0)
+      expect(override.send(:padding))
+        .to eq(top: 1.0, left: 2.0, bottom: 3.0, right: 4.0)
+    end
+
+    it "keeps the exact prepass for small graphs and bounds large graphs" do
+      algorithm = described_class.new
+      pair_count = 200 * 199 / 2
+      large_iterations = algorithm.send(:force_iterations, 200)
+
+      expect(algorithm.send(:force_iterations, 4)).to eq(300)
+      expect(large_iterations * pair_count)
+        .to be <= described_class::FORCE_PAIR_INTERACTION_BUDGET
+    end
+  end
+
   describe "layout quality" do
     let(:chain_thirty) do
       {
@@ -56,40 +113,15 @@ RSpec.describe Elkrb::Layout::Algorithms::Stress do
     end
   end
 
-  describe "convergence" do
-    let(:chain_thirty) do
-      {
-        "id" => "r",
-        "children" => Array.new(30) do |i|
-          { "id" => "n#{i}", "width" => 10, "height" => 10 }
-        end,
-        "edges" => Array.new(29) do |i|
-          { "id" => "e#{i}", "sources" => ["n#{i}"],
-            "targets" => ["n#{i + 1}"] }
-        end,
-      }
+  describe "relative convergence" do
+    it "stops when relative improvement falls below epsilon" do
+      expect(described_class.new.send(:converged?, 100.0, 99.95, 0.001))
+        .to be(true)
     end
 
-    def positions_with_limit(graph, limit)
-      input = graph.merge(
-        "layoutOptions" => { "elk.stress.iterationLimit" => limit },
-      )
-      Elkrb.layout(input, algorithm: "stress").children.map do |node|
-        [node.x, node.y]
-      end
-    end
-
-    # Stopping on the improvement relative to the previous stress ends this
-    # chain well before 200 iterations. An absolute difference keeps going
-    # until the limit, so a larger limit would move the nodes again.
-    it "stops before the limit once the relative improvement is small" do
-      expect(positions_with_limit(chain_thirty, 2000))
-        .to eq(positions_with_limit(chain_thirty, 200))
-    end
-
-    it "still stops at the iteration limit when it comes first" do
-      expect(positions_with_limit(chain_thirty, 20))
-        .not_to eq(positions_with_limit(chain_thirty, 200))
+    it "continues while relative improvement exceeds epsilon" do
+      expect(described_class.new.send(:converged?, 100.0, 99.8, 0.001))
+        .to be(false)
     end
   end
 
@@ -133,18 +165,26 @@ RSpec.describe Elkrb::Layout::Algorithms::Stress do
         .to eq(6)
     end
 
-    # The default limit is Integer.MAX_VALUE, so each of these would run for
-    # as long as the limit allows if the stop test did not end the loop.
+    # A non-positive epsilon disables the relative-improvement stop, so the
+    # explicit iteration limit is the only normal termination condition.
     {
       "an epsilon of zero" => { "elk.stress.epsilon" => 0 },
       "a negative epsilon" => { "elk.stress.epsilon" => -1 },
-      "a stress that overflows" => { "elk.stress.desiredEdgeLength" => 1e200 },
     }.each do |name, layout_options|
-      it "stops before the limit with #{name}" do
+      it "runs to the limit with #{name}" do
         limited = layout_options.merge("elk.stress.iterationLimit" => 400)
 
-        expect(iterations_run_with(limited)).to be < 401
+        expect(iterations_run_with(limited)).to eq(401)
       end
+    end
+
+    it "stops before the limit when stress overflows" do
+      limited = {
+        "elk.stress.desiredEdgeLength" => 1e200,
+        "elk.stress.iterationLimit" => 400,
+      }
+
+      expect(iterations_run_with(limited)).to be < 401
     end
   end
 
@@ -203,6 +243,20 @@ RSpec.describe Elkrb::Layout::Algorithms::Stress do
       distances = described_class.new.send(:calculate_distances, graph)
 
       expect(distances[0][1]).to eq(Float::INFINITY)
+    end
+  end
+
+  describe "#calculate_stress (private)" do
+    it "weights squared distance error by inverse ideal distance squared" do
+      stress = described_class.new.send(
+        :calculate_stress,
+        [0.0, 20.0], [0.0, 0.0],
+        [[0.0, 10.0], [10.0, 0.0]],
+        [[Float::INFINITY, 0.01], [0.01, Float::INFINITY]],
+        [[1], [0]]
+      )
+
+      expect(stress).to eq(1.0)
     end
   end
 

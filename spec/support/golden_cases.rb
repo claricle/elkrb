@@ -13,11 +13,6 @@
 # The reasons are locals, not constants, so the table below is the only
 # thing this file exposes and nothing can reach past it to a single reason.
 module GoldenCases
-  stress_seeding =
-    "stress: elkjs seeds with its ELK Force layout and pads by 50, so the " \
-    "path comes out horizontal at 428.7x155.4; ours seeds on a circle and " \
-    "pads by 12 (87.8x351.4)"
-
   # The 29 cases whose golden is a laid-out graph, compared field by field.
   # `hyperedge` is deliberately absent -- its golden is an error hash, it
   # goes through a different code path in the matcher, and it lives in
@@ -60,7 +55,7 @@ module GoldenCases
     { name: "rect6", tier: :structural, pending: nil },
     { name: "force_tri", tier: :structural, fields: %i[nodes sections],
       pending: nil },
-    { name: "stress_path4", tier: :structural, pending: stress_seeding },
+    { name: "stress_path4", tier: :structural, pending: nil },
     { name: "random3", tier: :structural, pending: nil },
     { name: "spore_overlap4", tier: :structural, pending: nil },
   ].each(&:freeze).freeze

@@ -52,7 +52,6 @@ module CorpusCatalogue
     ["hyperedge", "invariants"] => "RC-hyperedge",
     ["java_elk_sporeCompaction", "invariants"] => "RC14",
     ["java_elk_stress", "invariants"] => "S14",
-    ["elkjs_layouters_stress", "invariants"] => "S14",
     ["java_elk_random", "invariants"] => "S14",
     ["elkjs_layouters_random", "invariants"] => "S14",
     ["java_elk_fixed", "invariants"] => "S16",
