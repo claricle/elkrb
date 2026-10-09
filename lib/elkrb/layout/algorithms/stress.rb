@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "base_algorithm"
+require_relative "../java_random"
 require_relative "../node_index"
 
 module Elkrb
@@ -23,6 +24,14 @@ module Elkrb
           Options::Registry.default("elk.stress.iterationLimit")
         DEFAULT_EPSILON = Options::Registry.default("elk.stress.epsilon")
         ITERATION_LIMIT = "elk.stress.iterationLimit"
+        FORCE_ITERATIONS = 300
+        FORCE_TEMPERATURE = 0.001
+        FORCE_SPACING = 80.0
+        FORCE_PADDING = { left: 50.0, top: 50.0, right: 50.0,
+                          bottom: 50.0 }.freeze
+        FORCE_ZERO_FACTOR = 100.0
+        FORCE_DISPLACEMENT_FACTOR = 16
+        FORCE_PAIR_INTERACTION_BUDGET = 250_000
 
         def layout_flat(graph, _options = {})
           return graph if graph.children.nil? || graph.children.empty?
@@ -42,12 +51,16 @@ module Elkrb
           ypos = graph.children.map(&:y)
           weights = pair_weights(distances)
           reachable = reachable_pairs(distances)
-          old_stress = calculate_stress(xpos, ypos, distances, reachable)
+          old_stress = calculate_stress(
+            xpos, ypos, distances, weights, reachable
+          )
           # Java ELK's do/while checks the limit after an iteration has run,
           # so a limit of N allows N + 1 iterations.
           (iterations.clamp(0..) + 1).times do
             optimize_positions(xpos, ypos, distances, weights, reachable)
-            new_stress = calculate_stress(xpos, ypos, distances, reachable)
+            new_stress = calculate_stress(
+              xpos, ypos, distances, weights, reachable
+            )
 
             break if converged?(old_stress, new_stress, epsilon)
 
@@ -96,15 +109,157 @@ module Elkrb
         end
 
         def initialize_positions(graph)
-          # Use circular initial layout
-          n = graph.children.length
-          radius = n * option("elk.stress.desiredEdgeLength").to_f
+          nodes = graph.children
+          random = JavaRandom.new(option("elk.randomSeed").to_i)
+          positions = force_seed_positions(nodes.length, random)
+          connections, edge_count = force_connections(graph)
 
-          graph.children.each_with_index do |node, i|
-            angle = 2 * Math::PI * i / n
-            node.x = (radius * Math.cos(angle)) + radius
-            node.y = (radius * Math.sin(angle)) + radius
+          run_force_prepass(nodes, positions, connections, edge_count, random)
+          apply_force_positions(nodes, positions)
+        end
+
+        def force_seed_positions(count, random)
+          x = Array.new(count)
+          y = Array.new(count)
+          count.times do |i|
+            x[i] = random.next_double * count
+            y[i] = random.next_double * count
           end
+          [x, y]
+        end
+
+        def force_connections(graph)
+          nodes = graph.children
+          count = nodes.length
+          matrix = Array.new(count * count, 0)
+          positions = nodes.each_with_index.to_h { |node, i| [node.id, i] }
+          index = NodeIndex.build(graph)
+          edge_count = 0
+
+          (graph.edges || []).each do |edge|
+            source = index.node(edge.sources&.first)
+            target = index.node(edge.targets&.first)
+            next unless source && target
+
+            source_slot = positions[source.id]
+            target_slot = positions[target.id]
+            next unless source_slot && target_slot
+            next if source_slot == target_slot
+
+            matrix[(source_slot * count) + target_slot] += 1
+            edge_count += 1
+          end
+
+          [matrix, edge_count]
+        end
+
+        def run_force_prepass(nodes, positions, connections, edge_count,
+                              random)
+          count = nodes.length
+          widths = nodes.map { |node| [node.width.to_f, 1.0].max }
+          heights = nodes.map { |node| [node.height.to_f, 1.0].max }
+          radii = widths.zip(heights).map do |width, height|
+            Math.hypot(width, height) / 2.0
+          end
+          k = Math.sqrt((widths.sum * heights.sum) / (2.0 * count)) *
+              FORCE_SPACING * 0.01
+          bound = [count * FORCE_DISPLACEMENT_FACTOR + edge_count,
+                   FORCE_DISPLACEMENT_FACTOR**2].max
+          iterations = force_iterations(count)
+          temperature = FORCE_TEMPERATURE
+          threshold = temperature / iterations
+
+          while temperature.positive?
+            temperature -= threshold
+            force_iteration(positions, radii, connections, k, temperature,
+                            bound, random)
+          end
+        end
+
+        # The exact 300-iteration prepass is cheap for the small graphs it was
+        # designed for. On large graphs, bound its quadratic work and preserve
+        # the same cooling curve across the deterministic reduced iteration
+        # count so Stress keeps its documented performance guarantee.
+        def force_iterations(node_count)
+          pair_count = node_count * (node_count - 1) / 2
+          return FORCE_ITERATIONS if pair_count.zero?
+
+          budgeted = [FORCE_PAIR_INTERACTION_BUDGET / pair_count, 1].max
+          [FORCE_ITERATIONS, budgeted].min
+        end
+
+        def force_iteration(positions, radii, connections, k, temperature,
+                            bound, random)
+          x, y = positions
+          count = x.length
+          dx_sum = Array.new(count, 0.0)
+          dy_sum = Array.new(count, 0.0)
+          i = 0
+
+          while i < count
+            j = i + 1
+            while j < count
+              separate_coincident_positions(positions, i, j, random)
+              dx = x[i] - x[j]
+              dy = y[i] - y[j]
+              length = Math.sqrt((dx * dx) + (dy * dy))
+              border_distance = [length - radii[i] - radii[j], 0.0].max
+              force = if border_distance.positive?
+                        k * k / border_distance
+                      else
+                        k * k * FORCE_ZERO_FACTOR
+                      end
+              connection = connections[(i * count) + j] +
+                           connections[(j * count) + i]
+              force -= border_distance * border_distance / k * connection
+              scale = force * temperature / length
+              force_x = dx * scale
+              force_y = dy * scale
+              dx_sum[i] += force_x
+              dy_sum[i] += force_y
+              dx_sum[j] -= force_x
+              dy_sum[j] -= force_y
+              j += 1
+            end
+            i += 1
+          end
+
+          count.times do |slot|
+            x[slot] += dx_sum[slot].clamp(-bound, bound)
+            y[slot] += dy_sum[slot].clamp(-bound, bound)
+          end
+        end
+
+        def separate_coincident_positions(positions, first, second, random)
+          x, y = positions
+          while x[first] == x[second] && y[first] == y[second]
+            x[second] += random.next_double - 0.5
+            y[second] += random.next_double - 0.5
+            x[first] += random.next_double - 0.5
+            y[first] += random.next_double - 0.5
+          end
+        end
+
+        def apply_force_positions(nodes, positions)
+          x, y = positions
+          left = nodes.each_index.map do |i|
+            x[i] - ([nodes[i].width.to_f, 1.0].max / 2.0)
+          end.min
+          top = nodes.each_index.map do |i|
+            y[i] - ([nodes[i].height.to_f, 1.0].max / 2.0)
+          end.min
+          pad = padding
+
+          nodes.each_with_index do |node, i|
+            node.x = x[i] + pad[:left] - left - (node.width.to_f / 2.0)
+            node.y = y[i] + pad[:top] - top - (node.height.to_f / 2.0)
+          end
+        end
+
+        # ELK Stress uses Force's 50px padding for its noninteractive seed
+        # pass, and keeps that padding for the final stress result.
+        def padding
+          option("elk.padding", default: FORCE_PADDING).to_h
         end
 
         def calculate_distances(graph)
@@ -177,13 +332,14 @@ module Elkrb
 
         # The loops below are plain whiles over precomputed index lists:
         # blocks here slow a 200-node layout down several times.
-        def calculate_stress(xpos, ypos, ideal_distances, reachable)
+        def calculate_stress(xpos, ypos, ideal_distances, weights, reachable)
           stress = 0.0
 
           i = 0
           n = xpos.length
           while i < n
             row = ideal_distances[i]
+            weight_row = weights[i]
             node_x = xpos[i]
             node_y = ypos[i]
             others = reachable[i]
@@ -195,7 +351,7 @@ module Elkrb
                 dx = xpos[j] - node_x
                 dy = ypos[j] - node_y
                 diff = Math.sqrt((dx * dx) + (dy * dy)) - row[j]
-                stress += diff * diff
+                stress += weight_row[j] * diff * diff
               end
               k += 1
             end
