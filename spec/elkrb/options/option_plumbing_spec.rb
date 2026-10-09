@@ -45,7 +45,9 @@ RSpec.describe "option plumbing" do
       at: :root,
       value: ->(name) { name == "radial" ? "box" : "radial" },
     },
-    "elk.aspectRatio" => { at: :root, value: 10.0 },
+    "elk.aspectRatio" => {
+      at: :root, value: ->(name) { name == "layered" ? 0.1 : 10.0 }
+    },
     "elk.bendPoints" => {
       at: :spline_edge, value: "(1,2; 3,4)",
       unwired: unread[
@@ -82,7 +84,7 @@ RSpec.describe "option plumbing" do
       at: :root, value: "NODES_AND_EDGES", variant: :fan_in_tie
     },
     "elk.layered.crossingMinimization.strategy" => {
-      at: :root, value: "NONE", variant: :fan_in_tie
+      at: :root, value: "NONE", variant: :sweep_gain
     },
     "elk.layered.layering.layerConstraint" => {
       at: :node, value: "LAST_SEPARATE"
@@ -144,9 +146,12 @@ RSpec.describe "option plumbing" do
         "bend points", only: %w[fixed random]
       ]
     },
+    "elk.separateConnectedComponents" => { at: :root, value: false },
     "elk.spacing.componentComponent" => {
       at: :root, value: 90.0,
-      unwired: unread["disco reads disco.componentSpacing only"]
+      unwired: unread[
+        "disco reads disco.componentSpacing only", only: %w[disco]
+      ]
     },
     "elk.spacing.nodeNode" => {
       at: :root, value: 90.0,
