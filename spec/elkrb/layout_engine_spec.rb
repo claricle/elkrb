@@ -69,14 +69,13 @@ RSpec.describe Elkrb::Layout::LayoutEngine do
 
         expect(result).to be_a(Elkrb::Graph::Graph)
 
-        # Nodes should be shifted by padding but relative positions maintained
         n1 = result.find_node("n1")
         n2 = result.find_node("n2")
         n3 = result.find_node("n3")
 
-        # Check that relative positions are maintained (n2.x - n1.x should equal 40)
-        expect(n2.x - n1.x).to eq(40)
-        expect(n3.x - n2.x).to eq(40)
+        expect([n1.x, n1.y]).to eq([10.0, 20.0])
+        expect([n2.x, n2.y]).to eq([50.0, 60.0])
+        expect([n3.x, n3.y]).to eq([90.0, 100.0])
       end
     end
 
@@ -159,11 +158,11 @@ RSpec.describe Elkrb::Layout::LayoutEngine do
         }
       end
 
-      it "runs box for a pin and no call option: b sits right of a with 20 spacing" do
+      it "runs box for a pin and no call option: b sits right of a with 15 spacing" do
         result = described_class.layout(pinned_box_json, {})
         a, b = result.children
 
-        expect([b.x, b.y]).to eq([a.x + 30 + 20, a.y])
+        expect([b.x, b.y]).to eq([a.x + 30 + 15, a.y])
       end
 
       it "keeps the pin when the call passes a different algorithm" do
@@ -577,5 +576,48 @@ RSpec.describe Elkrb::Layout::LayoutEngine do
           .not_to raise_error
       end
     end
+  end
+end
+
+RSpec.describe "fixed layout element options" do
+  it "applies elk.position without translating the node" do
+    graph = Elkrb.layout(
+      {
+        id: "root",
+        children: [
+          {
+            id: "a", width: 30, height: 30,
+            layoutOptions: { "elk.position" => "(40,50)" }
+          },
+        ],
+      },
+      algorithm: "fixed",
+    )
+
+    expect([graph.children.first.x, graph.children.first.y])
+      .to eq([40.0, 50.0])
+  end
+
+  it "applies elk.bendPoints to an edge" do
+    graph = Elkrb.layout(
+      {
+        id: "root",
+        children: [
+          { id: "a", x: 0, y: 0, width: 10, height: 10 },
+          { id: "b", x: 50, y: 0, width: 10, height: 10 },
+        ],
+        edges: [
+          {
+            id: "e", sources: ["a"], targets: ["b"],
+            layoutOptions: { "elk.bendPoints" => "(10,20; 30,40)" }
+          },
+        ],
+      },
+      algorithm: "fixed",
+    )
+
+    bends = graph.edges.first.sections.first.bend_points
+    expect(bends.map { |point| [point.x, point.y] })
+      .to eq([[10.0, 20.0], [30.0, 40.0]])
   end
 end

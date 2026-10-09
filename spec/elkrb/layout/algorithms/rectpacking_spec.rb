@@ -177,6 +177,18 @@ RSpec.describe Elkrb::Layout::Algorithms::RectPacking do
           expect(overlap_x && overlap_y).to be false
         end
       end
+
+      it "opens more than one row for twenty equal nodes" do
+        graph.children = Array.new(20) do |index|
+          Elkrb::Graph::Node.new(
+            id: "equal#{index}", width: 100, height: 60,
+          )
+        end
+
+        algorithm.layout(graph)
+
+        expect(graph.children.map(&:y).uniq.size).to be > 1
+      end
     end
 
     context "with no nodes" do
