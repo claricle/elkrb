@@ -90,7 +90,7 @@ module Elkrb
         # Calculate routing points based on port-awareness
         if edge_uses_ports?(edge, source_node, target_node)
           route_with_ports(section, edge, source_node, target_node,
-                           routing_style)
+                           routing_style, graph)
         else
           route_node_to_node(section, source_node, target_node, routing_style)
         end
@@ -200,7 +200,7 @@ module Elkrb
 
       # Route edge using port positions
       def route_with_ports(section, edge, source_node, target_node,
-                           routing_style)
+                           routing_style, graph)
         start_point, end_point = endpoint_points(edge, source_node, target_node)
 
         section.start_point = start_point
@@ -208,7 +208,9 @@ module Elkrb
         section.bend_points = []
 
         if routing_style == "ORTHOGONAL"
-          add_orthogonal_bend_points(section, start_point, end_point)
+          add_orthogonal_bend_points_between_nodes(
+            section, start_point, end_point, source_node, target_node, graph
+          )
         end
       end
 
@@ -350,6 +352,52 @@ module Elkrb
         else
           add_vertical_bend_points(section, start_point, end_point)
         end
+      end
+
+      def add_orthogonal_bend_points_between_nodes(
+        section, start_point, end_point, source_node, target_node, graph
+      )
+        return if start_point.x == end_point.x || start_point.y == end_point.y
+
+        source = node_rectangle(source_node)
+        target = node_rectangle(target_node)
+
+        if horizontal_routing?(source, target, graph)
+          mid_x = horizontal_gap(source, target, start_point, end_point)
+          section.add_bend_point(mid_x, start_point.y)
+          section.add_bend_point(mid_x, end_point.y)
+        else
+          mid_y = vertical_gap(source, target, start_point, end_point)
+          section.add_bend_point(start_point.x, mid_y)
+          section.add_bend_point(end_point.x, mid_y)
+        end
+      end
+
+      def horizontal_routing?(source, target, graph)
+        direction = @resolver.get("elk.direction", graph)
+        return true if %w[LEFT RIGHT].include?(direction)
+        return false if %w[DOWN UP].include?(direction)
+
+        (target.center.x - source.center.x).abs >=
+          (target.center.y - source.center.y).abs
+      end
+
+      def horizontal_gap(source, target, start_point, end_point)
+        return (source.x + source.width + target.x) / 2.0 if
+          source.x + source.width <= target.x
+        return (target.x + target.width + source.x) / 2.0 if
+          target.x + target.width <= source.x
+
+        (start_point.x + end_point.x) / 2.0
+      end
+
+      def vertical_gap(source, target, start_point, end_point)
+        return (source.y + source.height + target.y) / 2.0 if
+          source.y + source.height <= target.y
+        return (target.y + target.height + source.y) / 2.0 if
+          target.y + target.height <= source.y
+
+        (start_point.y + end_point.y) / 2.0
       end
 
       # Get edge routing style from graph options
@@ -522,9 +570,11 @@ module Elkrb
           when "SPLINES"
             route_spline_self_loop(section, edge, node, loop_index)
           when "POLYLINE"
-            route_polyline_self_loop(section, edge, node, loop_index)
+            route_polyline_self_loop(section, edge, node, loop_index, graph)
           else
-            route_orthogonal_self_loop(section, edge, node, loop_index)
+            route_orthogonal_self_loop(
+              section, edge, node, loop_index, graph
+            )
           end
         end
       end
@@ -543,16 +593,18 @@ module Elkrb
       end
 
       # Route orthogonal self-loop (rectangular path)
-      def route_orthogonal_self_loop(section, edge, node, loop_index)
+      def route_orthogonal_self_loop(section, edge, node, loop_index,
+                                     graph = nil)
         # Calculate offset based on loop index
         offset = calculate_loop_offset(loop_index)
 
         # Get self-loop side
-        side = get_self_loop_side(edge, node)
-
         # Calculate dimensions
         width = ((node.width || 50.0) * 0.4) + offset
         height = ((node.height || 50.0) * 0.4) + offset
+        side = unobstructed_self_loop_side(
+          get_self_loop_side(edge, node), node, width, height, graph
+        )
 
         case side
         when "EAST"
@@ -566,6 +618,53 @@ module Elkrb
         else
           route_east_self_loop(section, node, width, height)
         end
+      end
+
+      def unobstructed_self_loop_side(preferred, node, width, height, graph)
+        return preferred unless graph
+
+        ([preferred] + %w[EAST WEST NORTH SOUTH]).uniq.find do |side|
+          self_loop_side_clear?(side, node, width, height, graph)
+        end || preferred
+      end
+
+      def self_loop_side_clear?(side, node, width, height, graph)
+        loop_box = self_loop_box(side, node, width, height)
+        graph.children.to_a.none? do |candidate|
+          next false if candidate.equal?(node)
+
+          rectangles_overlap?(loop_box, node_rectangle(candidate))
+        end
+      end
+
+      def self_loop_box(side, node, width, height)
+        x = node.x || 0.0
+        y = node.y || 0.0
+        node_width = node.width || 50.0
+        node_height = node.height || 50.0
+        case side
+        when "WEST"
+          Geometry::Rectangle.new(x - width, y + (node_height / 2.0) - 5.0,
+                                  width, 10.0)
+        when "NORTH"
+          Geometry::Rectangle.new(x + (node_width / 2.0) - 5.0, y - height,
+                                  10.0, height)
+        when "SOUTH"
+          Geometry::Rectangle.new(
+            x + (node_width / 2.0) - 5.0, y + node_height, 10.0, height
+          )
+        else
+          Geometry::Rectangle.new(
+            x + node_width, y + (node_height / 2.0) - 5.0, width, 10.0
+          )
+        end
+      end
+
+      def rectangles_overlap?(first, second)
+        first.x < second.x + second.width &&
+          first.x + first.width > second.x &&
+          first.y < second.y + second.height &&
+          first.y + first.height > second.y
       end
 
       # Route self-loop on EAST side
@@ -750,9 +849,10 @@ module Elkrb
       end
 
       # Route polyline self-loop (simple path)
-      def route_polyline_self_loop(section, edge, node, loop_index)
+      def route_polyline_self_loop(section, edge, node, loop_index,
+                                   graph = nil)
         # For polyline, use orthogonal routing
-        route_orthogonal_self_loop(section, edge, node, loop_index)
+        route_orthogonal_self_loop(section, edge, node, loop_index, graph)
       end
 
       # Calculate offset for multiple self-loops on same node

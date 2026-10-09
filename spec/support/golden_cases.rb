@@ -19,9 +19,6 @@ module GoldenCases
   rc7_branch_routing =
     "RC7: layered has no crossing minimisation or dummy-node routing " \
     "for branching graphs"
-  rc7_long_edge_routing =
-    "RC7: layered has no crossing minimisation or dummy-node routing " \
-    "for long edges"
 
   # The 29 cases whose golden is a laid-out graph, compared field by field.
   # `hyperedge` is deliberately absent -- its golden is an error hash, it
@@ -38,8 +35,8 @@ module GoldenCases
       fields: %i[nodes sections], pending: nil },
     { name: "self_loop", tier: :structural, fields: %i[nodes sections],
       pending: nil },
-    { name: "long_edge", tier: :structural,
-      pending: rc7_long_edge_routing },
+    { name: "long_edge", tier: :structural, fields: %i[nodes sections],
+      pending: nil },
     { name: "ports_simple", tier: :structural,
       fields: %i[nodes sections], pending: nil },
     { name: "labeled_node", tier: :exact, fields: %i[labels], pending: nil },

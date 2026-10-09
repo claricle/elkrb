@@ -117,7 +117,7 @@ RSpec.describe "option plumbing" do
       variant: { "force" => :unpositioned }
     },
     "elk.selfLoopSide" => {
-      at: :loop, value: "WEST",
+      at: :loop, value: "WEST", variant: :self_loop_only,
       unwired: unread["fixed preserves existing edge routes", only: %w[fixed]]
     },
     "elk.spacing.componentComponent" => {

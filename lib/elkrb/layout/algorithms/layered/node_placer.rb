@@ -24,6 +24,7 @@ module Elkrb
           def place_nodes
             return unless @layers && !@layers.empty?
 
+            size_dummy_slots
             cross_extents = calculate_directional_cross_extents
             layer_extents = calculate_layer_extents
             layer_positions = calculate_layer_positions(layer_extents)
@@ -34,6 +35,32 @@ module Elkrb
           end
 
           private
+
+          def size_dummy_slots
+            layer_dimension = horizontal? ? :width : :height
+            cross_dimension = horizontal? ? :height : :width
+            @layers.each do |items|
+              size_dummy_layer(items, layer_dimension, cross_dimension)
+            end
+          end
+
+          def size_dummy_layer(items, layer_dimension, cross_dimension)
+            nodes = items.reject { |item| dummy?(item) }
+            layer_extent = maximum_size(nodes, layer_dimension)
+            cross_extent = maximum_size(nodes, cross_dimension)
+            items.select { |item| dummy?(item) }.each do |slot|
+              slot.public_send("#{layer_dimension}=", layer_extent)
+              slot.public_send("#{cross_dimension}=", cross_extent)
+            end
+          end
+
+          def maximum_size(nodes, dimension)
+            nodes.map { |node| size(node, dimension) }.max || 0
+          end
+
+          def dummy?(item)
+            item.respond_to?(:dummy?) && item.dummy?
+          end
 
           def calculate_layer_widths
             calculate_cross_extents(:width)

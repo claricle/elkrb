@@ -15,7 +15,7 @@ module Elkrb
             @strategy = resolver.get(STRATEGY, graph)
             @preserve_input_order =
               resolver.get(MODEL_ORDER, graph) == "NODES_AND_EDGES"
-            @input_order = input_order(graph)
+            @input_order = input_order(graph, layers)
             @neighbors = build_neighbors
           end
 
@@ -31,10 +31,16 @@ module Elkrb
 
           private
 
-          def input_order(graph)
-            (graph.children || []).each_with_index.to_h do |node, position|
+          def input_order(graph, layers)
+            children = graph.children || []
+            order = children.each_with_index.to_h do |node, position|
               [node.id, position]
             end
+            offset = order.length
+            dummy_slots(layers).each do |slot|
+              order[slot.id] = offset + slot.edge_order
+            end
+            order
           end
 
           def sweep_down
@@ -82,15 +88,55 @@ module Elkrb
 
           def build_neighbors
             neighbors = Hash.new { |hash, id| hash[id] = [] }
+            slots_by_edge = dummy_slots_by_edge
+            layer_by_id = layer_indexes
             @index.edges.each do |edge|
-              source = endpoint_owner(edge.sources)
-              target = endpoint_owner(edge.targets)
-              next unless source && target && source != target
-
-              neighbors[source] << target
-              neighbors[target] << source
+              connect_edge_neighbors(
+                edge, neighbors, slots_by_edge, layer_by_id
+              )
             end
             neighbors
+          end
+
+          def connect_edge_neighbors(edge, neighbors, slots_by_edge,
+                                     layer_by_id)
+            source = endpoint_owner(edge.sources)
+            target = endpoint_owner(edge.targets)
+            return unless source && target && source != target
+
+            chain = edge_chain(
+              source, target, slots_by_edge[edge], layer_by_id
+            )
+            chain.each_cons(2) do |first, second|
+              neighbors[first] << second
+              neighbors[second] << first
+            end
+          end
+
+          def dummy_slots(layers = @layers)
+            layers.flatten.select { |item| item.respond_to?(:dummy?) }
+          end
+
+          def dummy_slots_by_edge
+            slots = {}.compare_by_identity
+            dummy_slots.each do |slot|
+              (slots[slot.edge] ||= []) << slot
+            end
+            slots
+          end
+
+          def layer_indexes
+            @layers.each_with_index.with_object({}) do |(layer, index), map|
+              layer.each { |item| map[item.id] = index }
+            end
+          end
+
+          def edge_chain(source, target, slots, layer_by_id)
+            ordered = Array(slots).sort_by(&:layer_index)
+            if layer_by_id.fetch(source) > layer_by_id.fetch(target)
+              ordered.reverse!
+            end
+            [source, *ordered.map(&:id), target]
           end
 
           def endpoint_owner(endpoints)

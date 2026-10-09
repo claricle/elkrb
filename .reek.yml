@@ -869,7 +869,7 @@ detectors:
     - Elkrb::Layout::Constraints::BaseConstraint#find_node
     - Elkrb::Layout::EdgeRouter#add_horizontal_bend_points
     - Elkrb::Layout::EdgeRouter#add_horizontal_then_vertical
-    - Elkrb::Layout::EdgeRouter#add_orthogonal_bend_points
+    - /\AElkrb::Layout::EdgeRouter#add_orthogonal_bend_points\z/
     - Elkrb::Layout::EdgeRouter#add_vertical_bend_points
     - Elkrb::Layout::EdgeRouter#add_vertical_then_horizontal
     - Elkrb::Layout::EdgeRouter#calculate_loop_offset

@@ -224,6 +224,8 @@ module OptionPlumbing
   end
 
   def plumbing_skeleton(variant)
+    return self_loop_skeleton if variant == :self_loop_only
+
     nodes = Marshal.load(Marshal.dump(NODE_BASE))
     NODE_VARIANTS.fetch(variant)&.call(nodes)
     {
@@ -242,6 +244,18 @@ module OptionPlumbing
     }
   end
 
+  def self_loop_skeleton
+    {
+      "id" => "root",
+      "layoutOptions" => {},
+      "children" => [{ "id" => "d", "width" => 30, "height" => 30 }],
+      "edges" => [
+        { "id" => "loop", "sources" => ["d"], "targets" => ["d"],
+          "layoutOptions" => {} },
+      ],
+    }
+  end
+
   def place_options(graph, places)
     if places.key?(:spline_edge)
       graph["layoutOptions"]["elk.edgeRouting"] = "SPLINES"
@@ -252,6 +266,8 @@ module OptionPlumbing
   end
 
   def place_target(graph, place)
+    return graph["edges"].find { |edge| edge["id"] == "loop" } if place == :loop
+
     path = PLACE_PATHS.fetch(place)
     path.empty? ? graph : graph.dig(*path)
   end
