@@ -27,11 +27,8 @@ Gem::Specification.new do |spec|
   spec.metadata["changelog_uri"] = "https://github.com/claricle/elkrb/blob/main/CHANGELOG.adoc"
   spec.metadata["rubygems_mfa_required"] = "true"
 
-  # Specify which files should be added to the gem when it is released.
   spec.files = Dir.chdir(__dir__) do
-    `git ls-files -z`.split("\x0").reject do |f|
-      (f == __FILE__) || f.match(%r{\A(?:(?:bin|test|spec|features)/|\.(?:git|travis|circleci)|appveyor)})
-    end
+    Dir.glob(%w[lib/**/*.rb exe/* README.adoc LICENSE CHANGELOG.adoc docs/**/*]).select { |f| File.file?(f) }
   end
   spec.bindir = "exe"
   spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
@@ -43,6 +40,5 @@ Gem::Specification.new do |spec|
   # deserialization for the legacy YAML spellings, so a minor bump can change
   # what it does. Lift the cap once the new minor is checked.
   spec.add_dependency "lutaml-model", ">= 0.8", "< 0.9"
-  spec.add_dependency "rbs", "~> 3.0"
   spec.add_dependency "thor", "~> 1.4"
 end

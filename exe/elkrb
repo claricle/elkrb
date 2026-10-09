@@ -32,6 +32,7 @@ rescue Thor::Error => e
   $stderr.puts e.message # rubocop:disable Style/StderrPuts -- the cop's own
   # suggestion (`warn`) is the bug: `ruby -W0` silences `warn` and would
   # re-introduce the silent usage error this rescue exists to fix.
+  $stderr.puts Elkrb::Cli.usage_hint(ARGV) # rubocop:disable Style/StderrPuts
   exit 1
 rescue Errno::EPIPE
   # A reader hanging up ends a SUCCESSFUL run (`elkrb layout big.json |
