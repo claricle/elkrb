@@ -3,445 +3,256 @@
 require "spec_helper"
 
 RSpec.describe Elkrb::Layout::HierarchicalProcessor do
-  let(:processor_class) do
-    Class.new(Elkrb::Layout::Algorithms::BaseAlgorithm) do
-      def layout_flat(graph, _options = {})
-        # Simple box layout for testing
-        return graph if graph.children.nil? || graph.children.empty?
-
-        graph.children.each_with_index do |node, index|
-          node.x = index * 100.0
-          node.y = 0.0
-        end
-
-        apply_padding(graph)
-        graph
-      end
-    end
+  def layout_json(document, options = {})
+    Elkrb.layout(JSON.parse(JSON.generate(document)), options)
   end
 
-  let(:processor) { processor_class.new }
-
-  describe "#layout_hierarchical" do
-    context "with a flat graph" do
-      it "delegates to layout_flat" do
-        graph = Elkrb::Graph::Graph.new(
-          children: [
-            Elkrb::Graph::Node.new(id: "n1", width: 50, height: 50),
-            Elkrb::Graph::Node.new(id: "n2", width: 50, height: 50),
-          ],
-        )
-
-        result = processor.layout_hierarchical(graph)
-
-        expect(result).to be(graph)
-        # After layout_flat and apply_padding, nodes are shifted by left padding (12)
-        expect(graph.children[0].x).to eq(12.0)
-        expect(graph.children[1].x).to eq(112.0)
-      end
-    end
-
-    context "with a hierarchical graph" do
-      it "recursively layouts child nodes" do
-        child_node = Elkrb::Graph::Node.new(
-          id: "parent",
-          width: 100,
-          height: 100,
-          children: [
-            Elkrb::Graph::Node.new(id: "child1", width: 30, height: 30),
-            Elkrb::Graph::Node.new(id: "child2", width: 30, height: 30),
-          ],
-        )
-
-        graph = Elkrb::Graph::Graph.new(
-          children: [child_node],
-        )
-
-        result = processor.layout_hierarchical(graph)
-
-        expect(result).to be(graph)
-        # Children should have positions set
-        expect(child_node.children[0].x).not_to be_nil
-        expect(child_node.children[1].x).not_to be_nil
-      end
-
-      it "applies parent constraints with padding" do
-        layout_opts = {}
-        layout_opts["padding"] = 10
-
-        child_node = Elkrb::Graph::Node.new(
-          id: "parent",
-          width: 100,
-          height: 100,
-          children: [
-            Elkrb::Graph::Node.new(id: "child1", width: 30, height: 30, x: 0,
-                                   y: 0),
-          ],
-          layout_options: layout_opts,
-        )
-
-        graph = Elkrb::Graph::Graph.new(
-          children: [child_node],
-        )
-
-        processor.layout_hierarchical(graph)
-
-        # Child should be offset by custom padding (10) + outer padding (12 from apply_padding)
-        expect(child_node.children[0].x).to be >= 10.0
-        expect(child_node.children[0].y).to be >= 10.0
-      end
-
-      it "updates parent bounds to contain children" do
-        child_node = Elkrb::Graph::Node.new(
-          id: "parent",
-          width: 0,
-          height: 0,
-          children: [
-            Elkrb::Graph::Node.new(id: "child1", width: 30, height: 30, x: 0,
-                                   y: 0),
-            Elkrb::Graph::Node.new(id: "child2", width: 30, height: 30, x: 40,
-                                   y: 0),
-          ],
-        )
-
-        graph = Elkrb::Graph::Graph.new(
-          children: [child_node],
-        )
-
-        processor.layout_hierarchical(graph)
-
-        # Parent should be sized to contain children + padding
-        expect(child_node.width).to be > 70 # 70 for children + padding
-        expect(child_node.height).to be > 30 # 30 for children + padding
-      end
-    end
+  def compound_unsized
+    fixture = JSON.parse(
+      File.read("spec/fixtures/corpus/compound_unsized.json"),
+    )
+    fixture.fetch("graph")
   end
 
-  describe "options in a nested graph" do
-    let(:recorder_class) do
-      Class.new(Elkrb::Layout::Algorithms::BaseAlgorithm) do
-        def spacing_by_graph
-          @spacing_by_graph ||= {}
-        end
+  it "does not expose the removed hierarchical call option" do
+    expect(Elkrb.known_layout_options).not_to have_key("hierarchical")
+  end
 
-        def layout_flat(graph, _options = {})
-          spacing_by_graph[graph.id] = option("elk.spacing.nodeNode")
-          graph
-        end
-      end
-    end
+  it "sizes compounds before laying out their parent level" do
+    result = layout_json(compound_unsized)
+    parent, sibling = result.children
 
-    let(:root) do
-      Elkrb::Graph::Graph.new(
-        id: "root",
-        layout_options: { "elk.spacing.nodeNode" => 5 },
-        children: [
-          nested_parent("own", layout_options: { "elk.spacing.nodeNode" => 100 }),
-          nested_parent("props", properties: { "elk.spacing.nodeNode" => 33 }),
-          nested_parent("bare"),
+    expect([parent.x, parent.y, parent.width, parent.height])
+      .to eq([12.0, 12.0, 104.0, 54.0])
+    expect([sibling.x, sibling.y]).to eq([136.0, 24.0])
+    expect([result.width, result.height]).to eq([178.0, 78.0])
+    expect(result).to have_no_overlapping_siblings
+  end
+
+  it "applies compound padding once and routes its edge in local coordinates" do
+    parent = layout_json(compound_unsized).children.first
+    first, second = parent.children
+    section = parent.edges.first.sections.first
+
+    expect([first.x, first.y, second.x, second.y])
+      .to eq([12.0, 12.0, 62.0, 12.0])
+    expect([section.start_point.x, section.start_point.y])
+      .to all(be_between(0, parent.width))
+    expect([section.end_point.x, section.end_point.y])
+      .to all(be_between(0, parent.width))
+  end
+
+  it "honours a compound's own padding" do
+    result = layout_json(
+      "id" => "root",
+      "children" => [{
+        "id" => "p",
+        "layoutOptions" => {
+          "elk.padding" => "[top=30,left=30,bottom=30,right=30]",
+        },
+        "children" => [{ "id" => "c1", "width" => 80, "height" => 30 }],
+      }],
+      "edges" => [],
+    )
+    parent = result.children.first
+
+    expect([parent.children.first.x, parent.children.first.y])
+      .to eq([30.0, 30.0])
+    expect([parent.width, parent.height]).to eq([140.0, 90.0])
+  end
+
+  it "leaves cross-level edges unrouted in separate-children mode" do
+    result = layout_json(
+      "id" => "root",
+      "children" => [
+        {
+          "id" => "p",
+          "children" => [{ "id" => "c1", "width" => 30, "height" => 30 }],
+          "edges" => [],
+        },
+        { "id" => "q", "width" => 30, "height" => 30 },
+      ],
+      "edges" => [{ "id" => "cross", "sources" => ["c1"],
+                    "targets" => ["q"] }],
+    )
+
+    expect(result.edges.first.sections).to be_nil.or be_empty
+  end
+
+  it "recomputes a compound's declared size" do
+    graph = compound_unsized
+    graph.fetch("children").first.merge!("width" => 10, "height" => 10)
+
+    parent = layout_json(graph).children.first
+
+    expect([parent.width, parent.height]).to eq([104.0, 54.0])
+  end
+
+  it "sizes compounds while leaving unsized leaves unsized" do
+    result = layout_json(
+      "id" => "root",
+      "children" => [
+        {
+          "id" => "p",
+          "children" => [{ "id" => "c", "width" => 30, "height" => 30 }],
+          "edges" => [],
+        },
+        { "id" => "leaf" },
+      ],
+      "edges" => [],
+    )
+    parent, leaf = result.children
+
+    expect([parent.width, parent.height]).to eq([54.0, 54.0])
+    expect([leaf.width, leaf.height]).to eq([nil, nil])
+    expect(JSON.parse(result.to_json).fetch("children").last)
+      .not_to include("width", "height")
+  end
+
+  it "places ports after computing an unsized compound's dimensions" do
+    result = layout_json(
+      "id" => "root",
+      "children" => [{
+        "id" => "p",
+        "ports" => [
+          { "id" => "west", "side" => "WEST" },
+          { "id" => "east", "side" => "EAST" },
         ],
-      )
-    end
+        "children" => [{ "id" => "c", "width" => 30, "height" => 30 }],
+        "edges" => [],
+      }],
+      "edges" => [],
+    )
+    parent = result.children.first
+    west, east = parent.ports
 
-    it "reads each nested graph's own options, not the root's" do
-      algorithm = recorder_class.new
-      algorithm.layout(root)
-
-      expect(algorithm.spacing_by_graph).to include(
-        "own_children" => 100.0, "props_children" => 33.0,
-        "bare_children" => 20.0
-      )
-    end
-
-    # Keep: it is the only check that the scope is restored after a nested
-    # graph; the root is laid out after its children.
-    it "reads the root's options again once the nested graphs are done" do
-      algorithm = recorder_class.new
-      algorithm.layout(root)
-
-      expect(algorithm.spacing_by_graph["root"]).to eq(5.0)
-    end
-
-    it "lets call-level options reach a nested graph that names none" do
-      algorithm = recorder_class.new("elk.spacing.nodeNode" => 70)
-      algorithm.layout(root)
-
-      expect(algorithm.spacing_by_graph).to include(
-        "own_children" => 100.0, "bare_children" => 70.0,
-      )
-    end
-
-    it "reads a nested graph's options when called without #layout" do
-      algorithm = recorder_class.new
-      algorithm.layout_hierarchical(root)
-
-      expect(algorithm.spacing_by_graph["own_children"]).to eq(100.0)
-    end
+    expect([parent.width, parent.height]).to eq([54.0, 54.0])
+    expect([west.x, west.y]).to eq([0.0, 27.0])
+    expect([east.x, east.y]).to eq([54.0, 27.0])
   end
 
-  describe "algorithm selection for a nested graph" do
-    shapes_for = lambda do |algorithm|
+  it "uses a compound's pinned algorithm while retaining the root algorithm" do
+    result = layout_json(
+      "id" => "root",
+      "layoutOptions" => { "elk.algorithm" => "layered" },
+      "children" => [
+        {
+          "id" => "p",
+          "layoutOptions" => { "elk.algorithm" => "box" },
+          "children" => [
+            { "id" => "c1", "width" => 30, "height" => 30 },
+            { "id" => "c2", "width" => 30, "height" => 30 },
+            { "id" => "c3", "width" => 30, "height" => 30 },
+          ],
+          "edges" => [],
+        },
+        { "id" => "q", "width" => 30, "height" => 30 },
+      ],
+      "edges" => [{ "id" => "e", "sources" => ["p"], "targets" => ["q"] }],
+    )
+    parent, sibling = result.children
+
+    expect(parent.children.map(&:y)).to eq([15.0, 15.0, 60.0])
+    expect(sibling.x - (parent.x + parent.width)).to eq(20.0)
+  end
+
+  it "inherits the root pin when the call names a different algorithm" do
+    result = layout_json(
       {
-        "layoutOptions" => { layoutOptions: { "elk.algorithm" => algorithm } },
-        "the deprecated layoutOptions properties map" =>
-          { layoutOptions: { "properties" => { "elk.algorithm" => algorithm } } },
-        "element properties" => { properties: { "elk.algorithm" => algorithm } },
-      }
-    end
-    shapes = shapes_for.call("box")
+        "id" => "root",
+        "layoutOptions" => { "elk.algorithm" => "box" },
+        "children" => [{
+          "id" => "p",
+          "children" => [
+            { "id" => "c1", "width" => 30, "height" => 30 },
+            { "id" => "c2", "width" => 30, "height" => 30 },
+            { "id" => "c3", "width" => 30, "height" => 30 },
+          ],
+          "edges" => [],
+        }],
+        "edges" => [],
+      },
+      algorithm: "layered",
+    )
 
-    # Keep: the examples below compare equal positions; this one is the only
-    # check that box and layered differ on the fixture, so they cannot pass
-    # vacuously.
-    it "differs from the parent's algorithm when it names none" do
-      expect(nested_graph_positions({}))
-        .not_to eq(nested_graph_positions(shapes["layoutOptions"]))
-    end
-
-    # Keep: the opposite direction of the table below; it goes red when a
-    # nested graph that names no algorithm gets the registry default.
-    it "keeps the parent's algorithm when it names none" do
-      expect(nested_graph_positions({}, root_algorithm: "box"))
-        .to eq(nested_graph_positions(shapes["layoutOptions"]))
-    end
-
-    # Keep: it goes red when a nested graph that names no algorithm takes the
-    # call's algorithm over the graph's own.
-    it "does not take the call's algorithm for a graph that names none" do
-      expect(nested_graph_positions({}, root_algorithm: "box",
-                                        call: { algorithm: "layered" }))
-        .to eq(nested_graph_positions({}, root_algorithm: "box"))
-    end
-
-    it "passes the call's options to a nested graph that switches algorithm" do
-      call = { "elk.spacing.nodeNode" => 90 }
-
-      expect(nested_graph_positions(shapes["element properties"], call: call))
-        .to eq(nested_graph_positions(shapes["element properties"],
-                                      root_algorithm: "box", call: call))
-    end
-
-    # Keep: it goes red when a switched-to algorithm takes the nested graph's
-    # own options as its call options, which then reach the graphs below.
-    it "does not let a switching graph's options leak into the graphs below" do
-      call = { "elk.spacing.nodeNode" => 40 }
-      with_own = { layoutOptions: { "elk.spacing.nodeNode" => 90 } }
-
-      expect(grandchild_positions(with_own, call: call))
-        .to eq(grandchild_positions({}, call: call))
-    end
-
-    context "with a registered class that only implements #layout" do
-      let(:compatible_class) do
-        Class.new do
-          def initialize(_options = {}); end
-
-          def layout(graph)
-            graph.children.each { |node| node.x = 777.0 }
-            graph
-          end
-        end
-      end
-
-      around do |example|
-        registry = Elkrb::Layout::AlgorithmRegistry
-        algorithms = registry.instance_variable_get(:@algorithms).dup
-        metadata = registry.instance_variable_get(:@metadata).dup
-        example.run
-      ensure
-        registry.instance_variable_set(:@algorithms, algorithms)
-        registry.instance_variable_set(:@metadata, metadata)
-      end
-
-      shapes_for.call("compatible").each do |source, shape|
-        it "lays out a nested graph that selects it in #{source}" do
-          Elkrb::Layout::AlgorithmRegistry.register("compatible",
-                                                    compatible_class)
-
-          positions = nested_graph_positions(shape)
-
-          expect(positions.map(&:first)).to all(be >= 777.0)
-        end
-      end
-    end
-
-    shapes.each do |source, shape|
-      it "honours elk.algorithm given in #{source}" do
-        expect(nested_graph_positions(shape))
-          .to eq(nested_graph_positions(shapes["layoutOptions"]))
-      end
-    end
+    expect(result.children.first.children.map(&:y)).to eq([15.0, 15.0, 60.0])
   end
 
-  describe "#apply_parent_constraints" do
-    it "adjusts children for padding" do
-      layout_opts = {}
-      layout_opts["padding"] =
-        { "left" => 15, "top" => 20, "right" => 10, "bottom" => 10 }
-
-      node = Elkrb::Graph::Node.new(
-        id: "parent",
-        children: [
-          Elkrb::Graph::Node.new(id: "child", x: 0, y: 0),
+  it "reads a compound's algorithm from its properties" do
+    result = layout_json(
+      "id" => "root",
+      "layoutOptions" => { "elk.algorithm" => "layered" },
+      "children" => [{
+        "id" => "p",
+        "properties" => { "elk.algorithm" => "box" },
+        "children" => [
+          { "id" => "c1", "width" => 30, "height" => 30 },
+          { "id" => "c2", "width" => 30, "height" => 30 },
+          { "id" => "c3", "width" => 30, "height" => 30 },
         ],
-        layout_options: layout_opts,
-      )
+        "edges" => [],
+      }],
+      "edges" => [],
+    )
 
-      graph = Elkrb::Graph::Graph.new(children: [node])
-      processor.send(:apply_parent_constraints, graph)
-
-      expect(node.children[0].x).to eq(15.0)
-      expect(node.children[0].y).to eq(20.0)
-    end
+    expect(result.children.first.children.map(&:y)).to eq([15.0, 15.0, 60.0])
   end
 
-  describe "#get_padding" do
-    it "returns default padding when no options" do
-      node = Elkrb::Graph::Node.new(id: "n1")
-      padding = processor.send(:get_padding, node)
+  it "reads a compound's padding from its properties" do
+    result = layout_json(
+      "id" => "root",
+      "children" => [{
+        "id" => "p",
+        "properties" => {
+          "elk.padding" => "[top=30,left=30,bottom=30,right=30]",
+        },
+        "children" => [{ "id" => "c", "width" => 80, "height" => 30 }],
+        "edges" => [],
+      }],
+      "edges" => [],
+    )
+    parent = result.children.first
 
-      expect(padding).to eq({ top: 12.0, right: 12.0, bottom: 12.0,
-                              left: 12.0 })
-    end
-
-    it "parses hash padding" do
-      layout_opts = {}
-      layout_opts["padding"] = { "left" => 5, "top" => 10 }
-
-      node = Elkrb::Graph::Node.new(
-        id: "n1",
-        layout_options: layout_opts,
-      )
-
-      padding = processor.send(:get_padding, node)
-
-      expect(padding[:left]).to eq(5.0)
-      expect(padding[:top]).to eq(10.0)
-      expect(padding[:right]).to eq(12.0) # Default
-    end
-
-    it "parses uniform numeric padding" do
-      layout_opts = {}
-      layout_opts["padding"] = 20
-
-      node = Elkrb::Graph::Node.new(
-        id: "n1",
-        layout_options: layout_opts,
-      )
-
-      padding = processor.send(:get_padding, node)
-
-      expect(padding).to eq({ top: 20, right: 20, bottom: 20, left: 20 })
-    end
-
-    it "parses ELK string padding, which fell back to the default before" do
-      node = Elkrb::Graph::Node.new(
-        id: "n1",
-        layout_options: { "elk.padding" => "[top=1,left=2,bottom=3,right=4]" },
-      )
-
-      expect(processor.send(:get_padding, node))
-        .to eq({ top: 1.0, left: 2.0, bottom: 3.0, right: 4.0 })
-    end
-
-    it "reads the org.eclipse.elk.padding spelling" do
-      node = Elkrb::Graph::Node.new(
-        id: "n1",
-        layout_options: { "org.eclipse.elk.padding" => 7 },
-      )
-
-      expect(processor.send(:get_padding, node)).to eq({ top: 7.0, left: 7.0, bottom: 7.0, right: 7.0 })
-    end
+    expect([parent.children.first.x, parent.children.first.y])
+      .to eq([30.0, 30.0])
+    expect([parent.width, parent.height]).to eq([140.0, 90.0])
   end
 
-  describe "#calculate_children_bounds" do
-    it "calculates bounds for children" do
-      node = Elkrb::Graph::Node.new(
-        id: "parent",
-        children: [
-          Elkrb::Graph::Node.new(id: "c1", x: 10, y: 20, width: 30, height: 40),
-          Elkrb::Graph::Node.new(id: "c2", x: 50, y: 30, width: 20, height: 30),
-        ],
-      )
+  it "raises when a compound pins an unknown algorithm" do
+    graph = {
+      "id" => "root",
+      "children" => [{
+        "id" => "p",
+        "layoutOptions" => { "elk.algorithm" => "nope" },
+        "children" => [{ "id" => "c", "width" => 30, "height" => 30 }],
+      }],
+    }
 
-      bounds = processor.send(:calculate_children_bounds, node)
-
-      expect(bounds[:min_x]).to eq(10)
-      expect(bounds[:min_y]).to eq(20)
-      expect(bounds[:width]).to eq(60) # 10 to 70 (50+20)
-      expect(bounds[:height]).to eq(40) # 20 to 60 (30+30)
-    end
-
-    it "returns zero bounds for no children" do
-      node = Elkrb::Graph::Node.new(id: "parent")
-
-      bounds = processor.send(:calculate_children_bounds, node)
-
-      expect(bounds).to eq({ min_x: 0, min_y: 0, width: 0, height: 0 })
-    end
+    expect { layout_json(graph) }
+      .to raise_error(Elkrb::AlgorithmNotFoundError, /nope/)
   end
 
-  describe "#handle_cross_hierarchy_edges" do
-    it "handles edges crossing hierarchy levels" do
-      parent1 = Elkrb::Graph::Node.new(
-        id: "p1",
-        children: [
-          Elkrb::Graph::Node.new(id: "c1", x: 0, y: 0, width: 30, height: 30),
-        ],
-      )
+  it "resolves contained edges only within their own hierarchy level" do
+    result = layout_json(
+      "id" => "root",
+      "children" => [
+        { "id" => "c1", "width" => 30, "height" => 30 },
+        {
+          "id" => "p",
+          "children" => [
+            { "id" => "c1", "width" => 30, "height" => 30 },
+            { "id" => "c2", "width" => 30, "height" => 30 },
+          ],
+          "edges" => [{ "id" => "inside", "sources" => ["c1"],
+                        "targets" => ["c2"] }],
+        },
+      ],
+      "edges" => [],
+    )
+    parent = result.children.last
+    section = parent.edges.first.sections.first
 
-      parent2 = Elkrb::Graph::Node.new(id: "p2", x: 100, y: 0, width: 50,
-                                       height: 50)
-
-      edge = Elkrb::Graph::Edge.new(
-        sources: ["c1"],
-        targets: ["p2"],
-        sections: [
-          Elkrb::Graph::EdgeSection.new(
-            start_point: Elkrb::Geometry::Point.new(x: 15, y: 15),
-            end_point: Elkrb::Geometry::Point.new(x: 125, y: 25),
-          ),
-        ],
-      )
-
-      graph = Elkrb::Graph::Graph.new(
-        children: [parent1, parent2],
-        edges: [edge],
-      )
-
-      processor.send(:handle_cross_hierarchy_edges, graph)
-
-      # Edge should have bend points added
-      section = edge.sections.first
-      expect(section.bend_points).not_to be_empty
-    end
-  end
-
-  describe "integration with BaseAlgorithm" do
-    it "automatically uses hierarchical layout for hierarchical graphs" do
-      child_node = Elkrb::Graph::Node.new(
-        id: "parent",
-        width: 100,
-        height: 100,
-        children: [
-          Elkrb::Graph::Node.new(id: "child1", width: 30, height: 30),
-          Elkrb::Graph::Node.new(id: "child2", width: 30, height: 30),
-        ],
-      )
-
-      graph = Elkrb::Graph::Graph.new(
-        children: [child_node],
-      )
-
-      processor.layout(graph)
-
-      # Should have laid out children
-      expect(child_node.children[0].x).not_to be_nil
-      expect(child_node.children[1].x).not_to be_nil
-
-      # Parent should be sized appropriately
-      expect(child_node.width).to be > 0
-      expect(child_node.height).to be > 0
-    end
+    expect(section.start_point.x).to eq(parent.children.first.x + 15.0)
+    expect(section.end_point.x).to eq(parent.children.last.x + 15.0)
   end
 end

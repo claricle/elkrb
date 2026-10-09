@@ -177,7 +177,7 @@ RSpec.describe Elkrb::Options::UnhonouredReport do
       ["layered", "Layered", false],
       ["force", "org.eclipse.elk.layered", false],
       ["force", "nonesuch", true],
-      ["layered", "nonesuch", false],
+      ["layered", "nonesuch", :missing_algorithm],
     ].each do |root, own, raises|
       it "#{raises ? 'refuses' : 'accepts'} a compound's key under root " \
          "#{root}, compound #{own.inspect}" do
@@ -186,7 +186,10 @@ RSpec.describe Elkrb::Options::UnhonouredReport do
         graph = positioned_graph(compound: compound)
         strictly = { algorithm: root, strict: true }
 
-        if raises
+        if raises == :missing_algorithm
+          expect { Elkrb.layout(graph, strictly) }
+            .to raise_error(Elkrb::AlgorithmNotFoundError, /nonesuch/)
+        elsif raises
           expect { Elkrb.layout(graph, strictly) }
             .to raise_error(Elkrb::Error, unhonoured)
         else

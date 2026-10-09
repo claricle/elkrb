@@ -16,8 +16,6 @@ module GoldenCases
   rc2_2_algorithm_pin =
     "RC2.2: graph-level elk.algorithm pin is never read, " \
     "LayoutEngine always defaults to layered"
-  rc5_parent_sized_first =
-    "RC5: hierarchical layout sizes the parent before its children"
   rc7_direction_and_layer_gap =
     "RC7: layered ignores elk.direction and uses a 60px layer gap " \
     "instead of ELK's RIGHT/20 defaults"
@@ -53,10 +51,10 @@ module GoldenCases
       pending: rc8_absolute_node_labels },
     { name: "labeled_node_placement", tier: :exact,
       pending: rc8_label_placement_unread },
-    { name: "compound_chain", tier: :exact,
-      pending: rc5_parent_sized_first },
-    { name: "compound_nested", tier: :structural,
-      pending: rc5_parent_sized_first },
+    { name: "compound_chain", tier: :exact, fields: %i[nodes graph],
+      pending: nil },
+    { name: "compound_nested", tier: :structural, fields: %i[nodes graph],
+      pending: nil },
     { name: "direction_down", tier: :exact, fields: %i[nodes graph],
       pending: nil },
     { name: "spacing_override", tier: :exact, fields: %i[nodes],

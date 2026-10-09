@@ -54,8 +54,6 @@ module CorpusCatalogue
     ["java_elk_sporeCompaction", "invariants"] => "RC14",
     ["port_id_edges", "invariants"] => "RC8",
     ["elkjs_bug7_complex", "invariants"] => "RC8",
-    ["compound_unsized", "invariants"] => "S10",
-    ["java_elk_compound", "invariants"] => "S10",
     ["java_elk_force", "invariants"] => "S15",
     ["elkjs_layouters_force", "invariants"] => "S15",
     ["java_elk_stress", "invariants"] => "S14",

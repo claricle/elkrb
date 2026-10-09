@@ -74,7 +74,7 @@ module Elkrb
 
       # { canonical id => status }; status is nil for an unknown key. An
       # unknown key in the call is not reported: the call also carries engine
-      # flags such as strict and hierarchical. The call's nested properties
+      # flags such as strict. The call's nested properties
       # map is never read as options, so it is not reported either.
       def findings_for(graph, call)
         occurrences(laid_out_elements(graph), call)

@@ -199,7 +199,7 @@ RSpec.describe Elkrb::Layout::LabelPlacer do
     end
 
     context "with hierarchical graphs" do
-      it "recursively places labels in child nodes" do
+      it "lets the child-level algorithm place labels in child nodes" do
         child_label = Elkrb::Graph::Label.new(
           text: "Child",
           width: 30,
@@ -225,7 +225,7 @@ RSpec.describe Elkrb::Layout::LabelPlacer do
         )
 
         graph = Elkrb::Graph::Graph.new(children: [parent_node])
-        placer.send(:place_labels, graph)
+        placer.layout(graph)
 
         # Child label should be positioned
         expect(child_label.x).not_to be_nil

@@ -23,7 +23,7 @@ RSpec.describe Elkrb::Layout::Constraints::ConstraintProcessor do
       expect(processor.has_constraints?(graph)).to be true
     end
 
-    it "returns true for nested node with constraints" do
+    it "checks nested constraints only in their own level" do
       graph = Elkrb::Graph::Graph.new(id: "root")
       parent = Elkrb::Graph::Node.new(id: "parent", width: 200, height: 150)
       child = Elkrb::Graph::Node.new(id: "child", width: 50, height: 30)
@@ -31,7 +31,10 @@ RSpec.describe Elkrb::Layout::Constraints::ConstraintProcessor do
       parent.children = [child]
       graph.children = [parent]
 
-      expect(processor.has_constraints?(graph)).to be true
+      child_level = Elkrb::Graph::Graph.new(children: parent.children)
+
+      expect(processor.has_constraints?(graph)).to be false
+      expect(processor.has_constraints?(child_level)).to be true
     end
   end
 
