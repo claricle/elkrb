@@ -148,6 +148,73 @@ after:  {"id":"e","sources":["a"],"targets":["b"],
                       "incomingShape":"a","outgoingShape":"b"}]}
 ----
 
+* Ports are placed on their node's border. Each port now carries `x`, `y` and
+  `side`, and `offset` is filled in, where before a port had only `index` and
+  `offset: 0`. Edge sections that start or end at a port move to match. Code
+  that computed port positions itself should read these fields. (#70)
++
+Node `a` with a 6x6 port `p`, edge `p` to `b`:
++
+[source,text]
+----
+before: port {"id":"p","index":0,"offset":0.0}
+        section start (12.0, 12.0)
+after:  port {"id":"p","x":30.0,"y":12.0,"side":"EAST","index":0,"offset":12.0}
+        section start (48.0, 27.0)
+----
+
+* Layered orders the nodes within a layer by a barycenter sweep, so cross-axis
+  coordinates move whenever a layer holds more than one node.
+  `elk.layered.crossingMinimization.strategy` and
+  `elk.layered.considerModelOrder.strategy` are now honoured. Set
+  `elk.layered.crossingMinimization.strategy` to `NONE` to get insertion order
+  back. (#72)
++
+Edges `a` to `d` and `b` to `c`, default options:
++
+[source,text]
+----
+before:        a (12, 12)  b (12, 62)  c (62, 12)  d (62, 62)
+after:         a (12, 12)  b (12, 62)  c (62, 62)  d (62, 12)
+after, NONE:   a (12, 12)  b (12, 62)  c (62, 12)  d (62, 62)
+----
+
+* Self-loops leave and enter the node border and are routed outside the node
+  instead of retracing themselves, and their section id changes from
+  `<edge>_section_0` to `<edge>_s0`. An edge between two ports of the same node
+  is now routed as a loop too. Code that matches the old section id or the old
+  geometry must accept the new one. (#74)
++
+Node `a` (30x30) with an edge from `a` to `a`:
++
+[source,text]
+----
+before: {"id":"e_section_0","startPoint":{"x":42.0,"y":27.0},"endPoint":{"x":42.0,"y":37.0},
+         "bendPoints":[{"x":74.0,"y":27.0},{"x":74.0,"y":-5.0},{"x":74.0,"y":59.0},{"x":42.0,"y":32.0}]}
+after:  {"id":"e_s0","startPoint":{"x":42.0,"y":22.0},"endPoint":{"x":42.0,"y":32.0},
+         "bendPoints":[{"x":74.0,"y":22.0},{"x":74.0,"y":32.0}],
+         "incomingShape":"a","outgoingShape":"a"}
+----
+
+* `elkrb layout` rejects an unknown switch with `Unknown switches "--bogus"`
+  and a `Try: elkrb help layout` line. It used to read the switch as the input
+  file and fail with "no such file". `layout --output out.yml` now writes YAML,
+  where it wrote JSON; pass `--format json` to keep JSON. (#62)
++
+`elkrb layout --bogus graph.json`:
++
+[source,text]
+----
+before: ERROR: "elkrb layout" was called with arguments ["--bogus", "graph.json"]
+after:  Unknown switches "--bogus"
+        Try: elkrb help layout
+----
+
+* `sig/` is deleted and `rbs` is no longer a runtime dependency; the
+  signatures did not load. The gem ships an explicit file list (`lib`, `exe`,
+  `README.adoc`, `LICENSE`, `CHANGELOG.adoc`, `docs`) instead of every tracked
+  file, so benchmarks, examples and dotfiles are no longer packaged. (#77)
+
 === Added
 
 * Edges read the elkjs primitive endpoint keys `source`, `target`,
@@ -157,6 +224,15 @@ after:  {"id":"e","sources":["a"],"targets":["b"],
 
 * `junctionPoints`, `container`, `incomingSections` and `outgoingSections` on
   edges, and `properties` on labels, are no longer dropped when parsing.
+
+* `elkrb options [ALGORITHM]` lists every layout option with its type,
+  default, status, aliases and the algorithms that read it; `--json` prints
+  the same as JSON. `elkrb algorithms --json` is new. `batch` and `diagram`
+  accept the same layout flags as `layout`, including `--spacing`
+  and `--layer-spacing`. (#62)
+
+* A `LICENSE` file (BSD-2-Clause, as the gemspec already declared) ships with
+  the gem. (#77)
 
 === Fixed
 
