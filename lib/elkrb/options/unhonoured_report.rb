@@ -84,28 +84,33 @@ module Elkrb
         end
       end
 
-      # [[canonical id, algorithms that would read it]], one per place a key
-      # is written. An element's key is read by the algorithm laying out that
-      # element. A call key reaches every level, so any algorithm in play may
-      # read it.
+      # [[canonical id, algorithm/carrier routes that would read it]], one per
+      # place a key is written. A call key reaches every level, so any
+      # algorithm in play may read it.
       def occurrences(levels, call)
-        in_play = levels.filter_map(&:last).uniq
-        written = levels.flat_map do |options, algorithm|
-          options.ids.map { |id| [id, [algorithm]] }
-        end
+        in_play = levels.filter_map { |_, algorithm, _| algorithm }.uniq
+        written = written_occurrences(levels)
         called = call.own_ids.select { |id| Registry.status(id) }
-        (written + called.map { |id| [id, in_play] }).uniq
+        call_routes = in_play.map { |algorithm| [algorithm, :call] }
+        (written + called.map { |id| [id, call_routes] }).uniq
       end
 
-      def unread?(id, status, algorithms)
+      def written_occurrences(levels)
+        levels.flat_map do |options, _, routes|
+          options.ids.map { |id| [id, routes] }
+        end
+      end
+
+      def unread?(id, status, routes)
         status != :honoured &&
-          algorithms.none? { |name| Registry.read_by?(id, name) }
+          routes.none? do |algorithm, carrier|
+            Registry.read_by?(id, algorithm, carrier: carrier)
+          end
       end
 
-      # [[ElementOptions, algorithm]] for every element reachable from the
-      # graph, breadth first; the algorithm is the one laying out the element's
-      # children, nil for an element that has none to lay out (a leaf node,
-      # an edge, a port, a label). Iterative, so a deeply nested graph
+      # [[ElementOptions, algorithm, carrier]] for every element reachable
+      # from the graph, breadth first. Leaf elements inherit the algorithm of
+      # their enclosing layout level. Iterative, so a deeply nested graph
       # cannot overflow the stack here; an element reachable by two paths is
       # visited once for each algorithm that would lay out the level above it.
       def laid_out_elements(graph)
@@ -116,14 +121,15 @@ module Elkrb
 
           seen[key] = true
           level_of(element, enclosing).tap do |level|
-            nested_elements(element).each { |c| visits << [c, level.last] }
+            nested_elements(element).each { |c| visits << [c, level[1]] }
           end
         end
       end
 
       def level_of(element, enclosing)
         options = ElementOptions.new(element, @spellings)
-        [options, layout_algorithm(element, options, enclosing)]
+        algorithm = layout_algorithm(element, options, enclosing)
+        [options, algorithm, routes_for(element, algorithm, enclosing)]
       end
 
       # The algorithm a compound node is laid out by is its own registered
@@ -131,7 +137,7 @@ module Elkrb
       # HierarchicalProcessor picks it.
       def layout_algorithm(element, options, enclosing)
         return enclosing if element.equal?(@graph)
-        return unless compound?(element)
+        return enclosing unless compound?(element)
 
         own = options.value(ALGORITHM_ID)
         (own && @algorithm_name.call(own)) || enclosing
@@ -139,6 +145,27 @@ module Elkrb
 
       def compound?(element)
         element.respond_to?(:children) && !Array(element.children).empty?
+      end
+
+      # A compound is both the graph laid out by its own algorithm and a node
+      # routed by the enclosing algorithm. Its options can therefore be read
+      # in either role.
+      def routes_for(element, algorithm, enclosing)
+        if compound?(element) && !element.equal?(@graph)
+          [[algorithm, :compound], [enclosing, :node]].uniq
+        else
+          [[algorithm, carrier(element)]]
+        end
+      end
+
+      def carrier(element)
+        return :root if element.equal?(@graph)
+        return :compound if compound?(element)
+        return :edge if element.respond_to?(:sources)
+        return :port if element.respond_to?(:side)
+        return :label if element.respond_to?(:text)
+
+        :node
       end
 
       def nested_elements(element)

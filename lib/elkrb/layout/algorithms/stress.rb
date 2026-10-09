@@ -111,7 +111,9 @@ module Elkrb
           end
 
           edge_length = option("elk.stress.desiredEdgeLength").to_f
-          Array.new(n) { |source| bfs_distances(adjacency, source, edge_length) }
+          Array.new(n) do |source|
+            bfs_distances(adjacency, source, edge_length)
+          end
         end
 
         def bfs_distances(adjacency, source, edge_length)

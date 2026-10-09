@@ -5,7 +5,7 @@ require "benchmark"
 
 RSpec.describe Elkrb::Layout::Algorithms::Stress do
   describe "layout quality" do
-    let(:chain_30) do
+    let(:chain_thirty) do
       {
         "id" => "r",
         "children" => Array.new(30) do |i|
@@ -18,7 +18,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Stress do
       }
     end
 
-    let(:chain_200) do
+    let(:chain_two_hundred) do
       {
         "id" => "r",
         # Isolate the all-pairs distance construction whose cubic cost this
@@ -35,7 +35,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Stress do
     end
 
     it "keeps adjacent chain nodes near the desired edge length" do
-      result = Elkrb.layout(chain_30, algorithm: "stress")
+      result = Elkrb.layout(chain_thirty, algorithm: "stress")
       by_id = result.children.to_h { |node| [node.id, node] }
       distances = Array.new(29) do |i|
         left = by_id.fetch("n#{i}")
@@ -49,7 +49,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Stress do
 
     it "lays out a 200-node chain in under two seconds" do
       elapsed = Benchmark.realtime do
-        Elkrb.layout(chain_200, algorithm: "stress")
+        Elkrb.layout(chain_two_hundred, algorithm: "stress")
       end
 
       expect(elapsed).to be < 2.0

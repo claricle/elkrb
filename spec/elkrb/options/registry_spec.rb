@@ -199,7 +199,6 @@ RSpec.describe Elkrb::Options::Registry do
 
     algorithms = Elkrb::Layout::AlgorithmRegistry.available_algorithms
     by_positioning = OptionRouteRows.method(:by_positioning)
-    compounds = %i[compound_other compound_same compound_none]
     # elkjs 0.11 (knownLayoutOptions) targets these three options at parents
     # (padding also at nodes), never at an edge, so an edge's layoutOptions
     # does not decide their status. elk.direction is a parent target too, but
@@ -216,22 +215,36 @@ RSpec.describe Elkrb::Options::Registry do
       elk_string: [5, 50].map { |v| "[top=#{v},left=#{v},bottom=#{v},right=#{v}]" },
     }
 
-    # Measured: an edge's own direction orients SPLINES routing everywhere
-    # except in an algorithm that routes its own connectors and never hands
-    # them to the SPLINES router (libavoid), and fixed and spore_compaction
-    # give the same output at both directions when no node has an input
-    # position.
-    own_connector_routers = %w[libavoid]
-    spline_routed = algorithms - own_connector_routers
+    # Measured: direction reaches SPLINES routing from an edge or the call
+    # options under every resolver spelling. Fixed preserves edge routes and
+    # libavoid routes its own connectors; spore_compaction gives the same
+    # output at both directions when no node has an input position. MRTree
+    # also reads direction from parent options.
+    call_direction = by_positioning.call(
+      algorithms - %w[fixed libavoid radial],
+      unpositioned: algorithms - %w[fixed libavoid radial spore_compaction],
+      first_only: algorithms - %w[fixed libavoid radial],
+    )
     edge_direction = by_positioning.call(
-      spline_routed, unpositioned: spline_routed - %w[fixed spore_compaction],
-                     first_only: spline_routed
+      algorithms - %w[fixed libavoid mrtree radial],
+      unpositioned: algorithms - %w[fixed libavoid mrtree radial spore_compaction],
+      first_only: algorithms - %w[fixed libavoid mrtree radial],
     )
     direction = "elk.direction"
-    direction_readers =
-      (%i[call_string call_symbol edge].product(
-        OptionRouteRows.spellings_for(direction, "direction"),
-      )).to_h { |carrier, spelling| [[carrier, spelling, :value], edge_direction] }
+    direction_spellings = OptionRouteRows.spellings_for(direction, "direction")
+    direction_readers = %i[call_string call_symbol]
+      .product(direction_spellings).to_h do |carrier, spelling|
+      [[carrier, spelling, :value], call_direction]
+    end
+    direction_readers.merge!(
+      %i[edge].product(direction_spellings).to_h do |carrier, spelling|
+        [[carrier, spelling, :value], edge_direction]
+      end,
+    )
+    %i[root compound_none compound_same compound_other]
+      .product(direction_spellings).each do |carrier, spelling|
+      direction_readers[[carrier, spelling, :value]] = %w[mrtree]
+    end
     # Measured: every carrier an option applies to reads padding in every
     # shape and spelling, for every algorithm.
     padding_spellings = OptionRouteRows.spellings_for("elk.padding", "padding")
@@ -377,18 +390,21 @@ RSpec.describe Elkrb::Options::Registry do
   # libavoid_spec.rb ("with an edgeRouting style and an edge direction set")
   # holds the behaviour these two rows describe.
   describe "the edge routing options libavoid does not apply to its own routes" do
-    %w[elk.edgeRouting elk.spline.curvature].each do |id|
-      it "records #{id} as partial, read by every algorithm but libavoid" do
+    {
+      "elk.edgeRouting" => %w[fixed libavoid],
+      "elk.spline.curvature" => %w[fixed libavoid mrtree radial],
+    }.each do |id, nonreaders|
+      it "records #{id} as partial and not read by libavoid" do
         expect(described_class.status(id)).to eq(:partial)
         expect(described_class.read_by?(id, "layered")).to be(true)
         expect(described_class.read_by?(id, "libavoid")).to be(false)
         expect(described_class.note(id)).to include("libavoid ")
       end
 
-      it "lists as readers exactly the algorithms registered but libavoid" do
+      it "lists exactly its measured readers" do
         readers = described_class.all.fetch(id)[:readers]
         expect(readers.sort)
-          .to eq(Elkrb::Layout::AlgorithmRegistry.available_algorithms - %w[libavoid])
+          .to eq(Elkrb::Layout::AlgorithmRegistry.available_algorithms - nonreaders)
       end
     end
   end
@@ -412,12 +428,12 @@ RSpec.describe Elkrb::Options::Registry do
       end
     end
 
-    it "does not read org.eclipse.elk.direction from the graph's layoutOptions" do
+    it "reads org.eclipse.elk.direction from the graph's layoutOptions" do
       graph = Elkrb::Graph::Graph.from_json({
         id: "root", layoutOptions: { "org.eclipse.elk.direction" => "RIGHT" },
         children: [{ id: "a", width: 30, height: 30 }]
       }.to_json)
-      expect(Elkrb.export_dot(graph)).not_to include("rankdir")
+      expect(Elkrb.export_dot(graph)).to include("rankdir=LR")
     end
   end
 
@@ -435,7 +451,6 @@ RSpec.describe Elkrb::Options::Registry do
         elk.layered.compaction.postCompaction.strategy
         elk.box.packingMode
         elk.layered.layering.layerConstraint
-        elk.radial.centerOnRoot
         elk.disco.componentCompaction.strategy
       ]
 
@@ -443,6 +458,7 @@ RSpec.describe Elkrb::Options::Registry do
         expect(described_class.status(id)).to eq(:accepted),
                                               "#{id} should be :accepted"
       end
+      expect(described_class.status("elk.radial.centerOnRoot")).to eq(:honoured)
     end
 
     it "describes elk.disco.componentCompaction.strategy with ELK's contract, not the arrangement values" do

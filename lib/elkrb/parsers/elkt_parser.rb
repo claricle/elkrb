@@ -16,8 +16,8 @@ module Elkrb
     #
     # The returned Hash is the full ELK graph. `Graph.from_hash` reads the
     # parts the models have today: ids, sizes, positions, layout options,
-    # children, ports and edges. Root labels, root ports, labels nested inside
-    # a label and edge section options are parsed but the models drop them.
+    # children, labels, ports and edges. Labels nested inside a label and edge
+    # section options are parsed but the models drop them.
     #
     # @example
     #   Elkrb::Parsers::ElktParser.parse("node n1\nnode n2\nedge n1 -> n2\n")

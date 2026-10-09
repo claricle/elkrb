@@ -277,7 +277,7 @@ RSpec.describe "layoutOptions on every model" do
         layout_options: { edgeRouting: "SPLINES" }
       )
 
-      Elkrb.layout(graph, algorithm: "fixed")
+      Elkrb.layout(graph, algorithm: "box")
 
       expect(edge.sections.first.bend_points).not_to be_empty
     end
@@ -302,7 +302,7 @@ RSpec.describe "layoutOptions on every model" do
 
       expect(graph.layout_options).to eq("edge_routing" => "SPLINES")
 
-      Elkrb.layout(graph, algorithm: "fixed")
+      Elkrb.layout(graph, algorithm: "box")
 
       expect(graph.edges.first.sections.first.bend_points.size).to eq(2)
     end

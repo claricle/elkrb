@@ -588,8 +588,7 @@ RSpec.describe Elkrb::Options::Resolver do
       resolver.report_unhonoured(option_graph({}, children: [outer]))
 
       expect(log.string.lines.map { |line| line[/option (\S+)/, 1] })
-        .to contain_exactly("elk.spacing.edgeEdge", "elk.box.packingMode",
-                            "elk.radial.centerOnRoot")
+        .to contain_exactly("elk.spacing.edgeEdge", "elk.box.packingMode")
     end
 
     it "warns again on every call, because the report is per layout" do

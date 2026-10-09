@@ -19,9 +19,10 @@ module Elkrb
       private_constant :ELK_PREFIX
 
       # A :partial row either lists `readers`, the algorithms that read the id
-      # on every route it can arrive by (the id is partial ACROSS algorithms),
-      # or lists none (it is partial WITHIN each algorithm). With `readers`,
-      # `note` holds only what the list leaves out; .note joins the two.
+      # on every applicable carrier (the id is partial ACROSS algorithms), or
+      # lists none (it is partial WITHIN each algorithm). `carriers` narrows
+      # where a reader consumes the id. With `readers`, `note` holds only what
+      # the list leaves out; .note joins the two.
       #
       # The OPTIONS constant name/path is private; .all below returns
       # this same frozen object, so use .all (or .canonical/.coerce/
@@ -35,12 +36,12 @@ module Elkrb
         "disco.componentSpacing" => { type: :float, default: 20.0, namespace: :elkrb, algorithms: %w[disco], status: :honoured, description: "Spacing between components" },
         "elk.algorithm" => { type: :string, default: "layered", aliases: %w[algorithm], algorithms: :all, status: :honoured, description: "The layout algorithm to use" },
         "elk.aspectRatio" => { type: :float, default: 1.6, aliases: %w[aspectRatio aspect_ratio], algorithms: %w[box random], status: :honoured, description: "Target width/height ratio (box, random)" },
-        "elk.bendPoints" => { type: :kvector_chain, default: nil, aliases: %w[bendPoints], algorithms: :all, status: :honoured, description: "Manual bend points for an edge" },
+        "elk.bendPoints" => { type: :kvector_chain, default: nil, aliases: %w[bendPoints], algorithms: :all, status: :partial, readers: %w[fixed], carriers: %i[edge call], note: "No other algorithm applies explicit bend points", description: "Manual bend points for an edge" },
         "elk.box.packingMode" => { type: :enum, values: %w[SIMPLE GROUP_DEC GROUP_MIXED GROUP_INC], default: "SIMPLE", algorithms: %w[box], status: :accepted, description: "Box layout packing mode; SIMPLE is implemented and GROUP_* values fall back to it" },
         "elk.direction" => { type: :enum, values: %w[UNDEFINED RIGHT LEFT DOWN UP], default: "UNDEFINED", aliases: %w[direction], algorithms: %w[layered mrtree], status: :partial, note: "an edge's own direction, or a call option under any registered spelling, orients SPLINES routing; node placement ignores it on every route; DOT export reads it from the graph's layoutOptions as elk.direction or direction", description: "Overall direction of layout" },
         "elk.disco.componentCompaction.strategy" => { type: :enum, values: %w[POLYOMINO], default: "POLYOMINO", algorithms: %w[disco], status: :accepted, description: "DisCo component compaction; not honoured today. Arrangement is a separate concern elkrb reads as disco.componentArrangement" },
         "elk.edgeLabels.placement" => { type: :string, default: "CENTER", algorithms: :all, status: :honoured, description: "Edge label placement" },
-        "elk.edgeRouting" => { type: :enum, values: %w[UNDEFINED POLYLINE ORTHOGONAL SPLINES], default: "UNDEFINED", aliases: %w[edgeRouting edge_routing edge.routing], algorithms: :all, status: :partial, readers: %w[box disco fixed force layered mrtree radial random rectpacking spore_compaction spore_overlap stress topdownpacking vertiflex], note: "libavoid routes every edge between two nodes of a level itself, as an orthogonal route around the nodes, and ignores the style for them; its self-loops and edges that leave the level follow the style like any other algorithm's edges", description: "Edge routing style" },
+        "elk.edgeRouting" => { type: :enum, values: %w[UNDEFINED POLYLINE ORTHOGONAL SPLINES], default: "UNDEFINED", aliases: %w[edgeRouting edge_routing edge.routing], algorithms: :all, status: :partial, readers: %w[box disco force layered mrtree radial random rectpacking spore_compaction spore_overlap stress topdownpacking vertiflex], carriers: %i[root compound edge call], note: "Fixed preserves existing edge routes. libavoid routes every edge between two nodes of a level itself as an orthogonal route around the nodes and ignores the style for them; its self-loops and edges that leave the level follow the style like any other algorithm's edges", description: "Edge routing style" },
         "elk.force.iterations" => { type: :integer, default: 300, aliases: %w[iterations], algorithms: %w[force], status: :honoured, description: "Force simulation iteration count" },
         "elk.force.repulsion" => { type: :float, default: 5.0, aliases: %w[repulsion], algorithms: %w[force], status: :honoured, description: "Force simulation repulsion strength" },
         "elk.force.temperature" => { type: :float, default: 0.001, aliases: %w[temperature], algorithms: %w[force], status: :honoured, description: "Force simulation cooling temperature" },
@@ -63,12 +64,12 @@ module Elkrb
         "elk.randomSeed" => { type: :integer, default: 1, aliases: %w[randomSeed], algorithms: %w[force random], status: :honoured, description: "Seed for algorithms with random behaviour" },
         "elk.selfLoopOffset" => { type: :float, default: 20.0, aliases: %w[selfLoopOffset], namespace: :elkrb, algorithms: :all, status: :accepted, description: "elkrb-private: self-loop offset (not yet wired; hardcoded today)" },
         "elk.selfLoopRouting" => { type: :string, default: nil, aliases: %w[selfLoopRouting], namespace: :elkrb, algorithms: :all, status: :accepted, description: "elkrb-private: self-loop routing style (not yet wired)" },
-        "elk.selfLoopSide" => { type: :enum, values: %w[NORTH SOUTH EAST WEST], default: "EAST", aliases: %w[selfLoopSide], namespace: :elkrb, algorithms: :all, status: :honoured, description: "elkrb-private: side a self-loop is drawn on" },
+        "elk.selfLoopSide" => { type: :enum, values: %w[NORTH SOUTH EAST WEST], default: "EAST", aliases: %w[selfLoopSide], namespace: :elkrb, algorithms: :all, status: :partial, readers: %w[box disco force layered libavoid mrtree radial random rectpacking spore_compaction spore_overlap stress topdownpacking vertiflex], carriers: %i[node edge call], note: "Fixed preserves existing edge routes", description: "elkrb-private: side a self-loop is drawn on" },
         "elk.spacing.componentComponent" => { type: :float, default: 20.0, algorithms: %w[disco], status: :honoured, description: "Spacing between disconnected components" },
         "elk.spacing.edgeEdge" => { type: :float, default: 10.0, algorithms: %w[layered], status: :accepted, description: "Spacing between two edges; not honoured today" },
         "elk.spacing.edgeNode" => { type: :float, default: 10.0, algorithms: %w[layered], status: :accepted, description: "Spacing between an edge and a node it does not connect to; not honoured today" },
-        "elk.spacing.nodeNode" => { type: :float, default: 20.0, aliases: %w[spacing.nodeNode spacing_node_node], algorithms: :all, status: :partial, readers: %w[box layered mrtree random rectpacking topdownpacking vertiflex], note: "Every reader takes it under every spelling, from the call options and from the layoutOptions of the graph or compound node it lays out. libavoid also reads it, unless every node has an input position; disco reads it only from a compound node's layoutOptions. No other algorithm reads it", description: "Spacing between nodes" },
-        "elk.spline.curvature" => { type: :float, default: 0.5, aliases: %w[spline.curvature], namespace: :elkrb, algorithms: :all, status: :partial, readers: %w[box disco fixed force layered mrtree radial random rectpacking spore_compaction spore_overlap stress topdownpacking vertiflex], note: "libavoid does not apply it to the edges between two nodes of a level, which it routes itself as orthogonal routes", description: "elkrb-private: curvature factor for SPLINES routing" },
+        "elk.spacing.nodeNode" => { type: :float, default: 20.0, aliases: %w[spacing.nodeNode spacing_node_node], algorithms: :all, status: :partial, readers: %w[box layered mrtree random rectpacking topdownpacking vertiflex], carriers: %i[root compound call], note: "Every reader takes it under every spelling, from the call options and from the layoutOptions of the graph or compound node it lays out. libavoid also reads it, unless every node has an input position; disco reads it only from a compound node's layoutOptions. No other algorithm reads it", description: "Spacing between nodes" },
+        "elk.spline.curvature" => { type: :float, default: 0.5, aliases: %w[spline.curvature], namespace: :elkrb, algorithms: :all, status: :partial, readers: %w[box disco force layered random rectpacking spore_compaction spore_overlap stress topdownpacking vertiflex], carriers: %i[edge call], note: "Fixed preserves routes; MRTree and Radial replace generic spline routing; libavoid does not apply it to edges between two nodes of a level, which it routes itself as orthogonal routes", description: "elkrb-private: curvature factor for SPLINES routing" },
         "elk.stress.desiredEdgeLength" => { type: :float, default: 100.0, algorithms: %w[stress], status: :honoured, description: "Desired edge length for stress majorization" },
         "elk.stress.epsilon" => { type: :float, default: 0.0001, aliases: %w[epsilon], algorithms: %w[stress], status: :honoured, description: "Stress majorization convergence threshold" },
         "elk.stress.iterationLimit" => { type: :integer, default: 500, algorithms: %w[stress], status: :honoured, description: "Stress majorization iteration limit" },
@@ -106,6 +107,7 @@ module Elkrb
         entry[:values]&.freeze
         entry[:algorithms].freeze if entry[:algorithms].is_a?(Array)
         entry[:readers]&.freeze
+        entry[:carriers]&.freeze
       end
 
       ALIAS_LOOKUP = OPTIONS.each_with_object({}) do |(id, entry), lookup|
@@ -169,13 +171,18 @@ module Elkrb
 
         # @param id [String, Symbol] any id or alias
         # @param algorithm [String, nil] a normalised algorithm name
+        # @param carrier [Symbol, nil] where the option is written; nil checks
+        #   only algorithm readership
         # @return [Boolean] whether the id lists the algorithm among its
         #   readers; false for an id with no readers. Readers are the
         #   built-in algorithms, matched by registered name: a class
         #   registered under another name is not one, and a class registered
         #   over a built-in name is taken to read what that name reads.
-        def read_by?(id, algorithm)
-          Array(entry_for(id)&.[](:readers)).include?(algorithm)
+        def read_by?(id, algorithm, carrier: nil)
+          entry = entry_for(id)
+          return false unless Array(entry&.[](:readers)).include?(algorithm)
+
+          carrier.nil? || Array(entry[:carriers]).include?(carrier)
         end
 
         # Membership, not truthfulness: an id's presence here means it's

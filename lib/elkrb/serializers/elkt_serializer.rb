@@ -45,8 +45,12 @@ module Elkrb
         serialize_layout_options(options)
         @output << "" if options.any?
 
+        labels = value(graph, :labels) || []
+        ports = value(graph, :ports) || []
         children = value(graph, :children) || []
         edges = value(graph, :edges) || []
+        labels.each { |label| serialize_label(label) }
+        ports.each { |port| serialize_port(port) }
         children.each { |node| serialize_node(node) }
         @output << "" if children.any? && edges.any?
         edges.each { |edge| serialize_edge(edge) }
@@ -194,6 +198,7 @@ module Elkrb
       def prepare_ids(graph)
         @port_owners = {}
         ids = collect_ids(graph)
+        collect_root_port_ids(graph, ids)
         @id_map = {}
         used = {}
 
@@ -233,6 +238,14 @@ module Elkrb
           collect_ids(node, ids)
         end
         ids
+      end
+
+      def collect_root_port_ids(graph, ids)
+        Array(value(graph, :ports)).each do |port|
+          port_id = value(port, :id)&.to_s
+          ids << port_id if port_id
+          collect_member_ids(value(port, :labels), ids)
+        end
       end
 
       def collect_edge_ids(edges, ids)

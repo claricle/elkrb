@@ -93,6 +93,26 @@ RSpec.describe "S22 serializers" do
         .to eq(graph.edges.map { |edge| [edge.id, edge.sources, edge.targets] })
     end
 
+    it "round-trips root labels and ports through the shared ID map" do
+      graph = Elkrb::Graph::Graph.from_hash(
+        id: "root",
+        labels: [{ id: "root-label", text: "Title" }],
+        ports: [{
+          id: "root.port",
+          labels: [{ id: "port-label", text: "Port label" }],
+        }],
+      )
+
+      elkt = serializer.serialize(graph)
+      parsed = Elkrb::Parsers::ElktParser.parse(elkt)
+
+      expect(elkt).to include('label root_label: "Title"', "port root_port")
+      expect(parsed.dig(:labels, 0)).to include(id: "root_label", text: "Title")
+      expect(parsed.dig(:ports, 0, :id)).to eq("root_port")
+      expect(parsed.dig(:ports, 0, :labels, 0))
+        .to include(id: "port_label", text: "Port label")
+    end
+
     it "round-trips complex edges through one deterministic ID map" do
       graph = Elkrb::Graph::Graph.from_json(
         File.read("spec/fixtures/elkjs_bug7_complex.json"),

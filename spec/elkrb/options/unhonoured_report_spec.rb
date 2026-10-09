@@ -9,7 +9,7 @@ RSpec.describe Elkrb::Options::UnhonouredReport do
   node_node = "elk.spacing.nodeNode"
   # registry_spec ("status agrees with what layout reads") holds these to
   # what layout does and to the registry's readers.
-  readers = %w[box layered mrtree random rectpacking topdownpacking]
+  readers = %w[box layered mrtree random rectpacking topdownpacking vertiflex]
   algorithms = Elkrb::Layout::AlgorithmRegistry.available_algorithms
   unhonoured = /strict mode.*#{Regexp.escape(node_node)} \(partial/
 
@@ -65,6 +65,102 @@ RSpec.describe Elkrb::Options::UnhonouredReport do
   end
 
   describe "the algorithm that lays out the element carrying the key" do
+    edge_cases = [
+      ["fixed", {}, { "elk.bendPoints" => "(10,20; 30,40)" }],
+      ["box", {}, { "elk.edgeRouting" => "ORTHOGONAL" }],
+      ["box", { "elk.edgeRouting" => "SPLINES" },
+       { "elk.spline.curvature" => 0.9 }],
+    ]
+    edge_cases.each do |algorithm, root_options, edge_options|
+      keys = edge_options.keys.join(", ")
+
+      it "accepts #{keys} on an edge under #{algorithm}" do
+        graph = positioned_graph(
+          layout_options: root_options,
+          edge: { layoutOptions: edge_options },
+        )
+
+        expect { Elkrb.layout(graph, algorithm: algorithm, strict: true) }
+          .not_to raise_error
+      end
+    end
+
+    it "accepts self-loop side on an actual loop under box" do
+      graph = positioned_graph(
+        edge: { layoutOptions: { "elk.selfLoopSide" => "WEST" } },
+      )
+      graph.edges.first.targets = ["a"]
+
+      expect { Elkrb.layout(graph, algorithm: "box", strict: true) }
+        .not_to raise_error
+    end
+
+    it "refuses edge routing on an edge under fixed" do
+      graph = positioned_graph(
+        edge: { layoutOptions: { "elk.edgeRouting" => "ORTHOGONAL" } },
+      )
+
+      expect { Elkrb.layout(graph, algorithm: "fixed", strict: true) }
+        .to raise_error(Elkrb::Error, /elk\.edgeRouting \(partial/)
+    end
+
+    let(:nested_edge_graph) do
+      lambda do |own_algorithm, edge_options|
+        Elkrb::Graph::Graph.from_json(
+          {
+            id: "root",
+            children: [{
+              id: "compound",
+              layoutOptions: { "elk.algorithm" => own_algorithm },
+              children: positioned_nodes("inner-"),
+              edges: [{
+                id: "inner-edge", sources: ["inner-a"], targets: ["inner-b"],
+                layoutOptions: edge_options
+              }],
+            }],
+          }.to_json,
+        )
+      end
+    end
+
+    [
+      ["fixed", "box", { "elk.edgeRouting" => "ORTHOGONAL" }, false],
+      ["box", "fixed", { "elk.bendPoints" => "(10,20; 30,40)" }, false],
+      ["box", "fixed", { "elk.edgeRouting" => "ORTHOGONAL" }, true],
+    ].each do |root, own, options, raises|
+      it "judges nested #{options.keys.first} by #{own} under #{root}" do
+        graph = nested_edge_graph.call(own, options)
+        operation = -> { Elkrb.layout(graph, algorithm: root, strict: true) }
+
+        if raises
+          expect(&operation).to raise_error(Elkrb::Error, /partial/)
+        else
+          expect(&operation).not_to raise_error
+        end
+      end
+    end
+
+    it "also treats a compound as a node routed by its enclosing algorithm" do
+      compound = {
+        id: "compound",
+        layoutOptions: {
+          "elk.algorithm" => "fixed", "elk.selfLoopSide" => "WEST"
+        },
+        children: positioned_nodes("inner-"),
+      }
+      graph = Elkrb::Graph::Graph.from_json(
+        {
+          id: "root", children: [compound],
+          edges: [{
+            id: "loop", sources: ["compound"], targets: ["compound"]
+          }]
+        }.to_json,
+      )
+
+      expect { Elkrb.layout(graph, algorithm: "box", strict: true) }
+        .not_to raise_error
+    end
+
     # [root algorithm, the compound's own algorithm, raises?]
     [
       ["force", "layered", false],
