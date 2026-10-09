@@ -152,8 +152,8 @@ RSpec.describe "sirena consumer contract" do
         %w[b c].sort_by { |id| positions[id][0] }
       end
 
-      expect(left_to_right.call("NODES_AND_EDGES")).to eq(%w[c b])
-      expect(left_to_right.call("NONE")).to eq(%w[b c])
+      expect(left_to_right.call("NODES_AND_EDGES")).to eq(%w[b c])
+      expect(left_to_right.call("NONE")).to eq(%w[c b])
     end
   end
 

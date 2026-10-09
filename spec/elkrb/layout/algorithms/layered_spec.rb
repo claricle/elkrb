@@ -14,13 +14,37 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
       }
     end
 
+    # ELK's long edge runs straight along its dummy's lane: one bend where it
+    # enters the dummy's layer and one where it leaves, never one at the centre.
     it "routes a two-layer edge around the intervening node" do
       result = Elkrb.layout(long_edge_graph(%w[a b c]), algorithm: "layered")
       section = result.edges.find { |edge| edge.id == "long" }.sections.first
       obstacle = result.children.find { |node| node.id == "b" }
 
-      expect(section.bend_points.length).to eq(1)
+      expect(section.bend_points.length).to eq(2)
       expect(route_interior_crossings(section, obstacle)).to be_empty
+    end
+
+    it "pads the graph from the lane when the lane is outermost" do
+      result = Elkrb.layout(long_edge_graph(%w[a b c]), algorithm: "layered")
+      section = result.edges.find { |edge| edge.id == "long" }.sections.first
+      top = result.children.map(&:y).min
+
+      expect(section.bend_points.map(&:y).min).to be < top
+      expect(section.bend_points.map(&:y).min - 0.5).to eq(12.0)
+    end
+
+    it "visits a reversed edge's bends from its own start" do
+      result = Elkrb.layout(
+        long_edge_graph(%w[a b c]).tap do |graph|
+          graph[:edges].last.merge!(sources: ["c"], targets: ["a"])
+        end,
+        algorithm: "layered",
+      )
+      section = result.edges.find { |edge| edge.id == "long" }.sections.first
+      bend_x = section.bend_points.map(&:x)
+
+      expect(bend_x).to eq(bend_x.sort.reverse)
     end
 
     it "adds one bend for each of two intermediate layers" do

@@ -13,13 +13,6 @@
 # The reasons are locals, not constants, so the table below is the only
 # thing this file exposes and nothing can reach past it to a single reason.
 module GoldenCases
-  fan_out_parent_position =
-    "layered centres a on its targets (y 37); elk aligns a's first " \
-    "edge straight with b (y 17)"
-  branch_layer_order =
-    "layered orders the branching layer [b, c]; elk orders it [c, b] " \
-    "(cause undetermined), and parents sit centred rather than " \
-    "aligned with one target"
   spore_scaling =
     "sporeOverlap: our push-apart loop exhausts its 50 iterations with an " \
     "overlap left (134x101.5); elkjs separates the diamond to 122x122"
@@ -32,10 +25,9 @@ module GoldenCases
     { name: "chain2", tier: :exact, fields: %i[nodes graph], pending: nil },
     { name: "chain3", tier: :exact,
       fields: %i[nodes graph sections], pending: nil },
-    { name: "fan_out", tier: :structural,
-      pending: fan_out_parent_position },
-    { name: "fan_in", tier: :structural, pending: branch_layer_order },
-    { name: "diamond", tier: :structural, pending: branch_layer_order },
+    { name: "fan_out", tier: :structural, pending: nil },
+    { name: "fan_in", tier: :structural, pending: nil },
+    { name: "diamond", tier: :structural, pending: nil },
     { name: "cycle3", tier: :structural,
       fields: %i[nodes sections], pending: nil },
     { name: "self_loop", tier: :structural, fields: %i[nodes sections],

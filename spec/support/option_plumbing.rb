@@ -67,12 +67,10 @@ module OptionPlumbing
         node["y"] = y
       end
     end,
-    # Put the two equally ranked targets in reverse id order. Layered's
-    # default tie-break sorts them by id, while model-order preservation and
-    # disabled crossing minimization retain this input order.
-    reversed_layered_tie: lambda do |nodes|
-      nodes[1], nodes[2] = nodes[2], nodes[1]
-    end,
+    # Reverses the a-b and a-c edges into a fan-in (b-a, c-a): the shape where
+    # considerModelOrder and crossingMinimization NONE change the order of b
+    # and c. plumbing_skeleton flips the edges.
+    fan_in_tie: nil,
   }.freeze
 
   # The 4-node fixture: a-b and a-c edges (a labelled one, a port on a), and
@@ -228,7 +226,7 @@ module OptionPlumbing
 
     nodes = Marshal.load(Marshal.dump(NODE_BASE))
     NODE_VARIANTS.fetch(variant)&.call(nodes)
-    {
+    graph = {
       "id" => "root",
       "layoutOptions" => {},
       "children" => nodes,
@@ -242,6 +240,14 @@ module OptionPlumbing
           "layoutOptions" => {} },
       ],
     }
+    reverse_fan_edges(graph) if variant == :fan_in_tie
+    graph
+  end
+
+  def reverse_fan_edges(graph)
+    graph["edges"].first(2).each do |edge|
+      edge["sources"], edge["targets"] = edge["targets"], edge["sources"]
+    end
   end
 
   def self_loop_skeleton
