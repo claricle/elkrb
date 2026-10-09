@@ -38,13 +38,15 @@ module Elkrb
           distances = calculate_distances(graph)
 
           # Iteratively minimize stress
+          old_stress = calculate_stress(graph, distances)
           iterations.times do |_i|
-            old_stress = calculate_stress(graph, distances)
             optimize_positions(graph, distances)
             new_stress = calculate_stress(graph, distances)
 
             # Stop if converged
             break if (old_stress - new_stress).abs < epsilon
+
+            old_stress = new_stress
           end
 
           # Apply padding and set graph dimensions
@@ -72,7 +74,7 @@ module Elkrb
         def initialize_positions(graph)
           # Use circular initial layout
           n = graph.children.length
-          radius = n * 10.0
+          radius = n * option("elk.stress.desiredEdgeLength").to_f
 
           graph.children.each_with_index do |node, i|
             angle = 2 * Math::PI * i / n
@@ -83,12 +85,9 @@ module Elkrb
 
         def calculate_distances(graph)
           n = graph.children.length
-          distances = Array.new(n) { Array.new(n, Float::INFINITY) }
+          adjacency = Array.new(n) { [] }
 
-          # Initialize distances
-          n.times { |i| distances[i][i] = 0 }
-
-          # Set edge distances
+          # Build adjacency from endpoints resolved to their owning nodes.
           index = NodeIndex.build(graph)
           positions = graph.children.each_with_index.to_h do |node, i|
             [node.id, i]
@@ -105,20 +104,31 @@ module Elkrb
 
             i = positions[source_node.id]
             j = positions[target_node.id]
+            next unless i && j
 
-            distances[i][j] = 1.0
-            distances[j][i] = 1.0
+            adjacency[i] << j
+            adjacency[j] << i
           end
 
-          # Floyd-Warshall for shortest paths
-          n.times do |k|
-            n.times do |i|
-              n.times do |j|
-                distances[i][j] = [
-                  distances[i][j],
-                  distances[i][k] + distances[k][j],
-                ].min
-              end
+          edge_length = option("elk.stress.desiredEdgeLength").to_f
+          Array.new(n) { |source| bfs_distances(adjacency, source, edge_length) }
+        end
+
+        def bfs_distances(adjacency, source, edge_length)
+          distances = Array.new(adjacency.length, Float::INFINITY)
+          distances[source] = 0.0
+          queue = [source]
+          cursor = 0
+
+          while cursor < queue.length
+            current = queue[cursor]
+            cursor += 1
+
+            adjacency[current].each do |neighbor|
+              next unless distances[neighbor] == Float::INFINITY
+
+              distances[neighbor] = distances[current] + edge_length
+              queue << neighbor
             end
           end
 

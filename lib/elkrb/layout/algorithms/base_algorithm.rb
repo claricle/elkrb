@@ -113,6 +113,10 @@ module Elkrb
           @resolver.get(key, @graph, default: default)
         end
 
+        def rng
+          @rng ||= ::Random.new(option("elk.randomSeed").to_i)
+        end
+
         # Runs the block with #option reading from graph, then puts the
         # previous graph back, even when the block raises.
         #

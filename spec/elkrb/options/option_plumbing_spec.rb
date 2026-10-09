@@ -92,7 +92,7 @@ RSpec.describe "option plumbing" do
     },
     "elk.randomSeed" => {
       at: :root, value: 7,
-      unwired: unread["force and random use the unseeded Kernel#rand; card 20"]
+      variant: { "force" => :unpositioned },
     },
     "elk.selfLoopSide" => { at: :loop, value: "WEST" },
     "elk.spacing.componentComponent" => {
@@ -109,10 +109,7 @@ RSpec.describe "option plumbing" do
       ]
     },
     "elk.spline.curvature" => { at: :spline_edge, value: 0.9 },
-    "elk.stress.desiredEdgeLength" => {
-      at: :root, value: 300.0,
-      unwired: unread["stress reads no desired edge length yet; card 20"]
-    },
+    "elk.stress.desiredEdgeLength" => { at: :root, value: 300.0 },
     "elk.stress.epsilon" => { at: :root, value: 1e9 },
     "elk.stress.iterationLimit" => { at: :root, value: 1 },
     "hierarchical" => {

@@ -28,8 +28,8 @@ module Elkrb
 
           # Position nodes randomly
           graph.children.each do |node|
-            node.x = rand * (width - (node.width || 0.0))
-            node.y = rand * (height - (node.height || 0.0))
+            node.x = rng.rand * (width - (node.width || 0.0))
+            node.y = rng.rand * (height - (node.height || 0.0))
           end
 
           # Apply padding and set graph dimensions

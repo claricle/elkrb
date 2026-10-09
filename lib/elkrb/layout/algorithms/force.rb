@@ -62,8 +62,8 @@ module Elkrb
           graph.children.each do |node|
             # Set random position if not already set
             unless node.x && node.y
-              node.x = rand * side
-              node.y = rand * side
+              node.x = rng.rand * side
+              node.y = rng.rand * side
             end
           end
         end

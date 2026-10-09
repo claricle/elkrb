@@ -1,8 +1,61 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "benchmark"
 
 RSpec.describe Elkrb::Layout::Algorithms::Stress do
+  describe "layout quality" do
+    let(:chain_30) do
+      {
+        "id" => "r",
+        "children" => Array.new(30) do |i|
+          { "id" => "n#{i}", "width" => 30, "height" => 30 }
+        end,
+        "edges" => Array.new(29) do |i|
+          { "id" => "e#{i}", "sources" => ["n#{i}"],
+            "targets" => ["n#{i + 1}"] }
+        end,
+      }
+    end
+
+    let(:chain_200) do
+      {
+        "id" => "r",
+        # Isolate the all-pairs distance construction whose cubic cost this
+        # regression protects against.
+        "layoutOptions" => { "elk.stress.iterationLimit" => 1 },
+        "children" => Array.new(200) do |i|
+          { "id" => "n#{i}", "width" => 10, "height" => 10 }
+        end,
+        "edges" => Array.new(199) do |i|
+          { "id" => "e#{i}", "sources" => ["n#{i}"],
+            "targets" => ["n#{i + 1}"] }
+        end,
+      }
+    end
+
+    it "keeps adjacent chain nodes near the desired edge length" do
+      result = Elkrb.layout(chain_30, algorithm: "stress")
+      by_id = result.children.to_h { |node| [node.id, node] }
+      distances = Array.new(29) do |i|
+        left = by_id.fetch("n#{i}")
+        right = by_id.fetch("n#{i + 1}")
+        Math.hypot(left.x - right.x, left.y - right.y)
+      end
+
+      expect(distances).to all(be_within(10.0).of(100.0))
+      expect(result).to have_no_overlapping_siblings
+    end
+
+    it "lays out a 200-node chain in under two seconds" do
+      elapsed = Benchmark.realtime do
+        Elkrb.layout(chain_200, algorithm: "stress")
+      end
+
+      expect(elapsed).to be < 2.0
+    end
+  end
+
   describe "#calculate_distances (private)" do
     it "resolves port-id edge endpoints to their owning node's row/column" do
       node_a = Elkrb::Graph::Node.new(
@@ -21,8 +74,8 @@ RSpec.describe Elkrb::Layout::Algorithms::Stress do
 
       distances = described_class.new.send(:calculate_distances, graph)
 
-      expect(distances[0][1]).to eq(1.0)
-      expect(distances[1][0]).to eq(1.0)
+      expect(distances[0][1]).to eq(100.0)
+      expect(distances[1][0]).to eq(100.0)
       expect(distances[0][2]).to eq(Float::INFINITY)
     end
 
