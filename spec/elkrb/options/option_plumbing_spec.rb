@@ -120,6 +120,13 @@ RSpec.describe "option plumbing" do
       at: :root, value: 7,
       variant: { "force" => :unpositioned }
     },
+    "elk.selfLoopOffset" => {
+      at: :loop, value: 40.0, variant: :self_loop_only,
+      unwired: unread[
+        "fixed preserves existing edge routes; random scatters its own " \
+        "bend points", only: %w[fixed random]
+      ]
+    },
     "elk.selfLoopSide" => {
       at: :loop, value: "WEST", variant: :self_loop_only,
       unwired: unread[

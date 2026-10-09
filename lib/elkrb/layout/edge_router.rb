@@ -596,7 +596,7 @@ module Elkrb
       def route_orthogonal_self_loop(section, edge, node, loop_index,
                                      graph = nil)
         # Calculate offset based on loop index
-        offset = calculate_loop_offset(loop_index)
+        offset = calculate_loop_offset(loop_index, edge, node)
 
         # Get self-loop side
         # Calculate dimensions
@@ -752,7 +752,7 @@ module Elkrb
       # Route spline self-loop (curved path)
       def route_spline_self_loop(section, edge, node, loop_index)
         # Calculate offset based on loop index
-        offset = calculate_loop_offset(loop_index)
+        offset = calculate_loop_offset(loop_index, edge, node)
 
         # Get self-loop side
         side = get_self_loop_side(edge, node)
@@ -856,8 +856,8 @@ module Elkrb
       end
 
       # Calculate offset for multiple self-loops on same node
-      def calculate_loop_offset(loop_index)
-        base_offset = 20.0
+      def calculate_loop_offset(loop_index, edge, node)
+        base_offset = @resolver.get("elk.selfLoopOffset", edge, node)
         base_offset * (loop_index + 1)
       end
 
@@ -891,7 +891,7 @@ module Elkrb
         source_port = find_port_by_id(source_id, node)
         target_port = find_port_by_id(target_id, node)
 
-        offset = calculate_loop_offset(loop_index)
+        offset = calculate_loop_offset(loop_index, edge, node)
         if source_port && target_port
           start_point = get_port_absolute_position(source_port, node)
           end_point = get_port_absolute_position(target_port, node)

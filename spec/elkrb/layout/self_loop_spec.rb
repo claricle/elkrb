@@ -4,6 +4,8 @@ require "spec_helper"
 
 RSpec.describe "Self-loop Support" do
   let(:router) { RouterHost.new }
+  let(:loop_edge) { Elkrb::Graph::Edge.new(id: "le") }
+  let(:loop_node) { Elkrb::Graph::Node.new(id: "ln") }
 
   describe "self-loop detection" do
     it "detects self-loop when source equals target" do
@@ -276,9 +278,9 @@ RSpec.describe "Self-loop Support" do
     end
 
     it "applies increasing offsets to multiple loops" do
-      offset0 = router.send(:calculate_loop_offset, 0)
-      offset1 = router.send(:calculate_loop_offset, 1)
-      offset2 = router.send(:calculate_loop_offset, 2)
+      offset0 = router.send(:calculate_loop_offset, 0, loop_edge, loop_node)
+      offset1 = router.send(:calculate_loop_offset, 1, loop_edge, loop_node)
+      offset2 = router.send(:calculate_loop_offset, 2, loop_edge, loop_node)
 
       expect(offset0).to eq(20.0)
       expect(offset1).to eq(40.0)
@@ -608,14 +610,14 @@ RSpec.describe "Self-loop Support" do
 
   describe "self-loop offset calculation" do
     it "calculates base offset for first loop" do
-      offset = router.send(:calculate_loop_offset, 0)
+      offset = router.send(:calculate_loop_offset, 0, loop_edge, loop_node)
       expect(offset).to eq(20.0)
     end
 
     it "calculates increasing offset for subsequent loops" do
-      offset1 = router.send(:calculate_loop_offset, 1)
-      offset2 = router.send(:calculate_loop_offset, 2)
-      offset3 = router.send(:calculate_loop_offset, 3)
+      offset1 = router.send(:calculate_loop_offset, 1, loop_edge, loop_node)
+      offset2 = router.send(:calculate_loop_offset, 2, loop_edge, loop_node)
+      offset3 = router.send(:calculate_loop_offset, 3, loop_edge, loop_node)
 
       expect(offset1).to eq(40.0)
       expect(offset2).to eq(60.0)
@@ -648,6 +650,46 @@ RSpec.describe "Self-loop Support" do
 
       # Second loop should extend further
       expect(bend_x_1).to be > bend_x_0
+    end
+  end
+
+  describe "elk.selfLoopOffset" do
+    let(:node) do
+      Elkrb::Graph::Node.new(id: "n1", x: 0.0, y: 0.0, width: 100.0,
+                             height: 100.0)
+    end
+    let(:edge) do
+      Elkrb::Graph::Edge.new(id: "e1", sources: ["n1"], targets: ["n1"])
+    end
+
+    def east_bend_x(edge, node, loop_index)
+      section = Elkrb::Graph::EdgeSection.new(id: "s")
+      router.send(:route_orthogonal_self_loop, section, edge, node, loop_index)
+      section.bend_points.first.x
+    end
+
+    it "keeps the 20.0 default for every loop index" do
+      expect([0, 1, 2].map { |index| east_bend_x(edge, node, index) })
+        .to eq([160.0, 180.0, 200.0])
+    end
+
+    it "moves the bend points by the difference from the default" do
+      edge.layout_options = { "elk.selfLoopOffset" => 35.0 }
+
+      expect(east_bend_x(edge, node, 0)).to eq(175.0)
+    end
+
+    it "multiplies the configured offset by the loop index" do
+      edge.layout_options = { "elk.selfLoopOffset" => 35.0 }
+
+      expect(east_bend_x(edge, node, 1) - east_bend_x(edge, node, 0))
+        .to eq(35.0)
+    end
+
+    it "is read from the node when the edge names none" do
+      node.layout_options = { "selfLoopOffset" => 30.0 }
+
+      expect(router.send(:calculate_loop_offset, 1, edge, node)).to eq(60.0)
     end
   end
 
