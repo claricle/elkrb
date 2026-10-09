@@ -16,15 +16,15 @@ RSpec.describe Elkrb::Commands::ValidateCommand do
   # CLI exits 1 either way. This captures the real bullet list #run prints
   # so a few specs can pin its actual content instead of its mere presence.
   def run_capturing_errors(command)
-    original_stdout = $stdout
-    $stdout = StringIO.new
+    original_stderr = $stderr
+    $stderr = StringIO.new
     begin
       command.run
     rescue Elkrb::CommandFailed
       nil
     ensure
-      output = $stdout.string
-      $stdout = original_stdout
+      output = $stderr.string
+      $stderr = original_stderr
     end
     output.lines.grep(/^ {2}• /).map { |line| line.sub(/^ {2}• /, "").chomp }
   end
@@ -64,7 +64,7 @@ RSpec.describe Elkrb::Commands::ValidateCommand do
       command = described_class.new(input_file, {})
 
       expect { command.run }
-        .to output(/• Graph missing 'id' field/).to_stdout
+        .to output(/• Graph missing 'id' field/).to_stderr
         .and raise_error(Elkrb::CommandFailed, /has 1 error\(s\)/)
     end
 
@@ -80,7 +80,7 @@ RSpec.describe Elkrb::Commands::ValidateCommand do
       command = described_class.new(input_file, {})
 
       expect { command.run }
-        .to output(/• children\[0\]: Node missing 'id' field/).to_stdout
+        .to output(/• children\[0\]: Node missing 'id' field/).to_stderr
         .and raise_error(Elkrb::CommandFailed, /has 1 error\(s\)/)
     end
 
@@ -96,7 +96,7 @@ RSpec.describe Elkrb::Commands::ValidateCommand do
       command = described_class.new(input_file, {})
 
       expect { command.run }
-        .to output(/• edges\[0\]: Edge 'e1' missing 'sources' field/).to_stdout
+        .to output(/• edges\[0\]: Edge 'e1' missing 'sources' field/).to_stderr
         .and raise_error(Elkrb::CommandFailed, /has 1 error\(s\)/)
     end
 
@@ -112,7 +112,7 @@ RSpec.describe Elkrb::Commands::ValidateCommand do
       command = described_class.new(input_file, {})
 
       expect { command.run }
-        .to output(/• edges\[0\]: Edge 'e1' missing 'targets' field/).to_stdout
+        .to output(/• edges\[0\]: Edge 'e1' missing 'targets' field/).to_stderr
         .and raise_error(Elkrb::CommandFailed, /has 1 error\(s\)/)
     end
 
@@ -137,7 +137,7 @@ RSpec.describe Elkrb::Commands::ValidateCommand do
       command = described_class.new(input_file, { strict: true })
 
       expect { command.run }
-        .to output(/• children\[0\]: Node 'n1' missing 'width'/).to_stdout
+        .to output(/• children\[0\]: Node 'n1' missing 'width'/).to_stderr
         .and raise_error(Elkrb::CommandFailed, /has 1 error\(s\)/)
     end
 
@@ -152,10 +152,10 @@ RSpec.describe Elkrb::Commands::ValidateCommand do
 
       command = described_class.new(input_file, { strict: true })
       report_line =
-        /• edges\[0\]: Edge 'e1' references unknown target node 'n2'/
+        /• edges\[0\]: Edge 'e1' references unknown target node or port 'n2'/
 
       expect { command.run }
-        .to output(report_line).to_stdout
+        .to output(report_line).to_stderr
         .and raise_error(Elkrb::CommandFailed, /has 1 error\(s\)/)
     end
 
@@ -171,7 +171,7 @@ RSpec.describe Elkrb::Commands::ValidateCommand do
       command = described_class.new(input_file, {})
 
       expect { command.run }
-        .to output(/• Graph missing 'id' field/).to_stdout
+        .to output(/• Graph missing 'id' field/).to_stderr
         .and raise_error(Elkrb::CommandFailed,
                          /\A#{Regexp.escape(input_file)} has 2 error\(s\)\z/)
     end
@@ -191,12 +191,6 @@ RSpec.describe Elkrb::Commands::ValidateCommand do
       expect(errors).to include(expected)
     end
 
-    # A String width does not survive the round trip through
-    # Elkrb::Graph::Graph -- lutaml-model coerces "wide" to 0.0 before
-    # #validate_node ever sees it (measured), so the ">is_a?(Numeric)" half
-    # of the guard is only reachable via a non-Graph Hash input. Zero and a
-    # negative number both stay numeric and are what a real caller's typo
-    # (an accidental 0, a sign error) actually produces.
     it "flags a zero width and a negative height separately" do
       input_file = File.join(temp_dir, "invalid.json")
       graph = {
@@ -213,8 +207,8 @@ RSpec.describe Elkrb::Commands::ValidateCommand do
       errors = run_capturing_errors(command)
 
       expect(errors).to include(
-        "children[0]: Node 'n1' has invalid width: 0.0",
-        "children[0]: Node 'n1' has invalid height: -5.0",
+        "children[0]: Node 'n1' has invalid width: 0",
+        "children[0]: Node 'n1' has invalid height: -5",
       )
     end
 
@@ -234,12 +228,15 @@ RSpec.describe Elkrb::Commands::ValidateCommand do
       errors = run_capturing_errors(command)
 
       expect(errors).to include(
-        "edges[0]: Edge 'e1' references unknown source node 'ghost-source'",
-        "edges[0]: Edge 'e1' references unknown target node 'ghost-target1'",
-        "edges[0]: Edge 'e1' references unknown target node 'ghost-target2'",
+        "edges[0]: Edge 'e1' references unknown source node or port " \
+        "'ghost-source'",
+        "edges[0]: Edge 'e1' references unknown target node or port " \
+        "'ghost-target1'",
+        "edges[0]: Edge 'e1' references unknown target node or port " \
+        "'ghost-target2'",
       )
       expect(errors)
-        .not_to include(a_string_matching(/unknown source node 'n1'/))
+        .not_to include(a_string_matching(/unknown source node or port 'n1'/))
     end
 
     # A plain `output(...).to_stdout` assertion here would NOT catch this
@@ -266,7 +263,7 @@ RSpec.describe Elkrb::Commands::ValidateCommand do
 
     it "validates YAML files" do
       input_file = File.join(temp_dir, "valid.yml")
-      File.write(input_file, valid_graph.to_yaml)
+      File.write(input_file, JSON.parse(valid_graph.to_json).to_yaml)
 
       command = described_class.new(input_file, {})
 
@@ -295,7 +292,7 @@ RSpec.describe Elkrb::Commands::ValidateCommand do
     # actually reachable.
     it "auto-detects YAML when the extension is unrecognized" do
       input_file = File.join(temp_dir, "valid.graph")
-      File.write(input_file, valid_graph.to_yaml)
+      File.write(input_file, JSON.parse(valid_graph.to_json).to_yaml)
 
       command = described_class.new(input_file, {})
 
@@ -331,7 +328,7 @@ RSpec.describe Elkrb::Commands::ValidateCommand do
 
     it "loads a YAML file with no recognized extension" do
       input_file = File.join(temp_dir, "graph.noext")
-      File.write(input_file, valid_graph.to_yaml)
+      File.write(input_file, JSON.parse(valid_graph.to_json).to_yaml)
 
       command = described_class.new(input_file, {})
 

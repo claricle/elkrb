@@ -619,17 +619,16 @@ end
 RSpec.describe "every command reads input through one path" do
   include CliRunner
 
-  # The extension dispatch used to be copy-pasted into four private methods,
-  # so a guard added to one left the other three accepting malformed input.
-  # All four are driven here: layout goes through Cli#read_input_file, and
-  # validate, diagram and convert through a loader of their own.
-  it "rejects a malformed shape from every command alike" do
+  # Validate intentionally keeps the raw document so it can name the malformed
+  # field. The model-reading commands still share FormatSniffer's early shape
+  # refusal.
+  it "rejects a malformed shape at every command boundary" do
     Dir.mktmpdir do |dir|
       path = File.join(dir, "bad.json")
       File.write(path, '{"id":"r","children":{"a":1}}')
 
       # diagram and convert each write a file, so each needs its own path.
-      readers = { "layout" => [], "validate" => [],
+      readers = { "layout" => [],
                   "diagram" => ["-o", File.join(dir, "out.dot")],
                   "convert" => ["-o", File.join(dir, "out.yaml")] }
 
@@ -641,6 +640,12 @@ RSpec.describe "every command reads input through one path" do
         expect(stderr).to include("Unable to parse"),
                           "#{command} leaked an internal error"
       end
+
+      stdout, stderr, status = run_elkrb("validate", path)
+
+      expect(status.exitstatus).to eq(1)
+      expect(stdout).to eq("")
+      expect(stderr).to include("children[0]: Node must be a Hash")
     end
   end
 
