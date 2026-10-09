@@ -397,11 +397,12 @@ RSpec.describe "Disco routing after components are repositioned" do
     }
   end
 
-  it "keeps only the bends from the final routing pass" do
+  it "keeps only the aligned route from the final routing pass" do
     result = Elkrb.layout(graph, algorithm: "disco")
     section = result.edges.first.sections.first
 
-    expect(section.bend_points.size).to eq(2)
+    expect(result.edges.first.sections.size).to eq(1)
+    expect(section.bend_points).to be_empty
   end
 
   it "leaves no bend outside the laid-out graph" do

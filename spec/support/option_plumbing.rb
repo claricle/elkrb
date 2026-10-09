@@ -98,12 +98,15 @@ module OptionPlumbing
     end
   end
 
-  # Two positioned nodes with one edge from a to b, `edge_options` on the
-  # edge and `root_options` on the root.
+  # Two routed nodes plus a spacer that makes Box put the endpoints on
+  # different rows. That keeps ORTHOGONAL observably different from POLYLINE
+  # now that an already-aligned segment correctly needs no bends.
   def two_node_graph(edge_options, root_options = {})
     {
       "id" => "r", "layoutOptions" => root_options,
-      "children" => [positioned("a", 0, 0, 30), positioned("b", 100, 80, 30)],
+      "children" => [positioned("spacer", 0, 0, 30),
+                     positioned("a", 0, 0, 30),
+                     positioned("b", 100, 80, 30)],
       "edges" => [
         { "id" => "e", "sources" => ["a"], "targets" => ["b"],
           "layoutOptions" => edge_options },
@@ -126,7 +129,8 @@ module OptionPlumbing
     port = { "id" => "p", "x" => 30, "y" => 10, "width" => 6, "height" => 6 }
     source = positioned("a", 0, 0, 30).merge("ports" => [port])
     graph = { "id" => "r", "layoutOptions" => root_options,
-              "children" => [source, positioned("b", 100, 80, 30)],
+              "children" => [positioned("spacer", 0, 0, 30),
+                             source, positioned("b", 100, 80, 30)],
               "edges" => [{ "id" => "e", "sources" => ["p"],
                             "targets" => ["b"],
                             "layoutOptions" => edge_options }] }

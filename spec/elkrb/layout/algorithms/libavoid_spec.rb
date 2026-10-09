@@ -2693,3 +2693,81 @@ RSpec.describe Elkrb::Layout::Algorithms::Libavoid do
     end
   end
 end
+
+RSpec.describe "Libavoid edge section integration" do
+  let(:algorithm) { Elkrb::Layout::Algorithms::Libavoid.new }
+
+  it "replaces stale non-loop sections with normalized endpoint metadata" do
+    stale_sections = [
+      Elkrb::Graph::EdgeSection.new(id: "stale_1"),
+      Elkrb::Graph::EdgeSection.new(id: "stale_2"),
+    ]
+    edge = Elkrb::Graph::Edge.new(
+      id: "e", sources: ["a"], targets: ["b"],
+      sections: stale_sections
+    )
+    graph = Elkrb::Graph::Graph.new(
+      id: "root",
+      children: [
+        Elkrb::Graph::Node.new(id: "a", x: 0, y: 0,
+                               width: 30, height: 30),
+        Elkrb::Graph::Node.new(id: "b", x: 120, y: 0,
+                               width: 30, height: 30),
+      ],
+      edges: [edge],
+    )
+
+    algorithm.layout(graph)
+
+    expect(edge.sections.length).to eq(1)
+    expect(edge.sections.first).to have_attributes(
+      id: "e_s0", incoming_shape: "a", outgoing_shape: "b",
+    )
+    expect(edge.container).to eq("root")
+  end
+
+  [
+    { edge: "SPLINES", graph: "POLYLINE", bends: 2 },
+    { edge: "POLYLINE", graph: "SPLINES", bends: 4 },
+  ].each do |row|
+    it "lets self-loop #{row[:edge]} override graph #{row[:graph]}" do
+      edge = Elkrb::Graph::Edge.new(
+        id: "loop", sources: ["a"], targets: ["a"],
+        layout_options: { "elk.edgeRouting" => row[:edge] }
+      )
+      graph = Elkrb::Graph::Graph.new(
+        id: "root",
+        layout_options: { "elk.edgeRouting" => row[:graph] },
+        children: [
+          Elkrb::Graph::Node.new(id: "a", x: 0, y: 0,
+                                 width: 50, height: 50),
+        ],
+        edges: [edge],
+      )
+
+      algorithm.layout(graph)
+
+      expect(edge.sections.first.bend_points.length).to eq(row[:bends])
+    end
+  end
+
+  it "includes an unresolved edge in fallback style resolution" do
+    edge = Elkrb::Graph::Edge.new(
+      id: "e", sources: ["a"], targets: ["ghost"],
+      layout_options: { "elk.edgeRouting" => "POLYLINE" }
+    )
+    graph = Elkrb::Graph::Graph.new(
+      id: "root",
+      children: [
+        Elkrb::Graph::Node.new(id: "a", x: 0, y: 0,
+                               width: 50, height: 50),
+      ],
+      edges: [edge],
+    )
+
+    expect(algorithm).to receive(:get_edge_routing_style)
+      .with(graph, edge).and_call_original
+
+    algorithm.layout(graph)
+  end
+end

@@ -171,6 +171,63 @@ RSpec.describe Elkrb::Layout::Algorithms::Radial do
   end
 end
 
+RSpec.describe "Radial edge section integration" do
+  it "replaces stale sections with normalized endpoint metadata" do
+    graph = {
+      "id" => "root",
+      "children" => [
+        { "id" => "a", "width" => 30, "height" => 30 },
+        { "id" => "b", "width" => 30, "height" => 30 },
+      ],
+      "edges" => [{
+        "id" => "e", "sources" => ["a"], "targets" => ["b"],
+        "sections" => [
+          { "id" => "stale_1" },
+          { "id" => "stale_2" },
+        ]
+      }],
+    }
+
+    edge = Elkrb.layout(graph, algorithm: "radial").edges.first
+
+    expect(edge.sections.length).to eq(1)
+    expect(edge.sections.first).to have_attributes(
+      id: "e_s0", incoming_shape: "a", outgoing_shape: "b",
+    )
+    expect(edge.container).to eq("root")
+  end
+
+  it "keeps a named source port at its origin and the target on its border" do
+    input = lambda do |source|
+      {
+        "id" => "root",
+        "children" => [
+          {
+            "id" => "a", "width" => 30, "height" => 30,
+            "ports" => [{ "id" => "a_out", "side" => "NORTH" }]
+          },
+          { "id" => "b", "width" => 30, "height" => 30 },
+          { "id" => "c", "width" => 30, "height" => 30 },
+        ],
+        "edges" => [{ "id" => "e", "sources" => [source], "targets" => ["b"] }],
+      }
+    end
+
+    node_edge = Elkrb.layout(input.call("a"), algorithm: "radial").edges.first
+    ported = Elkrb.layout(input.call("a_out"), algorithm: "radial")
+    port_edge = ported.edges.first
+    source = ported.children.find { |node| node.id == "a" }
+    port = source.ports.first
+
+    expect([port_edge.sections.first.start_point.x,
+            port_edge.sections.first.start_point.y])
+      .to eq([source.x + port.x, source.y + port.y])
+    expect(port_edge.sections.first.end_point)
+      .to eq(node_edge.sections.first.end_point)
+    expect(port_edge.sections.first.bend_points).to eq([])
+  end
+end
+
 RSpec.describe "Radial tree geometry" do
   def star_graph(count, width: 30, height: 30)
     children = (0...count).map do |index|

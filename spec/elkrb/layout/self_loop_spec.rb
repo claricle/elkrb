@@ -450,7 +450,7 @@ RSpec.describe "Self-loop Support" do
       expect(section.bend_points[1]).to be_a(Elkrb::Geometry::Point)
     end
 
-    it "handles ports on different sides" do
+    it "routes aligned ports on different sides directly" do
       port1 = Elkrb::Graph::Port.new(id: "p1", x: 80.0, y: 30.0, side: "EAST")
       port2 = Elkrb::Graph::Port.new(id: "p2", x: 0.0, y: 30.0, side: "WEST")
       node.ports = [port1, port2]
@@ -470,7 +470,9 @@ RSpec.describe "Self-loop Support" do
       router.route_edges(graph, nil, "ORTHOGONAL")
 
       section = edge.sections.first
-      expect(section.bend_points).not_to be_empty
+      expect(section.start_point.to_h).to eq(x: 180.0, y: 130.0)
+      expect(section.end_point.to_h).to eq(x: 100.0, y: 130.0)
+      expect(section.bend_points).to be_empty
     end
   end
 

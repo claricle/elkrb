@@ -163,8 +163,7 @@ module Elkrb
         #
         # @param graph [Elkrb::Graph::Graph] The graph
         def apply_edge_routing(graph)
-          routing_style = get_edge_routing_style(graph)
-          route_edges(graph, nil, routing_style)
+          route_edges(graph)
         end
 
         # Defined in EdgeRouter. Released as a protected method here, so

@@ -554,7 +554,7 @@ module Elkrb
           outgoing.each_value do |entries|
             entries.each_with_index do |connection, position|
               route_tree_edge(
-                connection, position + 1, entries.size + 1, graph.id
+                connection, position + 1, entries.size + 1, graph
               )
             end
           end
@@ -568,7 +568,7 @@ module Elkrb
           [edge, source, target]
         end
 
-        def route_tree_edge(connection, position, denominator, container)
+        def route_tree_edge(connection, position, denominator, graph)
           edge, source, target = connection
           fraction = position.to_f / denominator
           direction = option("elk.direction", default: "DOWN").to_s.upcase
@@ -577,12 +577,17 @@ module Elkrb
           start, finish, bend = tree_edge_points(
             source, target, direction, fraction
           )
-          section = Graph::EdgeSection.new(id: "#{edge.id}_s0")
+          start = tree_endpoint_position(
+            edge.sources.first, source, start, :outgoing
+          )
+          finish = tree_endpoint_position(
+            edge.targets.first, target, finish, :incoming
+          )
+          section = reset_section(edge, graph)
           section.start_point = start
           section.end_point = finish
           section.bend_points = [bend]
-          edge.sections = [section]
-          connection.first.container = container
+          connection.first.container = graph.id
         end
 
         def tree_edge_points(source, target, direction, fraction)
@@ -630,6 +635,12 @@ module Elkrb
           end
 
           [start, finish, bend]
+        end
+
+        def tree_endpoint_position(endpoint_id, node, node_point, direction)
+          return node_point unless find_port_by_id(endpoint_id, node)
+
+          get_port_position(endpoint_id, node, direction)
         end
 
         def node_width(node)

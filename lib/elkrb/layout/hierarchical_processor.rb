@@ -28,6 +28,7 @@ module Elkrb
 
       # Build the graph view shared by compound sizing and nested edge routing.
       def create_child_graph(node)
+        (node.edges || []).each { |edge| edge.container = node.id }
         Graph::Graph.new(
           id: "#{node.id}_children",
           children: node.children,

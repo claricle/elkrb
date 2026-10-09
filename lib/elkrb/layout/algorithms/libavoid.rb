@@ -733,8 +733,10 @@ f_score = Float::INFINITY, direction = nil)
             ends = EdgeEnds.resolve(edge, node_map)
             next route_edge_by_owner(edge, graph, node_map) unless ends
 
-            record_routing_status(DiagnosticsKey.edge(diagnostics_prefix, edge.id),
-                                  route_single_edge(edge, ends, obstacle_map))
+            record_routing_status(
+              DiagnosticsKey.edge(diagnostics_prefix, edge.id),
+              route_single_edge(edge, ends, obstacle_map, graph),
+            )
           end
         end
 
@@ -758,7 +760,8 @@ f_score = Float::INFINITY, direction = nil)
         # A self-loop, whether on a plain node or a port back to its own node.
         def route_edge_as_self_loop(edge, graph)
           node_map = NodeIndex.build(graph)
-          route_self_loop(edge, node_map, graph, get_edge_routing_style(graph))
+          style = get_edge_routing_style(graph, edge)
+          route_self_loop(edge, node_map, graph, style)
           pin_port_ends(edge, node_map)
         end
 
@@ -804,7 +807,7 @@ f_score = Float::INFINITY, direction = nil)
         # is correct here since no node_map lookup resolved either endpoint.
         def route_edge_without_obstacles(edge, graph)
           node_index = NodeIndex.build(graph)
-          routing_style = get_edge_routing_style(graph)
+          routing_style = get_edge_routing_style(graph, edge)
 
           if self_loop?(edge)
             route_self_loop(edge, node_index, graph, routing_style)
@@ -822,7 +825,7 @@ f_score = Float::INFINITY, direction = nil)
         # A* can double back through it once it is no longer in the
         # obstacle set. `clearance_point` already handles a nil port, so
         # ported and plain endpoints share this one path.
-        def route_single_edge(edge, ends, obstacle_map)
+        def route_single_edge(edge, ends, obstacle_map, graph)
           source_id = edge.sources.first
           target_id = edge.targets.first
           start_point = endpoint_point(source_id, ends.source, ends.target)
@@ -852,13 +855,9 @@ f_score = Float::INFINITY, direction = nil)
           bend_points = minimize_bends(bend_points, start_point, end_point,
                                        obstacles)
 
-          # Apply to edge section
-          edge.sections ||= []
-          if edge.sections.empty?
-            edge.sections << Graph::EdgeSection.new(id: "#{edge.id}_section_0")
-          end
-
-          section = edge.sections.first
+          # Apply to a fresh edge section. Input routes are stale once the
+          # obstacle search has recomputed this edge.
+          section = reset_section(edge, graph)
           section.start_point = start_point
           section.end_point = end_point
           section.bend_points = bend_points

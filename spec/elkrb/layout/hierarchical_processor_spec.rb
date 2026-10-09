@@ -252,7 +252,8 @@ RSpec.describe Elkrb::Layout::HierarchicalProcessor do
     parent = result.children.last
     section = parent.edges.first.sections.first
 
-    expect(section.start_point.x).to eq(parent.children.first.x + 15.0)
-    expect(section.end_point.x).to eq(parent.children.last.x + 15.0)
+    expect(section.start_point.x)
+      .to eq(parent.children.first.x + parent.children.first.width)
+    expect(section.end_point.x).to eq(parent.children.last.x)
   end
 end
