@@ -163,6 +163,49 @@ module Elkrb
           vertical_layers? ? [item.y, item.height] : [item.x, item.width]
         end
 
+        # The generic router bends midway between the two nodes. Nodes lean
+        # toward one side of their layer, so a bend at a node's own edge can
+        # land inside a layer neighbour; bend midway between the layers.
+        def horizontal_gap(source, target, *)
+          layer_gap(source, target, :x, :width) || super
+        end
+
+        def vertical_gap(source, target, *)
+          layer_gap(source, target, :y, :height) || super
+        end
+
+        def layer_gap(source, target, coordinate, size)
+          return unless @routed_layers && vertical_layers? == (coordinate == :y)
+
+          bounds = layer_bounds
+          held = [source, target].map do |rectangle|
+            layer_holding(bounds, rectangle, coordinate, size)
+          end
+          midway(bounds, *held)
+        end
+
+        def midway(bounds, from, to)
+          return unless from && to && (from - to).abs == 1
+
+          earlier, later = [from, to].minmax
+          (bounds[earlier].last + bounds[later].first) / 2.0
+        end
+
+        def layer_bounds
+          @routed_layers.first.map do |items|
+            ranges = items.map { |item| along_range(item) }
+            [ranges.map(&:first).min, ranges.map(&:last).max]
+          end
+        end
+
+        def layer_holding(bounds, rectangle, coordinate, size)
+          low = rectangle.public_send(coordinate)
+          high = low + rectangle.public_send(size)
+          bounds.index do |first, last|
+            first && low >= first - 1e-6 && high <= last + 1e-6
+          end
+        end
+
         def cross_extent(item)
           thickness = Layered::NodePlacer::EDGE_THICKNESS
           return thickness if item.respond_to?(:dummy?)

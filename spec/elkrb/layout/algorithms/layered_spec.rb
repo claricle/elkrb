@@ -671,7 +671,10 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
       # roots. The aliased nested edge made b a layer of its own.
       result = Elkrb.layout(cross_level_graph, algorithm: "layered")
 
-      expect(result.children.map(&:x).uniq.size).to eq(1)
+      # One layer: every node overlaps the same column. Unequal nodes sit
+      # at different x within it.
+      expect(result.children.map(&:x).max)
+        .to be < result.children.map { |node| node.x + node.width }.min
     end
   end
 

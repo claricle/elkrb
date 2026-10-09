@@ -16,7 +16,8 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::NodePlacer do
 
     # Nodes without edges are separate blocks; Brandes-Koepf compaction puts a
     # block at the smallest cross coordinate its layer neighbour allows, so the
-    # first node of each layer sits at the start of the cross axis.
+    # first node of each layer sits at the start of the cross axis. A node
+    # without edges is centred across its layer, so the 10px node sits 5px in.
     it "starts RIGHT layers at the cross-axis origin" do
       described_class.new(
         Elkrb::Graph::Graph.new(id: "r"), layers,
@@ -24,7 +25,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::NodePlacer do
       ).place_nodes
 
       expect(layers.flatten.map { |node| [node.x, node.y] })
-        .to eq([[0.0, 0.0], [37.0, 0.0], [37.0, 15.0]])
+        .to eq([[0.0, 0.0], [42.0, 0.0], [37.0, 15.0]])
     end
 
     it "maps DOWN onto y and stacks nodes along x" do
@@ -34,7 +35,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::NodePlacer do
       ).place_nodes
 
       expect(layers.flatten.map { |node| [node.x, node.y] })
-        .to eq([[0.0, 0.0], [0.0, 27.0], [15.0, 27.0]])
+        .to eq([[0.0, 0.0], [0.0, 32.0], [15.0, 27.0]])
     end
 
     it "mirrors LEFT within the placed bounding box" do
@@ -44,7 +45,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::NodePlacer do
       ).place_nodes
 
       expect(layers.flatten.map { |node| [node.x, node.y] })
-        .to eq([[27.0, 0.0], [10.0, 0.0], [0.0, 15.0]])
+        .to eq([[27.0, 0.0], [5.0, 0.0], [0.0, 15.0]])
     end
 
     it "mirrors UP within the placed bounding box" do
@@ -54,7 +55,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::NodePlacer do
       ).place_nodes
 
       expect(layers.flatten.map { |node| [node.x, node.y] })
-        .to eq([[0.0, 27.0], [0.0, 10.0], [15.0, 0.0]])
+        .to eq([[0.0, 27.0], [0.0, 5.0], [15.0, 0.0]])
     end
   end
 
