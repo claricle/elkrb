@@ -503,6 +503,10 @@ status. The status says how much of the option elkrb acts on: `honoured`,
 `partial`, `accepted` (parsed and validated, but it does not change the
 result) or `unsupported`.
 
+Run `elkrb options` to list every option with its status, or
+`bundle exec rake docs:all` to write the full option and elkjs comparison
+pages under `docs/`.
+
 By default an option elkrb does not fully honour logs a warning through
 `Elkrb.logger`. Pass `strict: true` to raise `Elkrb::Error` instead:
 
