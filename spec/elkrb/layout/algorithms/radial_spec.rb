@@ -21,6 +21,13 @@ RSpec.describe Elkrb::Layout::Algorithms::Radial do
           Elkrb::Graph::Node.new(id: "node3", width: 40, height: 30),
           Elkrb::Graph::Node.new(id: "node4", width: 40, height: 30),
         ]
+        graph.edges = (2..4).map do |index|
+          Elkrb::Graph::Edge.new(
+            id: "e#{index}",
+            sources: ["node1"],
+            targets: ["node#{index}"],
+          )
+        end
       end
 
       it "arranges nodes in a circular pattern" do
@@ -33,10 +40,11 @@ RSpec.describe Elkrb::Layout::Algorithms::Radial do
         end
 
         # Calculate distances from center
-        center_x = graph.width / 2.0
-        center_y = graph.height / 2.0
+        root = graph.children.first
+        center_x = root.x + (root.width / 2.0)
+        center_y = root.y + (root.height / 2.0)
 
-        distances = graph.children.map do |node|
+        distances = graph.children.drop(1).map do |node|
           node_center_x = node.x + (node.width / 2.0)
           node_center_y = node.y + (node.height / 2.0)
           Math.sqrt(
@@ -55,11 +63,12 @@ RSpec.describe Elkrb::Layout::Algorithms::Radial do
       it "evenly distributes nodes around the circle" do
         algorithm.layout(graph)
 
-        center_x = graph.width / 2.0
-        center_y = graph.height / 2.0
+        root = graph.children.first
+        center_x = root.x + (root.width / 2.0)
+        center_y = root.y + (root.height / 2.0)
 
         # Calculate angles for each node
-        angles = graph.children.map do |node|
+        angles = graph.children.drop(1).map do |node|
           node_center_x = node.x + (node.width / 2.0)
           node_center_y = node.y + (node.height / 2.0)
           Math.atan2(node_center_y - center_y, node_center_x - center_x)
@@ -69,7 +78,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Radial do
         sorted_angles = angles.sort
 
         # Calculate angular spacing
-        expected_spacing = (2 * Math::PI) / graph.children.size
+        expected_spacing = (2 * Math::PI) / angles.size
 
         # Check that nodes are evenly spaced
         (0...(sorted_angles.size - 1)).each do |i|
@@ -159,5 +168,43 @@ RSpec.describe Elkrb::Layout::Algorithms::Radial do
         expect(graph.height).to eq(0)
       end
     end
+  end
+end
+
+RSpec.describe "Radial tree geometry" do
+  def star_graph(count, width: 30, height: 30)
+    children = (0...count).map do |index|
+      { "id" => "n#{index}", "width" => width, "height" => height }
+    end
+    edges = (1...count).map do |index|
+      { "id" => "e#{index}", "sources" => ["n0"],
+        "targets" => ["n#{index}"] }
+    end
+    { "id" => "root", "children" => children, "edges" => edges }
+  end
+
+  it "centres the edge-derived root inside a ring" do
+    graph = Elkrb.layout(star_graph(5), algorithm: "radial")
+    root = graph.children.first
+
+    expect(root.x + (root.width / 2.0)).to be_within(1e-9).of(graph.width / 2.0)
+    expect(root.y + (root.height / 2.0))
+      .to be_within(1e-9).of(graph.height / 2.0)
+  end
+
+  it "grows the ring until eight large nodes do not overlap" do
+    graph = Elkrb.layout(star_graph(8, width: 100, height: 50),
+                         algorithm: "radial")
+    overlaps = graph.children.combination(2).count do |left, right|
+      left.x < right.x + right.width && right.x < left.x + left.width &&
+        left.y < right.y + right.height && right.y < left.y + left.height
+    end
+
+    expect(overlaps).to be_zero
+  end
+
+  it "marks centerOnRoot as honoured" do
+    expect(Elkrb::Options::Registry.status("elk.radial.centerOnRoot"))
+      .to eq(:honoured)
   end
 end

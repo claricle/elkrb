@@ -58,7 +58,7 @@ module Elkrb
         "elk.portConstraints" => { type: :enum, values: %w[UNDEFINED FREE FIXED_SIDE FIXED_ORDER FIXED_RATIO FIXED_POS], default: "UNDEFINED", aliases: %w[portConstraints], algorithms: :all, status: :honoured, description: "How strictly port positions are respected" },
         "elk.portLabels.placement" => { type: :string, default: "OUTSIDE", aliases: %w[port.label.placement], algorithms: :all, status: :honoured, description: "Port label placement" },
         "elk.position" => { type: :kvector, default: nil, aliases: %w[position], algorithms: %w[fixed], status: :honoured, description: "Fixed position for a node (fixed algorithm)" },
-        "elk.radial.centerOnRoot" => { type: :boolean, default: false, algorithms: %w[radial], status: :accepted, description: "Whether the root node is placed at the centre; not honoured today (ELK default is false; radial.rb does not centre any node today either)" },
+        "elk.radial.centerOnRoot" => { type: :boolean, default: false, algorithms: %w[radial], status: :honoured, description: "Whether the root node is placed at the centre" },
         "elk.radial.radius" => { type: :float, default: 100.0, algorithms: %w[radial], status: :honoured, description: "Radius for radial layout" },
         "elk.randomSeed" => { type: :integer, default: 1, aliases: %w[randomSeed], algorithms: %w[force random], status: :honoured, description: "Seed for algorithms with random behaviour" },
         "elk.selfLoopOffset" => { type: :float, default: 20.0, aliases: %w[selfLoopOffset], namespace: :elkrb, algorithms: :all, status: :accepted, description: "elkrb-private: self-loop offset (not yet wired; hardcoded today)" },

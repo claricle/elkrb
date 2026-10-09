@@ -585,11 +585,11 @@ RSpec.describe Elkrb::Layout::Algorithms::MRTree do
         z = graph.children.find { |n| n.id == "z" }
 
         # Three trees in a row, each one 10-wide column with 20.0 of node
-        # spacing after it, inside 12.0 of padding: anchor at 12.0, a's
-        # tree at 42.0, z at 72.0. A duplicated b gives a's tree a SECOND
-        # column, which pushes z to 102.0 and the graph to 124.0.
-        expect(z.x).to eq(72.0)
-        expect(graph.width).to eq(94.0)
+        # spacing after it, inside MRTree's 20.0 padding: anchor at 20.0,
+        # a's tree at 50.0, z at 80.0. A duplicated b gives a's tree a
+        # SECOND column, which pushes z to 110.0.
+        expect(z.x).to eq(80.0)
+        expect(graph.width).to eq(110.0)
       end
     end
 
@@ -627,11 +627,94 @@ RSpec.describe Elkrb::Layout::Algorithms::MRTree do
         # Nil widths alone are also what a layout that did nothing at all
         # would leave behind. The missing width has to be READ as zero:
         # the chain stacks into one zero-wide column at the left padding.
-        expect(graph.children.map(&:x)).to all(eq(12.0))
-        expect(graph.children.map(&:y)).to eq([12.0, 92.0, 172.0])
-        expect(graph.width).to eq(24.0)
+        expect(graph.children.map(&:x)).to all(eq(20.0))
+        expect(graph.children.map(&:y)).to eq([20.0, 40.0, 60.0])
+        expect(graph.width).to eq(40.0)
       end
     end
+  end
+end
+
+RSpec.describe "MRTree level geometry and direction" do
+  def tree_graph(direction_key = nil, direction = nil)
+    layout_options = { "elk.algorithm" => "mrtree" }
+    layout_options[direction_key] = direction if direction_key
+    {
+      "id" => "root",
+      "layoutOptions" => layout_options,
+      "children" => %w[a b c].map do |id|
+        { "id" => id, "width" => 30, "height" => 30 }
+      end,
+      "edges" => [
+        { "id" => "e1", "sources" => ["a"], "targets" => ["b"] },
+        { "id" => "e2", "sources" => ["a"], "targets" => ["c"] },
+      ],
+    }
+  end
+
+  {
+    "DOWN" => ->(root, child) { root.y < child.y },
+    "UP" => ->(root, child) { root.y > child.y },
+    "RIGHT" => ->(root, child) { root.x < child.x },
+    "LEFT" => ->(root, child) { root.x > child.x },
+  }.each do |direction, root_is_on_expected_side|
+    it "places the root on the expected side for #{direction}" do
+      graph = Elkrb.layout(tree_graph("elk.direction", direction))
+      root, child = graph.children.first(2)
+
+      expect(root_is_on_expected_side.call(root, child)).to be(true)
+      graph.children.each do |node|
+        expect(node.x).to be_between(0.0, graph.width - node.width)
+        expect(node.y).to be_between(0.0, graph.height - node.height)
+      end
+    end
+  end
+
+  it "resolves the bare direction alias identically" do
+    canonical = Elkrb.layout(tree_graph("elk.direction", "RIGHT"))
+    bare = Elkrb.layout(tree_graph("direction", "RIGHT"))
+
+    expect(bare.children.map { |node| [node.x, node.y] })
+      .to eq(canonical.children.map { |node| [node.x, node.y] })
+  end
+
+  it "uses each level's tallest node plus spacing as the next pitch" do
+    graph = tree_graph
+    graph["children"][0]["height"] = 100
+    graph["children"][1]["height"] = 100
+    result = Elkrb.layout(graph)
+    root, child = result.children.first(2)
+
+    expect(child.y - (root.y + root.height)).to be >= 20
+  end
+
+  it "keeps neighbouring multi-child trees disjoint" do
+    ids = %w[r1 c1 c2 c3 r2 d1 d2 d3]
+    edges = [%w[r1 c1], %w[r1 c2], %w[r1 c3],
+             %w[r2 d1], %w[r2 d2], %w[r2 d3]]
+    graph = {
+      "id" => "root",
+      "children" => ids.map do |id|
+        { "id" => id, "width" => 100, "height" => 50 }
+      end,
+      "edges" => edges.each_with_index.map do |(source, target), index|
+        { "id" => "e#{index}", "sources" => [source], "targets" => [target] }
+      end,
+    }
+    result = Elkrb.layout(graph, algorithm: "mrtree")
+    by_id = result.children.to_h { |node| [node.id, node] }
+
+    expect(by_id.fetch("d1").x -
+           (by_id.fetch("c3").x + by_id.fetch("c3").width)).to be >= 20
+  end
+
+  it "matches the committed three-node MRTree geometry" do
+    graph = Elkrb.layout(tree_graph)
+
+    expect(graph.children.map { |node| [node.id, node.x, node.y] }).to eq(
+      [["a", 45.0, 20.0], ["b", 20.0, 70.0], ["c", 70.0, 70.0]],
+    )
+    expect([graph.width, graph.height]).to eq([120.0, 120.0])
   end
 end
 
