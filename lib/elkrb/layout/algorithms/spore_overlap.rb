@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-require_relative "../spore/body"
-require_relative "../spore/geometry"
+require_relative "../spore/placement"
+require_relative "../spore/edge_cost"
 require_relative "../spore/overlap_sweep"
 require_relative "../spore/triangulation"
 require_relative "../spore/spanning_tree"
@@ -21,10 +21,7 @@ module Elkrb
       # Ties between equally cheap tree edges are broken by discovery order,
       # where Java ELK breaks them by hash-set order.
       class SporeOverlap < BaseAlgorithm
-        # ELK's own defaults for this algorithm; the shared registry values
-        # are for the other algorithms.
-        DEFAULT_SPACING = 8.0
-        DEFAULT_PADDING = { left: 8.0, top: 8.0, right: 8.0, bottom: 8.0 }.freeze
+        include Spore::Placement
 
         def layout_flat(graph, _options = {})
           return graph if graph.children.empty?
@@ -48,28 +45,6 @@ module Elkrb
 
         private
 
-        def padding
-          option("elk.padding", default: DEFAULT_PADDING).to_h
-        end
-
-        def build_bodies(nodes, spacing)
-          seen = {}
-          nodes.map do |node|
-            body = Spore::Body.new(node, spacing)
-            body.nudge(rng) while seen.key?(body.origin)
-            seen[body.origin] = true
-            body
-          end
-        end
-
-        def most_central(bodies, graph)
-          cx = (graph.x.to_f + (graph.width.to_f / 2.0))
-          cy = (graph.y.to_f + (graph.height.to_f / 2.0))
-          bodies.min_by.with_index do |body, i|
-            [Spore::Geometry.distance(body.origin_x, body.origin_y, cx, cy), i]
-          end
-        end
-
         def remove_overlaps(bodies, root, max_iterations)
           max_iterations.times do
             pairs = Spore::OverlapSweep.pairs(bodies)
@@ -77,7 +52,7 @@ module Elkrb
 
             tree = Spore::SpanningTree.build(
               tree_edges(bodies, pairs), root
-            ) { |first, second| cost(first, second) }
+            ) { |first, second| Spore::EdgeCost.inverted_overlap(first, second) }
             grown = grow(tree)
             bodies.each(&:rebase)
             break unless grown
@@ -89,17 +64,6 @@ module Elkrb
           triangulated = Spore::Triangulation.triangulate(by_origin.keys)
             .map { |u, v| [by_origin[u], by_origin[v]] }
           (pairs + triangulated).uniq { |edge| edge.map(&:object_id).sort }
-        end
-
-        # Negative and growing with the overlap when the rectangles overlap,
-        # so the most overlapped pairs join the tree first.
-        def cost(first, second)
-          distance = Spore::Geometry.shortest_distance(first, second)
-          return distance if distance >= 0
-
-          between = Spore::Geometry.distance(first.center_x, first.center_y,
-                                             second.center_x, second.center_y)
-          -(Spore::Geometry.overlap(first, second) - 1) * between
         end
 
         # Walks the tree from the root, moving each child to where its
@@ -128,12 +92,6 @@ module Elkrb
             parent.center_y + ((child.origin_y - parent.origin_y) * factor),
           )
           factor
-        end
-
-        def place(body)
-          node = body.source
-          node.x = body.center_x - (node.width.to_f / 2.0)
-          node.y = body.center_y - (node.height.to_f / 2.0)
         end
 
         def warn_if_overlaps_remain(bodies, max_iterations)

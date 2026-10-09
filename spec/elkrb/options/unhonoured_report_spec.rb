@@ -10,7 +10,8 @@ RSpec.describe Elkrb::Options::UnhonouredReport do
   # registry_spec ("status agrees with what layout reads") holds these to
   # what layout does and to the registry's readers.
   readers = %w[
-    box force layered mrtree random rectpacking topdownpacking vertiflex
+    box force layered mrtree random rectpacking spore_compaction topdownpacking
+    vertiflex
   ]
   algorithms = Elkrb::Layout::AlgorithmRegistry.available_algorithms
   unhonoured = /strict mode.*#{Regexp.escape(node_node)} \(partial/

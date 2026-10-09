@@ -53,6 +53,9 @@ RSpec.describe "option plumbing" do
         only: algorithms - %w[fixed],
       ]
     },
+    "elk.compaction.orthogonal" => {
+      at: :root, value: true, variant: :spread
+    },
     "elk.direction" => {
       at: :root,
       value: ->(name) { name == "mrtree" ? "RIGHT" : "DOWN" },
@@ -107,6 +110,20 @@ RSpec.describe "option plumbing" do
     },
     "elk.portLabels.placement" => { at: :port, value: "INSIDE" },
     "elk.position" => { at: :node, value: "(5,5)" },
+    "elk.processingOrder.preferredRoot" => {
+      at: :root, value: "d", variant: :spread,
+      with: { root: { "processingOrder.rootSelection" => "FIXED" } }
+    },
+    "elk.processingOrder.rootSelection" => {
+      at: :root, value: "FIXED", variant: :spread,
+      with: { root: { "processingOrder.preferredRoot" => "d" } }
+    },
+    "elk.processingOrder.spanningTreeCostFunction" => {
+      at: :root, value: "CENTER_DISTANCE", variant: :spread
+    },
+    "elk.processingOrder.treeConstruction" => {
+      at: :root, value: "MAXIMUM_SPANNING_TREE", variant: :spread
+    },
     "elk.radial.centerOnRoot" => {
       at: :root, value: true,
       read_only: read_only[
@@ -135,7 +152,7 @@ RSpec.describe "option plumbing" do
       variant: { "libavoid" => :unpositioned },
       unwired: unread[
         "these algorithms do not read it today",
-        only: %w[disco fixed radial spore_compaction spore_overlap stress],
+        only: %w[disco fixed radial spore_overlap stress],
       ]
     },
     "elk.spline.curvature" => {
