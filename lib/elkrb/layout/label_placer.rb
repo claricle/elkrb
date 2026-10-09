@@ -8,6 +8,9 @@ module Elkrb
     # Handles positioning of node labels, edge labels, and port labels.
     # The including class sets @resolver, as BaseAlgorithm does.
     module LabelPlacer
+      OPPOSITE_SIDE = { left: :right, right: :left, top: :bottom, bottom: :top }.freeze
+      private_constant :OPPOSITE_SIDE
+
       # Place all labels in the graph after layout is complete.
       #
       # @param graph [Graph::Graph] The laid out graph
@@ -33,108 +36,121 @@ module Elkrb
         element.height || 0.0
       end
 
-      # Place labels for all nodes in the graph.
+      # Place labels for all nodes in the graph. Node and port labels are
+      # owner-relative: (0, 0) is the owner's top-left corner.
       def place_node_labels(graph)
         graph.children.each do |node|
-          next unless node.labels && !node.labels.empty?
-
-          node.labels.each_with_index do |label, index|
-            place_node_label(node, label, index)
+          if node.labels && !node.labels.empty?
+            node.labels.each_with_index do |label, index|
+              place_node_label(node, label, index)
+            end
           end
 
-          # Place port labels if node has ports
           place_port_labels(node) if node.ports && !node.ports.empty?
         end
       end
 
-      # Place a single node label.
+      # Place a single node label. Without a placement option the label is
+      # not moved, as in ELK: it keeps its coordinates, or (0, 0) if it has
+      # none.
       def place_node_label(node, label, index = 0)
-        placement = label_placement_option(node, "elk.nodeLabels.placement") ||
-          "INSIDE CENTER"
+        placement = label_placement_option(node, "elk.nodeLabels.placement")
+        tokens = placement_tokens(placement)
+        if tokens.empty?
+          label.x ||= 0.0
+          label.y ||= 0.0
+          return
+        end
 
-        case placement.upcase
-        when /INSIDE/
-          place_label_inside_node(node, label, placement, index)
-        when /OUTSIDE/
-          place_label_outside_node(node, label, placement, index)
+        vertical = vertical_of(tokens)
+        horizontal = horizontal_of(tokens)
+
+        if tokens.include?("OUTSIDE")
+          place_label_outside_node(node, label, vertical, horizontal, index)
         else
-          # Default: center inside
-          place_label_center(node, label)
+          place_label_inside_node(node, label, vertical, horizontal, index)
         end
       end
 
-      # Place label inside the node bounds.
-      def place_label_inside_node(node, label, placement, index)
-        case placement.upcase
-        when /TOP/
-          place_label_inside_top(node, label, index)
-        when /BOTTOM/
-          place_label_inside_bottom(node, label, index)
-        when /LEFT/
-          place_label_inside_left(node, label, index)
-        when /RIGHT/
-          place_label_inside_right(node, label, index)
-        else
-          place_label_center(node, label)
+      # The upcased tokens of a placement value. Accepts ELK's
+      # "[H_CENTER,V_CENTER,INSIDE]" and the space-separated
+      # "INSIDE V_CENTER H_CENTER".
+      def placement_tokens(placement)
+        placement.to_s.upcase.split(/[\s,\[\]]+/).reject(&:empty?)
+      end
+
+      # :top, :center or :bottom. V_TOP is also spelled TOP.
+      def vertical_of(tokens)
+        return :top if tokens.intersect?(%w[V_TOP TOP])
+        return :bottom if tokens.intersect?(%w[V_BOTTOM BOTTOM])
+
+        :center
+      end
+
+      # :left, :center or :right. H_LEFT is also spelled LEFT.
+      def horizontal_of(tokens)
+        return :left if tokens.intersect?(%w[H_LEFT LEFT])
+        return :right if tokens.intersect?(%w[H_RIGHT RIGHT])
+
+        :center
+      end
+
+      # Place a label inside the node, relative to the node's origin.
+      def place_label_inside_node(node, label, vertical, horizontal, index)
+        padding = label_padding_option(node)
+        offset = index * (height_of(label) + padding)
+
+        label.x = inside_x(node, label, horizontal, padding)
+        label.y =
+          case vertical
+          when :top then padding + offset
+          when :bottom then height_of(node) - height_of(label) - padding - offset
+          else (height_of(node) - height_of(label)) / 2.0
+          end
+      end
+
+      def inside_x(node, label, horizontal, padding)
+        case horizontal
+        when :left then padding
+        when :right then width_of(node) - width_of(label) - padding
+        else (width_of(node) - width_of(label)) / 2.0
         end
       end
 
-      # Place label outside the node bounds.
-      def place_label_outside_node(node, label, placement, _index)
+      # Place a label outside the node, relative to the node's origin. Above
+      # or below when a vertical side is named, otherwise beside. Naming no
+      # side at all places it above.
+      def place_label_outside_node(node, label, vertical, horizontal, index)
         margin = label_margin_option(node)
+        offset = index * (height_of(label) + margin)
 
-        case placement.upcase
-        when /TOP/
-          label.x = node.x + ((width_of(node) - width_of(label)) / 2.0)
-          label.y = node.y - height_of(label) - margin
-        when /BOTTOM/
-          label.x = node.x + ((width_of(node) - width_of(label)) / 2.0)
-          label.y = node.y + height_of(node) + margin
-        when /LEFT/
-          label.x = node.x - width_of(label) - margin
-          label.y = node.y + ((height_of(node) - height_of(label)) / 2.0)
-        when /RIGHT/
-          label.x = node.x + width_of(node) + margin
-          label.y = node.y + ((height_of(node) - height_of(label)) / 2.0)
+        if vertical == :center && horizontal != :center
+          place_label_beside_node(node, label, horizontal, margin)
+        elsif vertical == :bottom
+          label.x = outside_x(node, label, horizontal)
+          label.y = height_of(node) + margin + offset
+        else
+          label.x = outside_x(node, label, horizontal)
+          label.y = -height_of(label) - margin - offset
         end
       end
 
-      # Place label at various inside positions.
-      def place_label_inside_top(node, label, index)
-        padding = label_padding_option(node)
-        y_offset = index * (height_of(label) + padding)
-
-        label.x = node.x + ((width_of(node) - width_of(label)) / 2.0)
-        label.y = node.y + padding + y_offset
+      def outside_x(node, label, horizontal)
+        case horizontal
+        when :left then 0.0
+        when :right then width_of(node) - width_of(label)
+        else (width_of(node) - width_of(label)) / 2.0
+        end
       end
 
-      def place_label_inside_bottom(node, label, index)
-        padding = label_padding_option(node)
-        y_offset = index * (height_of(label) + padding)
-
-        label.x = node.x + ((width_of(node) - width_of(label)) / 2.0)
-        label.y = node.y + height_of(node) - height_of(label) - padding - y_offset
-      end
-
-      def place_label_inside_left(node, label, index)
-        padding = label_padding_option(node)
-        y_offset = index * (height_of(label) + padding)
-
-        label.x = node.x + padding
-        label.y = node.y + padding + y_offset
-      end
-
-      def place_label_inside_right(node, label, index)
-        padding = label_padding_option(node)
-        y_offset = index * (height_of(label) + padding)
-
-        label.x = node.x + width_of(node) - width_of(label) - padding
-        label.y = node.y + padding + y_offset
-      end
-
-      def place_label_center(node, label)
-        label.x = node.x + ((width_of(node) - width_of(label)) / 2.0)
-        label.y = node.y + ((height_of(node) - height_of(label)) / 2.0)
+      def place_label_beside_node(node, label, horizontal, margin)
+        label.x =
+          if horizontal == :left
+            -width_of(label) - margin
+          else
+            width_of(node) + margin
+          end
+        label.y = (height_of(node) - height_of(label)) / 2.0
       end
 
       # Place labels for all ports on a node.
@@ -148,27 +164,16 @@ module Elkrb
         end
       end
 
-      # Place a port label.
-      def place_port_label(node, port, label, _index)
-        # Port position relative to node
-        port_x = node.x + (port.x || 0)
-        port_y = node.y + (port.y || 0)
-
+      # Place a port label, relative to the port's origin. OUTSIDE (the
+      # default) puts it beside the port away from the node, INSIDE on the
+      # node's side of the port.
+      def place_port_label(node, port, label, index)
         placement = label_placement_option(port, "elk.portLabels.placement") ||
           "OUTSIDE"
+        side = port_side(node, port)
+        side = OPPOSITE_SIDE.fetch(side) if placement_tokens(placement).include?("INSIDE")
 
-        margin = label_margin_option(port)
-
-        case placement.upcase
-        when /INSIDE/
-          # Place inside port (if port is large enough)
-          label.x = port_x + ((width_of(port) - width_of(label)) / 2.0)
-          label.y = port_y + ((height_of(port) - height_of(label)) / 2.0)
-        else
-          # Default: outside, positioned based on port side
-          side = port_side(node, port)
-          place_port_label_by_side(label, port_x, port_y, port, side, margin)
-        end
+        place_port_label_by_side(label, port, side, label_margin_option(port), index)
       end
 
       # Determine which side of the node the port is on.
@@ -192,21 +197,21 @@ module Elkrb
         end
       end
 
-      # Place port label based on port side.
-      def place_port_label_by_side(label, port_x, port_y, port, side, margin)
+      # Place a port label on the given side of the port. Stacked labels
+      # step along the side by their own height.
+      def place_port_label_by_side(label, port, side, margin, index)
+        step = index * (height_of(label) + margin)
+
         case side
-        when :left
-          label.x = port_x - width_of(label) - margin
-          label.y = port_y + ((height_of(port) - height_of(label)) / 2.0)
-        when :right
-          label.x = port_x + width_of(port) + margin
-          label.y = port_y + ((height_of(port) - height_of(label)) / 2.0)
+        when :left, :right
+          label.x = side == :left ? -width_of(label) - margin : width_of(port) + margin
+          label.y = ((height_of(port) - height_of(label)) / 2.0) + step
         when :top
-          label.x = port_x + ((width_of(port) - width_of(label)) / 2.0)
-          label.y = port_y - height_of(label) - margin
+          label.x = (width_of(port) - width_of(label)) / 2.0
+          label.y = -height_of(label) - margin - step
         when :bottom
-          label.x = port_x + ((width_of(port) - width_of(label)) / 2.0)
-          label.y = port_y + height_of(port) + margin
+          label.x = (width_of(port) - width_of(label)) / 2.0
+          label.y = height_of(port) + margin + step
         end
       end
 
@@ -225,33 +230,37 @@ module Elkrb
       def place_edge_label(edge, label, index)
         # Get edge path (sections with bend points)
         if edge.sections && !edge.sections.empty?
-          place_edge_label_on_section(edge.sections.first, label, index)
+          place_edge_label_on_section(edge, edge.sections.first, label, index)
         else
           # No sections, estimate from source/target
           place_edge_label_estimated(edge, label, index)
         end
       end
 
-      # Place edge label on an edge section.
-      def place_edge_label_on_section(section, label, index)
-        # Calculate center point of the edge path
-        center = calculate_edge_center(section)
-
-        placement = "CENTER" # Could be configurable
-
+      # Place an edge label on an edge section, in the section's frame. The
+      # label's own elk.edgeLabels.placement wins over the edge's.
+      def place_edge_label_on_section(edge, section, label, index)
+        tokens = placement_tokens(
+          @resolver.get("elk.edgeLabels.placement", label, edge),
+        )
         offset = index * (height_of(label) + 2) # Stack multiple labels
 
-        case placement.upcase
-        when /CENTER/
-          label.x = center[:x] - (width_of(label) / 2.0)
-          label.y = center[:y] - (height_of(label) / 2.0) + offset
-        when /HEAD/
-          label.x = section.end_point.x - (width_of(label) / 2.0)
-          label.y = section.end_point.y - height_of(label) - 5 + offset
-        when /TAIL/
-          label.x = section.start_point.x - (width_of(label) / 2.0)
-          label.y = section.start_point.y - height_of(label) - 5 + offset
-        end
+        anchor =
+          if tokens.include?("HEAD")
+            above(section.end_point, label)
+          elsif tokens.include?("TAIL")
+            above(section.start_point, label)
+          else
+            calculate_edge_center(section)
+          end
+
+        label.x = anchor[:x] - (width_of(label) / 2.0)
+        label.y = anchor[:y] - (height_of(label) / 2.0) + offset
+      end
+
+      # HEAD and TAIL labels sit just above the end point they name.
+      def above(point, label)
+        { x: point.x, y: point.y - (height_of(label) / 2.0) - 5 }
       end
 
       # Calculate the center point of an edge section.
@@ -272,6 +281,8 @@ module Elkrb
           total_length += length
         end
 
+        return { x: points.first.x, y: points.first.y } if total_length.zero?
+
         # Find point at half the total length
         target_length = total_length / 2.0
         current_length = 0.0
@@ -279,7 +290,7 @@ module Elkrb
         (0...lengths.length).each do |i|
           if current_length + lengths[i] >= target_length
             # Interpolate between points[i] and points[i+1]
-            ratio = (target_length - current_length) / lengths[i]
+            ratio = lengths[i].zero? ? 0.0 : (target_length - current_length) / lengths[i]
             p1 = points[i]
             p2 = points[i + 1]
 

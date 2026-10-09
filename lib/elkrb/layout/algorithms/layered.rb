@@ -55,7 +55,7 @@ module Elkrb
 
           # Phase 2: Assign layers
           layer_assigner = Layered::LayerAssigner.new(
-            graph, index, reversed_edges
+            graph, index, reversed_edges, resolver: @resolver
           )
           layers = layer_assigner.assign_layers
 
