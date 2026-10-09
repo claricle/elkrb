@@ -469,7 +469,6 @@ RSpec.describe Elkrb::Options::Registry do
         elk.layered.nodePlacement.strategy
         elk.layered.compaction.postCompaction.strategy
         elk.box.packingMode
-        elk.disco.componentCompaction.strategy
       ]
 
       accepted_ids.each do |id|
@@ -482,6 +481,8 @@ RSpec.describe Elkrb::Options::Registry do
       expect(described_class.status(
                "elk.layered.crossingMinimization.strategy",
              )).to eq(:honoured)
+      expect(described_class.status("elk.disco.componentCompaction.strategy"))
+        .to eq(:honoured)
       expect(described_class.status("elk.radial.centerOnRoot")).to eq(:honoured)
       expect(described_class.status("elk.layered.layering.layerConstraint"))
         .to eq(:honoured)

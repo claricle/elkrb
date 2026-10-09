@@ -166,9 +166,162 @@ RSpec.describe Elkrb::Layout::Algorithms::Disco do
         expect(xs.each_cons(2).map { |a, b| b - a }).to all(eq(70.0))
       end
 
-      it "lays POLYOMINO out as a row, since no polyomino packing exists" do
-        expect(disco_positions_for("POLYOMINO"))
-          .to eq(disco_positions_for("ROW"))
+      it "packs POLYOMINO into a block, not a row" do
+        xs, ys = disco_positions_for("POLYOMINO").transpose
+
+        expect([xs.uniq.size > 1, ys.uniq.size > 1]).to eq([true, true])
+      end
+
+      it "packs POLYOMINO when no strategy is named" do
+        graph = Elkrb::Graph::Graph.new(
+          children: Array.new(4) do |i|
+            Elkrb::Graph::Node.new(id: "n#{i}", width: 50, height: 30)
+          end,
+          edges: [],
+        )
+        described_class.new.layout(graph)
+
+        expect(graph.children.map { |n| [n.x, n.y] })
+          .to eq(disco_positions_for("POLYOMINO"))
+      end
+    end
+
+    context "with POLYOMINO compaction" do
+      include PolyominoFixtures
+
+      # Positions ELK's DisCo gives the same graphs (same sizes, same start
+      # positions, no component layout), measured from the top-left of the
+      # nodes. Components are packed; edges are the straight lines between
+      # node centers.
+      let(:unconnected) do
+        [["a", 100, 100], ["b", 30, 30], ["c", 60, 20], ["d", 30, 30],
+         ["e", 50, 80], ["f", 40, 40]]
+      end
+      let(:connected) do
+        [["a", 80, 40, 0, 0], ["b", 40, 40, 120, 0], ["c", 60, 30, 0, 100],
+         ["d", 70, 50, 200, 200], ["e", 20, 20, 0, 300],
+         ["f", 90, 25, 150, 320]]
+      end
+
+      def expect_positions(graph, expected)
+        actual = relative_positions(graph)
+
+        expect(actual.keys).to eq(expected.keys)
+        expected.each do |id, point|
+          expect(actual.fetch(id))
+            .to match(point.map { |value| be_within(1e-4).of(value) })
+        end
+      end
+
+      it "places four equal components where ELK does" do
+        graph = layout_disco(disco_graph(Array.new(4) do |i|
+          ["n#{i}", 50, 30]
+        end))
+
+        expect_positions(graph,
+                         "n0" => [52.443635, 52.443635], "n1" => [0.0, 0.0],
+                         "n2" => [72.110002, 0.0], "n3" => [0.0, 104.887267])
+      end
+
+      it "places unconnected components where ELK does" do
+        graph = layout_disco(disco_graph(unconnected))
+
+        expect_positions(graph,
+                         "a" => [73.257121, 88.257121],
+                         "b" => [75.504747, 33.188093],
+                         "c" => [15.470234, 210.138055],
+                         "d" => [132.821401, 33.188093],
+                         "e" => [0.0, 0.0], "f" => [197.420195, 32.28214])
+      end
+
+      it "places connected components with ratio and spacing as ELK does" do
+        graph = layout_disco(disco_graph(
+                               connected,
+                               edges: [%w[a b], %w[b c], %w[e f]],
+                               options: { "elk.aspectRatio" => 2.0,
+                                          "disco.componentSpacing" => 10.0 },
+                             ))
+
+        expect_positions(graph,
+                         "a" => [0.0, 26.152664], "b" => [120.0, 26.152664],
+                         "c" => [0.0, 126.152664], "d" => [190.535861, 0.0],
+                         "e" => [105.535861, 108.344262],
+                         "f" => [255.535861, 128.344262])
+      end
+
+      it "moves a component as one piece" do
+        graph = disco_graph(
+          connected,
+          edges: [%w[a b], %w[b c], %w[e f]],
+          options: { "disco.componentSpacing" => 10.0 },
+        )
+        before = graph.children.to_h { |n| [n.id, [n.x, n.y]] }
+        layout_disco(graph)
+        after = graph.children.to_h { |n| [n.id, [n.x, n.y]] }
+        shift = ->(id) {
+          [after[id][0] - before[id][0], after[id][1] - before[id][1]]
+        }
+
+        near = ->(of) {
+          match(shift.call(of).map do |v|
+            be_within(1e-9).of(v)
+          end)
+        }
+
+        expect(shift.call("b")).to near.call("a")
+        expect(shift.call("c")).to near.call("a")
+        expect(shift.call("f")).to near.call("e")
+      end
+
+      it "leaves no two nodes overlapping, over generated graphs" do
+        rng = Random.new(20_241_011)
+        100.times do
+          nodes = Array.new(rng.rand(1..9)) do |i|
+            ["n#{i}", rng.rand(5..120), rng.rand(5..120), rng.rand(0..400),
+             rng.rand(0..400)]
+          end
+          edges = if nodes.size < 2
+                    []
+                  else
+                    Array.new(rng.rand(0..4)) do
+                      nodes.sample(2, random: rng).map(&:first)
+                    end
+                  end
+          ratio = [1.0, 1.6, 0.5].sample(random: rng)
+          options = { "elk.aspectRatio" => ratio }
+          graph = layout_disco(disco_graph(nodes, edges: edges,
+                                                  options: options))
+
+          expect(overlapping_across_components(graph)).to eq([])
+        end
+      end
+
+      it "takes less area than a row with one large and many small ones" do
+        sizes = [["big", 200, 200]] + Array.new(8) { |i| ["s#{i}", 40, 40] }
+        area = lambda do |strategy|
+          key = "disco.componentCompaction.strategy"
+          graph = layout_disco(disco_graph(sizes, options: { key => strategy }))
+          graph.width * graph.height
+        end
+
+        expect(area.call("POLYOMINO")).to be < area.call("ROW") * 0.7
+      end
+
+      it "reads elk.aspectRatio" do
+        wide = layout_disco(disco_graph(unconnected,
+                                        options: { "elk.aspectRatio" => 4.0 }))
+        tall = layout_disco(disco_graph(unconnected,
+                                        options: { "elk.aspectRatio" => 0.25 }))
+
+        expect(wide.width / wide.height).to be > tall.width / tall.height
+      end
+
+      it "rejects an aspect ratio of zero" do
+        graph = disco_graph(unconnected, options: { "elk.aspectRatio" => 0.0 })
+
+        expect do
+          layout_disco(graph)
+        end.to raise_error(Elkrb::ValidationError, /aspectRatio/)
       end
     end
 

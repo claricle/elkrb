@@ -57,6 +57,7 @@ RSpec.describe "option plumbing" do
       at: :root,
       value: ->(name) { name == "mrtree" ? "RIGHT" : "DOWN" },
     },
+    "elk.disco.componentCompaction.strategy" => { at: :root, value: "ROW" },
     "elk.edgeLabels.placement" => {
       at: :edge, value: "TAIL",
       unwired: unread[

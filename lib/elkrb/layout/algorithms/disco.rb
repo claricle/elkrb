@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "../node_index"
+require_relative "../polyomino/component_compactor"
 
 module Elkrb
   module Layout
@@ -12,6 +13,13 @@ module Elkrb
       # 2. Laying out each component independently
       # 3. Arranging components in a grid or row
       class Disco < BaseAlgorithm
+        # ELK's default edge thickness, which widens an edge's footprint.
+        EDGE_THICKNESS = 1.0
+        # DisCo packs for a square unless the graph names an aspect ratio;
+        # the registry default of elk.aspectRatio belongs to other algorithms.
+        DEFAULT_ASPECT_RATIO = 1.0
+        private_constant :EDGE_THICKNESS, :DEFAULT_ASPECT_RATIO
+
         def layout_flat(graph, _options = {})
           return graph if graph.children.empty?
 
@@ -104,15 +112,18 @@ module Elkrb
           component[:edges].each { |edge| edge.sections = nil }
         end
 
-        # disco.componentCompaction.strategy is ELK's key, and its one value,
-        # POLYOMINO, reads as a row. disco.componentArrangement is the older
-        # elkrb key and takes ROW, COLUMN or GRID. The graph names either key
-        # before the call does: the first reader sees the graph alone.
+        # disco.componentCompaction.strategy is ELK's key; its one value,
+        # POLYOMINO, is also the default. disco.componentArrangement is the
+        # older elkrb key and takes ROW, COLUMN or GRID, and so does the
+        # strategy key. The graph names either key before the call does: the
+        # first reader sees the graph alone. A graph that names
+        # disco.componentArrangement and not the strategy gets that
+        # arrangement.
         def component_arrangement(graph)
           keys = %w[disco.componentCompaction.strategy disco.componentArrangement]
           raw = [Options::Resolver.new, resolver].product(keys)
             .filter_map { |reader, key| reader.get(key, graph, default: nil) }
-            .first || resolver.get(keys.last, graph)
+            .first || resolver.get(keys.first, graph)
           raw.to_s.downcase
         end
 
@@ -122,6 +133,8 @@ module Elkrb
           arrangement = component_arrangement(graph)
 
           case arrangement
+          when "polyomino"
+            arrange_by_polyomino(components, graph, spacing)
           when "grid"
             arrange_in_grid(components, spacing)
           when "column"
@@ -129,6 +142,83 @@ module Elkrb
           else
             arrange_in_row(components, spacing)
           end
+        end
+
+        # Packs the components the way ELK's DisCo does. A component's edges
+        # have no route yet (the outer pass routes them), so each counts as the
+        # straight line between its end nodes, as wide as the spacing.
+        def arrange_by_polyomino(components, graph, spacing)
+          aspect_ratio = resolver.get("elk.aspectRatio", graph, default: DEFAULT_ASPECT_RATIO)
+          unless aspect_ratio.positive?
+            raise ValidationError, "elk.aspectRatio must be above zero, got #{aspect_ratio}"
+          end
+
+          index = NodeIndex.build(graph)
+          shapes = components.map { |component| component_shapes(component, index, spacing) }
+          offsets = Polyomino::ComponentCompactor.new(shapes, aspect_ratio: aspect_ratio).offsets
+
+          components.zip(offsets).each do |component, (dx, dy)|
+            component[:nodes].each do |node|
+              node.x = (node.x || 0.0) + dx
+              node.y = (node.y || 0.0) + dy
+            end
+          end
+        end
+
+        def component_shapes(component, index, spacing)
+          nodes = component[:nodes]
+          shapes = nodes.flat_map { |node| node_shapes(node, spacing) }
+          component[:edges].each do |edge|
+            ends = (index.endpoint_nodes(edge.sources) + index.endpoint_nodes(edge.targets)).uniq
+            next unless ends.size == 2 && ends.all? { |n| nodes.include?(n) }
+
+            shapes << edge_shape(ends[0], ends[1], EDGE_THICKNESS + spacing)
+          end
+          shapes
+        end
+
+        # The node, and each label and port that has a position, grown by half
+        # the spacing on every side.
+        def node_shapes(node, spacing)
+          x = node.x || 0.0
+          y = node.y || 0.0
+          boxes = [[x, y, node.width, node.height]]
+          boxes += positioned(node.labels, x, y)
+          (node.ports || []).each do |port|
+            next unless port.x && port.y
+
+            px = x + port.x
+            py = y + port.y
+            boxes << [px, py, port.width, port.height]
+            boxes += positioned(port.labels, px, py)
+          end
+          boxes.map { |bx, by, w, h| grown_rectangle(bx, by, w || 0.0, h || 0.0, spacing / 2.0) }
+        end
+
+        def positioned(labels, left, top)
+          (labels || []).select { |label| label.x && label.y }
+            .map { |label| [left + label.x, top + label.y, label.width, label.height] }
+        end
+
+        def grown_rectangle(left_edge, top_edge, width, height, margin)
+          left = left_edge - margin
+          top = top_edge - margin
+          right = left_edge + width + margin
+          bottom = top_edge + height + margin
+          [[left, top], [left, bottom], [right, bottom], [right, top]]
+        end
+
+        def edge_shape(from, to, thickness)
+          ax = (from.x || 0.0) + ((from.width || 0.0) / 2.0)
+          ay = (from.y || 0.0) + ((from.height || 0.0) / 2.0)
+          bx = (to.x || 0.0) + ((to.width || 0.0) / 2.0)
+          by = (to.y || 0.0) + ((to.height || 0.0) / 2.0)
+          length = Math.hypot(bx - ax, by - ay)
+          return grown_rectangle(ax, ay, 0.0, 0.0, thickness / 2.0) if length.zero?
+
+          nx = (by - ay) / length * (thickness / 2.0)
+          ny = (ax - bx) / length * (thickness / 2.0)
+          [[ax + nx, ay + ny], [bx + nx, by + ny], [bx - nx, by - ny], [ax - nx, ay - ny]]
         end
 
         def arrange_in_row(components, spacing)
