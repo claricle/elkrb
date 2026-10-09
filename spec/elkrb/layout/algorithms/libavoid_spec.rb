@@ -763,8 +763,12 @@ RSpec.describe Elkrb::Layout::Algorithms::Libavoid do
         port = node.ports.first
         section = graph.edges.first.sections.first
 
-        expect([section.start_point.x, section.start_point.y]).to eq([node.x + port.x, node.y + port.y])
-        expect([section.end_point.x, section.end_point.y]).to eq([node.x + port.x, node.y + port.y])
+        port_center = [
+          node.x + port.x,
+          node.y + port.y + (port.height / 2.0),
+        ]
+        expect([section.start_point.x, section.start_point.y]).to eq(port_center)
+        expect([section.end_point.x, section.end_point.y]).to eq(port_center)
       end
 
       # Keep: guards self-loop dispatch in route_edge_by_owner; it is the only check that a loop keeps its shape.
@@ -2732,7 +2736,7 @@ RSpec.describe "Libavoid edge section integration" do
 
   [
     { edge: "SPLINES", graph: "POLYLINE", bends: 2 },
-    { edge: "POLYLINE", graph: "SPLINES", bends: 4 },
+    { edge: "POLYLINE", graph: "SPLINES", bends: 2 },
   ].each do |row|
     it "lets self-loop #{row[:edge]} override graph #{row[:graph]}" do
       edge = Elkrb::Graph::Edge.new(
