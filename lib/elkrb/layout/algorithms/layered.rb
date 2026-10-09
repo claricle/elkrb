@@ -86,6 +86,63 @@ module Elkrb
         def apply_padding_with_dummies(graph)
           shift_x, shift_y = padding_shift(graph)
           shift_dummy_slots(shift_x, shift_y)
+          include_long_edges(graph)
+        end
+
+        # A long edge's lane can run beyond the nodes; the padding is
+        # measured from the lane, not from the nearest node.
+        def include_long_edges(graph)
+          return if @dummy_slots.empty?
+
+          vertical = %w[DOWN UP].include?(option("elk.direction"))
+          before, after = lane_overhang(graph, vertical)
+            .map { |amount| [amount, 0].max }
+          shift_cross(graph, vertical, before)
+          grow_cross(graph, vertical, before + after)
+        end
+
+        # How far the lanes reach past the padded content on each end of
+        # the cross axis; negative when they stay inside.
+        def lane_overhang(graph, vertical)
+          low, high = @dummy_slots.map { |slot| lane_centre(slot, vertical) }
+            .minmax
+          reach = Layered::NodePlacer::EDGE_THICKNESS / 2.0
+          start, stop = content_range(graph, vertical)
+          [start - (low - reach), high + reach - stop]
+        end
+
+        def content_range(graph, vertical)
+          lead, trail = padding.values_at(*cross_sides(vertical))
+          [lead, (vertical ? graph.width : graph.height) - trail]
+        end
+
+        def cross_sides(vertical)
+          vertical ? %i[left right] : %i[top bottom]
+        end
+
+        def lane_centre(slot, vertical)
+          vertical ? slot.x + (slot.width / 2.0) : slot.y + (slot.height / 2.0)
+        end
+
+        def shift_cross(graph, vertical, amount)
+          items = [*graph.children, *@dummy_slots]
+          items.each do |item|
+            if vertical
+              item.x += amount
+            else
+              item.y += amount
+            end
+          end
+        end
+
+        def grow_cross(graph, vertical, amount)
+          return unless amount.positive?
+
+          if vertical
+            graph.width += amount
+          else
+            graph.height += amount
+          end
         end
 
         def padding_shift(graph)
@@ -127,15 +184,30 @@ module Elkrb
           )
         end
 
+        # A lone dummy is entered and left at its layer's edges; a single
+        # bend at its centre would cut across the nodes beside it.
         def ordered_dummy_anchors(start_point, slots, graph)
+          return lone_dummy_anchors(start_point, slots.first, graph) if
+            slots.length == 1
+
           ordered = slots.sort_by { |slot| squared_distance(start_point, slot) }
           ordered.each_with_index.map do |slot, index|
             dummy_anchor(slot, graph, anchor_for(index, ordered.length))
           end
         end
 
+        # A reversed edge runs against the layer order, so the anchor nearer
+        # its start comes first.
+        def lone_dummy_anchors(start_point, slot, graph)
+          points = %i[leading trailing].map do |anchor|
+            dummy_anchor(slot, graph, anchor)
+          end
+          points.sort_by do |point|
+            ((point.x - start_point.x)**2) + ((point.y - start_point.y)**2)
+          end
+        end
+
         def anchor_for(index, length)
-          return :center if length == 1
           return :leading if index.zero?
           return :trailing if index == length - 1
 
@@ -192,9 +264,10 @@ module Elkrb
         end
 
         def minimize_crossings(graph, layers, index)
-          Layered::CrossingMinimizer.new(
+          minimizer = Layered::CrossingMinimizer.new(
             graph, layers, index, resolver
-          ).minimize
+          )
+          minimizer.minimize.tap { @port_order = minimizer.port_order }
         end
 
         def place_nodes(graph, layers, index)
@@ -208,6 +281,7 @@ module Elkrb
             node_spacing: node_spacing
           )
           placer.index = index
+          placer.port_order = @port_order
           placer.place_nodes
         end
 
