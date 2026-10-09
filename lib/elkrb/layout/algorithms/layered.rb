@@ -96,11 +96,11 @@ module Elkrb
 
           routes = orthogonal_router.routes(method(:along_range))
           graph.edges.to_a.select do |edge|
-            points = routes[edge]
-            next false unless points && level_edge?(edge)
+            route = routes[edge]
+            next false unless route && level_edge?(edge)
             next false unless orthogonal_edge?(graph, edge)
 
-            apply_route(edge, points, graph)
+            apply_route(edge, route, graph)
             true
           end
         end
@@ -116,13 +116,18 @@ module Elkrb
           get_edge_routing_style(graph, edge) == "ORTHOGONAL"
         end
 
-        def apply_route(edge, points, graph)
+        def apply_route(edge, route, graph)
+          place_junctions(edge, route.junctions)
           section = reset_section(edge, graph)
-          start, *bends, finish = points
+          start, *bends, finish = route.points
           section.start_point = point_at(start)
           section.end_point = point_at(finish)
           section.bend_points = []
           bends.each { |x, y| section.add_bend_point(x, y) }
+        end
+
+        def place_junctions(edge, junctions)
+          edge.junction_points = junctions.map { |point| point_at(point) }
         end
 
         def point_at(coordinates)
