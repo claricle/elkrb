@@ -111,6 +111,15 @@ RSpec.describe "elkjs Compatibility" do
       end
     end
 
+    it "places elkjs property ports on their declared sides" do
+      result = Elkrb::Layout::LayoutEngine.layout(graph_data, {})
+      port = result.children.first.ports.first
+
+      expect([port.side, port.x, port.y]).to eq(["NORTH", 78.0, 0.0])
+      expect(result.children.flat_map { |node| node.ports || [] })
+        .to all(satisfy { |candidate| candidate.x && candidate.y })
+    end
+
     it "respects layout properties" do
       result = Elkrb::Layout::LayoutEngine.layout(graph_data, {})
 

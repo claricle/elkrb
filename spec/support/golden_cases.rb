@@ -48,7 +48,7 @@ module GoldenCases
     { name: "long_edge", tier: :structural,
       pending: rc7_long_edge_routing },
     { name: "ports_simple", tier: :structural,
-      pending: rc7_direction_and_layer_gap },
+      fields: %i[nodes sections], pending: nil },
     { name: "labeled_node", tier: :exact,
       pending: rc8_absolute_node_labels },
     { name: "labeled_node_placement", tier: :exact,
