@@ -3,6 +3,7 @@
 require_relative "port_order"
 require_relative "port_spread"
 require_relative "orthogonal/gap_solver"
+require_relative "orthogonal/junction_points"
 
 module Elkrb
   module Layout
@@ -16,14 +17,33 @@ module Elkrb
         # All geometry is read through callables, so the same router sizes
         # the gaps before nodes have a layer position and routes after.
         #
-        # Not ported: junction points, and the segment splitting described
-        # on Orthogonal::GapSolver.
+        # Not ported: the segment splitting described on
+        # Orthogonal::GapSolver.
         class OrthogonalRouter
           # Cross-axis geometry, each a callable.
           #
           # `start` is where an item starts, `extent` its cross size and
           # `port` the cross size of a port.
           Measure = Struct.new(:start, :extent, :port, keyword_init: true)
+
+          # An edge's route: its points, source first, and the junction
+          # points where it meets other edges of its hyperedge segment.
+          Route = Struct.new(:points, :junctions)
+          # Bend points and junction points per edge, per gap.
+          class Book
+            attr_reader :bends, :junctions
+
+            def initialize
+              @bends = {}.compare_by_identity
+              @junctions = {}.compare_by_identity
+            end
+
+            def record(edge, gap, bends, junctions)
+              (@bends[edge] ||= {})[gap] = bends
+              (@junctions[edge] ||= {})[gap] = junctions
+            end
+          end
+          private_constant :Book
 
           # Distance between neighbouring routing slots.
           EDGE_SPACING = 10.0
@@ -61,15 +81,14 @@ module Elkrb
 
           # @param along_range [#call] [low, high] of an item on the layer
           #   axis, in final coordinates
-          # @return [Hash{Edge=>Array<Array(Float, Float)>}] the points of
-          #   each edge that crosses a layer gap, source first; an edge
-          #   whose declared port is not on the side facing its neighbour
-          #   layer is left out
+          # @return [Hash{Edge=>Route}] the route of each edge that crosses
+          #   a layer gap, source first; an edge whose declared port is not
+          #   on the side facing its neighbour layer is left out
           def routes(along_range)
             @along_range = along_range
-            bends = gap_bends
+            book = gap_book
             grouped_segments.select { |_edge, links| facing?(links) }
-              .to_h { |edge, links| [edge, edge_points(edge, links, bends)] }
+              .to_h { |edge, links| [edge, route(edge, links, book)] }
           end
 
           private
@@ -97,23 +116,26 @@ module Elkrb
             @measure.start.call(item) + offset
           end
 
-          # Bend points per edge, per gap: [[along, cross], [along, cross]].
-          def gap_bends
-            bends = {}.compare_by_identity
+          # Bend points and junction points per edge, per gap: lists of
+          # [along, cross].
+          def gap_book
+            book = Book.new
             pairs = @layers.each_cons(2).zip(gaps)
             pairs.each_with_index do |(pair, segments), gap|
               start = layer_high(pair.first) + EDGE_NODE_SPACING
-              segments.each { |segment| place(segment, start, gap, bends) }
+              joints = Orthogonal::JunctionPoints.new
+              segments.each { |s| place(s, [start, gap], book, joints) }
             end
-            bends
+            book
           end
 
-          def place(segment, start, gap, bends)
+          def place(segment, (start, gap), book, joints)
             return if segment.straight?
 
             along = start + (segment.slot * EDGE_SPACING)
             source_links(segment).each do |link|
-              add_bend(link, along, gap, bends)
+              points = bend_points(link, along) or next
+              book.record(link.edge, gap, points, joints.among(segment, points))
             end
           end
 
@@ -122,12 +144,12 @@ module Elkrb
               .flat_map(&:segments)
           end
 
-          def add_bend(link, along, gap, bends)
+          def bend_points(link, along)
             from = cross_of(link.from_port)
             to = cross_of(link.to_port)
             return if (from - to).abs <= TOLERANCE
 
-            (bends[link.edge] ||= {})[gap] = [[along, from], [along, to]]
+            [[along, from], [along, to]]
           end
 
           def grouped_segments
@@ -164,17 +186,24 @@ module Elkrb
             map
           end
 
-          def edge_points(edge, links, bends)
+          def route(edge, links, book)
             first = links.first.from_port
-            points = [anchor(first, :high), *gap_points(edge, links, bends),
+            inner = gap_points(edge, links, book.bends)
+            points = [anchor(first, :high), *inner,
                       anchor(links.last.to_port, :low)]
-            points.map! { |along, cross| real_point(along, cross) }
-            forward?(edge, first) ? points : points.reverse
+            joined = gap_points(edge, links, book.junctions)
+            forward = forward?(edge, first)
+            Route.new(oriented(points, forward), oriented(joined, forward))
           end
 
-          def gap_points(edge, links, bends)
+          def oriented(points, forward)
+            real = points.map { |along, cross| real_point(along, cross) }
+            forward ? real : real.reverse
+          end
+
+          def gap_points(edge, links, per_gap)
             links.flat_map do |link|
-              bends.dig(edge, layer_index(link.from_port.item_id)) || []
+              per_gap.dig(edge, layer_index(link.from_port.item_id)) || []
             end
           end
 
