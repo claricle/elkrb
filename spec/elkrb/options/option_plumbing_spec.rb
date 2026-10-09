@@ -26,7 +26,8 @@ RSpec.describe "option plumbing" do
   read_only = lambda do |why, only: :all|
     { algorithms: only, why: why }
   end
-  libavoid_astar = "libavoid's A* never finds a path on this fixture; card 24"
+  libavoid_penalty = "no route on this fixture has a cheaper alternative " \
+                     "for the penalty to choose"
 
   # at:        where the option is written (OptionPlumbing::PLACES)
   # value:     what is written; a Proc receives the algorithm name
@@ -108,7 +109,13 @@ RSpec.describe "option plumbing" do
                  spore_overlap stress],
       ]
     },
-    "elk.spline.curvature" => { at: :spline_edge, value: 0.9 },
+    "elk.spline.curvature" => {
+      at: :spline_edge, value: 0.9,
+      unwired: unread[
+        "libavoid routes its own connectors and never hands them to the " \
+        "SPLINES router", only: %w[libavoid]
+      ]
+    },
     "elk.stress.desiredEdgeLength" => { at: :root, value: 300.0 },
     "elk.stress.epsilon" => { at: :root, value: 1e9 },
     "elk.stress.iterationLimit" => { at: :root, value: 1 },
@@ -134,14 +141,14 @@ RSpec.describe "option plumbing" do
       ]
     },
     "libavoid.bendPenalty" => {
-      at: :root, value: 50.0, read_only: read_only[libavoid_astar]
+      at: :root, value: 50.0, read_only: read_only[libavoid_penalty]
     },
-    "libavoid.routingPadding" => {
-      at: :root, value: 40.0, read_only: read_only[libavoid_astar]
-    },
+    "libavoid.maxExpansions" => { at: :root, value: 1 },
+    "libavoid.routingPadding" => { at: :root, value: 40.0 },
     "libavoid.segmentPenalty" => {
-      at: :root, value: 50.0, read_only: read_only[libavoid_astar]
+      at: :root, value: 50.0, read_only: read_only[libavoid_penalty]
     },
+    "libavoid.stepSize" => { at: :root, value: 40.0 },
     "spore.compactionDirection" => {
       at: :root, value: "horizontal", variant: :spread
     },
