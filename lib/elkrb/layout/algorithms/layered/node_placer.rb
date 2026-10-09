@@ -9,6 +9,8 @@ module Elkrb
         # This phase calculates the x and y coordinates for each node
         # based on their layer assignment and spacing requirements.
         class NodePlacer
+          attr_writer :index
+
           # @param layer_spacing [Numeric] gap between consecutive layers
           # @param node_spacing [Numeric] gap between nodes in one layer
           def initialize(_graph, layers, direction: "RIGHT",
@@ -27,6 +29,7 @@ module Elkrb
             layer_positions = calculate_layer_positions(layer_extents)
 
             place_all_layers(cross_extents, layer_positions)
+            align_fan_out_parents(cross_extents.max || 0)
             mirror_layers(layer_positions, layer_extents)
           end
 
@@ -92,6 +95,77 @@ module Elkrb
               node.x = cross_position
               node.y = layer_position
             end
+          end
+
+          def align_fan_out_parents(cross_extent)
+            return unless @index
+
+            targets_by_source = fan_out_targets_by_source
+            @layers.each_cons(2) do |parents, children|
+              align_parent_layer(
+                parents, children, targets_by_source, cross_extent
+              )
+            end
+          end
+
+          def align_parent_layer(parents, children, targets_by_source,
+                                 cross_extent)
+            child_ids = children.to_h { |node| [node.id, node] }
+            parents.each do |parent|
+              targets = targets_by_source[parent.id].filter_map do |target_id|
+                child_ids[target_id]
+              end.uniq(&:id)
+              next unless targets.length > 1
+
+              align_parent(parent, targets, parents, cross_extent)
+            end
+          end
+
+          def fan_out_targets_by_source
+            @index.edges.each_with_object(Hash.new do |hash, id|
+              hash[id] = []
+            end) do |edge, targets|
+              source = endpoint_owner(edge.sources)
+              target = endpoint_owner(edge.targets)
+              targets[source] << target if source && target
+            end
+          end
+
+          def endpoint_owner(endpoints)
+            id = (endpoints || []).first
+            @index.owner(id)&.id if id
+          end
+
+          def align_parent(parent, children, siblings, cross_extent)
+            centroid = children.sum do |child|
+              cross_center(child)
+            end / children.length
+            desired = centroid - (cross_size(parent) / 2.0)
+            return unless desired.between?(0, cross_extent - cross_size(parent))
+            return unless room_for?(parent, desired, siblings)
+
+            set_cross_position(parent, desired)
+          end
+
+          def room_for?(parent, desired, siblings)
+            siblings.reject { |node| node.equal?(parent) }.all? do |sibling|
+              sibling_start = cross_position(sibling)
+              sibling_end = sibling_start + cross_size(sibling)
+              desired + cross_size(parent) + @node_spacing <= sibling_start ||
+                sibling_end + @node_spacing <= desired
+            end
+          end
+
+          def cross_center(node)
+            cross_position(node) + (cross_size(node) / 2.0)
+          end
+
+          def cross_position(node)
+            horizontal? ? node.y : node.x
+          end
+
+          def set_cross_position(node, position)
+            node.public_send("#{horizontal? ? :y : :x}=", position)
           end
 
           def mirror_layers(layer_positions, layer_extents)

@@ -3,6 +3,53 @@
 require "spec_helper"
 
 RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
+  describe "S25a crossing minimization" do
+    let(:crossing_graph) do
+      {
+        id: "root",
+        children: %w[a b c d].map do |id|
+          { id: id, width: 100, height: 60 }
+        end,
+        edges: [
+          { id: "1", sources: ["a"], targets: ["d"] },
+          { id: "2", sources: ["b"], targets: ["c"] },
+        ],
+      }
+    end
+
+    it "removes crossings with the default layer sweep" do
+      result = Elkrb.layout(crossing_graph, algorithm: "layered")
+
+      expect(LayeredCrossings.count(result)).to eq(0)
+    end
+
+    it "keeps insertion order when crossing minimization is NONE" do
+      result = Elkrb.layout(
+        crossing_graph,
+        algorithm: "layered",
+        "elk.layered.crossingMinimization.strategy" => "NONE",
+      )
+
+      expect(LayeredCrossings.count(result)).to eq(1)
+    end
+
+    it "reports both crossing options as honoured" do
+      expect(Elkrb::Options::Registry.status(
+               "elk.layered.crossingMinimization.strategy",
+             )).to eq(:honoured)
+      expect(Elkrb::Options::Registry.status(
+               "elk.layered.considerModelOrder.strategy",
+             )).to eq(:honoured)
+    end
+
+    it "places the diamond without crossings" do
+      input = JSON.parse(File.read("spec/fixtures/golden/inputs/diamond.json"))
+      result = Elkrb.layout(input.fetch("graph"), input.fetch("options"))
+
+      expect(LayeredCrossings.count(result)).to eq(0)
+    end
+  end
+
   describe "S9 direction and spacing" do
     let(:chain) do
       {

@@ -55,6 +55,32 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::NodePlacer do
     end
   end
 
+  describe "fan-out alignment" do
+    it "centres a parent over its children when there is room" do
+      parent = Elkrb::Graph::Node.new(id: "parent", width: 10, height: 10)
+      children = %w[u v w].map do |id|
+        Elkrb::Graph::Node.new(id: id, width: 10, height: 10)
+      end
+      graph = Elkrb::Graph::Graph.new(
+        id: "root",
+        children: [parent, *children],
+        edges: %w[v w].map do |target|
+          Elkrb::Graph::Edge.new(
+            id: "parent_#{target}", sources: ["parent"], targets: [target],
+          )
+        end,
+      )
+      placer = described_class.new(
+        graph, [[parent], children], node_spacing: 10
+      )
+      placer.index = Elkrb::Layout::NodeIndex.build(graph)
+
+      placer.place_nodes
+
+      expect(parent.y).to eq(30.0)
+    end
+  end
+
   describe "#calculate_layer_widths" do
     # place_nodes reads this array by layer index, so an empty layer has to
     # contribute an entry at its own position. A `return` inside the map
