@@ -32,14 +32,6 @@ module Elkrb
           []
         end
 
-        # Check if constraint applies to this node
-        #
-        # @param node [Graph::Node] The node to check
-        # @return [Boolean] True if constraint applies
-        def applies_to?(node)
-          node.constraints.present?
-        end
-
         protected
 
         # Find node by ID in graph
