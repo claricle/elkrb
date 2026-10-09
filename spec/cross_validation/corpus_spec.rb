@@ -51,11 +51,26 @@ module CorpusCatalogue
     ["hyperedge", "no_crash"] => "RC-hyperedge",
     ["hyperedge", "invariants"] => "RC-hyperedge",
     ["java_elk_sporeCompaction", "invariants"] => "RC14",
-    ["java_elk_stress", "invariants"] => "S14",
-    ["java_elk_random", "invariants"] => "S14",
-    ["elkjs_layouters_random", "invariants"] => "S14",
-    ["java_elk_fixed", "invariants"] => "S16",
-    ["elkjs_layouters_fixed", "invariants"] => "S16",
+  }.freeze
+
+  # [algorithm, invariant matcher] => what elkjs 0.11.0 does with the same
+  # input. These algorithms violate the invariant by design, so the matcher
+  # is skipped for them while every other invariant still runs. Reproduce
+  # with the corpus inputs (10-20 nodes of 100x60, a chain plus chords):
+  # lay each out with elkjs and test the node boxes pairwise.
+  ELKJS_VIOLATES = {
+    ["fixed", :have_no_overlapping_siblings] =>
+      "the inputs carry no positions; elkjs leaves every node at (0,0), " \
+      "so 45 of 45 (10 nodes) and 190 of 190 (20 nodes) pairs overlap",
+    ["random", :have_no_overlapping_siblings] =>
+      "elkjs scatters nodes uniformly; 11 pairs overlap (10 nodes), " \
+      "16 pairs (20 nodes)",
+    ["random", :have_edges_on_node_borders] =>
+      "elkjs ends each edge at the source node's bottom centre " \
+      "(e1 of elkjs_layouters_random ends at 324.6,119.4 inside n1), " \
+      "never on the target's border",
+    ["stress", :have_no_overlapping_siblings] =>
+      "elkjs stress is not overlap-free; 5 pairs overlap (20 nodes)",
   }.freeze
 end
 
@@ -75,8 +90,15 @@ RSpec.describe "Elkrb layout corpus" do
   end
   private :invariant_arguments
 
-  def assert_layout_invariants(result, input)
-    (INVARIANTS - [:be_deterministic]).each do |matcher|
+  def exempt_invariants(algorithm)
+    CorpusCatalogue::ELKJS_VIOLATES.keys.filter_map do |alg, matcher|
+      matcher if alg == algorithm.to_s
+    end
+  end
+
+  def assert_layout_invariants(result, input, algorithm)
+    skipped = [:be_deterministic, *exempt_invariants(algorithm)]
+    (INVARIANTS - skipped).each do |matcher|
       if invariant_arguments.include?(matcher)
         expect(result).to send(matcher, input)
       else
@@ -111,7 +133,7 @@ RSpec.describe "Elkrb layout corpus" do
         pending(reason) if reason
 
         result = layout_with_timeout(kase)
-        assert_layout_invariants(result, kase.graph)
+        assert_layout_invariants(result, kase.graph, kase.algorithm)
       end
     end
   end
@@ -140,10 +162,20 @@ RSpec.describe "Elkrb layout corpus" do
 
   def entry_still_fails?(kase, check)
     result = layout_with_timeout(kase)
-    assert_layout_invariants(result, kase.graph) if check == "invariants"
+    return false unless check == "invariants"
+
+    assert_layout_invariants(result, kase.graph, kase.algorithm)
     false
   rescue StandardError, SystemStackError, RSpec::Expectations::ExpectationNotMetError
     true
+  end
+
+  it "only exempts algorithms the corpus runs and invariants that exist" do
+    corpus_algorithms = CorpusCatalogue::CASES.map { |k| k.algorithm.to_s }
+    CorpusCatalogue::ELKJS_VIOLATES.each_key do |algorithm, matcher|
+      expect(corpus_algorithms).to include(algorithm)
+      expect(INVARIANTS).to include(matcher)
+    end
   end
 
   describe CorpusRunner, ".source_directory?" do
