@@ -121,7 +121,6 @@ RSpec.describe ".reek.yml" do
       "Elkrb::Layout::Algorithms::Force#initialize_positions",
       "Elkrb::Layout::Algorithms::Stress#initialize_positions",
       "Elkrb::Layout::Constraints::AlignmentConstraint#validate_group_alignment",
-      "Elkrb::Layout::Constraints::RelativePositionConstraint#apply_relative_position",
       "Elkrb::Layout::EdgeRouter#route_edge_with_style",
       "Elkrb::Layout::EdgeRouter#route_edges",
       "Elkrb::Layout::EdgeRouter#route_self_loop_with_ports",

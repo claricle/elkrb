@@ -74,7 +74,7 @@ module Elkrb
 
           # Phase 2: Assign layers and insert long-edge dummy slots
           Layered::LayerAssigner.new(
-            graph, index, reversed_edges
+            graph, index, reversed_edges, resolver: @resolver
           ).assign_layers
         end
 

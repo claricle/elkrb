@@ -59,22 +59,42 @@ RSpec.describe Elkrb::Layout::Constraints::ConstraintProcessor do
       node.constraints = Elkrb::Graph::NodeConstraints.new(fixed_position: true)
       graph.children = [node]
 
-      processor.apply_all(graph)
+      processor.apply_pre_layout(graph)
+      node.x = 0
+      node.y = 0
+      processor.enforce_post_layout(graph)
 
-      expect(node.properties["_constraint_fixed"]).to be true
-      expect(node.properties["_constraint_original_x"]).to eq(500)
-      expect(node.properties["_constraint_original_y"]).to eq(800)
+      expect([node.x, node.y]).to eq([500, 800])
+      expect(node.properties).to be_nil
     end
 
-    it "applies layer constraint" do
+    it "releases a node once fixed_position is cleared" do
       graph = Elkrb::Graph::Graph.new(id: "root")
-      node = Elkrb::Graph::Node.new(id: "n1", width: 100, height: 60)
-      node.constraints = Elkrb::Graph::NodeConstraints.new(layer: 2)
+      node = Elkrb::Graph::Node.new(id: "n1", width: 100, height: 60, x: 500,
+                                    y: 800)
+      node.constraints = Elkrb::Graph::NodeConstraints.new(fixed_position: true)
+      graph.children = [node]
+
+      processor.apply_pre_layout(graph)
+      node.constraints.fixed_position = false
+      node.x = 0
+      node.y = 0
+      processor.enforce_post_layout(graph)
+
+      expect([node.x, node.y]).to eq([0, 0])
+    end
+
+    it "leaves no scratch state in node properties" do
+      graph = Elkrb::Graph::Graph.new(id: "root")
+      node = Elkrb::Graph::Node.new(id: "n1", width: 100, height: 60, x: 5,
+                                    y: 8)
+      node.constraints = Elkrb::Graph::NodeConstraints.new(fixed_position: true,
+                                                           layer: 2)
       graph.children = [node]
 
       processor.apply_all(graph)
 
-      expect(node.properties["_constraint_layer"]).to eq(2)
+      expect(node.properties).to be_nil
     end
 
     it "applies alignment constraint" do
@@ -154,15 +174,9 @@ RSpec.describe Elkrb::Layout::Constraints::ConstraintProcessor do
 
       processor.apply_all(graph)
 
-      # Fixed position marked
-      expect(fixed_node.properties["_constraint_fixed"]).to be true
-
-      # Alignment applied
+      expect([fixed_node.x, fixed_node.y]).to eq([500, 100])
       expect(db1.y).to eq(db2.y)
-
-      # Layer marked
-      expect(db1.properties["_constraint_layer"]).to eq(2)
-      expect(db2.properties["_constraint_layer"]).to eq(2)
+      expect([db1, db2, fixed_node].map(&:properties)).to all(be_nil)
     end
   end
 
@@ -183,12 +197,8 @@ RSpec.describe Elkrb::Layout::Constraints::ConstraintProcessor do
       node = Elkrb::Graph::Node.new(id: "n1", width: 100, height: 60, x: 500,
                                     y: 800)
       node.constraints = Elkrb::Graph::NodeConstraints.new(fixed_position: true)
-      node.properties = {
-        "_constraint_fixed" => true,
-        "_constraint_original_x" => 500,
-        "_constraint_original_y" => 800,
-      }
       graph.children = [node]
+      processor.apply_pre_layout(graph)
 
       errors = processor.validate_all(graph)
 
@@ -197,15 +207,13 @@ RSpec.describe Elkrb::Layout::Constraints::ConstraintProcessor do
 
     it "detects fixed position violation" do
       graph = Elkrb::Graph::Graph.new(id: "root")
-      node = Elkrb::Graph::Node.new(id: "n1", width: 100, height: 60, x: 600,
-                                    y: 900)
+      node = Elkrb::Graph::Node.new(id: "n1", width: 100, height: 60, x: 500,
+                                    y: 800)
       node.constraints = Elkrb::Graph::NodeConstraints.new(fixed_position: true)
-      node.properties = {
-        "_constraint_fixed" => true,
-        "_constraint_original_x" => 500,
-        "_constraint_original_y" => 800,
-      }
       graph.children = [node]
+      processor.apply_pre_layout(graph)
+      node.x = 600
+      node.y = 900
 
       errors = processor.validate_all(graph)
 
@@ -283,6 +291,40 @@ RSpec.describe Elkrb::Layout::Constraints::ConstraintProcessor do
       errors = processor.validate_all(graph)
 
       expect(errors).to be_empty
+    end
+
+    it "reports, rather than raises, on a graph with no coordinates" do
+      graph = Elkrb::Graph::Graph.new(id: "root")
+      ref = Elkrb::Graph::Node.new(id: "ref", width: 100, height: 60)
+      node = Elkrb::Graph::Node.new(id: "api", width: 100, height: 60)
+      node.constraints = Elkrb::Graph::NodeConstraints.new(
+        relative_to: "ref",
+        relative_offset: Elkrb::Graph::RelativeOffset.new(x: 150, y: 0),
+      )
+      graph.children = [ref, node]
+
+      expect { processor.apply_all(graph) }.not_to raise_error
+      errors = processor.validate_all(graph)
+
+      expect(errors).to contain_exactly(a_string_including("no coordinates"))
+    end
+
+    it "reports a relative_to cycle once per node and does not move it" do
+      graph = Elkrb::Graph::Graph.new(id: "root")
+      offset = Elkrb::Graph::RelativeOffset.new(x: 10, y: 0)
+      a, b = [%w[a b], %w[b a]].map do |id, ref|
+        Elkrb::Graph::Node.new(
+          id: id, width: 10, height: 10, x: 1, y: 2,
+          constraints: Elkrb::Graph::NodeConstraints.new(relative_to: ref,
+                                                         relative_offset: offset)
+        )
+      end
+      graph.children = [a, b]
+
+      processor.apply_all(graph)
+
+      expect([a.x, b.x]).to eq([1, 1])
+      expect(processor.validate_all(graph).length).to eq(2)
     end
 
     it "detects missing reference node" do

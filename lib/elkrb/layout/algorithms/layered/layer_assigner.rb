@@ -7,11 +7,18 @@ require "set"
 # rubocop:enable Lint/RedundantRequireStatement
 require_relative "dummy_slot"
 
+require_relative "../../../options/resolver"
+require_relative "layer_constraints"
+
 module Elkrb
   module Layout
     module Algorithms
       module Layered
-        # Assigns nodes to layers using an iterative longest-path pass.
+        # Assigns nodes to layers using an iterative longest-path pass, then
+        # applies layer constraints: `elk.layered.layering.layerConstraint`
+        # (FIRST, FIRST_SEPARATE, LAST, LAST_SEPARATE) and
+        # `constraints.layer`. A constraint wins over the edges, so an edge
+        # may end up pointing against the layer order.
         class LayerAssigner
           attr_reader :layers
 
@@ -28,8 +35,10 @@ module Elkrb
           # only thing standing between a dedup bug and a direct caller
           # that relies on the default AND later mutates it in place.
           def initialize(graph, index,
-                         reversed_edges = Set.new.compare_by_identity)
+                         reversed_edges = Set.new.compare_by_identity,
+                         resolver: Options::Resolver.new)
             @graph = graph
+            @resolver = resolver
             @index = index
             @reversed_edges = reversed_edges
             @layers = []
@@ -42,6 +51,7 @@ module Elkrb
             nodes = @graph.children.to_h { |node| [node.id, node] }
             predecessors = build_predecessors(nodes)
             assign_predecessor_layers(nodes, predecessors)
+            apply_layer_constraints(nodes)
             build_layers(nodes)
             insert_dummy_slots
             @layers
@@ -160,6 +170,10 @@ module Elkrb
               else
                 0
               end
+          end
+
+          def apply_layer_constraints(nodes)
+            LayerConstraints.new(nodes, @node_layers, @resolver).apply
           end
 
           def build_layers(nodes)

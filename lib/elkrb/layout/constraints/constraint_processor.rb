@@ -14,7 +14,7 @@ module Elkrb
       # Orchestrates the application and validation of all layout constraints.
       # Constraints are applied in a specific order to handle dependencies:
       # 1. Fixed position (locks nodes)
-      # 2. Layer constraints (assigns layers)
+      # 2. Layer constraints (checked; the layered algorithm honours them)
       # 3. Relative position (depends on reference nodes)
       # 4. Alignment (adjusts positions)
       #
@@ -30,15 +30,14 @@ module Elkrb
           LayerConstraint,
         ].freeze
 
-        # Post-layout constraints (enforce after algorithm runs)
-        POST_LAYOUT_CONSTRAINTS = [
-          RelativePositionConstraint,
-          AlignmentConstraint,
-        ].freeze
-
-        def initialize
+        # @param spacing [Numeric] minimum gap alignment keeps between the
+        #   members of one group along the axis it does not align
+        def initialize(spacing: 0.0)
           @pre_constraints = PRE_LAYOUT_CONSTRAINTS.map(&:new)
-          @post_constraints = POST_LAYOUT_CONSTRAINTS.map(&:new)
+          @post_constraints = [
+            RelativePositionConstraint.new,
+            AlignmentConstraint.new(spacing: spacing),
+          ]
           @all_constraints = (@pre_constraints + @post_constraints)
         end
 

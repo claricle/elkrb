@@ -3,6 +3,100 @@
 require "spec_helper"
 
 RSpec.describe Elkrb::Layout::Algorithms::Force do
+  describe "Fruchterman-Reingold layout" do
+    let(:chain_json) do
+      {
+        id: "r",
+        children: Array.new(30) do |i|
+          { id: "n#{i}", width: 30, height: 30 }
+        end,
+        edges: Array.new(29) do |i|
+          { id: "e#{i}", sources: ["n#{i}"], targets: ["n#{i + 1}"] }
+        end,
+      }.to_json
+    end
+
+    let(:five_nodes_json) do
+      {
+        id: "r",
+        children: Array.new(5) do |i|
+          { id: "n#{i}", width: 30, height: 30 }
+        end,
+        edges: [],
+      }.to_json
+    end
+
+    it "separates a 30-node chain while keeping adjacent nodes close" do
+      result = Elkrb.layout(JSON.parse(chain_json), algorithm: "force")
+      by_id = result.children.to_h { |node| [node.id, node] }
+      adjacent_distances = Array.new(29) do |i|
+        left = by_id.fetch("n#{i}")
+        right = by_id.fetch("n#{i + 1}")
+        Math.hypot(left.x - right.x, left.y - right.y)
+      end
+
+      expect(result).to have_no_overlapping_siblings
+      expect(adjacent_distances).to all(be_between(40.0, 200.0))
+      expect(result.children.map(&:x).min).to eq(50.0)
+      expect(result.children.map(&:y).min).to eq(50.0)
+    end
+
+    it "separates nodes that start at the same position" do
+      graph = JSON.parse(five_nodes_json)
+      graph["children"].each { |node| node.merge!("x" => 0, "y" => 0) }
+      result = Elkrb.layout(graph, algorithm: "force")
+
+      pairwise_distances = result.children.combination(2).map do |left, right|
+        Math.hypot(left.x - right.x, left.y - right.y)
+      end
+
+      expect(pairwise_distances).to all(be > 10.0)
+    end
+
+    it "is deterministic" do
+      expect do
+        Elkrb.layout(JSON.parse(chain_json), algorithm: "force")
+      end.to be_deterministic
+    end
+
+    it "returns only the seeded scatter when iterations are zero" do
+      first = JSON.parse(five_nodes_json)
+      first["layoutOptions"] = {
+        "elk.force.iterations" => 0,
+        "elk.force.repulsion" => 0,
+        "elk.force.temperature" => 0,
+      }
+      second = JSON.parse(five_nodes_json)
+      second["layoutOptions"] = {
+        "elk.force.iterations" => 0,
+        "elk.force.repulsion" => 1000,
+        "elk.force.temperature" => 1000,
+      }
+
+      first_result = Elkrb.layout(first, algorithm: "force")
+      second_result = Elkrb.layout(second, algorithm: "force")
+      positions = first_result.children.map { |node| [node.x, node.y] }
+      second_positions = second_result.children.map { |node| [node.x, node.y] }
+
+      expect(positions).to eq(second_positions)
+      expect(positions.uniq.length).to eq(5)
+    end
+
+    it "keeps zero-spacing sizeless graphs finite" do
+      graph = {
+        id: "r",
+        layoutOptions: { "elk.spacing.nodeNode" => 0 },
+        children: [{ id: "a" }, { id: "b" }],
+        edges: [{ id: "e", sources: ["a"], targets: ["b"] }],
+      }
+
+      result = Elkrb.layout(graph, algorithm: "force")
+
+      coordinates = result.children.flat_map { |node| [node.x, node.y] }
+      expect(coordinates).to all(be_finite)
+    end
+  end
+
   describe "#layout" do
     it "pulls port-id-connected nodes together, not just node-id ones" do
       # Fixed positions plus repulsion: 0.0 isolate the attractive force

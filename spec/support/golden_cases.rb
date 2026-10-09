@@ -19,10 +19,6 @@ module GoldenCases
   rc7_branch_routing =
     "RC7: layered has no crossing minimisation or dummy-node routing " \
     "for branching graphs"
-  rc8_absolute_node_labels =
-    "RC8: node labels are absolute, not owner-relative"
-  rc8_label_placement_unread =
-    "RC8: ELK node label placement keys are never read"
 
   # The 29 cases whose golden is a laid-out graph, compared field by field.
   # `hyperedge` is deliberately absent -- its golden is an error hash, it
@@ -43,10 +39,9 @@ module GoldenCases
       pending: nil },
     { name: "ports_simple", tier: :structural,
       fields: %i[nodes sections], pending: nil },
-    { name: "labeled_node", tier: :exact,
-      pending: rc8_absolute_node_labels },
-    { name: "labeled_node_placement", tier: :exact,
-      pending: rc8_label_placement_unread },
+    { name: "labeled_node", tier: :exact, fields: %i[labels], pending: nil },
+    { name: "labeled_node_placement", tier: :exact, fields: %i[labels],
+      pending: nil },
     { name: "compound_chain", tier: :exact,
       fields: %i[nodes graph sections], pending: nil },
     { name: "compound_nested", tier: :structural, fields: %i[nodes graph],
@@ -65,7 +60,8 @@ module GoldenCases
     { name: "mrtree7", tier: :structural, pending: nil },
     { name: "radial_star5", tier: :structural, pending: nil },
     { name: "rect6", tier: :structural, pending: nil },
-    { name: "force_tri", tier: :structural, pending: rc2_2_algorithm_pin },
+    { name: "force_tri", tier: :structural, fields: %i[nodes sections],
+      pending: nil },
     { name: "stress_path4", tier: :structural,
       pending: rc2_2_algorithm_pin },
     { name: "random3", tier: :structural, pending: rc2_2_algorithm_pin },
