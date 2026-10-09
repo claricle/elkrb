@@ -161,18 +161,23 @@ module Elkrb
           radii = widths.zip(heights).map do |width, height|
             Math.hypot(width, height) / 2.0
           end
-          k = Math.sqrt((widths.sum * heights.sum) / (2.0 * count)) *
-              FORCE_SPACING * 0.01
-          bound = [count * FORCE_DISPLACEMENT_FACTOR + edge_count,
+          area_constant = Math.sqrt(
+            (widths.sum * heights.sum) / (2.0 * count),
+          )
+          force_constant = (area_constant * FORCE_SPACING) * 0.01
+          bound = [(count * FORCE_DISPLACEMENT_FACTOR) + edge_count,
                    FORCE_DISPLACEMENT_FACTOR**2].max
           iterations = force_iterations(count)
           temperature = FORCE_TEMPERATURE
           threshold = temperature / iterations
+          state = {
+            positions: positions, radii: radii, connections: connections,
+            force_constant: force_constant, bound: bound, random: random
+          }
 
           while temperature.positive?
             temperature -= threshold
-            force_iteration(positions, radii, connections, k, temperature,
-                            bound, random)
+            force_iteration(state, temperature)
           end
         end
 
@@ -188,8 +193,13 @@ module Elkrb
           [FORCE_ITERATIONS, budgeted].min
         end
 
-        def force_iteration(positions, radii, connections, k, temperature,
-                            bound, random)
+        def force_iteration(state, temperature)
+          positions = state[:positions]
+          radii = state[:radii]
+          connections = state[:connections]
+          force_constant = state[:force_constant]
+          bound = state[:bound]
+          random = state[:random]
           x, y = positions
           count = x.length
           dx_sum = Array.new(count, 0.0)
@@ -205,13 +215,14 @@ module Elkrb
               length = Math.sqrt((dx * dx) + (dy * dy))
               border_distance = [length - radii[i] - radii[j], 0.0].max
               force = if border_distance.positive?
-                        k * k / border_distance
+                        force_constant * force_constant / border_distance
                       else
-                        k * k * FORCE_ZERO_FACTOR
+                        force_constant * force_constant * FORCE_ZERO_FACTOR
                       end
-              connection = connections[(i * count) + j] +
-                           connections[(j * count) + i]
-              force -= border_distance * border_distance / k * connection
+              connection = connections[(i * count) + j]
+              connection += connections[(j * count) + i]
+              attraction = border_distance * border_distance / force_constant
+              force -= attraction * connection
               scale = force * temperature / length
               force_x = dx * scale
               force_y = dy * scale

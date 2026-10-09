@@ -253,7 +253,7 @@ RSpec.describe Elkrb::Layout::Algorithms::Stress do
         [0.0, 20.0], [0.0, 0.0],
         [[0.0, 10.0], [10.0, 0.0]],
         [[Float::INFINITY, 0.01], [0.01, Float::INFINITY]],
-        [[1], [0]],
+        [[1], [0]]
       )
 
       expect(stress).to eq(1.0)
