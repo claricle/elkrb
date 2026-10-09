@@ -796,7 +796,7 @@ f_score = Float::INFINITY, direction = nil)
           node_index = NodeIndex.build(graph)
           routing_style = get_edge_routing_style(graph, edge)
 
-          if self_loop?(edge)
+          if self_loop?(edge, node_index)
             route_self_loop(edge, node_index, graph, routing_style)
           else
             route_edge_with_style(edge, node_index, graph, routing_style)

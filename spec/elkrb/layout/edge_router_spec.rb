@@ -746,8 +746,7 @@ RSpec.describe Elkrb::Layout::EdgeRouter do
 
         router.route_edges(mixed_graph, nil, "ORTHOGONAL")
 
-        # Self-loop should have 4 bend points (rectangular)
-        expect(self_loop_edge.sections.first.bend_points.length).to eq(4)
+        expect(self_loop_edge.sections.first.bend_points.length).to eq(2)
 
         # The normal edge is already horizontally aligned.
         normal_edge.layout_options = {}

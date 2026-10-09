@@ -16,9 +16,6 @@ module GoldenCases
   rc2_2_algorithm_pin =
     "RC2.2: graph-level elk.algorithm pin is never read, " \
     "LayoutEngine always defaults to layered"
-  rc7_direction_and_layer_gap =
-    "RC7: layered ignores elk.direction and uses a 60px layer gap " \
-    "instead of ELK's RIGHT/20 defaults"
   rc7_branch_routing =
     "RC7: layered has no crossing minimisation or dummy-node routing " \
     "for branching graphs"
@@ -43,8 +40,8 @@ module GoldenCases
     { name: "diamond", tier: :structural, pending: rc7_branch_routing },
     { name: "cycle3", tier: :structural,
       fields: %i[nodes sections], pending: nil },
-    { name: "self_loop", tier: :structural,
-      pending: rc7_direction_and_layer_gap },
+    { name: "self_loop", tier: :structural, fields: %i[nodes sections],
+      pending: nil },
     { name: "long_edge", tier: :structural,
       pending: rc7_long_edge_routing },
     { name: "ports_simple", tier: :structural,
