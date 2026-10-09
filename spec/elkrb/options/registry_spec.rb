@@ -378,9 +378,17 @@ RSpec.describe Elkrb::Options::Registry do
   # holds the behaviour these two rows describe.
   describe "the edge routing options libavoid does not apply to its own routes" do
     %w[elk.edgeRouting elk.spline.curvature].each do |id|
-      it "records #{id} as partial and names libavoid" do
+      it "records #{id} as partial, read by every algorithm but libavoid" do
         expect(described_class.status(id)).to eq(:partial)
-        expect(described_class.note(id)).to match(/\Alibavoid /)
+        expect(described_class.read_by?(id, "layered")).to be(true)
+        expect(described_class.read_by?(id, "libavoid")).to be(false)
+        expect(described_class.note(id)).to include("libavoid ")
+      end
+
+      it "lists as readers exactly the algorithms registered but libavoid" do
+        readers = described_class.all.fetch(id)[:readers]
+        expect(readers.sort)
+          .to eq(Elkrb::Layout::AlgorithmRegistry.available_algorithms - %w[libavoid])
       end
     end
   end
