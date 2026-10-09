@@ -16,7 +16,6 @@ RSpec.describe "sirena consumer contract" do
   describe "registry status" do
     SirenaContract::KEYS.each do |key, row|
       it "#{key} is #{row[:status]} (slice #{row[:slice]})" do
-        pending("needs card 31") if row[:slice] == "31"
         expect(Elkrb::Options::Registry.status(key)).to eq(row[:status])
       end
     end
@@ -134,7 +133,6 @@ RSpec.describe "sirena consumer contract" do
     end
 
     it "elk.layered.crossingMinimization.strategy changes the crossing count" do
-      pending("needs card 31")
       crossings = lambda do |strategy|
         options = down.merge(
           "elk.layered.crossingMinimization.strategy" => strategy,
@@ -146,7 +144,6 @@ RSpec.describe "sirena consumer contract" do
     end
 
     it "elk.layered.considerModelOrder.strategy changes the crossing count" do
-      pending("needs card 31")
       crossings = lambda do |strategy|
         options = down.merge(
           "elk.layered.considerModelOrder.strategy" => strategy,
