@@ -461,7 +461,6 @@ RSpec.describe Elkrb::Options::Registry do
         elk.layered.crossingMinimization.strategy
         elk.layered.compaction.postCompaction.strategy
         elk.box.packingMode
-        elk.layered.layering.layerConstraint
         elk.disco.componentCompaction.strategy
       ]
 
@@ -470,6 +469,8 @@ RSpec.describe Elkrb::Options::Registry do
                                               "#{id} should be :accepted"
       end
       expect(described_class.status("elk.radial.centerOnRoot")).to eq(:honoured)
+      expect(described_class.status("elk.layered.layering.layerConstraint"))
+        .to eq(:honoured)
     end
 
     it "describes elk.disco.componentCompaction.strategy with ELK's contract, not the arrangement values" do
