@@ -48,10 +48,11 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
     it "treats UNDEFINED as RIGHT" do
       right = Elkrb.layout(Marshal.load(Marshal.dump(chain)),
                            algorithm: "layered", "elk.direction" => "RIGHT")
-      undefined = Elkrb.layout(
-        Marshal.load(Marshal.dump(chain)), algorithm: "layered",
-        "elk.direction" => "UNDEFINED"
-      )
+      undefined_options = {
+        algorithm: "layered", "elk.direction" => "UNDEFINED"
+      }
+      undefined = Elkrb.layout(Marshal.load(Marshal.dump(chain)),
+                               undefined_options)
 
       expect(undefined.children.map { |node| [node.x, node.y] })
         .to eq(right.children.map { |node| [node.x, node.y] })

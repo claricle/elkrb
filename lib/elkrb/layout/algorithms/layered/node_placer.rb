@@ -22,19 +22,11 @@ module Elkrb
           def place_nodes
             return unless @layers && !@layers.empty?
 
-            cross_extents = horizontal? ? calculate_layer_heights :
-              calculate_layer_widths
+            cross_extents = calculate_directional_cross_extents
             layer_extents = calculate_layer_extents
             layer_positions = calculate_layer_positions(layer_extents)
-            max_cross_extent = cross_extents.max || 0
 
-            @layers.each_with_index do |layer_nodes, layer_index|
-              cross_offset =
-                (max_cross_extent - cross_extents[layer_index]) / 2.0
-              place_layer(layer_nodes, layer_positions[layer_index],
-                          cross_offset)
-            end
-
+            place_all_layers(cross_extents, layer_positions)
             mirror_layers(layer_positions, layer_extents)
           end
 
@@ -48,12 +40,26 @@ module Elkrb
             calculate_cross_extents(:height)
           end
 
+          def calculate_directional_cross_extents
+            horizontal? ? calculate_layer_heights : calculate_layer_widths
+          end
+
           def calculate_cross_extents(dimension)
             @layers.map do |nodes|
               next 0 if nodes.empty?
 
-              nodes.sum { |node| size(node, dimension) } +
-                (nodes.length - 1) * @node_spacing
+              gaps = (nodes.length - 1) * @node_spacing
+              nodes.sum { |node| size(node, dimension) } + gaps
+            end
+          end
+
+          def place_all_layers(cross_extents, layer_positions)
+            max_cross_extent = cross_extents.max || 0
+            @layers.each_with_index do |layer_nodes, layer_index|
+              cross_offset =
+                (max_cross_extent - cross_extents[layer_index]) / 2.0
+              place_layer(layer_nodes, layer_positions[layer_index],
+                          cross_offset)
             end
           end
 
@@ -93,15 +99,21 @@ module Elkrb
 
             bound = layer_positions.zip(layer_extents)
               .map { |position, extent| position + extent }.max
-            dimension = @direction == "LEFT" ? :width : :height
-            coordinate = @direction == "LEFT" ? :x : :y
+            coordinate, dimension = mirror_axis
 
             @layers.flatten.each do |node|
-              node.public_send(
-                "#{coordinate}=", bound - node.public_send(coordinate) -
-                  size(node, dimension)
-              )
+              mirror_node(node, coordinate, dimension, bound)
             end
+          end
+
+          def mirror_axis
+            @direction == "LEFT" ? %i[x width] : %i[y height]
+          end
+
+          def mirror_node(node, coordinate, dimension, bound)
+            mirrored = bound - node.public_send(coordinate) -
+              size(node, dimension)
+            node.public_send("#{coordinate}=", mirrored)
           end
 
           def horizontal?

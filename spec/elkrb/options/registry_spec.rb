@@ -290,7 +290,7 @@ RSpec.describe Elkrb::Options::Registry do
     {
       direction => {
         internal: "direction", shapes: { value: %w[RIGHT DOWN] },
-        carriers: parent_carriers, readers: direction_readers
+        readers: direction_readers
       },
       layer_spacing => {
         internal: "layer_spacing", shapes: spacing,
@@ -363,11 +363,12 @@ RSpec.describe Elkrb::Options::Registry do
     end
 
     it "gives an id without readers its plain note, and an unknown id none" do
+      expected = [
+        described_class.all.fetch("elk.hierarchyHandling").fetch(:note), nil
+      ]
       expect([described_class.note("elk.hierarchyHandling"),
               described_class.note("elk.nonesuch")])
-        .to eq([
-          described_class.all.fetch("elk.hierarchyHandling").fetch(:note), nil
-        ])
+        .to eq(expected)
     end
 
     it "answers read_by? for a reader, a non-reader and an id with none" do
