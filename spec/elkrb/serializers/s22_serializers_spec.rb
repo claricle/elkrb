@@ -146,6 +146,12 @@ RSpec.describe "S22 serializers" do
       Elkrb::Graph::Graph.from_json(JSON.generate(document))
     end
 
+    def capture_dot(format, dot)
+      Open3.capture3("dot", format, stdin_data: dot)
+    rescue Errno::ENOENT
+      skip "Graphviz is not installed; skipping external DOT acceptance"
+    end
+
     it "quotes distinct DOT IDs and produces input Graphviz accepts" do
       graph = graph_model(
         id: "root",
@@ -159,11 +165,10 @@ RSpec.describe "S22 serializers" do
       )
 
       dot = serializer.serialize(graph)
-      _stdout, stderr, status = Open3.capture3("dot", "-Tcanon",
-                                               stdin_data: dot)
-
-      expect(status).to be_success, stderr
       expect(dot).to include('"1st"', '"a-b" -> "a.b"', '"node"')
+
+      _stdout, stderr, status = capture_dot("-Tcanon", dot)
+      expect(status).to be_success, stderr
     end
 
     it "emits nested and port edges once without phantom port nodes" do
@@ -185,11 +190,10 @@ RSpec.describe "S22 serializers" do
       )
 
       dot = serializer.serialize(graph)
-      plain, stderr, status = Open3.capture3("dot", "-Tplain",
-                                             stdin_data: dot)
-
-      expect(status).to be_success, stderr
       expect(dot.scan("n1:p1 -> n2:p2").length).to eq(1)
+
+      plain, stderr, status = capture_dot("-Tplain", dot)
+      expect(status).to be_success, stderr
       expect(plain.lines.grep(/^node /).length).to eq(2)
     end
 

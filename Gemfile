@@ -5,6 +5,8 @@ source "https://rubygems.org"
 # Specify your gem's dependencies in omnizip.gemspec
 gemspec
 
+# Ruby 4.0 no longer bundles benchmark, but the stress specs require it.
+gem "benchmark"
 gem "rake"
 gem "rspec"
 # Pinned to a single release series: a new rubocop or plugin version can add or

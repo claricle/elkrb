@@ -28,17 +28,7 @@ RSpec.describe "mutant.yml requires" do
     probe = <<~RUBY
       requires = #{requires.inspect}
       requires.each { |r| require r }
-      loaded = $LOADED_FEATURES.map do |feature|
-        if File::ALT_SEPARATOR
-          feature.tr(File::ALT_SEPARATOR, File::SEPARATOR)
-        else
-          feature
-        end
-      end
-      loaded.select! do |f|
-        f.include?("/lib/elkrb/") || f.end_with?("/lib/elkrb.rb")
-      end
-      puts loaded.map { |f| f.sub(%r{.*/lib/}, "") }.sort
+      puts $LOADED_FEATURES
     RUBY
 
     out = IO.popen(
@@ -51,7 +41,10 @@ RSpec.describe "mutant.yml requires" do
 
     expect(status).to be_success, "subprocess failed:\n#{out}"
 
-    loaded = out.lines(chomp: true)
+    loaded = out.lines(chomp: true).filter_map do |feature|
+      path = feature.tr("\\", "/")
+      path[%r{/lib/(elkrb(?:/.*)?\.rb)\z}, 1]
+    end.sort
     all_lib_files = Dir.glob("**/*.rb", base: File.join(repo_root, "lib")).sort
     missing = all_lib_files - loaded
 
