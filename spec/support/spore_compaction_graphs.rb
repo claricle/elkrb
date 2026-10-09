@@ -3,7 +3,9 @@
 # Builds the graphs of spec/fixtures/spore_compaction/elkjs_cases.json, whose
 # expected positions were produced by elkjs 0.11.0 laying out the same input.
 module SporeCompactionGraphs
-  FIXTURE = File.expand_path("../fixtures/spore_compaction/elkjs_cases.json", __dir__)
+  FIXTURE = File.expand_path(
+    "../fixtures/spore_compaction/elkjs_cases.json", __dir__
+  )
 
   def spore_compaction_cases
     JSON.parse(File.read(FIXTURE))
