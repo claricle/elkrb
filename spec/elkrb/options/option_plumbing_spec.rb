@@ -59,7 +59,10 @@ RSpec.describe "option plumbing" do
     },
     "elk.edgeLabels.placement" => {
       at: :edge, value: "TAIL",
-      unwired: unread["nothing reads it yet; card 17"]
+      unwired: unread[
+        "fixed edges without sections get no label placement",
+        only: %w[fixed],
+      ]
     },
     "elk.edgeRouting" => {
       at: :root, value: "SPLINES",
