@@ -55,8 +55,11 @@ RSpec.describe "Layout constraints through Elkrb.layout" do
     end
 
     it "keeps FIRST at the smallest and LAST at the largest layer coordinate" do
+      # c has no edge: with components separated it would be packed beside
+      # the others instead of taking the last layer.
       graph = {
         id: "r",
+        layoutOptions: { "elk.separateConnectedComponents" => false },
         children: [
           node("a"), node("b"),
           node_with_layer_kind("c", "LAST"),

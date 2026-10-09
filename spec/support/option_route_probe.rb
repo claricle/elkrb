@@ -98,6 +98,8 @@ module OptionRouteProbe
         edges: [
           { id: "e1", sources: ["n1"], targets: ["n2"], layoutOptions: {} },
           { id: "e2", sources: ["n2"], targets: ["n3"] },
+          { id: "e3", sources: ["n4"], targets: ["n5"] },
+          { id: "e4", sources: ["n4"], targets: ["n6"] },
         ],
       }.to_json,
     )
@@ -115,7 +117,9 @@ module OptionRouteProbe
       layoutOptions: {},
       children: (1..5).map { |i| probe_node("c#{i}", i, positioned) },
       edges: [{ id: "ce1", sources: ["c1"], targets: ["c2"] },
-              { id: "ce2", sources: ["c2"], targets: ["c3"] }],
+              { id: "ce2", sources: ["c2"], targets: ["c3"] },
+              { id: "ce3", sources: ["c4"], targets: ["c5"] },
+              { id: "ce4", sources: ["c4"], targets: ["c3"] }],
     )
   end
 

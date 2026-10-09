@@ -668,8 +668,12 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
 
     it "does not layer this level by a nested edge's aliased ids" do
       # Nothing connects a, b and c at the top level, so all three are
-      # roots. The aliased nested edge made b a layer of its own.
-      result = Elkrb.layout(cross_level_graph, algorithm: "layered")
+      # roots. The aliased nested edge made b a layer of its own. Components
+      # stay joined so the layers are all there is to see.
+      result = Elkrb.layout(
+        cross_level_graph, algorithm: "layered",
+                           "elk.separateConnectedComponents" => false
+      )
 
       expect(result.children.map(&:x).uniq.size).to eq(1)
     end

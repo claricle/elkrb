@@ -3,6 +3,7 @@
 require_relative "base_algorithm"
 require_relative "../node_index"
 require_relative "layered/cycle_breaker"
+require_relative "layered/components"
 require_relative "layered/crossing_minimizer"
 require_relative "layered/layer_assigner"
 require_relative "layered/node_placer"
@@ -48,12 +49,37 @@ module Elkrb
         end
 
         def layout_flat(graph, _options = {})
+          @routed_layers = nil
+          @parts = []
+          @level_size = graph.children.to_a.length
           index = NodeIndex.build(graph)
           validate_edges(index)
           return graph if graph.children.nil? || graph.children.empty?
 
+          @parts = lay_out_components(graph, index)
+          @dummy_slots = @parts.flat_map(&:slots)
+          @routed_layers = [@parts.flat_map(&:layers), index]
+          graph
+        end
+
+        private
+
+        # A graph with several connected components is laid out one component
+        # at a time and packed afterwards, as ELK does.
+        def lay_out_components(graph, index)
+          parts = []
+          if option("elk.separateConnectedComponents")
+            parts = Layered::Components::Splitter.new(graph, index).graphs
+          end
+          return [lay_out_part(graph, index)] if parts.length < 2
+
+          laid = parts.map { |part| lay_out_part(part, NodeIndex.build(part)) }
+          pack_components(graph, laid)
+          laid
+        end
+
+        def lay_out_part(graph, index)
           layers = assign_layers(graph, index)
-          @routed_layers = nil
 
           # Phase 3: Minimize crossings within the assigned layers
           layers = minimize_crossings(graph, layers, index)
@@ -61,15 +87,45 @@ module Elkrb
 
           # Phase 4: Place nodes
           place_nodes(graph, layers, index)
-          @routed_layers = [layers, index]
 
           # Apply padding and set graph dimensions
           apply_padding_with_dummies(graph)
-
-          graph
+          Layered::Components::Part.new(
+            graph, layers, index, @port_order, @dummy_slots
+          )
         end
 
-        private
+        def pack_components(graph, parts)
+          packer = row_packer(parts)
+          offsets = packer.offsets
+          parts.zip(offsets) { |part, (left, top)| move_part(part, left, top) }
+          size_packed(graph, *packer.size(offsets))
+        end
+
+        def size_packed(graph, width, height)
+          graph.width = width + padding[:left] + padding[:right]
+          graph.height = height + padding[:top] + padding[:bottom]
+        end
+
+        def row_packer(parts)
+          Layered::Components::RowPacker.new(
+            parts.map { |part| content_size(part.graph) },
+            spacing: option("elk.spacing.componentComponent").to_f,
+            aspect_ratio: option("elk.aspectRatio").to_f,
+          )
+        end
+
+        def content_size(part_graph)
+          [part_graph.width - padding[:left] - padding[:right],
+           part_graph.height - padding[:top] - padding[:bottom]]
+        end
+
+        def move_part(part, shift_x, shift_y)
+          [*part.graph.children, *part.slots].each do |item|
+            item.x += shift_x
+            item.y += shift_y
+          end
+        end
 
         def assign_layers(graph, index)
           # Phase 1: Find the back edges
@@ -94,7 +150,7 @@ module Elkrb
         def route_orthogonal_edges(graph)
           return [] unless @routed_layers
 
-          routes = orthogonal_router.routes(method(:along_range))
+          routes = orthogonal_routes
           graph.edges.to_a.select do |edge|
             points = routes[edge]
             next false unless points && level_edge?(edge)
@@ -103,6 +159,12 @@ module Elkrb
             apply_route(edge, points, graph)
             true
           end
+        end
+
+        def orthogonal_routes
+          @parts.map { |part| orthogonal_router(part) }
+            .map { |router| router.routes(method(:along_range)) }
+            .reduce({}, :merge)
         end
 
         # A cross-hierarchy edge names a nested node; its route is not this
@@ -129,10 +191,9 @@ module Elkrb
           Geometry::Point.new(x: coordinates[0], y: coordinates[1])
         end
 
-        def orthogonal_router
-          layers, index = @routed_layers
+        def orthogonal_router(part)
           Layered::OrthogonalRouter.new(
-            layers, @port_order, index,
+            part.layers, part.port_order, part.index,
             direction: layer_direction, measure: router_measure
           )
         end
@@ -371,8 +432,8 @@ module Elkrb
         end
 
         def minimize_crossings(graph, layers, index)
-          minimizer = Layered::CrossingMinimizer.new(
-            graph, layers, index, resolver
+          minimizer = Layered::Components::Minimizer.new(
+            graph, layers, index, resolver, @level_size
           )
           minimizer.minimize.tap { @port_order = minimizer.port_order }
         end

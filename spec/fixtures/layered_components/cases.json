@@ -1,0 +1,1194 @@
+[
+  {
+    "name": "wraps onto a second row",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered",
+        "elk.direction": "RIGHT"
+      },
+      "children": [
+        {
+          "id": "a1",
+          "width": 50,
+          "height": 30
+        },
+        {
+          "id": "a2",
+          "width": 50,
+          "height": 30
+        },
+        {
+          "id": "b1",
+          "width": 50,
+          "height": 30
+        },
+        {
+          "id": "b2",
+          "width": 50,
+          "height": 30
+        },
+        {
+          "id": "c1",
+          "width": 40,
+          "height": 30
+        },
+        {
+          "id": "d1",
+          "width": 60,
+          "height": 30
+        },
+        {
+          "id": "d2",
+          "width": 30,
+          "height": 30
+        },
+        {
+          "id": "e1",
+          "width": 30,
+          "height": 30
+        },
+        {
+          "id": "f1",
+          "width": 50,
+          "height": 30
+        },
+        {
+          "id": "f2",
+          "width": 40,
+          "height": 30
+        },
+        {
+          "id": "f3",
+          "width": 30,
+          "height": 30
+        }
+      ],
+      "edges": [
+        {
+          "id": "ae1",
+          "sources": [
+            "a1"
+          ],
+          "targets": [
+            "a2"
+          ]
+        },
+        {
+          "id": "be1",
+          "sources": [
+            "b1"
+          ],
+          "targets": [
+            "b2"
+          ]
+        },
+        {
+          "id": "de1",
+          "sources": [
+            "d1"
+          ],
+          "targets": [
+            "d2"
+          ]
+        },
+        {
+          "id": "fe1",
+          "sources": [
+            "f1"
+          ],
+          "targets": [
+            "f2"
+          ]
+        },
+        {
+          "id": "fe2",
+          "sources": [
+            "f2"
+          ],
+          "targets": [
+            "f3"
+          ]
+        }
+      ]
+    },
+    "size": [
+      184,
+      254
+    ],
+    "positions": {
+      "a1": [
+        12,
+        112
+      ],
+      "a2": [
+        82,
+        112
+      ],
+      "b1": [
+        12,
+        162
+      ],
+      "b2": [
+        82,
+        162
+      ],
+      "c1": [
+        62,
+        12
+      ],
+      "d1": [
+        12,
+        62
+      ],
+      "d2": [
+        92,
+        62
+      ],
+      "e1": [
+        12,
+        12
+      ],
+      "f1": [
+        12,
+        212
+      ],
+      "f2": [
+        82,
+        212
+      ],
+      "f3": [
+        142,
+        212
+      ]
+    },
+    "routes": {
+      "ae1": [
+        [
+          62,
+          127
+        ],
+        [
+          82,
+          127
+        ]
+      ],
+      "be1": [
+        [
+          62,
+          177
+        ],
+        [
+          82,
+          177
+        ]
+      ],
+      "de1": [
+        [
+          72,
+          77
+        ],
+        [
+          92,
+          77
+        ]
+      ],
+      "fe1": [
+        [
+          62,
+          227
+        ],
+        [
+          82,
+          227
+        ]
+      ],
+      "fe2": [
+        [
+          122,
+          227
+        ],
+        [
+          142,
+          227
+        ]
+      ]
+    }
+  },
+  {
+    "name": "direction DOWN",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered",
+        "elk.direction": "DOWN"
+      },
+      "children": [
+        {
+          "id": "p1",
+          "width": 40,
+          "height": 30
+        },
+        {
+          "id": "p2",
+          "width": 40,
+          "height": 30
+        },
+        {
+          "id": "p3",
+          "width": 40,
+          "height": 30
+        },
+        {
+          "id": "q1",
+          "width": 80,
+          "height": 30
+        },
+        {
+          "id": "r1",
+          "width": 30,
+          "height": 30
+        },
+        {
+          "id": "r2",
+          "width": 30,
+          "height": 30
+        },
+        {
+          "id": "s1",
+          "width": 50,
+          "height": 30
+        }
+      ],
+      "edges": [
+        {
+          "id": "pe1",
+          "sources": [
+            "p1"
+          ],
+          "targets": [
+            "p2"
+          ]
+        },
+        {
+          "id": "pe2",
+          "sources": [
+            "p2"
+          ],
+          "targets": [
+            "p3"
+          ]
+        },
+        {
+          "id": "re1",
+          "sources": [
+            "r1"
+          ],
+          "targets": [
+            "r2"
+          ]
+        }
+      ]
+    },
+    "size": [
+      174,
+      204
+    ],
+    "positions": {
+      "p1": [
+        62,
+        62
+      ],
+      "p2": [
+        62,
+        112
+      ],
+      "p3": [
+        62,
+        162
+      ],
+      "q1": [
+        82,
+        12
+      ],
+      "r1": [
+        12,
+        62
+      ],
+      "r2": [
+        12,
+        112
+      ],
+      "s1": [
+        12,
+        12
+      ]
+    },
+    "routes": {
+      "pe1": [
+        [
+          82,
+          92
+        ],
+        [
+          82,
+          112
+        ]
+      ],
+      "pe2": [
+        [
+          82,
+          142
+        ],
+        [
+          82,
+          162
+        ]
+      ],
+      "re1": [
+        [
+          27,
+          92
+        ],
+        [
+          27,
+          112
+        ]
+      ]
+    }
+  },
+  {
+    "name": "direction LEFT",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered",
+        "elk.direction": "LEFT"
+      },
+      "children": [
+        {
+          "id": "p1",
+          "width": 40,
+          "height": 30
+        },
+        {
+          "id": "p2",
+          "width": 40,
+          "height": 30
+        },
+        {
+          "id": "p3",
+          "width": 40,
+          "height": 30
+        },
+        {
+          "id": "q1",
+          "width": 80,
+          "height": 30
+        },
+        {
+          "id": "r1",
+          "width": 30,
+          "height": 30
+        },
+        {
+          "id": "r2",
+          "width": 30,
+          "height": 30
+        },
+        {
+          "id": "s1",
+          "width": 50,
+          "height": 30
+        }
+      ],
+      "edges": [
+        {
+          "id": "pe1",
+          "sources": [
+            "p1"
+          ],
+          "targets": [
+            "p2"
+          ]
+        },
+        {
+          "id": "pe2",
+          "sources": [
+            "p2"
+          ],
+          "targets": [
+            "p3"
+          ]
+        },
+        {
+          "id": "re1",
+          "sources": [
+            "r1"
+          ],
+          "targets": [
+            "r2"
+          ]
+        }
+      ]
+    },
+    "size": [
+      184,
+      154
+    ],
+    "positions": {
+      "p1": [
+        132,
+        112
+      ],
+      "p2": [
+        72,
+        112
+      ],
+      "p3": [
+        12,
+        112
+      ],
+      "q1": [
+        82,
+        12
+      ],
+      "r1": [
+        62,
+        62
+      ],
+      "r2": [
+        12,
+        62
+      ],
+      "s1": [
+        12,
+        12
+      ]
+    },
+    "routes": {
+      "pe1": [
+        [
+          132,
+          127
+        ],
+        [
+          112,
+          127
+        ]
+      ],
+      "pe2": [
+        [
+          72,
+          127
+        ],
+        [
+          52,
+          127
+        ]
+      ],
+      "re1": [
+        [
+          62,
+          77
+        ],
+        [
+          42,
+          77
+        ]
+      ]
+    }
+  },
+  {
+    "name": "orthogonal long edge",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered",
+        "elk.direction": "RIGHT",
+        "elk.edgeRouting": "ORTHOGONAL"
+      },
+      "children": [
+        {
+          "id": "a",
+          "width": 40,
+          "height": 30
+        },
+        {
+          "id": "b",
+          "width": 40,
+          "height": 30
+        },
+        {
+          "id": "c",
+          "width": 40,
+          "height": 30
+        },
+        {
+          "id": "x",
+          "width": 50,
+          "height": 30
+        },
+        {
+          "id": "y",
+          "width": 50,
+          "height": 30
+        }
+      ],
+      "edges": [
+        {
+          "id": "ab",
+          "sources": [
+            "a"
+          ],
+          "targets": [
+            "b"
+          ]
+        },
+        {
+          "id": "bc",
+          "sources": [
+            "b"
+          ],
+          "targets": [
+            "c"
+          ]
+        },
+        {
+          "id": "ac",
+          "sources": [
+            "a"
+          ],
+          "targets": [
+            "c"
+          ]
+        },
+        {
+          "id": "xy",
+          "sources": [
+            "x"
+          ],
+          "targets": [
+            "y"
+          ]
+        }
+      ]
+    },
+    "size": [
+      184,
+      115
+    ],
+    "positions": {
+      "a": [
+        12,
+        68
+      ],
+      "b": [
+        72,
+        73
+      ],
+      "c": [
+        132,
+        68
+      ],
+      "x": [
+        12,
+        12
+      ],
+      "y": [
+        82,
+        12
+      ]
+    },
+    "routes": {
+      "ab": [
+        [
+          52,
+          88
+        ],
+        [
+          72,
+          88
+        ]
+      ],
+      "bc": [
+        [
+          112,
+          88
+        ],
+        [
+          132,
+          88
+        ]
+      ],
+      "ac": [
+        [
+          52,
+          78
+        ],
+        [
+          62,
+          78
+        ],
+        [
+          62,
+          62
+        ],
+        [
+          122,
+          62
+        ],
+        [
+          122,
+          78
+        ],
+        [
+          132,
+          78
+        ]
+      ],
+      "xy": [
+        [
+          62,
+          27
+        ],
+        [
+          82,
+          27
+        ]
+      ]
+    }
+  },
+  {
+    "name": "component spacing 50",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered",
+        "elk.direction": "RIGHT",
+        "elk.spacing.componentComponent": 50
+      },
+      "children": [
+        {
+          "id": "a1",
+          "width": 50,
+          "height": 30
+        },
+        {
+          "id": "a2",
+          "width": 50,
+          "height": 30
+        },
+        {
+          "id": "b1",
+          "width": 50,
+          "height": 30
+        },
+        {
+          "id": "b2",
+          "width": 50,
+          "height": 30
+        },
+        {
+          "id": "c1",
+          "width": 40,
+          "height": 30
+        },
+        {
+          "id": "d1",
+          "width": 60,
+          "height": 30
+        },
+        {
+          "id": "d2",
+          "width": 30,
+          "height": 30
+        },
+        {
+          "id": "e1",
+          "width": 30,
+          "height": 30
+        },
+        {
+          "id": "f1",
+          "width": 50,
+          "height": 30
+        },
+        {
+          "id": "f2",
+          "width": 40,
+          "height": 30
+        },
+        {
+          "id": "f3",
+          "width": 30,
+          "height": 30
+        }
+      ],
+      "edges": [
+        {
+          "id": "ae1",
+          "sources": [
+            "a1"
+          ],
+          "targets": [
+            "a2"
+          ]
+        },
+        {
+          "id": "be1",
+          "sources": [
+            "b1"
+          ],
+          "targets": [
+            "b2"
+          ]
+        },
+        {
+          "id": "de1",
+          "sources": [
+            "d1"
+          ],
+          "targets": [
+            "d2"
+          ]
+        },
+        {
+          "id": "fe1",
+          "sources": [
+            "f1"
+          ],
+          "targets": [
+            "f2"
+          ]
+        },
+        {
+          "id": "fe2",
+          "sources": [
+            "f2"
+          ],
+          "targets": [
+            "f3"
+          ]
+        }
+      ]
+    },
+    "size": [
+      184,
+      374
+    ],
+    "positions": {
+      "a1": [
+        12,
+        172
+      ],
+      "a2": [
+        82,
+        172
+      ],
+      "b1": [
+        12,
+        252
+      ],
+      "b2": [
+        82,
+        252
+      ],
+      "c1": [
+        92,
+        12
+      ],
+      "d1": [
+        12,
+        92
+      ],
+      "d2": [
+        92,
+        92
+      ],
+      "e1": [
+        12,
+        12
+      ],
+      "f1": [
+        12,
+        332
+      ],
+      "f2": [
+        82,
+        332
+      ],
+      "f3": [
+        142,
+        332
+      ]
+    },
+    "routes": {
+      "ae1": [
+        [
+          62,
+          187
+        ],
+        [
+          82,
+          187
+        ]
+      ],
+      "be1": [
+        [
+          62,
+          267
+        ],
+        [
+          82,
+          267
+        ]
+      ],
+      "de1": [
+        [
+          72,
+          107
+        ],
+        [
+          92,
+          107
+        ]
+      ],
+      "fe1": [
+        [
+          62,
+          347
+        ],
+        [
+          82,
+          347
+        ]
+      ],
+      "fe2": [
+        [
+          122,
+          347
+        ],
+        [
+          142,
+          347
+        ]
+      ]
+    }
+  },
+  {
+    "name": "aspect ratio 4",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered",
+        "elk.direction": "RIGHT",
+        "elk.aspectRatio": 4
+      },
+      "children": [
+        {
+          "id": "a1",
+          "width": 50,
+          "height": 30
+        },
+        {
+          "id": "a2",
+          "width": 50,
+          "height": 30
+        },
+        {
+          "id": "b1",
+          "width": 50,
+          "height": 30
+        },
+        {
+          "id": "b2",
+          "width": 50,
+          "height": 30
+        },
+        {
+          "id": "c1",
+          "width": 40,
+          "height": 30
+        },
+        {
+          "id": "d1",
+          "width": 60,
+          "height": 30
+        },
+        {
+          "id": "d2",
+          "width": 30,
+          "height": 30
+        },
+        {
+          "id": "e1",
+          "width": 30,
+          "height": 30
+        },
+        {
+          "id": "f1",
+          "width": 50,
+          "height": 30
+        },
+        {
+          "id": "f2",
+          "width": 40,
+          "height": 30
+        },
+        {
+          "id": "f3",
+          "width": 30,
+          "height": 30
+        }
+      ],
+      "edges": [
+        {
+          "id": "ae1",
+          "sources": [
+            "a1"
+          ],
+          "targets": [
+            "a2"
+          ]
+        },
+        {
+          "id": "be1",
+          "sources": [
+            "b1"
+          ],
+          "targets": [
+            "b2"
+          ]
+        },
+        {
+          "id": "de1",
+          "sources": [
+            "d1"
+          ],
+          "targets": [
+            "d2"
+          ]
+        },
+        {
+          "id": "fe1",
+          "sources": [
+            "f1"
+          ],
+          "targets": [
+            "f2"
+          ]
+        },
+        {
+          "id": "fe2",
+          "sources": [
+            "f2"
+          ],
+          "targets": [
+            "f3"
+          ]
+        }
+      ]
+    },
+    "size": [
+      524,
+      104
+    ],
+    "positions": {
+      "a1": [
+        252,
+        12
+      ],
+      "a2": [
+        322,
+        12
+      ],
+      "b1": [
+        392,
+        12
+      ],
+      "b2": [
+        462,
+        12
+      ],
+      "c1": [
+        62,
+        12
+      ],
+      "d1": [
+        122,
+        12
+      ],
+      "d2": [
+        202,
+        12
+      ],
+      "e1": [
+        12,
+        12
+      ],
+      "f1": [
+        12,
+        62
+      ],
+      "f2": [
+        82,
+        62
+      ],
+      "f3": [
+        142,
+        62
+      ]
+    },
+    "routes": {
+      "ae1": [
+        [
+          302,
+          27
+        ],
+        [
+          322,
+          27
+        ]
+      ],
+      "be1": [
+        [
+          442,
+          27
+        ],
+        [
+          462,
+          27
+        ]
+      ],
+      "de1": [
+        [
+          182,
+          27
+        ],
+        [
+          202,
+          27
+        ]
+      ],
+      "fe1": [
+        [
+          62,
+          77
+        ],
+        [
+          82,
+          77
+        ]
+      ],
+      "fe2": [
+        [
+          122,
+          77
+        ],
+        [
+          142,
+          77
+        ]
+      ]
+    }
+  },
+  {
+    "name": "separation off",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered",
+        "elk.direction": "RIGHT",
+        "elk.separateConnectedComponents": false,
+        "elk.spacing.componentComponent": 200
+      },
+      "children": [
+        {
+          "id": "u1",
+          "width": 40,
+          "height": 30
+        },
+        {
+          "id": "u2",
+          "width": 40,
+          "height": 30
+        },
+        {
+          "id": "v1",
+          "width": 40,
+          "height": 30
+        },
+        {
+          "id": "v2",
+          "width": 40,
+          "height": 30
+        }
+      ],
+      "edges": [
+        {
+          "id": "ue1",
+          "sources": [
+            "u1"
+          ],
+          "targets": [
+            "u2"
+          ]
+        },
+        {
+          "id": "ve1",
+          "sources": [
+            "v1"
+          ],
+          "targets": [
+            "v2"
+          ]
+        }
+      ]
+    },
+    "size": [
+      124,
+      104
+    ],
+    "positions": {
+      "u1": [
+        12,
+        12
+      ],
+      "u2": [
+        72,
+        12
+      ],
+      "v1": [
+        12,
+        62
+      ],
+      "v2": [
+        72,
+        62
+      ]
+    },
+    "routes": {
+      "ue1": [
+        [
+          52,
+          27
+        ],
+        [
+          72,
+          27
+        ]
+      ],
+      "ve1": [
+        [
+          52,
+          77
+        ],
+        [
+          72,
+          77
+        ]
+      ]
+    }
+  }
+]

@@ -71,6 +71,9 @@ module OptionPlumbing
     # considerModelOrder and crossingMinimization NONE change the order of b
     # and c. plumbing_skeleton flips the edges.
     fan_in_tie: nil,
+    # Six connected nodes whose creation order the layer sweep improves and
+    # the layering's own order does not. plumbing_skeleton swaps the graph.
+    sweep_gain: nil,
   }.freeze
 
   # The 4-node fixture: a-b and a-c edges (a labelled one, a port on a), and
@@ -223,6 +226,7 @@ module OptionPlumbing
 
   def plumbing_skeleton(variant)
     return self_loop_skeleton if variant == :self_loop_only
+    return sweep_gain_skeleton if variant == :sweep_gain
 
     nodes = Marshal.load(Marshal.dump(NODE_BASE))
     NODE_VARIANTS.fetch(variant)&.call(nodes)
@@ -242,6 +246,20 @@ module OptionPlumbing
     }
     reverse_fan_edges(graph) if variant == :fan_in_tie
     graph
+  end
+
+  def sweep_gain_skeleton
+    {
+      "id" => "root",
+      "layoutOptions" => {},
+      "children" => %w[a d c e b f].map do |id|
+        { "id" => id, "width" => 100, "height" => 60 }
+      end,
+      "edges" => %w[a-e b-e a-c a-d b-d a-f].map do |pair|
+        source, target = pair.split("-")
+        { "id" => pair, "sources" => [source], "targets" => [target] }
+      end,
+    }
   end
 
   def reverse_fan_edges(graph)
