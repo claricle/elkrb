@@ -59,7 +59,10 @@ RSpec.describe "option plumbing" do
     },
     "elk.edgeLabels.placement" => {
       at: :edge, value: "TAIL",
-      unwired: unread["nothing reads it yet; card 17"]
+      unwired: unread[
+        "fixed edges without sections get no label placement",
+        only: %w[fixed],
+      ]
     },
     "elk.edgeRouting" => {
       at: :root, value: "SPLINES",
@@ -68,6 +71,9 @@ RSpec.describe "option plumbing" do
     "elk.force.iterations" => { at: :root, value: 5 },
     "elk.force.repulsion" => { at: :root, value: 50.0 },
     "elk.force.temperature" => { at: :root, value: 0.5 },
+    "elk.layered.layering.layerConstraint" => {
+      at: :node, value: "LAST_SEPARATE"
+    },
     "elk.layered.spacing.nodeNodeBetweenLayers" => {
       at: :root, value: 200.0
     },
@@ -116,8 +122,7 @@ RSpec.describe "option plumbing" do
       variant: { "libavoid" => :unpositioned },
       unwired: unread[
         "these algorithms do not read it today",
-        only: %w[disco fixed force radial spore_compaction
-                 spore_overlap stress],
+        only: %w[disco fixed radial spore_compaction spore_overlap stress],
       ]
     },
     "elk.spline.curvature" => {
