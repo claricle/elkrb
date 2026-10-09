@@ -87,7 +87,7 @@ require_relative "elkrb/layout/algorithms/vertiflex"
 #   }
 #
 #   result = Elkrb.layout(graph)
-#   puts result[:children][0][:x]  # Node positions computed
+#   puts result.children[0].x  # Node positions computed
 #
 # @example Using model classes
 #   graph = Elkrb::Graph::Graph.new(id: "root")

@@ -49,8 +49,7 @@ graph1.edges = [
 ]
 
 # Apply layout
-engine = Elkrb::Layout::LayoutEngine.new
-result1 = engine.layout(graph1)
+result1 = Elkrb.layout(graph1)
 
 puts "\nNode 1 Ports (after layout):"
 result1.children[0].ports.each do |port|
@@ -92,7 +91,7 @@ node3.ports = [
 graph2.children = [node3]
 
 # Apply layout
-result2 = engine.layout(graph2)
+result2 = Elkrb.layout(graph2)
 
 puts "\nPort Side Detection Results:"
 result2.children[0].ports.each do |port|
@@ -128,7 +127,7 @@ node4.ports = [
 graph3.children = [node4]
 
 # Apply layout
-result3 = engine.layout(graph3)
+result3 = Elkrb.layout(graph3)
 
 puts "\nNORTH Side Ports (ordered):"
 north_ports = result3.children[0].ports.select { |p| p.side == "NORTH" }
@@ -181,7 +180,7 @@ node5.ports = [
 graph4.children = [node5]
 
 # Apply layout
-result4 = engine.layout(graph4)
+result4 = Elkrb.layout(graph4)
 
 puts "\nPorts after layout with constraints:"
 result4.children[0].ports.each do |port|
@@ -256,7 +255,7 @@ graph5.edges = [
 ]
 
 # Apply layout
-result5 = engine.layout(graph5)
+result5 = Elkrb.layout(graph5)
 
 puts "\nFinal Node Positions:"
 result5.children.each do |node|

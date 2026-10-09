@@ -6,23 +6,6 @@
 # Note that changes in the inspected code, or installation of new
 # versions of RuboCop, may require this file to be generated again.
 
-# Offense count: 1
-# examples/hierarchical_graph.rb is truncated mid-literal since the
-# initial commit (ace9eea) and cannot be parsed at all; AllCops:Exclude
-# (which skips every cop for this file, not just Lint/Syntax) is the only
-# way to silence a Lint/Syntax parse failure, which has no per-cop
-# Enabled/Exclude of its own. inherit_mode:merge keeps this addition on
-# top of the remote base config's own db/tmp/vendor excludes instead of
-# replacing them. Re-add this block after any future
-# `rubocop --auto-gen-config` regeneration -- it overwrites this whole
-# file and would otherwise silently drop the exclusion.
-AllCops:
-  inherit_mode:
-    merge:
-      - Exclude
-  Exclude:
-    - 'examples/hierarchical_graph.rb'
-
 # Parked deliberately, not lint debt to burn down in this file. The remote
 # cimas config sets TargetRubyVersion 3.4 while the gemspec declares
 # `>= 3.0.0`, and the gemspec is the wrong side of that mismatch:

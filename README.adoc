@@ -1,8 +1,8 @@
 = ElkRb
 
 image:https://img.shields.io/gem/v/elkrb.svg[RubyGems Version]
-image:https://img.shields.io/github/license/metanorma/elkrb.svg[License]
-image:https://github.com/metanorma/elkrb/actions/workflows/test.yml/badge.svg["Build", link="https://github.com/metanorma/elkrb/actions/workflows/test.yml"]
+image:https://img.shields.io/github/license/claricle/elkrb.svg[License]
+image:https://github.com/claricle/elkrb/actions/workflows/rake.yml/badge.svg["Build", link="https://github.com/claricle/elkrb/actions/workflows/rake.yml"]
 
 == Purpose
 
@@ -22,90 +22,48 @@ The library is designed for box-based diagrams including:
 ElkRb is built on top of the `lutaml-model` serialization framework, providing
 flexible YAML and JSON serialization with ELK JSON format compatibility.
 
-ElkRb aims to be fully compatible with:
+[[compatibility-with-elk]]
+== Compatibility with ELK
 
-* Java-based ELK (https://www.eclipse.org/elk/)
-* JavaScript-based elkjs (https://github.com/kieler/elkjs) (verifiable
-compatible in specs)
+ElkRb is format-compatible with elkjs 0.11.0: it reads and writes the ELK JSON
+graph format.
+
+Coordinate parity with elkjs is exactly what the tiers in
+`spec/elkrb/golden_spec.rb` say it is. Cases in the `exact` tier compare
+coordinates; cases in the looser `structural` tier do not, and a case that
+carries a `pending:` reason in `spec/support/golden_cases.rb` is known to
+differ.
+
+Layered implements only the `SIMPLE` node placement strategy; Brandes-Köpf
+is deferred, so branching graphs such as fan-out stay structurally equivalent
+to elkjs rather than coordinate-identical.
+
+Not every option ELK defines changes the result here. Each option elkrb knows
+carries a status (`honoured`, `partial`, `accepted` or `unsupported`); see
+<<option-status>>.
 
 == Features
 
-Supports all 15 ELK layout algorithms from Java implementation:
+Layout algorithms:: every algorithm in the registry (see
+<<layout-algorithms>>), including layered, force, stress, box, fixed, random,
+MRTree, radial, RectPacking, TopdownPacking, DISCO, SPOrE Overlap, SPOrE
+Compaction, Libavoid and VertiFlex.
 
-Layered:: (Sugiyama) hierarchical diagrams with directed flow
-Force:: organic, symmetric layouts using force simulation
-Stress:: quality-focused layout with stress minimization
-Box:: simple grid-based arrangement
-Fixed:: preserve existing positions
-Random:: random node placement
-MRTree:: multi-rooted tree layout
-Radial:: circular/radial node arrangement
-RectPacking:: efficient rectangle packing
-TopdownPacking:: grid-based treemap layout
-Libavoid:: "A*" pathfinding connector routing
-VertiFlex:: column-grid arrangement that ignores edges
-DISCO:: disconnected component layout
-SPOrE Overlap:: overlap removal optimization
-SPOrE Compaction:: whitespace compaction
+Edge routing:: ORTHOGONAL, POLYLINE and SPLINES, with bend points on the
+computed edge sections.
 
+Ports:: ports with an explicit side and index, and port-to-port edges.
 
-Advanced edge routing
+Self-loops:: edges whose source and target are the same node.
 
-** ORTHOGONAL: 90-degree bends
-** POLYLINE: Straight segments
-** SPLINES: Smooth Bezier curves
+Hierarchy:: nested graphs laid out recursively.
 
+Labels:: automatic placement of node, edge and port labels.
 
-Advanced port constraints
+Export formats:: ELK JSON, YAML (Ruby-specific), Graphviz DOT and ELKT.
 
-* Port side specification (NORTH, SOUTH, EAST, WEST)
-* Automatic side detection
-* Port ordering within sides
-
-
-Self-loop support
-
-* Edges connecting nodes to themselves
-* Multiple self-loops per node
-* Configurable routing styles
-
-
-Export formats
-
-* ELK JSON format
-* YAML format (Ruby-specific)
-* Graphviz DOT format
-
-
-Advanced features
-
-* Edge routing with bend points and port awareness
-* Hierarchical graph support with recursive layout
-* Automatic label placement for nodes, edges, and ports
-* EdgeSection model with orthogonal routing
-
-
-Port-based node connections
-
-* Explicit port definitions
-* Port-to-port edge routing
-* Port side detection for labels
-
-ELK JSON format compatibility
-
-* Full elkjs v0.11.0 compatibility
-* YAML/JSON serialization via Lutaml::Model
-
-Comprehensive layout options
-
-* Option parsers (ElkPadding, KVector, KVectorChain)
-* Algorithm-specific options
-* Layout categories and metadata
-
-Command-line interface
-
-* Layout command with format options
-* Algorithm listing and query
+Command-line interface:: `layout`, `algorithms`, `diagram`, `convert`,
+`render`, `validate`, `batch` and `version`; see <<command-line-interface>>.
 
 == Architecture
 
@@ -141,7 +99,7 @@ Input Graph (YAML/JSON/Hash)
     └────┬────┘
          │
          ▼
-Output (YAML/JSON/Hash)
+Output (Graph; serialize with to_json / to_yaml)
 ----
 
 .Graph model structure
@@ -189,650 +147,671 @@ $ gem install elkrb
 
 === Basic graph layout
 
-A layout can be performed by defining a graph structure as a Ruby hash and
-passing it to the `Elkrb::LayoutEngine`.
+`Elkrb.layout` takes a graph as a Ruby hash (or an `Elkrb::Graph::Graph`) and
+returns an `Elkrb::Graph::Graph` with positions filled in. Read the result
+through attribute readers.
+
+Put the layout options in the graph's own `layoutOptions`; that is the primary
+way to configure a layout.
 
 [source,ruby]
 ----
 require "elkrb"
 
-# Define a simple graph
 graph = {
   id: "root",
   layoutOptions: {
-    "elk.algorithm" => "layered"
+    "elk.algorithm" => "layered",
+    "elk.direction" => "DOWN",
   },
   children: [
     { id: "n1", width: 100, height: 60 },
     { id: "n2", width: 100, height: 60 },
-    { id: "n3", width: 100, height: 60 }
+    { id: "n3", width: 100, height: 60 },
   ],
   edges: [
     { id: "e1", sources: ["n1"], targets: ["n2"] },
-    { id: "e2", sources: ["n1"], targets: ["n3"] }
-  ]
+    { id: "e2", sources: ["n1"], targets: ["n3"] },
+  ],
 }
 
-# Layout the graph
-engine = Elkrb::LayoutEngine.new
-result = engine.layout(graph)
-
-# Access computed positions
-puts result[:children][0][:x]  # => 0.0
-puts result[:children][0][:y]  # => 0.0
-puts result[:children][1][:x]  # => 150.0
-----
-
-A more structured approach uses the model classes to create the graph.
-
-[source,ruby]
-----
-require "elkrb"
-
-# Create graph using model classes
-graph = Elkrb::Graph::Graph.new(id: "root")
-
-# Add nodes
-node1 = Elkrb::Graph::Node.new(
-  id: "n1",
-  width: 100,
-  height: 60
-)
-node2 = Elkrb::Graph::Node.new(
-  id: "n2",
-  width: 100,
-  height: 60
-)
-
-graph.children = [node1, node2]
-
-# Add edge
-edge = Elkrb::Graph::Edge.new(
-  id: "e1",
-  sources: ["n1"],
-  targets: ["n2"]
-)
-graph.edges = [edge]
-
-# Set layout options
-graph.layout_options = {
-  "elk.algorithm" => "layered",
-  "elk.direction" => "DOWN"
-}
-
-# Layout
 result = Elkrb.layout(graph)
 
-# Serialize result
-puts result.to_yaml
-puts result.to_json
+result.children.each do |node|
+  puts "#{node.id}: x=#{node.x} y=#{node.y}"
+end
+puts "root: #{result.width} x #{result.height}"
 ----
 
-=== UML Class diagram layout
+Prints:
+
+[source]
+----
+n1: x=72.0 y=12.0
+n2: x=12.0 y=92.0
+n3: x=132.0 y=92.0
+root: 244.0 x 164.0
+----
+
+A Hash argument is converted to a fresh graph and left untouched. A
+`Graph` argument is laid out in place and returned. The model classes build the
+same graph:
 
 [source,ruby]
 ----
 require "elkrb"
 
-# UML class diagram with ports for connections
+graph = Elkrb::Graph::Graph.new(id: "root")
+graph.children = [
+  Elkrb::Graph::Node.new(id: "n1", width: 100, height: 60),
+  Elkrb::Graph::Node.new(id: "n2", width: 100, height: 60),
+]
+graph.edges = [
+  Elkrb::Graph::Edge.new(id: "e1", sources: ["n1"], targets: ["n2"]),
+]
+graph.layout_options = { "elk.algorithm" => "layered", "elk.direction" => "DOWN" }
+
+result = Elkrb.layout(graph)
+
+puts result.equal?(graph)
+puts result.to_yaml
+----
+
+Prints:
+
+[source]
+----
+true
+---
+id: root
+x: 0.0
+y: 0.0
+width: 124.0
+height: 164.0
+children:
+- id: n1
+  x: 12.0
+  y: 12.0
+  width: 100.0
+  height: 60.0
+- id: n2
+  x: 12.0
+  y: 92.0
+  width: 100.0
+  height: 60.0
+edges:
+- id: e1
+  sources:
+  - n1
+  targets:
+  - n2
+  sections:
+  - id: e1_s0
+    start_point:
+      x: 62.0
+      y: 72.0
+    end_point:
+      x: 62.0
+      y: 92.0
+    incoming_shape: n1
+    outgoing_shape: n2
+  container: root
+layout_options:
+  elk.algorithm: layered
+  elk.direction: DOWN
+----
+
+`result.to_json` writes the same graph in ELK JSON.
+
+=== Call-level options
+
+Options can also be passed to `Elkrb.layout` itself, as globals for that one
+call.
+
+[source,ruby]
+----
+require "elkrb"
+
+graph = {
+  id: "root",
+  children: [
+    { id: "n1", width: 100, height: 60 },
+    { id: "n2", width: 100, height: 60 },
+  ],
+  edges: [{ id: "e1", sources: ["n1"], targets: ["n2"] }],
+}
+
+down = Elkrb.layout(graph, "elk.direction" => "DOWN")
+puts "DOWN:  n2 at (#{down.children[1].x}, #{down.children[1].y})"
+
+right = Elkrb.layout(graph, "elk.direction" => "RIGHT")
+puts "RIGHT: n2 at (#{right.children[1].x}, #{right.children[1].y})"
+----
+
+Prints:
+
+[source]
+----
+DOWN:  n2 at (12.0, 92.0)
+RIGHT: n2 at (132.0, 12.0)
+----
+
+`algorithm:` is the call-level spelling of `"elk.algorithm"`.
+
+Options are read in one order: the graph's own `layoutOptions`, then its
+`properties`, then the call-level options, then the registry default. A graph
+that pins an algorithm keeps it, whatever the call passes:
+
+[source,ruby]
+----
+require "elkrb"
+
+graph = {
+  id: "root",
+  layoutOptions: { "elk.algorithm" => "box" },
+  children: [
+    { id: "n1", width: 100, height: 60 },
+    { id: "n2", width: 100, height: 60 },
+  ],
+  edges: [{ id: "e1", sources: ["n1"], targets: ["n2"] }],
+}
+
+pinned = Elkrb.layout(graph, algorithm: "force")
+unpinned = Elkrb.layout(graph.except(:layoutOptions), algorithm: "box")
+
+positions = ->(g) { g.children.map { |n| [n.x, n.y] } }
+puts positions.call(pinned) == positions.call(unpinned)
+----
+
+Prints:
+
+[source]
+----
+true
+----
+
+=== UML class diagram layout
+
+[source,ruby]
+----
+require "elkrb"
+
 graph = {
   id: "uml_diagram",
   layoutOptions: {
     "elk.algorithm" => "layered",
     "elk.direction" => "DOWN",
-    "elk.spacing.nodeNode" => 50
+    "elk.spacing.nodeNode" => 50,
   },
   children: [
-    {
-      id: "Person",
-      width: 120,
-      height: 80,
-      labels: [
-        { text: "Person", width: 100, height: 20 }
-      ],
-      ports: [
-        { id: "p1", x: 60, y: 0 },  # Top center
-        { id: "p2", x: 60, y: 80 }  # Bottom center
-      ]
-    },
-    {
-      id: "Employee",
-      width: 120,
-      height: 80,
-      labels: [
-        { text: "Employee", width: 100, height: 20 }
-      ],
-      ports: [
-        { id: "p3", x: 60, y: 0 }
-      ]
-    },
-    {
-      id: "Customer",
-      width: 120,
-      height: 80,
-      labels: [
-        { text: "Customer", width: 100, height: 20 }
-      ],
-      ports: [
-        { id: "p4", x: 60, y: 0 }
-      ]
-    }
+    { id: "Person", width: 120, height: 80,
+      labels: [{ text: "Person", width: 100, height: 20 }] },
+    { id: "Employee", width: 120, height: 80,
+      labels: [{ text: "Employee", width: 100, height: 20 }] },
+    { id: "Customer", width: 120, height: 80,
+      labels: [{ text: "Customer", width: 100, height: 20 }] },
   ],
   edges: [
-    {
-      id: "inheritance1",
-      sources: ["Employee"],
-      targets: ["Person"],
-      layoutOptions: {
-        "elk.edgeRouting" => "ORTHOGONAL"
-      }
-    },
-    {
-      id: "inheritance2",
-      sources: ["Customer"],
-      targets: ["Person"],
-      layoutOptions: {
-        "elk.edgeRouting" => "ORTHOGONAL"
-      }
-    }
-  ]
+    { id: "inheritance1", sources: ["Employee"], targets: ["Person"] },
+    { id: "inheritance2", sources: ["Customer"], targets: ["Person"] },
+  ],
 }
 
-engine = Elkrb::LayoutEngine.new
-result = engine.layout(graph)
+result = Elkrb.layout(graph)
+
+result.children.each do |node|
+  puts "#{node.id}: (#{node.x}, #{node.y})"
+end
 ----
 
-=== EXPRESS-G diagram layout
+Prints:
+
+[source]
+----
+Person: (97.0, 112.0)
+Employee: (12.0, 12.0)
+Customer: (182.0, 12.0)
+----
+
+=== Layout from YAML
 
 [source,ruby]
 ----
 require "elkrb"
 
-# EXPRESS-G entity-relationship diagram
-graph = {
-  id: "express_g",
-  layoutOptions: {
-    "elk.algorithm" => "layered",
-    "elk.direction" => "RIGHT",
-    "elk.edgeRouting" => "ORTHOGONAL"
-  },
-  children: [
-    {
-      id: "Entity1",
-      width: 100,
-      height: 60,
-      labels: [{ text: "Entity", width: 80, height: 15 }]
-    },
-    {
-      id: "Attribute1",
-      width: 80,
-      height: 40,
-      labels: [{ text: "name", width: 60, height: 15 }]
-    },
-    {
-      id: "Attribute2",
-      width: 80,
-      height: 40,
-      labels: [{ text: "value", width: 60, height: 15 }]
-    }
-  ],
-  edges: [
-    { id: "e1", sources: ["Entity1"], targets: ["Attribute1"] },
-    { id: "e2", sources: ["Entity1"], targets: ["Attribute2"] }
-  ]
-}
+yaml = <<~YAML
+  id: root
+  layout_options:
+    elk.algorithm: layered
+    elk.direction: RIGHT
+  children:
+    - id: a
+      width: 80
+      height: 40
+    - id: b
+      width: 80
+      height: 40
+  edges:
+    - id: e1
+      sources: [a]
+      targets: [b]
+YAML
 
-engine = Elkrb::LayoutEngine.new
-result = engine.layout(graph)
-----
+graph = Elkrb::Graph::Graph.from_yaml(yaml)
+result = Elkrb.layout(graph)
 
-=== Layout from YAML File
-
-[source,ruby]
-----
-require "elkrb"
-
-# Load graph from YAML
-yaml_content = File.read("diagram.yml")
-graph = Elkrb::Graph::Graph.from_yaml(yaml_content)
-
-# Layout
-engine = Elkrb::LayoutEngine.new
-result = engine.layout(graph)
-
-# Save result
+puts result.children.map { |n| "#{n.id}: (#{n.x}, #{n.y})" }
 File.write("diagram_laid_out.yml", result.to_yaml)
+puts File.size?("diagram_laid_out.yml").positive?
 ----
 
+Prints:
+
+[source]
+----
+a: (12.0, 12.0)
+b: (112.0, 12.0)
+true
+----
+
+YAML uses snake_case keys (`layout_options`); JSON uses the ELK camelCase keys
+(`layoutOptions`).
+
+[[layout-algorithms]]
 == Layout algorithms
 
-=== Layered layout
-
-The layered (Sugiyama) algorithm is ELK's flagship layout, ideal for
-hierarchical diagrams with a natural flow direction.
-
-==== Use cases
-
-* UML class diagrams (inheritance hierarchies)
-* Flowcharts and process diagrams
-* Data flow diagrams
-* Organization charts
-* Dependency graphs
-
-==== Key options
+Select an algorithm with `"elk.algorithm"`. The registry is the list of what
+is available:
 
 [source,ruby]
 ----
-layoutOptions: {
-  "elk.algorithm" => "layered",
-  "elk.direction" => "DOWN",  # DOWN, UP, LEFT, RIGHT
-  "elk.spacing.nodeNode" => 50,
-  "elk.layered.crossingMinimization.strategy" => "LAYER_SWEEP",
-  "elk.layered.nodePlacement.strategy" => "NETWORK_SIMPLEX",
-  "elk.edgeRouting" => "ORTHOGONAL"  # ORTHOGONAL, POLYLINE, SPLINES
-}
+require "elkrb"
+
+puts Elkrb.known_layout_algorithms.size
+Elkrb.known_layout_algorithms.each do |algorithm|
+  puts "#{algorithm[:id]}: #{algorithm[:name]}"
+end
 ----
 
-=== Force-Directed Layout
+Prints:
 
-Creates organic, symmetric layouts using force simulation.
+[source]
+----
+15
+box: Box
+disco: DISCO
+fixed: Fixed
+force: Force-Directed
+layered: Layered (Sugiyama)
+libavoid: Libavoid
+mrtree: Multi-Rooted Tree
+radial: Radial
+random: Random
+rectpacking: Rectangle Packing
+spore_compaction: SPOrE Compaction
+spore_overlap: SPOrE Overlap Removal
+stress: Stress Minimization
+topdownpacking: TopdownPacking
+vertiflex: VertiFlex
+----
 
-Use cases:
+Each entry also carries `:description`, `:category`, `:supports_hierarchy` and
+`:supported_options`, the option ids that algorithm reads.
 
-* Network diagrams
-* Social graphs
-* Mind maps
-* General undirected graphs
+[cols="1,3",options="header"]
+|===
+| Algorithm | Use it for
 
-Options:
+| `layered`
+| Directed, hierarchical diagrams with a flow direction: UML class diagrams,
+flowcharts, data flow diagrams, organization charts, dependency graphs.
+Supports nested graphs.
+
+| `force`, `stress`
+| Undirected network diagrams and social graphs.
+
+| `mrtree`
+| Forests and trees with several roots. Supports nested graphs.
+
+| `radial`
+| Hub-and-spoke arrangements around a centre.
+
+| `box`, `rectpacking`, `topdownpacking`, `vertiflex`
+| Grid-like and packed arrangements; dashboards and tile layouts.
+
+| `disco`
+| Graphs made of several disconnected components.
+
+| `spore_overlap`, `spore_compaction`
+| Post-processing: remove overlaps between nodes, or compact whitespace.
+
+| `libavoid`
+| Connector routing around obstacles.
+
+| `fixed`, `random`
+| Keep the positions the graph already carries, or place nodes at random.
+|===
+
+[[option-status]]
+=== Option status
+
+Options are validated against `Elkrb::Options::Registry`. `Elkrb.known_layout_options`
+returns every known option id with its type, default, allowed values and
+status. The status says how much of the option elkrb acts on: `honoured`,
+`partial`, `accepted` (parsed and validated, but it does not change the
+result) or `unsupported`.
+
+By default an option elkrb does not fully honour logs a warning through
+`Elkrb.logger`. Pass `strict: true` to raise `Elkrb::Error` instead:
 
 [source,ruby]
 ----
-layoutOptions: {
-  "elk.algorithm" => "force",
-  "elk.force.repulsion" => 5.0,
-  "elk.force.temperature" => 0.001
+require "elkrb"
+
+direction = Elkrb.known_layout_options["elk.direction"]
+puts direction[:status]
+puts direction[:values].inspect
+
+graph = {
+  id: "root",
+  layoutOptions: { "elk.layered.crossingMinimization.strategy" => "LAYER_SWEEP" },
+  children: [{ id: "n1", width: 40, height: 40 }],
 }
+
+begin
+  Elkrb.layout(graph, strict: true)
+rescue Elkrb::Error => e
+  puts e.message
+end
 ----
 
-=== Stress Minimization
+Prints:
 
-Quality-focused layout optimizing edge lengths and crossings.
-
-Use cases:
-
-* High-quality graph visualization
-* Research diagrams
-* Publication-ready layouts
-
-Options:
-
-[source,ruby]
+[source]
 ----
-layoutOptions: {
-  "elk.algorithm" => "stress"
-}
+partial
+["UNDEFINED", "RIGHT", "LEFT", "DOWN", "UP"]
+strict mode: unknown or unhonoured layout option(s): elk.layered.crossingMinimization.strategy (accepted, not honoured)
 ----
 
-=== Box Layout
-
-Simple rectangular packing of nodes.
-
-Use cases:
-
-* Simple container layouts
-* Grid-like arrangements
-* Dashboards
-
-Options:
-
-[source,ruby]
-----
-layoutOptions: {
-  "elk.algorithm" => "box"
-}
-----
-
-=== MRTree Layout
-
-Multi-rooted tree layout for forest structures.
-
-Use cases:
-
-* Multiple inheritance hierarchies
-* Forest data structures
-* Parallel tree structures
-* Multi-root taxonomies
-
-Options:
-
-[source,ruby]
-----
-layoutOptions: {
-  "elk.algorithm" => "mrtree",
-  "elk.direction" => "DOWN",
-  "elk.spacing.nodeNode" => 30
-}
-----
-
-=== Radial Layout
-
-Arranges nodes in a circular pattern around the center.
-
-Use cases:
-
-* Network diagrams
-* Circular visualizations
-* Hub-and-spoke diagrams
-* Cyclic structures
-
-Options:
-
-[source,ruby]
-----
-layoutOptions: {
-  "elk.algorithm" => "radial",
-  "elk.spacing.nodeNode" => 50
-}
-----
-
-=== RectPacking Layout
-
-Efficient rectangle packing using shelf algorithms.
-
-Use cases:
-
-* Dashboards
-* Tile layouts
-* Space-efficient arrangements
-* Component grids
-
-Options:
-
-[source,ruby]
-----
-layoutOptions: {
-  "elk.algorithm" => "rectpacking",
-  "elk.spacing.nodeNode" => 15
-}
-----
-
-=== DISCO Layout
-
-Disconnected component layout - identifies and arranges separate graph components.
-
-Use cases:
-
-* Graphs with multiple disconnected parts
-* Component-based visualizations
-* Separate module layouts
-* Multi-cluster diagrams
-
-Options:
-
-[source,ruby]
-----
-layoutOptions: {
-  "elk.algorithm" => "disco",
-  "disco.componentCompaction.strategy" => "NONE",  # NONE, ROW, COLUMN, GRID
-  "disco.componentCompaction.componentLayoutAlgorithm" => "layered",
-  "disco.spacing.componentComponent" => 30
-}
-----
-
-=== SPOrE Overlap Removal
-
-Removes overlaps between nodes while preserving the overall structure.
-
-Use cases:
-
-* Post-processing for force-directed layouts
-* Cleaning up manually positioned diagrams
-* Overlap resolution
-* Layout refinement
-
-Options:
-
-[source,ruby]
-----
-layoutOptions: {
-  "elk.algorithm" => "sporeOverlap",
-  "elk.spacing.nodeNode" => 10,
-  "sporeOverlap.maxIterations" => 100
-}
-----
-
-=== SPOrE Compaction
-
-Compacts layouts by removing whitespace while maintaining structure.
-
-Use cases:
-
-* Minimizing diagram size
-* Reducing whitespace
-* Creating compact layouts
-* Space optimization
-
-Options:
-
-[source,ruby]
-----
-layoutOptions: {
-  "elk.algorithm" => "sporeCompaction",
-  "sporeCompaction.compactionStrategy" => "BOTH",  # HORIZONTAL, VERTICAL, BOTH
-  "elk.spacing.nodeNode" => 10,
-  "sporeCompaction.normalize" => true
-}
-----
+A value of the wrong type, such as `"abc"` for `elk.spacing.nodeNode`, raises
+`Elkrb::ValidationError`.
 
 == Advanced features
 
 === Edge routing
 
-ElkRb supports advanced edge routing with bend points and port awareness.
+Choose the routing style with `"elk.edgeRouting"` (`ORTHOGONAL`, `POLYLINE`
+or `SPLINES`). The computed route is on the edge's sections:
 
 [source,ruby]
 ----
-# Enable edge routing with orthogonal bend points
+require "elkrb"
+
 graph = {
+  id: "root",
   layoutOptions: {
     "elk.algorithm" => "layered",
-    "elk.edgeRouting" => "ORTHOGONAL"
+    "elk.direction" => "DOWN",
+    "elk.edgeRouting" => "ORTHOGONAL",
   },
-  # ... nodes and edges
+  children: [
+    { id: "a", width: 60, height: 40 },
+    { id: "b", width: 60, height: 40 },
+    { id: "c", width: 60, height: 40 },
+  ],
+  edges: [
+    { id: "e1", sources: ["a"], targets: ["b"] },
+    { id: "e2", sources: ["a"], targets: ["c"] },
+  ],
 }
 
 result = Elkrb.layout(graph)
 
-# Access edge sections with bend points
-edge_section = result[:edges][0][:sections][0]
-puts edge_section[:startPoint]  # { x: 50.0, y: 60.0 }
-puts edge_section[:endPoint]    # { x: 150.0, y: 60.0 }
-puts edge_section[:bendPoints]  # [{ x: 100.0, y: 30.0 }, ...]
+result.edges.each do |edge|
+  section = edge.sections.first
+  bends = section.bend_points.map { |p| [p.x.round(1), p.y.round(1)] }
+  puts "#{edge.id}: (#{section.start_point.x.round(1)}, " \
+       "#{section.start_point.y.round(1)}) -> " \
+       "(#{section.end_point.x.round(1)}, #{section.end_point.y.round(1)}) " \
+       "bends=#{bends}"
+end
+----
+
+Prints:
+
+[source]
+----
+e1: (68.7, 52.0) -> (55.3, 72.0) bends=[[68.7, 62.0], [55.3, 62.0]]
+e2: (95.3, 52.0) -> (108.7, 72.0) bends=[[95.3, 62.0], [108.7, 62.0]]
+----
+
+With `"elk.edgeRouting" => "SPLINES"` the section carries the control points of
+the curve in `bend_points`:
+
+[source,ruby]
+----
+require "elkrb"
+
+graph = {
+  id: "root",
+  layoutOptions: { "elk.algorithm" => "layered", "elk.edgeRouting" => "SPLINES" },
+  children: [
+    { id: "a", width: 60, height: 40 },
+    { id: "b", width: 60, height: 40 },
+  ],
+  edges: [{ id: "e1", sources: ["a"], targets: ["b"] }],
+}
+
+result = Elkrb.layout(graph)
+section = result.edges.first.sections.first
+puts section.bend_points.size
+puts section.start_point.x
+----
+
+Prints:
+
+[source]
+----
+2
+72.0
 ----
 
 === Hierarchical graphs
 
-Nested node structures are automatically handled with recursive layout.
+A node with `children` is laid out recursively. The parent is sized to contain
+its children, and child coordinates are relative to the parent.
 
 [source,ruby]
 ----
+require "elkrb"
+
 graph = {
-  layoutOptions: {
-    "elk.algorithm" => "layered",
-    "hierarchical" => true
-  },
+  id: "root",
+  layoutOptions: { "elk.algorithm" => "layered" },
   children: [
     {
       id: "parent",
-      width: 300,
-      height: 200,
       children: [
         { id: "child1", width: 80, height: 60 },
-        { id: "child2", width: 80, height: 60 }
+        { id: "child2", width: 80, height: 60 },
       ],
-      edges: [
-        { sources: ["child1"], targets: ["child2"] }
-      ]
-    }
-  ]
+      edges: [{ id: "inner", sources: ["child1"], targets: ["child2"] }],
+    },
+  ],
 }
 
 result = Elkrb.layout(graph)
-# Parent bounds automatically calculated to contain children
-# Child nodes recursively laid out within parent
+
+parent = result.children.first
+puts "parent: #{parent.width} x #{parent.height}"
+parent.children.each { |child| puts "#{child.id}: (#{child.x}, #{child.y})" }
+----
+
+Prints:
+
+[source]
+----
+parent: 204.0 x 84.0
+child1: (12.0, 12.0)
+child2: (112.0, 12.0)
 ----
 
 === Label placement
 
-Automatic label positioning for nodes, edges, and ports.
+Labels on nodes, edges and ports are positioned by the layout:
 
 [source,ruby]
 ----
+require "elkrb"
+
 graph = {
+  id: "root",
   children: [
-    {
-      id: "n1",
-      width: 100,
-      height: 60,
-      labels: [
-        { text: "Node Label", width: 80, height: 20 }
-      ],
-      layoutOptions: {
-        "node.label.placement" => "INSIDE CENTER"  # or OUTSIDE TOP, etc.
-      },
-      ports: [
-        {
-          id: "p1",
-          x: 0,
-          y: 30,
-          labels: [
-            { text: "Port", width: 30, height: 15 }
-          ]
-        }
-      ]
-    }
+    { id: "n1", width: 100, height: 60,
+      labels: [{ text: "Node Label", width: 80, height: 20 }] },
+    { id: "n2", width: 100, height: 60 },
   ],
   edges: [
-    {
-      sources: ["n1"],
-      targets: ["n2"],
-      labels: [
-        { text: "Edge Label", width: 60, height: 15 }
-      ]
-    }
-  ]
+    { id: "e1", sources: ["n1"], targets: ["n2"],
+      labels: [{ text: "Edge Label", width: 60, height: 15 }] },
+  ],
 }
 
 result = Elkrb.layout(graph)
-# Labels automatically positioned based on placement options
-# Port labels placed according to port side detection
-# Edge labels placed at center of edge path
+
+node_label = result.children.first.labels.first
+edge_label = result.edges.first.labels.first
+puts "#{node_label.text}: (#{node_label.x}, #{node_label.y})"
+puts "#{edge_label.text}: (#{edge_label.x}, #{edge_label.y})"
 ----
 
-Label placement options:
+Prints:
 
-* `node.label.placement` - INSIDE/OUTSIDE + TOP/BOTTOM/LEFT/RIGHT/CENTER
-* `port.label.placement` - Same format as node labels
-* `label.padding` - Internal spacing within labels
-* `label.margin` - External spacing around labels
-* `label.placement.disabled` - Disable automatic placement
+[source]
+----
+Node Label: (0.0, 0.0)
+Edge Label: (92.0, 34.5)
+----
 
-== Advanced features
+=== Ports
 
-=== Spline Edge Routing
-
-Use smooth Bezier curves for aesthetically pleasing edge routing:
+A port has a `side` (`NORTH`, `SOUTH`, `EAST` or `WEST`) and an `index` that
+orders it along that side. Edges name ports as their sources and targets.
 
 [source,ruby]
 ----
-graph.layout_options = {
-  "elk.algorithm" => "layered",
-  "elk.edgeRouting" => "SPLINES",
-  "elk.spline.curvature" => 0.5
+require "elkrb"
+
+graph = Elkrb::Graph::Graph.new(id: "root")
+a = Elkrb::Graph::Node.new(id: "a", width: 100, height: 60)
+a.ports = [Elkrb::Graph::Port.new(id: "a_out", side: "EAST", index: 0)]
+b = Elkrb::Graph::Node.new(id: "b", width: 100, height: 60)
+b.ports = [Elkrb::Graph::Port.new(id: "b_in", side: "WEST", index: 0)]
+graph.children = [a, b]
+graph.edges = [
+  Elkrb::Graph::Edge.new(id: "e1", sources: ["a_out"], targets: ["b_in"]),
+]
+
+result = Elkrb.layout(graph)
+
+result.children.each do |node|
+  node.ports.each do |port|
+    puts "#{port.id}: side=#{port.side} at (#{port.x}, #{port.y})"
+  end
+end
+----
+
+Prints:
+
+[source]
+----
+a_out: side=EAST at (100.0, 30.0)
+b_in: side=WEST at (0.0, 30.0)
+----
+
+See `examples/port_constraints_demo.rb` for more.
+
+=== Self-loops
+
+An edge whose source and target are the same node is a self-loop:
+
+[source,ruby]
+----
+require "elkrb"
+
+graph = {
+  id: "root",
+  children: [{ id: "n1", width: 100, height: 60 }],
+  edges: [{ id: "loop", sources: ["n1"], targets: ["n1"] }],
+}
+
+result = Elkrb.layout(graph)
+
+section = result.edges.first.sections.first
+puts "sections: #{result.edges.first.sections.size}"
+puts "start: (#{section.start_point.x}, #{section.start_point.y})"
+----
+
+Prints:
+
+[source]
+----
+sections: 1
+start: (112.0, 42.0)
+----
+
+See `examples/self_loop_demo.rb` for more.
+
+=== Graphviz DOT export
+
+`Elkrb.export_dot` serializes a graph to DOT text. It does not need Graphviz;
+only rendering the DOT to an image does (`elkrb render`).
+
+[source,ruby]
+----
+require "elkrb"
+
+graph = {
+  id: "root",
+  children: [
+    { id: "a", width: 60, height: 40 },
+    { id: "b", width: 60, height: 40 },
+  ],
+  edges: [{ id: "e1", sources: ["a"], targets: ["b"] }],
+}
+
+result = Elkrb.layout(graph)
+puts Elkrb.export_dot(result, rankdir: "LR")
+----
+
+Prints:
+
+[source]
+----
+digraph G
+{
+  rankdir=LR
+  size="2.2777777777777777,0.8888888888888888"
+  a [label="a", width=0.83, height=0.56, fixedsize=true, shape=box]
+  b [label="b", width=0.83, height=0.56, fixedsize=true, shape=box]
+  a -> b 
 }
 ----
-
-// See link:SPLINE_ROUTING_GUIDE.md[Spline Routing Guide] for details.
-
-=== Advanced Port Constraints
-
-Control port placement and ordering on nodes:
-
-[source,ruby]
-----
-port = Elkrb::Graph::Port.new(
-  id: "p1",
-  side: "WEST",
-  index: 0
-)
-----
-
-// See link:PORT_CONSTRAINTS_GUIDE.md[Port Constraints Guide] for details.
-
-=== Self-loop Support
-
-Create edges connecting nodes to themselves:
-
-[source,ruby]
-----
-edge = Elkrb::Graph::Edge.new(
-  id: "loop",
-  sources: ["n1"],
-  targets: ["n1"]
-)
-----
-
-// See link:SELF_LOOP_GUIDE.md[Self-loop Guide] for details.
-
-
-=== Graphviz DOT Export
-
-NOTE: DOT export requires Graphviz installed on your system. ElkRb does not
-include Graphviz itself, only the DOT serialization functionality.
-
-Export layouts to DOT format:
-
-[source,ruby]
-----
-result = Elkrb.layout(graph)
-dot_string = Elkrb.export_dot(result)
-File.write("output.dot", dot_string)
-----
-
-// See link:DOT_SERIALIZER_GUIDE.md[DOT Export Guide] for details.
-
-
-== Performance
-
-ElkRb provides production-ready performance for most use cases.
-
-TODO: See link:docs/PERFORMANCE.adoc[Performance Benchmarks] for detailed
-comparisons with elkjs and Java ELK.
-
-Quick overview of algorithm performance:
-
-* Fast algorithms (< 10ms): Box, Radial, VertiFlex
-* Medium algorithms (10-50ms): Layered, Stress, MRTree
-* Complex algorithms (50-500ms): Force, RectPacking, Libavoid
-
-Suitable for:
-
-* Real-time layout of small to medium graphs (< 100 nodes)
-* Batch processing of large graphs
-* Interactive diagram editors
-
 
 == Migration from elkjs
 
-If you're migrating from elkjs, see
-link:docs/MIGRATION_FROM_ELKJS.adoc[Migration Guide] for a smooth transition.
+The elkjs call `elk.layout(graph).then(...)` becomes `Elkrb.layout(graph)`:
 
-Key differences:
+* It returns an `Elkrb::Graph::Graph` synchronously, not a Promise of a plain
+  object. Read it with attribute readers (`result.children[0].x`), or call
+  `to_json` for the ELK JSON.
+* The graph may be a Hash with ELK's camelCase keys (`layoutOptions`), the
+  same shape elkjs takes.
+* Call-level options are the second argument.
+* YAML round-tripping is available through `to_yaml` and `from_yaml`.
 
-* Ruby API instead of JavaScript Promise-based API
-* Additional algorithms (TopdownPacking, Libavoid, VertiFlex)
-* YAML serialization support
+See <<compatibility-with-elk>> for where results can differ.
 
 == Data Model
 
@@ -845,6 +824,8 @@ The root container for nodes and edges.
 `width, height`:: Dimensions
 `children`:: Array of Node objects
 `edges`:: Array of Edge objects
+`labels`:: Array of Label objects
+`ports`:: Array of Port objects
 `layout_options`:: Hash of ELK option ids to values
 `properties`:: Custom properties hash
 
@@ -854,12 +835,13 @@ Represents a graph node (box, shape, entity).
 
 `id`:: Unique identifier
 `x, y`:: Position coordinates
-`width, height`:: Required dimensions
+`width, height`:: Dimensions
 `labels`:: Array of Label objects
 `ports`:: Array of Port objects
 `children`:: Nested nodes (for hierarchical graphs)
 `edges`:: Local edges
 `layout_options`:: Node-specific layout options
+`constraints`:: Placement constraints
 `properties`:: Custom properties
 
 === Edge
@@ -873,6 +855,8 @@ Represents connections between nodes.
 `sections`:: Computed routing (EdgeSection objects)
 `layout_options`:: Edge-specific layout options
 `properties`:: Custom properties
+`junction_points`:: Junction points of the routed edge
+`container`:: Id of the container the edge belongs to
 
 === Port
 
@@ -881,8 +865,12 @@ Explicit attachment points on node borders.
 `id`:: Unique identifier
 `x, y`:: Position relative to node
 `width, height`:: Port dimensions
+`side`:: `NORTH`, `SOUTH`, `EAST` or `WEST` (default `UNDEFINED`)
+`index`:: Order along the side (default -1)
+`offset`:: Port offset (default 0.0)
 `labels`:: Array of Label objects
 `layout_options`:: Port-specific layout options
+`properties`:: Custom properties
 
 === Label
 
@@ -892,49 +880,83 @@ Text labels for nodes, edges, or ports.
 `text`:: Label text
 `x, y`:: Position coordinates
 `width, height`:: Label dimensions
+`layout_options`:: Label-specific layout options
+`properties`:: Custom properties
 
 === Layout options
 
-`layout_options` is an open Hash on every model (graph, node, edge, port,
-label). Keys are ELK option ids as strings; values are whatever that option
-takes. There is no fixed attribute list -- any id ELK understands can be set.
+`layout_options` is a Hash on every model (graph, node, edge, port, label).
+Keys are ELK option ids; values are whatever that option takes. Symbol keys
+are stringified on assignment, so `:"elk.direction"` and `"elk.direction"` are
+equivalent.
 
 [source,ruby]
 ----
-graph.layout_options = {
-  "elk.algorithm" => "layered",              # layered, force, stress, ...
-  "elk.direction" => "DOWN",                 # DOWN, UP, LEFT, RIGHT
-  "elk.spacing.nodeNode" => 20.0
-}
+require "elkrb"
+
+graph = Elkrb::Graph::Graph.new(id: "root")
+graph.layout_options = { "elk.direction": "DOWN", "elk.algorithm" => "layered" }
+p graph.layout_options
+
+begin
+  graph.layout_options = { "text" => "a" }
+rescue Elkrb::ValidationError => e
+  puts e.message
+end
 ----
 
-Symbol keys are accepted and stringified on assignment, so
-`{ "elk.algorithm" => "layered" }` and `{ :"elk.algorithm" => "layered" }`
-are equivalent. Mutating the map in place after assignment does not
-stringify, so use string keys there.
+Prints:
 
-NOTE: `text` and `elements` are reserved by the serialization layer and
-cannot be used as option keys.
+[source]
+----
+{"elk.direction" => "DOWN", "elk.algorithm" => "layered"}
+layoutOptions cannot use `text` or `elements` as a key; both are reserved by lutaml-model
+----
 
+[[command-line-interface]]
 == Command-Line Interface
 
-The `elkrb` command provides utilities for layout operations.
+The `elkrb` command lays out, converts, validates and renders graph files.
+`elkrb help` lists the commands; `elkrb help COMMAND` lists a command's flags.
+Every command takes `--verbose`.
 
-=== Layout Command
+Input files are JSON, YAML or ELKT. The format is taken from the file
+extension, and sniffed from the content when the extension is not one of
+those.
+
+=== layout
+
+Lays out a graph and writes the result.
 
 [source,sh]
 ----
-# Layout a graph from file
-$ elkrb layout input.yml --output result.yml
-
-# Specify algorithm
-$ elkrb layout input.yml --algorithm layered --output result.yml
-
-# Output JSON
-$ elkrb layout input.yml --format json --output result.json
+$ elkrb layout input.json                       # JSON to stdout
+$ elkrb layout input.json --output result.json
+$ elkrb layout input.json --format yaml --output result.yml
+$ elkrb layout input.json --algorithm layered --direction DOWN --spacing 50
 ----
 
-=== Available Algorithms
+The output format is `--format` (`json` by default, or `yaml`); it is not
+inferred from the `--output` extension. Flags that set a layout option write it
+onto the root graph, where it outranks the same option in the file.
+
+[cols="1,3",options="header"]
+|===
+| Flag | Meaning
+
+| `--algorithm NAME` | Layout algorithm. Without it, the file's own `elk.algorithm`, else `layered`.
+| `-o, --output FILE` | Output file (default: stdout).
+| `--format json\|yaml` | Output format (default: `json`).
+| `--spacing N` | Node spacing (`elk.spacing.nodeNode`).
+| `--layer-spacing N` | Layer spacing, for the layered algorithm.
+| `--direction DIR` | `DOWN`, `RIGHT`, ...; applied by the layered and mrtree algorithms.
+| `--edge-routing STYLE` | Edge routing strategy.
+| `--padding-top N`, `--padding-bottom N`, `--padding-left N`, `--padding-right N` | Padding.
+|===
+
+=== algorithms
+
+Lists the registered algorithms.
 
 [source,sh]
 ----
@@ -946,43 +968,112 @@ Available Layout Algorithms:
     Name: Box
     Description: Arranges nodes in a grid pattern
 
+  disco
+    Name: DISCO
+    Description: Layout for disconnected graph components
+
   fixed
     Name: Fixed
     Description: Keeps nodes at their current positions
 
-  force
-    Name: Force-Directed
-    Description: Physics-based layout using attractive and repulsive forces
-    Category: force
-
-  layered
-    Name: Layered (Sugiyama)
-    Description: Hierarchical layout using the Sugiyama framework
-    Category: hierarchical
-    Supports Hierarchy: Yes
-
-  random
-    Name: Random
-    Description: Places nodes at random positions
-
-  stress
-    Name: Stress Minimization
-    Description: High-quality layout using stress majorization
-    Category: force
+  ...
 ----
 
+`...` stands for the remaining algorithms. Categories other than `general`,
+and hierarchy support, are listed per algorithm.
 
-== Benchmarking
+=== diagram
 
-ElkRb provides production-ready performance.
-
-ElkRb can be run in a benchmark mode to compare its performance against
-elkjs and Java ELK (TODO).
-
+Lays out a graph and writes a diagram in one step. The output format comes
+from the `--output` extension: `.json`, `.yml`/`.yaml`, `.dot`/`.gv`, `.elkt`,
+or the image formats `.png`, `.svg`, `.pdf`, `.ps` and `.eps`. Image formats
+need Graphviz.
 
 [source,sh]
 ----
-# Run all ElkRb benchmarks and generate report
+$ elkrb diagram input.json --output diagram.svg
+✓ Diagram created: diagram.svg
+----
+
+Flags: `--output FILE` (required), `--algorithm`, `--direction`, `--spacing`,
+`--edge-routing` (as for `layout`), `--format` (used when the extension is not
+recognised) and `--preview` (open the result in the default viewer).
+
+=== convert
+
+Converts a graph file between JSON, YAML, DOT and ELKT, without laying it out.
+
+[source,sh]
+----
+$ elkrb convert input.json --output input.dot
+✓ Converted input.json → input.dot (dot)
+----
+
+Flags: `--output FILE` (required) and `--format`. The output extension picks
+the format (`.json`, `.yml`/`.yaml`, `.dot`/`.gv`, `.elkt`).
+
+=== render
+
+Renders a DOT file to an image with Graphviz.
+
+[source,sh]
+----
+$ elkrb render input.dot --output input.png
+✓ Rendered input.dot → input.png
+----
+
+Flags: `--output FILE` (required), `--engine` (Graphviz engine such as `dot`,
+`neato`, `fdp`; default `dot`) and `--dpi` (default 96). It fails when
+Graphviz is not installed.
+
+=== validate
+
+Checks the structure of a graph file.
+
+[source,sh]
+----
+$ elkrb validate input.json
+✅ input.json is valid
+----
+
+`--strict` also requires every node to have a positive `width` and `height`,
+and `layoutOptions` to be a Hash.
+
+=== batch
+
+Lays out every `.json`, `.yml`, `.yaml` and `.elkt` file in a directory.
+
+[source,sh]
+----
+$ elkrb batch graphs/ --output-dir out/
+✓ Diagram created: out/a.svg
+✓ Diagram created: out/b.svg
+
+✓ Processed 2 file(s) → out/
+----
+
+Flags: `--output-dir DIR` (required), `--format` (default `svg`),
+`--algorithm`, `--direction` and `--edge-routing`. The command fails when any
+file fails.
+
+=== version
+
+[source,sh]
+----
+$ elkrb version
+elkrb version 1.0.2
+----
+
+== Benchmarking
+
+`rake` tasks time each algorithm on four generated graphs (10 to 200 nodes) and
+write the results to `benchmarks/results/`. ElkRb does not publish performance
+figures in this README: the committed results are a snapshot from an earlier
+release, so measure on your own hardware.
+
+[source,sh]
+----
+# Run all ElkRb benchmarks and generate the report
 $ rake benchmark:all
 
 # Generate test graphs
@@ -994,10 +1085,11 @@ $ rake benchmark:elkrb
 # Run elkjs benchmarks (requires Node.js and elkjs)
 $ rake benchmark:elkjs
 
-# Generate performance report
+# Generate the report (writes docs/PERFORMANCE.adoc)
 $ rake benchmark:report
 ----
 
+See `benchmarks/README.md` for the method.
 
 == Development
 
@@ -1014,6 +1106,16 @@ $ bundle exec rake spec
 ----
 $ bundle exec rubocop
 $ bundle exec rubocop -A  # Auto-correct
+----
+
+=== Examples
+
+`examples/*.rb` are runnable scripts, and `spec/examples_spec.rb` runs every
+one of them.
+
+[source,sh]
+----
+$ bundle exec ruby examples/simple_graph.rb
 ----
 
 == References

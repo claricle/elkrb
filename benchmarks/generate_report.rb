@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+require "fileutils"
 require "json"
 
 # Generates performance comparison report in AsciiDoc format
@@ -12,6 +13,7 @@ class PerformanceReportGenerator
 
   def generate
     adoc = generate_adoc_report
+    FileUtils.mkdir_p("docs")
     File.write("docs/PERFORMANCE.adoc", adoc)
     puts "Performance report generated: docs/PERFORMANCE.adoc"
   end
