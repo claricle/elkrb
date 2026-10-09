@@ -708,7 +708,7 @@ RSpec.describe "MRTree level geometry and direction" do
            (by_id.fetch("c3").x + by_id.fetch("c3").width)).to be >= 20
   end
 
-  it "matches the committed three-node MRTree geometry" do
+  it "keeps directionless MRTree on its historical DOWN geometry" do
     graph = Elkrb.layout(tree_graph)
 
     expect(graph.children.map { |node| [node.id, node.x, node.y] }).to eq(

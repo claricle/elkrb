@@ -510,7 +510,7 @@ module Elkrb
         # frame. Other directions are rotations/mirrors of that same shape;
         # apply_padding normalises the resulting negative coordinates.
         def orient(nodes)
-          direction = option("elk.direction").to_s.upcase
+          direction = option("elk.direction", default: "DOWN").to_s.upcase
 
           case direction
           when "RIGHT"
@@ -571,7 +571,7 @@ module Elkrb
         def route_tree_edge(connection, position, denominator, container)
           edge, source, target = connection
           fraction = position.to_f / denominator
-          direction = option("elk.direction").to_s.upcase
+          direction = option("elk.direction", default: "DOWN").to_s.upcase
           direction = "DOWN" if direction == "UNDEFINED"
 
           start, finish, bend = tree_edge_points(
