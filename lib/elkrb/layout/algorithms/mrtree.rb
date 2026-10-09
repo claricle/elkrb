@@ -17,9 +17,6 @@ module Elkrb
         NO_CHILDREN = [].freeze
         private_constant :NO_CHILDREN
 
-        LEVEL_HEIGHT = 80.0
-        private_constant :LEVEL_HEIGHT
-
         def layout_flat(graph, _options = {})
           # `layout_flat` is public and `children` really can be nil -- a
           # deserialized graph that omits the key keeps it nil, and
@@ -38,6 +35,7 @@ module Elkrb
           roots = graph.children if roots.empty?
 
           trees = build_forest(roots, graph, adjacency(graph, index))
+          level_offsets = level_offsets(trees)
 
           # Calculate positions for each tree
           x_offset = 0
@@ -46,9 +44,11 @@ module Elkrb
           # `calculate_tree_width` summed leaf widths and omitted the gap
           # between siblings, so a tree was reported narrower than it was drawn.
           trees.each do |tree|
-            consumed, = layout_tree(tree, x_offset, 0)
+            consumed, = layout_tree(tree, x_offset, 0, [], level_offsets)
             x_offset += consumed
           end
+
+          orient(graph.children)
 
           # Apply padding and set graph dimensions
           apply_padding(graph)
@@ -373,12 +373,11 @@ module Elkrb
         # `settle_subtree` below is a helper and costs nothing, because it
         # runs AFTER the recursion has returned and so is never on the
         # stack during the descent.
-        def layout_tree(tree, x_offset, y_offset, placed = [])
+        def layout_tree(tree, x_offset, y_offset, placed = [], offsets = {})
           start = placed.size
 
           if tree[:children].empty?
-            return place_leaf(tree, x_offset, y_offset,
-                              placed)
+            return place_leaf(tree, x_offset, y_offset, placed, offsets)
           end
 
           child_x = x_offset
@@ -386,13 +385,13 @@ module Elkrb
           right = nil
           tree[:children].each do |child_tree|
             consumed, child_left, child_right =
-              layout_tree(child_tree, child_x, y_offset, placed)
+              layout_tree(child_tree, child_x, y_offset, placed, offsets)
             child_x += consumed
             left = child_left if left.nil? || child_left < left
             right = child_right if right.nil? || child_right > right
           end
 
-          centre_over_children(tree, y_offset)
+          centre_over_children(tree, y_offset, offsets)
           placed << tree[:node]
           settle_subtree(tree[:node], placed, start, x_offset, [left, right])
         end
@@ -427,10 +426,10 @@ module Elkrb
         end
 
         # A leaf sits where it was told to, and occupies exactly its own box.
-        def place_leaf(tree, x_offset, y_offset, placed)
+        def place_leaf(tree, x_offset, y_offset, placed, offsets)
           node = tree[:node]
           node.x = x_offset
-          node.y = y_offset + (tree[:level] * LEVEL_HEIGHT)
+          node.y = y_offset + offsets.fetch(tree[:level], 0.0)
           placed << node
           width = node.width || 0.0
 
@@ -438,7 +437,7 @@ module Elkrb
         end
 
         # Centres a node over the children already placed beneath it.
-        def centre_over_children(tree, y_offset)
+        def centre_over_children(tree, y_offset, offsets)
           node = tree[:node]
           first_child = tree[:children].first[:node]
           last_child = tree[:children].last[:node]
@@ -446,7 +445,163 @@ module Elkrb
           center_x = (first_child.x + last_child.x + last_child_width) / 2.0
 
           node.x = center_x - ((node.width || 0.0) / 2.0)
-          node.y = y_offset + (tree[:level] * LEVEL_HEIGHT)
+          node.y = y_offset + offsets.fetch(tree[:level], 0.0)
+        end
+
+        # Every row starts below the tallest node in the preceding row. This
+        # preserves the tree's level/breadth geometry without assuming a node
+        # height, and makes the configured node spacing the actual gap.
+        def level_offsets(trees)
+          heights = Hash.new(0.0)
+          stack = trees.dup
+
+          until stack.empty?
+            tree = stack.pop
+            level = tree[:level]
+            heights[level] = [heights[level], tree[:node].height || 0.0].max
+            stack.concat(tree[:children])
+          end
+
+          offset = 0.0
+          (0..(heights.keys.max || 0)).to_h do |level|
+            current = offset
+            offset += heights[level] + node_spacing
+            [level, current]
+          end
+        end
+
+        # Layout is calculated once in DOWN's (breadth, level) coordinate
+        # frame. Other directions are rotations/mirrors of that same shape;
+        # apply_padding normalises the resulting negative coordinates.
+        def orient(nodes)
+          direction = option("elk.direction").to_s.upcase
+
+          case direction
+          when "RIGHT"
+            nodes.each { |node| node.x, node.y = node.y, node.x }
+          when "UP"
+            nodes.each { |node| node.y = -node.y - (node.height || 0.0) }
+          when "LEFT"
+            nodes.each do |node|
+              breadth = node.x
+              node.x = -node.y - (node.width || 0.0)
+              node.y = breadth
+            end
+          end
+        end
+
+        # ELK's MRTree layout uses 20px padding even though the shared core
+        # registry default is 12px. An explicit graph/call option still wins.
+        def padding
+          option(
+            "elk.padding",
+            default: { left: 20.0, top: 20.0, right: 20.0, bottom: 20.0 },
+          ).to_h
+        end
+
+        # MRTree connects a parent's side to the centre of each child's near
+        # side. Sibling edges receive distinct, evenly spaced attachment
+        # points, matching ELK's tree routing and keeping every endpoint on a
+        # node border.
+        def apply_edge_routing(graph)
+          super
+          index = NodeIndex.build(graph)
+          outgoing = Hash.new { |hash, key| hash[key] = [] }
+
+          (graph.edges || []).each do |edge|
+            connection = tree_connection(edge, index)
+            next unless connection
+
+            outgoing[connection[1].id] << connection
+          end
+
+          outgoing.each_value do |entries|
+            entries.each_with_index do |connection, position|
+              route_tree_edge(
+                connection, position + 1, entries.size + 1, graph.id
+              )
+            end
+          end
+        end
+
+        def tree_connection(edge, index)
+          source = index.endpoint_nodes(edge.sources).first
+          target = index.endpoint_nodes(edge.targets).first
+          return unless source && target && source.id != target.id
+
+          [edge, source, target]
+        end
+
+        def route_tree_edge(connection, position, denominator, container)
+          edge, source, target = connection
+          fraction = position.to_f / denominator
+          direction = option("elk.direction").to_s.upcase
+          direction = "DOWN" if direction == "UNDEFINED"
+
+          start, finish, bend = tree_edge_points(
+            source, target, direction, fraction
+          )
+          section = Graph::EdgeSection.new(id: "#{edge.id}_s0")
+          section.start_point = start
+          section.end_point = finish
+          section.bend_points = [bend]
+          edge.sections = [section]
+          connection.first.container = container
+        end
+
+        def tree_edge_points(source, target, direction, fraction)
+          case direction
+          when "RIGHT"
+            start = Geometry::Point.new(
+              x: source.x + node_width(source),
+              y: source.y + (node_height(source) * fraction),
+            )
+            finish = Geometry::Point.new(
+              x: target.x,
+              y: target.y + (node_height(target) / 2.0),
+            )
+            bend = Geometry::Point.new(x: start.x + 3.0, y: start.y)
+          when "UP"
+            start = Geometry::Point.new(
+              x: source.x + (node_width(source) * fraction),
+              y: source.y,
+            )
+            finish = Geometry::Point.new(
+              x: target.x + (node_width(target) / 2.0),
+              y: target.y + node_height(target),
+            )
+            bend = Geometry::Point.new(x: start.x, y: start.y - 3.0)
+          when "LEFT"
+            start = Geometry::Point.new(
+              x: source.x,
+              y: source.y + (node_height(source) * fraction),
+            )
+            finish = Geometry::Point.new(
+              x: target.x + node_width(target),
+              y: target.y + (node_height(target) / 2.0),
+            )
+            bend = Geometry::Point.new(x: start.x - 3.0, y: start.y)
+          else
+            start = Geometry::Point.new(
+              x: source.x + (node_width(source) * fraction),
+              y: source.y + node_height(source),
+            )
+            finish = Geometry::Point.new(
+              x: target.x + (node_width(target) / 2.0),
+              y: target.y,
+            )
+            bend = Geometry::Point.new(x: start.x, y: start.y + 3.0)
+          end
+
+          [start, finish, bend]
+        end
+
+        def node_width(node)
+          node.width || 0.0
+        end
+
+        def node_height(node)
+          node.height || 0.0
         end
 
         def shift_slice(placed, start, shift)
