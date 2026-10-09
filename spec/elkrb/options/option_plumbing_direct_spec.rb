@@ -4,6 +4,8 @@ require "spec_helper"
 
 # Rows that need a hand-built graph rather than the table's 4-node fixture.
 RSpec.describe "option plumbing, direct rows" do
+  include CrossLevelEdgeHelpers
+
   describe "elk.edgeRouting on an edge, under box" do
     let(:legacy) { bends({ "edge.routing" => "orthogonal" }, "box") }
 
@@ -136,20 +138,23 @@ RSpec.describe "option plumbing, direct rows" do
 
   describe "elk.hierarchyHandling on a nested graph" do
     algorithms = Elkrb::Layout::AlgorithmRegistry.available_algorithms
-    values = %w[INCLUDE_CHILDREN SEPARATE_CHILDREN]
 
-    # The registry calls this :partial with the note "cross-level edges are
-    # routed; no cross-level layering". Nothing reads the id, so the layout
-    # is the same for every value; this pins that, so wiring the id turns the
-    # row red and it has to be rewritten against what the wiring does.
     algorithms.each do |name|
-      values.each do |value|
-        it "#{name} lays out identically with #{value}" do
-          option = { "elk.hierarchyHandling" => value }
+      it "#{name} leaves SEPARATE_CHILDREN unchanged" do
+        separate = { "elk.hierarchyHandling" => "SEPARATE_CHILDREN" }
 
-          expect(laid_out(nested_graph(option), name))
-            .to eq(laid_out(nested_graph, name))
-        end
+        expect(laid_out(nested_graph(separate), name))
+          .to eq(laid_out(nested_graph, name))
+      end
+
+      it "#{name} routes INCLUDE_CHILDREN without moving nodes" do
+        included_option = { "elk.hierarchyHandling" => "INCLUDE_CHILDREN" }
+        included = laid_out(nested_graph(included_option), name)
+        baseline = laid_out(nested_graph, name)
+
+        expect(included.dig("edges", 0, "sections").length).to eq(1)
+        expect(hash_node_positions(included))
+          .to eq(hash_node_positions(baseline))
       end
     end
   end

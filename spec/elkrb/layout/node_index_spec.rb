@@ -166,6 +166,101 @@ RSpec.describe Elkrb::Layout::NodeIndex do
     end
   end
 
+  describe ".build_deep" do
+    it "maps a nested node with its ancestor-only absolute offset" do
+      graph = graph_from(
+        "id" => "r",
+        "children" => [
+          {
+            "id" => "p", "x" => 12, "y" => 12,
+            "width" => 50, "height" => 50,
+            "layoutOptions" => {
+              "elk.padding" => "[top=12,left=12,bottom=12,right=12]",
+            },
+            "children" => [
+              {
+                "id" => "c1", "x" => 12, "y" => 12,
+                "width" => 10, "height" => 10
+              },
+            ]
+          },
+        ],
+      )
+
+      node, offset = described_class.build_deep(graph).fetch("c1").fetch(0)
+
+      expect(node).to equal(graph.children.first.children.first)
+      expect([offset.x, offset.y]).to eq([12.0, 12.0])
+      expect([node.x + offset.x, node.y + offset.y]).to eq([24.0, 24.0])
+    end
+
+    it "keeps every match when an id repeats at different levels" do
+      graph = graph_from(
+        "id" => "r",
+        "children" => [
+          { "id" => "shared", "width" => 10, "height" => 10 },
+          {
+            "id" => "p", "x" => 20, "y" => 30,
+            "width" => 50, "height" => 50,
+            "children" => [
+              { "id" => "shared", "width" => 5, "height" => 5 },
+            ]
+          },
+        ],
+      )
+      root_node = graph.children.first
+      nested_node = graph.children.last.children.first
+
+      entries = described_class.build_deep(graph).fetch("shared")
+
+      expect(entries.length).to eq(2)
+      expect(entries[0].first).to equal(root_node)
+      expect(entries[1].first).to equal(nested_node)
+      expect(entries.map { |_node, offset| [offset.x, offset.y] })
+        .to eq([[0.0, 0.0], [20.0, 30.0]])
+    end
+
+    it "retains duplicate-id validation within a level" do
+      graph = graph_from(
+        "id" => "r",
+        "children" => [
+          {
+            "id" => "p",
+            "children" => [
+              { "id" => "same", "width" => 5, "height" => 5 },
+              { "id" => "same", "width" => 5, "height" => 5 },
+            ],
+          },
+        ],
+      )
+
+      expect { described_class.build_deep(graph) }
+        .to raise_error(Elkrb::ValidationError, "duplicate id: same")
+    end
+
+    it "maps a port id to its owning node at the node's level offset" do
+      graph = graph_from(
+        "id" => "r",
+        "children" => [
+          {
+            "id" => "p", "x" => 7, "y" => 9,
+            "children" => [
+              {
+                "id" => "c", "width" => 10, "height" => 10,
+                "ports" => [{ "id" => "c_port" }]
+              },
+            ]
+          },
+        ],
+      )
+
+      node, offset = described_class.build_deep(graph).fetch("c_port").fetch(0)
+
+      expect(node).to equal(graph.children.first.children.first)
+      expect([offset.x, offset.y]).to eq([7.0, 9.0])
+    end
+  end
+
   describe "#edges" do
     it "takes the graph's own edges and a leaf child's" do
       graph = graph_from(
