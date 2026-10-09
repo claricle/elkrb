@@ -357,6 +357,8 @@ module Elkrb
       def add_orthogonal_bend_points_between_nodes(
         section, start_point, end_point, source_node, target_node, graph
       )
+        return if start_point.x == end_point.x || start_point.y == end_point.y
+
         source = node_rectangle(source_node)
         target = node_rectangle(target_node)
 
