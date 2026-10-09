@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "../../java_random"
+require_relative "discovery_order"
+require_relative "layer_sweep"
 require_relative "port_order"
 
 module Elkrb
@@ -19,6 +22,8 @@ module Elkrb
           MODEL_ORDER = "elk.layered.considerModelOrder.strategy"
           # ELK only runs its greedy switch on graphs smaller than this.
           GREEDY_SWITCH_NODE_LIMIT = 40
+          # ELK's default for elk.randomSeed.
+          RANDOM_SEED = 1
 
           # @return [PortOrder] the port lists as the last sweep left them
           attr_reader :port_order
@@ -29,30 +34,49 @@ module Elkrb
             @preserve_input_order =
               resolver.get(MODEL_ORDER, graph) == "NODES_AND_EDGES"
             @input_order = input_order(graph, layers)
+            DiscoveryOrder.new(graph, index).sort(layers)
             @port_order = PortOrder.new(layers, index)
             @node_count = (graph.children || []).length
+            @random = JavaRandom.new(RANDOM_SEED)
           end
 
           def minimize
-            if @strategy == "NONE"
+            unless trivial?
+              sweep_layers unless @strategy == "NONE"
               greedy_switch
-            else
-              sweep_until_stable
             end
             @layers
           end
 
           private
 
-          # NONE does not sweep, but ELK still runs its two-sided greedy
-          # switch over the layering's own order: adjacent nodes swap while
-          # that lowers the crossings against both neighbouring layers, in
-          # the port order the edges were created in. The first sweep runs
-          # backward, which is the direction ELK's seeded generator picks.
+          # ELK has nothing to minimize in an empty graph or a lone node.
+          def trivial?
+            @layers.all?(&:empty?) ||
+              (@layers.length == 1 && @layers.first.length == 1)
+          end
+
+          def sweep_layers
+            return sweep_until_stable if @preserve_input_order
+
+            LayerSweep.new(@layers, @port_order, @random,
+                           -> { count_crossings }).minimize
+          end
+
+          # ELK runs its two-sided greedy switch after whichever minimizer
+          # ran, NONE included: adjacent nodes swap while that lowers the
+          # crossings against both neighbouring layers, in the port order
+          # the sweep left. Its first direction is a draw from the seeded
+          # generator, which the sweep may already have advanced.
           def greedy_switch
             return if @node_count >= GREEDY_SWITCH_NODE_LIMIT
 
-            forward = false
+            @random.next_long
+            forward = @random.next_bits(1) != 0
+            switch_until_unchanged(forward)
+          end
+
+          def switch_until_unchanged(forward)
             loop do
               first, *free = (0...@layers.length).to_a
               first, *free = [first, *free].reverse unless forward

@@ -35,10 +35,10 @@ RSpec.describe Elkrb::Layout::Algorithms::Layered::CrossingMinimizer do
     ).minimize
   end
 
-  it "breaks barycenter ties by node id by default" do
+  it "orders tied barycenters as elkjs does by default" do
     graph, layers = graph_with_tied_targets
 
-    expect(minimize(graph, layers).last.map(&:id)).to eq(%w[a b])
+    expect(minimize(graph, layers).last.map(&:id)).to eq(%w[b a])
   end
 
   it "breaks barycenter ties by input order for NODES_AND_EDGES" do

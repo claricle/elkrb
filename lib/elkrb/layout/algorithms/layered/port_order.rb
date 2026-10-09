@@ -76,6 +76,15 @@ module Elkrb
               end.map(&:first)
           end
 
+          # The port lists as they are now, for #restore.
+          def snapshot
+            @lists.transform_values(&:dup)
+          end
+
+          def restore(snapshot)
+            @lists = snapshot.transform_values(&:dup)
+          end
+
           private
 
           def list(item_id, side)
