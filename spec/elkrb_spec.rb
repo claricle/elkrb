@@ -25,6 +25,7 @@ RSpec.describe Elkrb do
 
       expect(result["elk.algorithm"][:values]).to include("layered", "force")
       expect(result["elk.direction"][:values]).to include("RIGHT")
+      expect(result["elk.direction"][:default]).to eq("RIGHT")
       expect(result["elk.spacing.nodeNode"][:type]).to eq(:float)
       expect(result["elk.padding"][:parser]).to eq("Elkrb::Options::ElkPadding")
       expect(result["elk.hierarchyHandling"][:note]).to eq("cross-level edges are routed; no cross-level layering")

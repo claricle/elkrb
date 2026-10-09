@@ -148,8 +148,8 @@ RSpec.describe Elkrb::Options::Registry do
   end
 
   describe ".default" do
-    it "returns the ELK-real default for elk.direction" do
-      expect(described_class.default("elk.direction")).to eq("UNDEFINED")
+    it "returns RIGHT as the public default for elk.direction" do
+      expect(described_class.default("elk.direction")).to eq("RIGHT")
     end
 
     it "returns ELK's 20px default layered gap" do

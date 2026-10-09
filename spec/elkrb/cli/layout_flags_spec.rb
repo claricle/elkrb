@@ -148,12 +148,12 @@ RSpec.describe "elkrb CLI layout flags" do
     end
 
     %w[layout diagram batch].each do |command|
-      it "tells #{command} --help that no algorithm applies --direction yet" do
+      it "tells #{command} --help which algorithms apply --direction" do
         stdout, _err, status = run_elkrb("help", command)
         direction = stdout.split("\n").grep(/--direction/).first.to_s
 
         expect(status.exitstatus).to eq(0)
-        expect(direction).to include("not yet applied by any algorithm")
+        expect(direction).to include("applied by layered and mrtree algorithms")
       end
     end
   end
