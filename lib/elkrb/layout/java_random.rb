@@ -12,6 +12,11 @@ module Elkrb
       INT_LIMIT = 1 << 31
 
       def initialize(seed)
+        self.seed = seed
+      end
+
+      # Restarts the sequence, like Random#setSeed.
+      def seed=(seed)
         @state = (seed ^ MULTIPLIER) & MASK
       end
 
@@ -20,6 +25,12 @@ module Elkrb
         @state = ((@state * MULTIPLIER) + ADDEND) & MASK
         value = @state >> (48 - bits)
         value >= INT_LIMIT ? value - (1 << 32) : value
+      end
+
+      # A signed 64-bit integer, like Random#nextLong.
+      def next_long
+        value = (next_bits(32) << 32) + next_bits(32)
+        value >= 1 << 63 ? value - (1 << 64) : value
       end
 
       # A float in [0, 1) with 24 random bits, like Random#nextFloat.
