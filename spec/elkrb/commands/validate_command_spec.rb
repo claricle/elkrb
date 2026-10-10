@@ -407,6 +407,27 @@ RSpec.describe Elkrb::Commands::ValidateCommand do
       expect(command.send(:validate_graph, graph)).to be_empty
     end
 
+    it "rejects an edge whose descendant endpoint is ambiguous" do
+      graph = {
+        id: "root",
+        layoutOptions: { "elk.hierarchyHandling" => "INCLUDE_CHILDREN" },
+        children: [
+          { id: "left", children: [{ id: "shared" }] },
+          { id: "right", children: [{ id: "shared" }] },
+          { id: "outside" },
+        ],
+        edges: [
+          { id: "e", sources: ["shared"], targets: ["outside"] },
+        ],
+      }
+      command = described_class.new("unused", {})
+
+      expect(command.send(:validate_graph, graph)).to include(
+        "edges[0]: Edge 'e' references ambiguous " \
+        "source node or port 'shared'",
+      )
+    end
+
     it "reports malformed collection and layout option shapes" do
       graph = { id: "root", children: "not-an-array", edges: false,
                 layoutOptions: false }

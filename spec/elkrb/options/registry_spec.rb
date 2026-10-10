@@ -126,11 +126,11 @@ RSpec.describe Elkrb::Options::Registry do
       )
     end
 
-    it "keeps the documented spline orientation aliases" do
+    it "normalizes the documented spline orientation aliases" do
       expect(described_class.coerce("elk.direction", "horizontal"))
-        .to eq("HORIZONTAL")
+        .to eq("RIGHT")
       expect(described_class.coerce("elk.direction", "vertical"))
-        .to eq("VERTICAL")
+        .to eq("DOWN")
     end
 
     it "accepts documented DisCo arrangement extensions without advertising them as ELK values" do
