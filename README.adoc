@@ -1086,7 +1086,7 @@ file fails.
 [source,sh]
 ----
 $ elkrb version
-elkrb version 1.0.2
+elkrb version 2.0.0
 ----
 
 == Benchmarking

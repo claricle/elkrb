@@ -2,7 +2,7 @@
 
 All notable changes to Elkrb are recorded here.
 
-== Unreleased (v2)
+== 2.0.0 (2026-10-10)
 
 === Breaking changes
 
@@ -324,6 +324,41 @@ after:  105x105   n0 (15, 15)  n1 (60, 15)  n2 (15, 60)   n3 (60, 60)
   the two endpoints instead of the caller's own `Point` objects. Its fifth
   parameter is now named `sample_count`, which is what it always counted.
 
+* Validation now checks nested container scopes, collection shapes, finite
+  dimensions and option enum values. It rejects ambiguous hierarchical edge
+  endpoints, and the `HORIZONTAL` and `VERTICAL` direction aliases produce
+  valid layouts. Validation output remains readable on US-ASCII terminals.
+
+* Failed conversions and Graphviz renders preserve an existing destination
+  instead of replacing it with a partial result.
+
+* ELKT output preserves representable graph geometry, edge sections, ports and
+  hierarchy. DOT output keeps same-named nodes in different hierarchy scopes
+  distinct and routes scoped and hierarchical port endpoints without creating
+  phantom nodes.
+
+* `elk.selfLoopOffset` is honoured when it is carried by an edge or its node.
+
 === Changed
 
 * `lutaml-model` is now capped below 0.9.
+
+* Layered layout uses ELK-style Brandes-Kopf placement, layer sweeps, discovery
+  and port ordering, per-gap orthogonal routing with junction points, and
+  connected-component packing. Node coordinates and edge routes can differ
+  from earlier releases.
+
+* DisCo defaults to ELK's polyomino component compaction. Set the component
+  arrangement or compaction strategy to `ROW` to retain row arrangement.
+
+* SPOrE overlap removal and compaction follow Java ELK's triangulation and tree
+  algorithms and honour their registered processing options.
+
+* Stress layout uses ELK-compatible deterministic seeding and the weighted
+  stress objective. Large line-metric graphs with the default iteration limit
+  use an exact projection, avoiding the previous quadratic timeout.
+
+=== Security
+
+* Release automation uses SHA-pinned actions, least-privilege jobs and
+  RubyGems OIDC trusted publishing instead of a long-lived API key.
