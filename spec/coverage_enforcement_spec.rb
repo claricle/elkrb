@@ -2,6 +2,8 @@
 
 require "rbconfig"
 require "fileutils"
+require "json"
+require "pathname"
 require "tmpdir"
 
 # The floors in spec/spec_helper.rb are armed from a before(:suite) hook, and
@@ -12,6 +14,71 @@ require "tmpdir"
 # which asserts the property directly: if this was a gate run, a floor is in
 # force at exit, whatever mode RSpec was invoked in.
 RSpec.describe "coverage floor arming" do
+  describe "the coverage file set" do
+    it "keeps additive tracking and the existing exclusions" do
+      Dir.mktmpdir("coverage-files") do |root|
+        files = %w[lib/elkrb.rb lib/unloaded.rb lib/elkrb/version.rb
+                   extras/loaded.rb spec/excluded.rb benchmarks/excluded.rb]
+        files.each_with_index do |relative, index|
+          path = File.join(root, relative)
+          FileUtils.mkdir_p(File.dirname(path))
+          File.write(path, "module CoverageProbe#{index}; end\n")
+        end
+        FileUtils.cp(File.expand_path("spec_helper.rb", __dir__),
+                     File.join(root, "spec/spec_helper.rb"))
+        File.write(File.join(root, "spec/tiny_spec.rb"), <<~SPEC)
+          require "json"
+          require_relative "../extras/loaded"
+          require_relative "excluded"
+          require_relative "../benchmarks/excluded"
+          require_relative "../lib/elkrb/version"
+
+          class CoverageFileFormatter
+            def format(result)
+              files = result.files.to_h do |source_file|
+                [source_file.filename, source_file.coverage_data]
+              end
+              File.write(ENV.fetch("COVERAGE_FILE_RECEIPT"), JSON.generate(files))
+            end
+          end
+          SimpleCov.formatter CoverageFileFormatter
+
+          RSpec.describe("coverage file set") do
+            it("runs") { expect(true).to eq(true) }
+          end
+        SPEC
+
+        receipt = File.join(root, "reported-files.json")
+        output = IO.popen(
+          { "COVERAGE_ENFORCE" => nil, "COVERAGE_FILE_RECEIPT" => receipt },
+          [RbConfig.ruby, "-Ilib", "-Ispec",
+           Gem.bin_path("rspec-core", "rspec"),
+           "--require", "spec_helper", "spec/tiny_spec.rb"],
+          err: %i[child out], chdir: root, &:read
+        )
+        expect($CHILD_STATUS.exitstatus).to eq(0), output
+        expect(output).not_to include("[DEPRECATION]")
+
+        resultset = JSON.parse(File.read(receipt))
+        project_root = Pathname.new(File.realpath(root))
+        relative_resultset = resultset.to_h do |path, coverage|
+          relative = Pathname.new(path).relative_path_from(project_root).to_s
+          [relative.tr("\\", "/"), coverage]
+        end
+
+        expect(relative_resultset)
+          .to include("lib/unloaded.rb", "extras/loaded.rb")
+        expect(relative_resultset).not_to include(
+          "spec/excluded.rb", "benchmarks/excluded.rb", "lib/elkrb/version.rb"
+        )
+        unloaded_lines = relative_resultset.fetch("lib/unloaded.rb")
+          .fetch("lines").compact
+        expect(unloaded_lines).not_to be_empty
+        expect(unloaded_lines).to all(eq(0))
+      end
+    end
+  end
+
   # Out of process, because the property IS the process exit status, and
   # because a dry run inside this one would not have its own at_exit.
   #

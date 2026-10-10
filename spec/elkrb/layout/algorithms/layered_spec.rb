@@ -261,6 +261,28 @@ RSpec.describe Elkrb::Layout::Algorithms::LayeredAlgorithm do
         .to eq(right.children.map { |node| [node.x, node.y] })
     end
 
+    it "normalizes spline orientation aliases before layered routing" do
+      horizontal = Elkrb.layout(
+        Marshal.load(Marshal.dump(chain)),
+        algorithm: "layered", "elk.direction" => "HORIZONTAL",
+      )
+      vertical = Elkrb.layout(
+        Marshal.load(Marshal.dump(chain)),
+        algorithm: "layered", "elk.direction" => "VERTICAL",
+      )
+
+      expect(horizontal.children.map { |node| [node.x, node.y] })
+        .to eq(Elkrb.layout(
+          Marshal.load(Marshal.dump(chain)),
+          algorithm: "layered", "elk.direction" => "RIGHT",
+        ).children.map { |node| [node.x, node.y] })
+      expect(vertical.children.map { |node| [node.x, node.y] })
+        .to eq(Elkrb.layout(
+          Marshal.load(Marshal.dump(chain)),
+          algorithm: "layered", "elk.direction" => "DOWN",
+        ).children.map { |node| [node.x, node.y] })
+    end
+
     it "reads the canonical layer gap and its call-level alias" do
       canonical_graph = Marshal.load(Marshal.dump(chain))
       canonical_graph[:layoutOptions] = {

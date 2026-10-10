@@ -1,12 +1,14 @@
 # frozen_string_literal: true
 
 require "json"
+require_relative "../errors"
 
 module Elkrb
   module Serializers
     # Serializes graph models and Hashes to ELK Text.
     class ElktSerializer
       IDENTIFIER = /\A[A-Za-z_]\w*\z/
+      PROPERTY_SEGMENT = /\A[A-Za-z_]\w*\z/
       KEYWORDS = %w[
         graph node port label edge layout section position size
         start end bends incoming outgoing true false null
@@ -15,7 +17,7 @@ module Elkrb
         "\\" => "\\\\", '"' => '\\"', "\n" => "\\n", "\r" => "\\r",
         "\t" => "\\t", "\b" => "\\b", "\f" => "\\f"
       }.freeze
-      private_constant :IDENTIFIER, :KEYWORDS, :LABEL_ESCAPES
+      private_constant :IDENTIFIER, :PROPERTY_SEGMENT, :KEYWORDS, :LABEL_ESCAPES
 
       def initialize(options = {})
         @indent_size = options[:indent_size] || 2
@@ -25,8 +27,9 @@ module Elkrb
         @indent_level = 0
         @output = []
         @graph_hash = graph_hash(graph)
+        @scope_stack = []
         prepare_ids(@graph_hash)
-        serialize_graph(@graph_hash)
+        emit_root(@graph_hash)
         "#{@output.join("\n")}\n"
       end
 
@@ -38,6 +41,15 @@ module Elkrb
           graph.respond_to?(:to_json)
 
         graph
+      end
+
+      def emit_root(graph)
+        id = value(graph, :id)
+        @output << "graph #{mapped_id(id)}" if id
+        with_scope(graph) do
+          serialize_shape_layout(graph)
+          serialize_graph(graph)
+        end
       end
 
       def serialize_graph(graph)
@@ -81,12 +93,14 @@ module Elkrb
       end
 
       def serialize_node_block(node)
-        serialize_shape_layout(node)
-        serialize_layout_options(value(node, :layoutOptions) || {})
-        (value(node, :labels) || []).each { |label| serialize_label(label) }
-        (value(node, :ports) || []).each { |port| serialize_port(port) }
-        (value(node, :children) || []).each { |child| serialize_node(child) }
-        (value(node, :edges) || []).each { |edge| serialize_edge(edge) }
+        with_scope(node) do
+          serialize_shape_layout(node)
+          serialize_layout_options(value(node, :layoutOptions) || {})
+          (value(node, :labels) || []).each { |label| serialize_label(label) }
+          (value(node, :ports) || []).each { |port| serialize_port(port) }
+          (value(node, :children) || []).each { |child| serialize_node(child) }
+          (value(node, :edges) || []).each { |edge| serialize_edge(edge) }
+        end
       end
 
       def serialize_port(port)
@@ -125,12 +139,87 @@ module Elkrb
       end
 
       def edge_has_block?(edge)
-        hash_present?(edge, :layoutOptions) || collection?(edge, :labels)
+        hash_present?(edge, :layoutOptions) || collection?(edge, :labels) ||
+          collection?(edge, :sections)
       end
 
       def serialize_edge_block(edge)
+        emit_sections(value(edge, :sections)) if collection?(edge, :sections)
         serialize_layout_options(value(edge, :layoutOptions) || {})
         (value(edge, :labels) || []).each { |label| serialize_label(label) }
+      end
+
+      def emit_sections(sections)
+        @output << "#{indentation}layout ["
+        @indent_level += 1
+        used_ids = sections.filter_map do |section|
+          id = value(section, :id)
+          mapped_id(id) if id
+        end.to_h { |id| [id, true] }
+        sections.each_with_index do |section, index|
+          emit_section(section, sections.length, index, used_ids)
+        end
+        @indent_level -= 1
+        @output << "#{indentation}]"
+      end
+
+      def emit_section(section, count, index, used_ids)
+        id = value(section, :id)
+        return emit_section_body(section) if count == 1 && !id
+
+        id ||= available_section_id(index + 1, used_ids)
+        used_ids[mapped_id(id)] = true
+        outgoing = Array(value(section, :outgoingSections))
+        declaration = "section #{mapped_id(id)}"
+        if outgoing.any?
+          refs = outgoing.map { |ref| mapped_id(ref) }.join(", ")
+          declaration = "#{declaration} -> #{refs}"
+        end
+        @output << "#{indentation}#{declaration} ["
+        @indent_level += 1
+        emit_section_body(section)
+        @indent_level -= 1
+        @output << "#{indentation}]"
+      end
+
+      def emit_section_body(section)
+        emit_shape_reference(section, :incomingShape, "incoming")
+        emit_shape_reference(section, :outgoingShape, "outgoing")
+        emit_section_point(section, :startPoint, "start")
+        emit_section_point(section, :endPoint, "end")
+        bends = Array(value(section, :bendPoints))
+        unless bends.empty?
+          points = bends.map { |point| formatted_point(point) }.join(" | ")
+          @output << "#{indentation}bends: #{points}"
+        end
+        serialize_layout_options(value(section, :layoutOptions) || {})
+      end
+
+      def available_section_id(index, used_ids)
+        loop do
+          candidate = "_section#{index}"
+          return candidate unless used_ids.key?(mapped_id(candidate))
+
+          index += 1
+        end
+      end
+
+      def emit_shape_reference(section, key, name)
+        reference = value(section, key)
+        return unless reference
+
+        @output << "#{indentation}#{name}: #{endpoint(reference)}"
+      end
+
+      def emit_section_point(section, key, name)
+        point = value(section, key)
+        return unless point
+
+        @output << "#{indentation}#{name}: #{formatted_point(point)}"
+      end
+
+      def formatted_point(point)
+        "#{format_number(value(point, :x))}, #{format_number(value(point, :y))}"
       end
 
       def serialize_label(label)
@@ -180,10 +269,10 @@ module Elkrb
       end
 
       def endpoint(id)
-        owner = @port_owners[id.to_s]
-        return mapped_id(id) unless owner
-
-        "#{mapped_id(owner)}.#{mapped_id(id)}"
+        @scope_stack.reverse_each do |scope|
+          return scope[id.to_s] if scope.key?(id.to_s)
+        end
+        mapped_id(id)
       end
 
       def serialized_endpoints(edge, direction)
@@ -196,8 +285,10 @@ module Elkrb
       end
 
       def prepare_ids(graph)
-        @port_owners = {}
-        ids = collect_ids(graph)
+        ids = []
+        graph_id = value(graph, :id)&.to_s
+        ids << graph_id if graph_id
+        collect_ids(graph, ids)
         collect_root_port_ids(graph, ids)
         @id_map = {}
         used = {}
@@ -232,7 +323,6 @@ module Elkrb
             next unless port_id
 
             ids << port_id
-            @port_owners[port_id] = node_id
             collect_member_ids(value(port, :labels), ids)
           end
           collect_ids(node, ids)
@@ -253,7 +343,38 @@ module Elkrb
           edge_id = value(edge, :id)&.to_s
           ids << edge_id if edge_id
           collect_member_ids(value(edge, :labels), ids)
+          collect_member_ids(value(edge, :sections), ids)
         end
+      end
+
+      def with_scope(container)
+        @scope_stack << endpoint_scope(container)
+        yield
+      ensure
+        @scope_stack.pop
+      end
+
+      def endpoint_scope(container)
+        scope = {}
+        children = Array(value(container, :children))
+        children.each do |child|
+          id = value(child, :id)
+          scope[id.to_s] ||= mapped_id(id) if id
+        end
+        Array(value(container, :ports)).each do |port|
+          id = value(port, :id)
+          scope[id.to_s] ||= mapped_id(id) if id
+        end
+        children.each do |child|
+          owner = value(child, :id)
+          Array(value(child, :ports)).each do |port|
+            id = value(port, :id)
+            next unless owner && id
+
+            scope[id.to_s] ||= "#{mapped_id(owner)}.#{mapped_id(id)}"
+          end
+        end
+        scope
       end
 
       def collect_member_ids(members, ids)
@@ -279,7 +400,13 @@ module Elkrb
       end
 
       def property_key(key)
-        key.to_s.split(".").map do |segment|
+        segments = key.to_s.split(".", -1)
+        unless segments.all? { |segment| PROPERTY_SEGMENT.match?(segment) }
+          raise Elkrb::ValidationError,
+                "ELKT cannot represent option key #{key.inspect}"
+        end
+
+        segments.map do |segment|
           KEYWORDS.include?(segment) ? "^#{segment}" : segment
         end.join(".")
       end
@@ -308,8 +435,14 @@ module Elkrb
       end
 
       def format_number(number)
-        formatted = format("%.2f", number).sub(/\.?0+$/, "")
-        formatted.empty? ? "0" : formatted
+        unless number.respond_to?(:finite?) && number.finite?
+          raise Elkrb::ValidationError,
+                "ELKT numbers must be finite, got #{number.inspect}"
+        end
+
+        return number.to_i.to_s if number.is_a?(Float) && number == number.to_i
+
+        number.to_s
       end
 
       def indentation

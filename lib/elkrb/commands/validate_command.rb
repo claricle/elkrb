@@ -185,20 +185,17 @@ module Elkrb
           errors << "#{path}: Edge '#{edge_id}' targets must be an array"
         end
 
-        if sources.is_a?(Array)
-          sources.each do |source|
-            unless valid_ids.include?(source)
-              errors << "#{path}: Edge '#{edge_id}' references unknown " \
-                        "source node or port '#{source}'"
-            end
-          end
-        end
+        { source: sources, target: targets }.each do |role, endpoints|
+          next unless endpoints.is_a?(Array)
 
-        if targets.is_a?(Array)
-          targets.each do |target|
-            unless valid_ids.include?(target)
+          endpoints.each do |endpoint|
+            matches = valid_ids.fetch(endpoint, 0)
+            if matches.zero?
               errors << "#{path}: Edge '#{edge_id}' references unknown " \
-                        "target node or port '#{target}'"
+                        "#{role} node or port '#{endpoint}'"
+            elsif matches > 1
+              errors << "#{path}: Edge '#{edge_id}' references ambiguous " \
+                        "#{role} node or port '#{endpoint}'"
             end
           end
         end
@@ -260,17 +257,18 @@ module Elkrb
         number.is_a?(Numeric) && number.finite? && number.positive?
       end
 
-      def descendant_endpoint_ids(children)
-        children.each_with_object(Set.new) do |node, ids|
+      def descendant_endpoint_ids(children, ids = Hash.new(0))
+        children.each do |node|
           next unless node.is_a?(Hash)
 
-          ids.add(value(node, :id)) if value(node, :id)
+          ids[value(node, :id)] += 1 if value(node, :id)
           Array(value(node, :ports)).each do |port|
             id = value(port, :id) if port.is_a?(Hash)
-            ids.add(id) if id
+            ids[id] += 1 if id
           end
-          ids.merge(descendant_endpoint_ids(Array(value(node, :children))))
+          descendant_endpoint_ids(Array(value(node, :children)), ids)
         end
+        ids
       end
 
       def duplicate_id_errors(children, edges)
