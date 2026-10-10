@@ -795,9 +795,12 @@ RSpec.describe Elkrb::GraphvizWrapper do
 
           wrapper.render(input, output, :png)
 
-          expect(logged_argv(log_path)).to eq(
-            ["-Kdot", "-Tpng", "-Gdpi=96", "-o", output, input],
+          argv = logged_argv(log_path)
+          expect(argv.values_at(0, 1, 2, 3, 5)).to eq(
+            ["-Kdot", "-Tpng", "-Gdpi=96", "-o", input],
           )
+          expect(File.dirname(argv[4])).to eq(dir)
+          expect(File.read(output)).to eq("rendered")
         end
       end
     end
@@ -829,7 +832,7 @@ RSpec.describe Elkrb::GraphvizWrapper do
     end
 
     it "never lets shell metacharacters in the output path execute" do
-      with_fake_dot do |log_path|
+      with_fake_dot do
         Dir.mktmpdir do |dir|
           input = write_fake_input(dir)
           # Escapes naive per-argument quoting. A bare `a;touch PWNED;`
@@ -844,7 +847,7 @@ RSpec.describe Elkrb::GraphvizWrapper do
             wrapper.render(input, malicious_output, :png)
           end
 
-          expect(logged_argv(log_path)).to include(malicious_output)
+          expect(File.read(malicious_output)).to eq("rendered")
           expect(File.exist?(File.join(dir, "PWNED"))).to be(false)
         end
       end
@@ -1060,6 +1063,14 @@ RSpec.describe Elkrb::GraphvizWrapper do
   describe "#render argv construction (no real binary required)" do
     before { wrapper.instance_variable_set(:@dot_path, "/usr/bin/dot") }
 
+    let(:successful_system_call) do
+      lambda do |*command|
+        output = command.fetch(command.index("-o") + 1)
+        File.binwrite(output, "rendered")
+        true
+      end
+    end
+
     # `system(*argv)` falls back to SHELL semantics when argv has exactly one
     # element, so the whole no-shell guarantee rests on this argv being long.
     # This is the assertion that CARRIES the shell-metacharacter property on
@@ -1067,19 +1078,22 @@ RSpec.describe Elkrb::GraphvizWrapper do
     # metacharacter stays one argv element. "never lets shell metacharacters
     # in the output path execute" above is a supplement that proves nothing
     # actually runs, and it is unavailable on Windows.
-    it "keeps a shell metacharacter in the output path as one argv element" do
+    it "keeps the caller's shell metacharacter out of the process argv" do
       Dir.mktmpdir do |dir|
         input = write_fake_input(dir)
         malicious_output = File.join(dir, "out.png; touch PWNED")
 
         expect(wrapper).to receive(:system) do |*command|
           expect(command.size).to be > 1
-          expect(command).to include("-o", malicious_output)
+          output = command.fetch(command.index("-o") + 1)
+          expect(File.dirname(output)).to eq(dir)
+          expect(output).not_to eq(malicious_output)
           expect(command).to all(be_a(String))
-          true
+          successful_system_call.call(*command)
         end
 
         wrapper.render(input, malicious_output, :png)
+        expect(File.read(malicious_output)).to eq("rendered")
       end
     end
 
@@ -1091,7 +1105,7 @@ RSpec.describe Elkrb::GraphvizWrapper do
     it "returns the underlying system call's success value" do
       Dir.mktmpdir do |dir|
         input = write_fake_input(dir)
-        allow(wrapper).to receive(:system).and_return(true)
+        allow(wrapper).to receive(:system, &successful_system_call)
 
         expect(wrapper.render(input, File.join(dir, "output.png"), :png)).to be true
       end
@@ -1107,7 +1121,7 @@ RSpec.describe Elkrb::GraphvizWrapper do
         input = write_fake_input(dir)
         expect(wrapper).to receive(:system) do |*command|
           expect(command).to include("-Tpng")
-          true
+          successful_system_call.call(*command)
         end
 
         wrapper.render(input, File.join(dir, "output.png"), "png")
@@ -1125,7 +1139,7 @@ RSpec.describe Elkrb::GraphvizWrapper do
         input = write_fake_input(dir)
         expect(wrapper).to receive(:system) do |*command|
           expect(command).to include("-Kdot")
-          true
+          successful_system_call.call(*command)
         end
 
         wrapper.render(input, File.join(dir, "output.png"), :png, engine: :dot)
@@ -1138,7 +1152,7 @@ RSpec.describe Elkrb::GraphvizWrapper do
         expect(wrapper).to receive(:system) do |*command|
           expect(command).to include(input)
           expect(command).to all(be_a(String))
-          true
+          successful_system_call.call(*command)
         end
 
         wrapper.render(Pathname.new(input), File.join(dir, "output.png"), :png)
@@ -1160,7 +1174,7 @@ RSpec.describe Elkrb::GraphvizWrapper do
         expect(wrapper).to receive(:system) do |*command|
           expect(command).to include(input)
           expect(command).to all(be_a(String))
-          true
+          successful_system_call.call(*command)
         end
 
         wrapper.render(custom_path, File.join(dir, "output.png"), :png)
@@ -1178,12 +1192,47 @@ RSpec.describe Elkrb::GraphvizWrapper do
         custom_path.define_singleton_method(:to_path) { output_path }
 
         expect(wrapper).to receive(:system) do |*command|
-          expect(command).to include("-o", output_path)
+          staged = command.fetch(command.index("-o") + 1)
+          expect(File.dirname(staged)).to eq(dir)
           expect(command).to all(be_a(String))
-          true
+          successful_system_call.call(*command)
         end
 
         wrapper.render(input, custom_path, :png)
+        expect(File.read(output_path)).to eq("rendered")
+      end
+    end
+
+    it "preserves an existing output when Graphviz writes partially then fails" do
+      Dir.mktmpdir do |dir|
+        input = write_fake_input(dir)
+        output = File.join(dir, "output.png")
+        File.write(output, "original")
+        allow(wrapper).to receive(:system) do |*command|
+          scratch = command.fetch(command.index("-o") + 1)
+          File.binwrite(scratch, "partial")
+          false
+        end
+
+        expect { wrapper.render(input, output, :png) }
+          .to raise_error(described_class::GraphvizNotFoundError,
+                          /command failed/)
+        expect(File.read(output)).to eq("original")
+        expect(Dir.children(dir)).to contain_exactly("input.dot", "output.png")
+      end
+    end
+
+    it "preserves an existing output when Graphviz produces no bytes" do
+      Dir.mktmpdir do |dir|
+        input = write_fake_input(dir)
+        output = File.join(dir, "output.png")
+        File.write(output, "original")
+        allow(wrapper).to receive(:system).and_return(true)
+
+        expect { wrapper.render(input, output, :png) }
+          .to raise_error(Elkrb::Error, /produced no output/)
+        expect(File.read(output)).to eq("original")
+        expect(Dir.children(dir)).to contain_exactly("input.dot", "output.png")
       end
     end
   end

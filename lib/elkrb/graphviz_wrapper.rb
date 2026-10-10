@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "open3"
+require_relative "atomic_destination"
 require_relative "command_resolver"
 
 module Elkrb
@@ -73,13 +74,13 @@ module Elkrb
       validate_file_exists!(dot_file)
       validate_output_file!(output_file)
 
-      engine = options[:engine] || "dot"
-      validate_engine!(engine)
+      engine, dpi = command_options(options)
 
-      dpi = options[:dpi] || 96
-
-      argv = build_command(engine, format, dot_file, output_file, dpi)
-      execute_command(argv)
+      AtomicDestination.generate(
+        output_file, require_nonempty: true
+      ) do |scratch|
+        execute_command(build_command(engine, format, dot_file, scratch, dpi))
+      end
     end
 
     # `available?` only proves @dot_path resolved to a real, executable file
@@ -106,6 +107,14 @@ module Elkrb
     end
 
     private
+
+    def command_options(options)
+      engine, dpi = options.values_at(:engine, :dpi)
+      engine ||= "dot"
+      dpi ||= 96
+      validate_engine!(engine)
+      [engine, dpi]
+    end
 
     # Finds the Graphviz `dot` executable.
     #

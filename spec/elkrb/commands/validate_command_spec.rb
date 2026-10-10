@@ -344,5 +344,95 @@ RSpec.describe Elkrb::Commands::ValidateCommand do
       expect { command.run }.to raise_error(ArgumentError,
                                             /Unable to parse input file/)
     end
+
+    it "allows endpoint IDs to repeat at distinct hierarchy levels" do
+      graph = {
+        id: "root",
+        children: [
+          { id: "a", ports: [{ id: "p" }] },
+          {
+            id: "group",
+            children: [{ id: "a", ports: [{ id: "p" }] }],
+          },
+        ],
+      }
+      command = described_class.new("unused", {})
+
+      expect(command.send(:validate_graph, graph)).to be_empty
+    end
+
+    it "rejects duplicate endpoint IDs within one hierarchy level" do
+      graph = {
+        id: "root",
+        children: [{ id: "a", ports: [{ id: "shared" }] },
+                   { id: "shared" }],
+      }
+      command = described_class.new("unused", {})
+
+      expect(command.send(:validate_graph, graph))
+        .to include("duplicate id: shared")
+    end
+
+    it "validates an edge against the namespace of its owning container" do
+      graph = {
+        id: "root",
+        children: [
+          { id: "outside" },
+          {
+            id: "group",
+            children: [{ id: "inside" }],
+            edges: [{ id: "e", sources: ["inside"], targets: ["outside"] }],
+          },
+        ],
+      }
+      command = described_class.new("unused", {})
+
+      expect(command.send(:validate_graph, graph)).to include(
+        "children[1].edges[0]: Edge 'e' references unknown " \
+        "target node or port 'outside'",
+      )
+    end
+
+    it "allows a container-owned edge to name its descendants" do
+      graph = {
+        id: "root",
+        children: [
+          { id: "outside" },
+          { id: "group", children: [{ id: "inside" }] },
+        ],
+        edges: [{ id: "e", sources: ["inside"], targets: ["outside"] }],
+      }
+      command = described_class.new("unused", {})
+
+      expect(command.send(:validate_graph, graph)).to be_empty
+    end
+
+    it "reports malformed collection and layout option shapes" do
+      graph = { id: "root", children: "not-an-array", edges: false,
+                layoutOptions: false }
+      command = described_class.new("unused", { strict: true })
+
+      expect(command.send(:validate_graph, graph)).to contain_exactly(
+        "children must be an Array",
+        "edges must be an Array",
+        "layoutOptions must be a Hash",
+      )
+    end
+
+    it "rejects non-finite strict dimensions" do
+      graph = {
+        id: "root",
+        children: [
+          { id: "nan", width: Float::NAN, height: 1 },
+          { id: "infinity", width: 1, height: Float::INFINITY },
+        ],
+      }
+      command = described_class.new("unused", { strict: true })
+
+      expect(command.send(:validate_graph, graph)).to include(
+        a_string_matching(/Node 'nan' has invalid width: NaN/),
+        a_string_matching(/Node 'infinity' has invalid height: Infinity/),
+      )
+    end
   end
 end

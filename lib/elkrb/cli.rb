@@ -5,6 +5,7 @@ require "json"
 require "yaml"
 
 require_relative "errors"
+require_relative "atomic_destination"
 require_relative "best_effort_write"
 require_relative "layout_flags"
 require_relative "cli/layout_flag_options"
@@ -221,7 +222,7 @@ module Elkrb
                end
 
       if options[:output]
-        File.write(options[:output], output)
+        AtomicDestination.write(options[:output], output)
         verbose_output "Output written to #{options[:output]}"
       else
         say output
