@@ -5,6 +5,7 @@ require "securerandom"
 require "yaml"
 require "fileutils"
 
+require_relative "../atomic_destination"
 require_relative "../best_effort_write"
 require_relative "../layout_flags"
 
@@ -112,10 +113,7 @@ module Elkrb
       end
 
       def write_output(content, filename)
-        dir = File.dirname(filename)
-        FileUtils.mkdir_p(dir)
-
-        File.write(filename, content)
+        AtomicDestination.write(filename, content)
       end
 
       IMAGE_FORMATS = %i[png svg pdf ps eps].freeze
@@ -325,16 +323,17 @@ module Elkrb
       end
 
       def preview(file)
-        case RbConfig::CONFIG["host_os"]
-        when /darwin/
-          system("open", file)
-        when /linux/
-          system("xdg-open", file)
-        when /mswin|mingw|cygwin/
-          system("start", file)
-        else
-          warn "Preview not supported on this platform"
-        end
+        launcher = case RbConfig::CONFIG["host_os"]
+                   when /darwin/ then ["open", file]
+                   when /linux/ then ["xdg-open", file]
+                   when /mswin|mingw|cygwin/
+                     ["cmd", "/c", "start", "", file]
+                   end
+
+        raise Error, "Preview is not supported on this platform" unless launcher
+        return if system(*launcher)
+
+        raise Error, "Unable to open preview: #{file}"
       end
     end
   end
