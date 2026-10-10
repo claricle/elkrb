@@ -360,5 +360,5 @@ after:  105x105   n0 (15, 15)  n1 (60, 15)  n2 (15, 60)   n3 (60, 60)
 
 === Security
 
-* Release automation uses pinned local actions, least-privilege jobs and
+* Release automation uses SHA-pinned actions, least-privilege jobs and
   RubyGems OIDC trusted publishing instead of a long-lived API key.
