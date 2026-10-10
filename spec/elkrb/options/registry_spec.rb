@@ -117,6 +117,29 @@ RSpec.describe Elkrb::Options::Registry do
       expect(described_class.coerce("elk.direction", "right")).to eq("RIGHT")
     end
 
+    it "rejects a value outside an enum's accepted values" do
+      expect do
+        described_class.coerce("elk.direction", "sideways")
+      end.to raise_error(
+        Elkrb::ValidationError,
+        /elk\.direction.*SIDEWAYS.*UNDEFINED, RIGHT, LEFT, DOWN, UP/,
+      )
+    end
+
+    it "keeps the documented spline orientation aliases" do
+      expect(described_class.coerce("elk.direction", "horizontal"))
+        .to eq("HORIZONTAL")
+      expect(described_class.coerce("elk.direction", "vertical"))
+        .to eq("VERTICAL")
+    end
+
+    it "accepts documented DisCo arrangement extensions without advertising them as ELK values" do
+      id = "elk.disco.componentCompaction.strategy"
+
+      expect(described_class.coerce(id, "row")).to eq("ROW")
+      expect(described_class.all.fetch(id).fetch(:values)).to eq(["POLYOMINO"])
+    end
+
     it "passes booleans through and parses the literal string true (any case)" do
       id = "label.placement.disabled"
       expect(described_class.coerce(id, true)).to be(true)

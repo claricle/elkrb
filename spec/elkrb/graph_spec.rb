@@ -141,4 +141,24 @@ RSpec.describe Elkrb::Graph::Graph do
       expect(graph.all_edges).to eq([])
     end
   end
+
+  describe "#all_edges on a deeply nested graph" do
+    it "returns edges from every descendant container" do
+      graph = described_class.from_hash(
+        id: "root",
+        edges: [{ id: "root-edge", sources: [], targets: [] }],
+        children: [{
+          id: "level-1",
+          edges: [{ id: "middle-edge", sources: [], targets: [] }],
+          children: [{
+            id: "level-2",
+            edges: [{ id: "deep-edge", sources: [], targets: [] }],
+          }],
+        }],
+      )
+
+      expect(graph.all_edges.map(&:id))
+        .to eq(%w[root-edge middle-edge deep-edge])
+    end
+  end
 end
