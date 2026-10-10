@@ -140,7 +140,7 @@ module Elkrb
           lines.concat(format_subgraph(node))
         else
           # Simple node
-          node_id = quote_id(node.id)
+          node_id = quote_id(@node_names.fetch(node))
           attrs = build_node_attributes(node)
 
           lines << indent("#{node_id} #{format_attrs(attrs)}")
@@ -219,7 +219,7 @@ module Elkrb
           attrs[:shape] = node.properties["dot.shape"]
         end
 
-        apply_port_label(attrs, node) if Array(node.ports).any?
+        apply_port_label(attrs, node) if declared_ports(node).any?
 
         attrs
       end
@@ -232,9 +232,8 @@ module Elkrb
         labels = Array(node.labels).map(&:text)
         labels = [node.id] if labels.empty?
         label = labels.map { |text| html_escape(text) }.join("<BR/>")
-        ports = Array(node.ports).map do |port|
-          name = @port_names.fetch(node).fetch(port.id.to_s)
-          %(<TD PORT="#{name}" TOOLTIP="#{html_escape(port.id)}"></TD>)
+        ports = declared_ports(node).map do |port_id, name|
+          %(<TD PORT="#{name}" TOOLTIP="#{html_escape(port_id)}"></TD>)
         end.join
         "<<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\"" \
           "#{html_table_dimensions(node)}>" \
@@ -264,8 +263,11 @@ module Elkrb
         # Get source and target
         # Build edge attributes
         attrs = build_edge_attributes(edge)
-        source_id = edge_endpoint(edge.sources.first, :source, attrs)
-        target_id = edge_endpoint(edge.targets.first, :target, attrs)
+        source = resolved_endpoint(edge.sources.first)
+        target = resolved_endpoint(edge.targets.first)
+        source_id = edge_endpoint(source)
+        target_id = edge_endpoint(target)
+        add_cluster_attributes(attrs, source, target)
 
         # Edge operator
         op = @options[:directed] ? "->" : "--"
@@ -363,57 +365,132 @@ module Elkrb
         "\"#{escaped.join('\\n')}\""
       end
 
-      def edge_endpoint(id, role, attrs)
-        text = id.to_s
-        endpoint = endpoint_entry(text)
-        if endpoint&.fetch(:type, nil) == :port
+      def resolved_endpoint(id)
+        endpoint_entry(id.to_s) || { type: :node, id: id.to_s, clusters: [] }
+      end
+
+      def edge_endpoint(endpoint)
+        if endpoint.fetch(:type) == :port
           return "#{quote_id(endpoint[:owner])}:#{endpoint[:port]}"
         end
 
-        if endpoint&.fetch(:type, nil) == :compound
-          attrs[role == :source ? :ltail : :lhead] = endpoint[:cluster]
+        if endpoint.fetch(:type) == :compound
           return quote_id(endpoint[:representative])
         end
 
-        quote_id(endpoint ? endpoint[:id] : text)
+        quote_id(endpoint[:id])
+      end
+
+      def add_cluster_attributes(attrs, source, target)
+        source_cluster = source[:cluster]
+        target_cluster = target[:cluster]
+        if source_cluster && !target.fetch(:clusters).include?(source_cluster)
+          attrs[:ltail] = source_cluster
+        end
+        if target_cluster && !source.fetch(:clusters).include?(target_cluster)
+          attrs[:lhead] = target_cluster
+        end
       end
 
       def index_endpoints(graph)
         @endpoint_scopes = {}.compare_by_identity
-        @port_names = {}.compare_by_identity
         @clusters = {}.compare_by_identity
-        @cluster_counter = 0
+        nodes = descendant_nodes(graph)
+        index_node_names(nodes)
+        index_clusters(nodes)
+        index_cluster_memberships(graph)
+        index_all_ports(nodes)
         index_container(graph)
+      end
+
+      def index_cluster_memberships(graph)
+        @cluster_memberships = {}.compare_by_identity
+        index_child_memberships(Array(graph.children), [])
+      end
+
+      def index_child_memberships(children, clusters)
+        children.each do |node|
+          own_clusters = node.hierarchical? ? [*clusters, @clusters.fetch(node)] : clusters
+          @cluster_memberships[node] = own_clusters
+          index_child_memberships(Array(node.children), own_clusters)
+        end
       end
 
       def index_container(container)
         children = Array(container.children)
-        children.select(&:hierarchical?).each do |node|
-          @clusters[node] = "cluster_#{@cluster_counter}"
-          @cluster_counter += 1
-        end
-        children.each { |node| index_ports(node) }
         @endpoint_scopes[container] = build_endpoint_scope(children)
         children.each { |node| index_container(node) }
       end
 
-      def index_ports(node)
-        ports = Array(node.ports)
-        names = {}
-        used = ports.filter_map do |port|
+      def descendant_nodes(container)
+        Array(container.children).flat_map do |node|
+          [node, *descendant_nodes(node)]
+        end
+      end
+
+      def index_node_names(nodes)
+        @node_names = {}.compare_by_identity
+        reserved = nodes.to_h { |node| [node.id.to_s, true] }
+        used = {}
+        nodes.each do |node|
+          name = node.id.to_s
+          name = available_node_name(name, reserved, used) if used.key?(name)
+          @node_names[node] = name
+          used[name] = true
+        end
+      end
+
+      def available_node_name(base, reserved, used)
+        index = 2
+        loop do
+          candidate = "#{base}_#{index}"
+          return candidate unless reserved.key?(candidate) || used.key?(candidate)
+
+          index += 1
+        end
+      end
+
+      def index_clusters(nodes)
+        nodes.select(&:hierarchical?).each_with_index do |node, index|
+          @clusters[node] = "cluster_#{index}"
+        end
+      end
+
+      def index_all_ports(nodes)
+        @port_names = {}.compare_by_identity
+        @declared_ports = {}.compare_by_identity
+        ports_by_owner = {}.compare_by_identity
+        nodes.each do |node|
+          owner = port_representative(node)
+          next unless owner
+
+          Array(node.ports).each do |port|
+            (ports_by_owner[owner] ||= []) << [node, port]
+          end
+        end
+        ports_by_owner.each { |owner, entries| index_owner_ports(owner, entries) }
+      end
+
+      def index_owner_ports(owner, entries)
+        reserved = entries.filter_map do |_node, port|
           port_id = port.id.to_s
           port_id if bare_id?(port_id)
         end.to_h { |port_id| [port_id, true] }
-
-        ports.each_with_index do |port, index|
+        used = {}
+        @declared_ports[owner] = entries.filter_map.with_index do |(node, port), index|
+          names = (@port_names[node] ||= {})
           port_id = port.id.to_s
           next if names.key?(port_id)
 
-          port_name = bare_id?(port_id) ? port_id : available_port_name(index, used)
-          names[port_id] = port_name
-          used[port_name] = true
+          name = if bare_id?(port_id) && !used.key?(port_id)
+                   port_id
+                 else
+                   available_port_name(index, reserved.merge(used))
+                 end
+          names[port_id] = name
+          used[name] = true
+          [port.id, name]
         end
-        @port_names[node] = names
       end
 
       def available_port_name(index, used)
@@ -431,26 +508,57 @@ module Elkrb
         end
 
         children.each do |node|
-          next if node.hierarchical?
-
-          Array(node.ports).each do |port|
-            scope[port.id.to_s] ||= {
-              type: :port, owner: node.id,
-              port: @port_names.fetch(node).fetch(port.id.to_s)
-            }
-          end
+          add_ports_to_scope(scope, node)
         end
+        add_descendant_scopes(scope, children)
 
         scope
       end
 
+      def add_descendant_scopes(scope, children)
+        children.each { |node| add_descendants_to_scope(scope, node) }
+      end
+
+      def add_descendants_to_scope(scope, node)
+        Array(node.children).each do |descendant|
+          scope[descendant.id.to_s] ||= node_endpoint(descendant)
+          add_ports_to_scope(scope, descendant)
+          add_descendants_to_scope(scope, descendant)
+        end
+      end
+
+      def add_ports_to_scope(scope, node)
+        owner = port_representative(node)
+        return unless owner
+
+        Array(node.ports).each do |port|
+          scope[port.id.to_s] ||= port_endpoint(node, owner, port)
+        end
+      end
+
+      def port_endpoint(node, owner, port)
+        {
+          type: :port, owner: @node_names.fetch(owner),
+          port: @port_names.fetch(node).fetch(port.id.to_s),
+          cluster: @clusters[node], clusters: @cluster_memberships.fetch(owner)
+        }
+      end
+
       def node_endpoint(node)
-        return { type: :node, id: node.id } unless node.hierarchical?
+        unless node.hierarchical?
+          return {
+            type: :node, id: @node_names.fetch(node),
+            clusters: @cluster_memberships.fetch(node)
+          }
+        end
+
+        representative = representative_node(node)
 
         {
-          type: :compound, id: node.id,
+          type: :compound, id: @node_names.fetch(node),
           cluster: @clusters.fetch(node),
-          representative: representative_id(node)
+          representative: @node_names.fetch(representative),
+          clusters: @cluster_memberships.fetch(representative)
         }
       end
 
@@ -468,9 +576,22 @@ module Elkrb
         @scope_stack.pop
       end
 
-      def representative_id(node)
-        child = Array(node.children).first
-        child&.hierarchical? ? representative_id(child) : child&.id
+      def port_representative(node)
+        node.hierarchical? ? representative_node(node) : node
+      end
+
+      def representative_node(node)
+        Array(node.children).each do |child|
+          return child unless child.hierarchical?
+
+          representative = representative_node(child)
+          return representative if representative
+        end
+        nil
+      end
+
+      def declared_ports(node)
+        @declared_ports.fetch(node, [])
       end
 
       def option_resolver
