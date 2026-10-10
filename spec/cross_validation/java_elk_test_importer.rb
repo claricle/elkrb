@@ -19,16 +19,6 @@ class JavaElkTestImporter
   TEST_MODELS_PATH = "#{ELK_PATH}/../elk-models".freeze
   OUTPUT_PATH = "spec/cross_validation/fixtures/java_elk"
 
-  # Both SPOrE algorithms resolve fine -- AlgorithmRegistry.normalize_name
-  # folds camelCase, so "sporeOverlap" reaches SporeOverlap -- and then
-  # crash inside the algorithm itself on nil arithmetic. The marker has to
-  # be generated here, not just hand-added to the committed fixture,
-  # because save_test_cases overwrites that file wholesale: otherwise the
-  # next regeneration reclassifies a tracked bug as a fresh regression and
-  # the corpus dump starts exiting non-zero for it. It comes out when the
-  # two algorithms stop crashing, not when the registry changes.
-  EXPECTED_ERROR_ALGORITHMS = %w[sporeOverlap sporeCompaction].freeze
-
   # An id becomes a filename, so it is BOUNDED, not merely escaped.
   # Percent-encoding EXPANDS: "界" is 3 bytes and encodes to 9, so a
   # 242-byte source name that used to dump as a 251-byte "<id>.json" reached
@@ -224,7 +214,6 @@ class JavaElkTestImporter
       source: "java_elk",
       category: "algorithm",
       algorithm: algorithm,
-      **expectation_for(algorithm),
       graph: {
         id: "root",
         layoutOptions: { "elk.algorithm" => algorithm },
@@ -234,12 +223,6 @@ class JavaElkTestImporter
         edges: edges,
       },
     }
-  end
-
-  def expectation_for(algorithm)
-    return {} unless EXPECTED_ERROR_ALGORITHMS.include?(algorithm)
-
-    { expect: "error" }
   end
 
   def create_hierarchical_test

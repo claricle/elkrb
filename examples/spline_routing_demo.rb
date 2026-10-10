@@ -231,5 +231,5 @@ puts "  • POLYLINE:   Simple connections, space-constrained layouts"
 puts "  • SPLINES:    Presentation diagrams, organic layouts, visual appeal"
 
 puts "\n#{'=' * 70}"
-puts "Demo complete! See SPLINE_ROUTING_GUIDE.md for more information."
+puts "Demo complete! See README.adoc's Edge routing section for more information."
 puts "=" * 70
