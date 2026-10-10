@@ -3,11 +3,13 @@
 
 require "fileutils"
 require "json"
+require_relative "../lib/elkrb/version"
 
 # Generates performance comparison report in AsciiDoc format
 class PerformanceReportGenerator
   def initialize
     @elkrb_results = load_json("benchmarks/results/elkrb_summary.json")
+    validate_elkrb_version!
     @elkjs_results = load_json("benchmarks/results/elkjs_summary.json")
   end
 
@@ -26,6 +28,16 @@ class PerformanceReportGenerator
     nil
   end
 
+  def validate_elkrb_version!
+    return unless @elkrb_results
+
+    benchmark_version = @elkrb_results["elkrb_version"] || "unknown"
+    return if benchmark_version == Elkrb::VERSION
+
+    raise ArgumentError,
+          "benchmark ElkRb version #{benchmark_version} does not match #{Elkrb::VERSION}"
+  end
+
   def generate_adoc_report
     <<~ADOC
       = ElkRb Performance Benchmarks
@@ -34,21 +46,19 @@ class PerformanceReportGenerator
 
       == Overview
 
-      This document compares the performance of ElkRb against elkjs (JavaScript).
+      #{report_overview}
 
-      **Benchmark Date**: #{Time.now.strftime('%Y-%m-%d %H:%M:%S')}
+      **ElkRb Benchmark Date**: #{@elkrb_results&.dig('timestamp') || 'unknown'}
 
       **Environment**:
 
-      * **ElkRb**: Ruby #{@elkrb_results&.dig('ruby_version') || 'unknown'}, ElkRb v#{@elkrb_results&.dig('elkrb_version') || 'unknown'}
-      * **elkjs**: Node.js #{@elkjs_results&.dig('node_version') || 'unknown'}, elkjs v#{@elkjs_results&.dig('elkjs_version') || 'unknown'}
+      #{environment_details}
 
       == Benchmark Methodology
 
       * Each test runs 10 iterations with a warm-up run
       * Times reported are average execution time in milliseconds
-      * Same test graphs used across all implementations
-      * Tests run on same hardware for consistency
+      #{comparison_methodology}
 
       == Test Graphs
 
@@ -66,6 +76,30 @@ class PerformanceReportGenerator
 
       #{generate_conclusion}
     ADOC
+  end
+
+  def report_overview
+    return "This document compares ElkRb and elkjs benchmark results." if @elkjs_results
+
+    "This document reports ElkRb benchmarks. No elkjs benchmark evidence was provided."
+  end
+
+  def environment_details
+    details = [
+      "* **ElkRb**: Ruby #{@elkrb_results&.dig('ruby_version') || 'unknown'}, ElkRb v#{@elkrb_results&.dig('elkrb_version') || 'unknown'}",
+    ]
+    return details.join("\n") unless @elkjs_results
+
+    details << "* **elkjs**: Node.js #{@elkjs_results['node_version'] || 'unknown'}, elkjs v#{@elkjs_results['elkjs_version'] || 'unknown'}"
+    details.join("\n")
+  end
+
+  def comparison_methodology
+    if @elkjs_results
+      "* Comparisons use matching graph and algorithm names from the supplied summaries"
+    else
+      "* No cross-implementation comparison is shown without an elkjs summary"
+    end
   end
 
   def generate_graph_descriptions
@@ -92,6 +126,8 @@ class PerformanceReportGenerator
   end
 
   def generate_graph_table(graph_name, algorithms)
+    return generate_elkrb_graph_table(graph_name, algorithms) unless @elkjs_results
+
     <<~TABLE
       === #{format_name(graph_name)}
 
@@ -102,6 +138,29 @@ class PerformanceReportGenerator
       #{generate_algorithm_rows(graph_name, algorithms)}
       |===
     TABLE
+  end
+
+  def generate_elkrb_graph_table(graph_name, algorithms)
+    <<~TABLE
+      === #{format_name(graph_name)}
+
+      [cols="2,1", options="header"]
+      |===
+      |Algorithm |ElkRb (ms)
+
+      #{generate_elkrb_rows(algorithms)}
+      |===
+    TABLE
+  end
+
+  def generate_elkrb_rows(algorithms)
+    rows = algorithms.filter_map do |algorithm, data|
+      next if data["error"]
+
+      "|#{format_name(algorithm)} |#{data['avg'].round(2)}"
+    end
+
+    rows.empty? ? "|No data |N/A" : rows.join("\n")
   end
 
   def generate_algorithm_rows(graph_name, algorithms)
@@ -139,31 +198,10 @@ class PerformanceReportGenerator
     return "No benchmark data available for analysis." unless @elkrb_results
 
     <<~ANALYSIS
-      === Key Findings
+      === Recorded averages
 
-      * **Ruby vs JavaScript**: ElkRb performance is competitive with elkjs for most algorithms
-      * **Algorithm Complexity**: More complex algorithms (layered, force) show different performance characteristics
-      * **Memory Usage**: Ruby generally uses more memory due to interpreter overhead
-      * **Startup Time**: Ruby has higher startup overhead but similar incremental performance
-
-      === Performance Characteristics
-
-      **Fast Algorithms** (< 10ms on medium graphs):
-
-      * Random, Fixed, Box
-      * Simple positioning algorithms
-
-      **Medium Algorithms** (10-50ms on medium graphs):
-
-      * Radial, MRTree, RectPacking
-      * Tree and packing algorithms
-
-      **Complex Algorithms** (> 50ms on medium graphs):
-
-      * Layered, Force, Stress
-      * Sophisticated layout algorithms
-
-      === Algorithm Performance Summary
+      These averages include successful measurements from the recorded fixtures.
+      Errors and timeouts are omitted.
 
       #{generate_algorithm_summary}
     ANALYSIS
@@ -172,7 +210,7 @@ class PerformanceReportGenerator
   def generate_algorithm_summary
     return "No data available." unless @elkrb_results
 
-    # Calculate average performance across all graphs
+    # Calculate average performance across successful graph runs
     algorithm_stats = {}
 
     @elkrb_results["results"].each_value do |algorithms|
@@ -186,7 +224,7 @@ class PerformanceReportGenerator
 
     summary = algorithm_stats.map do |algo, times|
       avg = (times.sum / times.size).round(2)
-      "* **#{format_name(algo)}**: #{avg}ms average across all graphs"
+      "* **#{format_name(algo)}**: #{avg}ms average across successful graph runs"
     end
 
     summary.join("\n")
@@ -194,41 +232,13 @@ class PerformanceReportGenerator
 
   def generate_conclusion
     <<~CONCLUSION
-      ElkRb provides **production-ready performance** for most use cases:
+      These measurements apply only to the recorded fixtures, versions, and
+      environment. They do not establish suitability for other workloads or
+      production use.
 
-      * ✅ Suitable for real-time layout of small to medium graphs (< 100 nodes)
-      * ✅ Batch processing of large graphs
-      * ✅ Comparable performance to elkjs for most algorithms
-      * ⚠️ Ruby overhead means performance may be 1-3x slower than JavaScript for some algorithms
-
-      === Recommendations
-
-      **For Interactive Applications**:
-
-      * Use simple algorithms (Random, Fixed, Box) for real-time updates
-      * Use more complex algorithms (Layered, Force) for initial layout only
-
-      **For Batch Processing**:
-
-      * All algorithms are suitable for batch processing
-      * Complex algorithms provide better layout quality
-
-      **For Large Graphs** (1000+ nodes):
-
-      * Consider using simpler algorithms for better performance
-      * For maximum performance with very large graphs, Java ELK may be preferable
-
-      === Future Optimizations
-
-      Potential areas for performance improvements:
-
-      * Native extensions for critical algorithms
-      * Caching and memoization strategies
-      * Parallel processing for independent subgraphs
-      * Incremental layout updates
-
-      For Ruby applications and medium-sized graphs, ElkRb provides
-      excellent performance with pure Ruby convenience.
+      Re-run the benchmarks in the deployment environment with representative
+      graphs, and treat recorded errors or timeouts as unsupported workload and
+      algorithm combinations until measured otherwise.
     CONCLUSION
   end
 
