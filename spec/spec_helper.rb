@@ -38,20 +38,21 @@ SimpleCov.start do
   # stale one. DO NOT DELETE: without this the floor is armed, obeyed, and
   # measuring a number this run did not earn.
   merging false
-  # Without this, a file no spec ever loads is ABSENT from the report rather
-  # than reported at 0% -- which is the case most worth surfacing.
-  track_files "lib/**/*.rb"
+  # Include unloaded library files at 0% without dropping Ruby files outside
+  # lib/ that this run actually loaded. A glob-only `cover` call would make the
+  # report restrictive, unlike the additive legacy tracking contract.
+  cover("lib/**/*.rb") { |source_file| !source_file.not_loaded? }
   # Anchored with no leading slash on purpose. SimpleCov matches a Regexp filter
   # against SourceFile#project_filename, which is root-relative with its leading
   # separator already stripped -- it reads "spec/foo.rb" -- so the older
   # `%r{^/spec/}` idiom matches nothing at all and silently guards nothing.
-  add_filter %r{\Aspec/}
-  add_filter %r{\Abenchmarks/}
+  skip %r{\Aspec/}
+  skip %r{\Abenchmarks/}
   # A String filter rather than a Regexp one, so this is a path-segment match
   # rather than an anchored pattern. The gemspec requires this file, and bundler
   # runs the gemspec before Coverage starts, so it can never be observed and
   # would otherwise sit at 0% forever.
-  add_filter "lib/elkrb/version.rb"
+  skip "lib/elkrb/version.rb"
   # The floor is NOT armed here. SimpleCov.start runs before RSpec has decided
   # which files it will load, so at this point nothing can tell a full run from
   # a narrowed one -- see the before(:suite) hook below, which arms it once that

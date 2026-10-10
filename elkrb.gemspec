@@ -11,7 +11,7 @@ Gem::Specification.new do |spec|
   spec.summary = "ElkRb: Ruby implementation of Eclipse Layout Kernel (ELK)"
   spec.description = <<~HEREDOC
     Pure Ruby implementation of the Eclipse Layout Kernel (ELK) providing automatic
-    layout of node-link diagrams. Supports all ELK algorithms.
+    layout of node-link diagrams. Supports 15 registered layout algorithms.
   HEREDOC
 
   spec.homepage = "https://github.com/claricle/elkrb"
@@ -24,7 +24,7 @@ Gem::Specification.new do |spec|
 
   spec.metadata["homepage_uri"] = spec.homepage
   spec.metadata["source_code_uri"] = "https://github.com/claricle/elkrb"
-  spec.metadata["changelog_uri"] = "https://github.com/claricle/elkrb/blob/main/CHANGELOG.adoc"
+  spec.metadata["changelog_uri"] = "https://github.com/claricle/elkrb/blob/v2/CHANGELOG.adoc"
   spec.metadata["rubygems_mfa_required"] = "true"
 
   spec.files = Dir.chdir(__dir__) do
