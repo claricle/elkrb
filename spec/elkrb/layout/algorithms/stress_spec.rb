@@ -78,9 +78,6 @@ RSpec.describe Elkrb::Layout::Algorithms::Stress do
     let(:chain_two_hundred) do
       {
         "id" => "r",
-        # Isolate the all-pairs distance construction whose cubic cost this
-        # regression protects against.
-        "layoutOptions" => { "elk.stress.iterationLimit" => 1 },
         "children" => Array.new(200) do |i|
           { "id" => "n#{i}", "width" => 10, "height" => 10 }
         end,
@@ -105,11 +102,18 @@ RSpec.describe Elkrb::Layout::Algorithms::Stress do
     end
 
     it "lays out a 200-node chain in under two seconds" do
+      result = nil
       elapsed = Benchmark.realtime do
-        Elkrb.layout(chain_two_hundred, algorithm: "stress")
+        result = Elkrb.layout(chain_two_hundred, algorithm: "stress")
       end
 
       expect(elapsed).to be < 2.0
+      expect(result).to have_finite_coordinates
+
+      adjacent_lengths = result.children.each_cons(2).map do |left, right|
+        Math.hypot(left.x - right.x, left.y - right.y)
+      end
+      expect(adjacent_lengths).to all(be_within(1e-6).of(100.0))
     end
   end
 
@@ -257,6 +261,31 @@ RSpec.describe Elkrb::Layout::Algorithms::Stress do
       )
 
       expect(stress).to eq(1.0)
+    end
+  end
+
+  describe "#project_line_metric (private)" do
+    {
+      "a connected non-line metric" => [
+        [0.0, 1.0, 1.0],
+        [1.0, 0.0, 1.0],
+        [1.0, 1.0, 0.0],
+      ],
+      "a disconnected metric" => [
+        [0.0, 1.0, Float::INFINITY],
+        [1.0, 0.0, Float::INFINITY],
+        [Float::INFINITY, Float::INFINITY, 0.0],
+      ],
+    }.each do |name, distances|
+      it "does not project #{name}" do
+        xpos = [2.0, 5.0, 11.0]
+        ypos = [3.0, 7.0, 13.0]
+
+        described_class.new.send(:project_line_metric, xpos, ypos, distances)
+
+        expect(xpos).to eq([2.0, 5.0, 11.0])
+        expect(ypos).to eq([3.0, 7.0, 13.0])
+      end
     end
   end
 
