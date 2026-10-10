@@ -8,11 +8,11 @@ require "tmpdir"
 RSpec.describe "elkrb validate S20" do
   include CliRunner
 
-  def validate_document(document, *options)
+  def validate_document(document, *options, env: {})
     Dir.mktmpdir do |dir|
       path = File.join(dir, "graph.json")
       File.write(path, JSON.generate(document))
-      return run_elkrb("validate", path, *options)
+      return run_elkrb("validate", path, *options, env: env)
     end
   end
 
@@ -25,6 +25,32 @@ RSpec.describe "elkrb validate S20" do
     expect(status.exitstatus).to eq(0)
     expect(stdout).to include("is valid")
     expect(stderr).to eq("")
+  end
+
+  it "prints an ASCII success marker when stdout is US-ASCII" do
+    stdout, stderr, status = validate_document(
+      { id: "root", children: [], edges: [] },
+      env: { "RUBYOPT" => "-EUS-ASCII:US-ASCII" },
+    )
+
+    expect(status.exitstatus).to eq(0), stderr
+    expect(stdout).to match(/\A\[OK\] .+ is valid\n\z/)
+    expect(stderr).to eq("")
+  end
+
+  it "retains ASCII validation errors when stderr is US-ASCII" do
+    stdout, stderr, status = validate_document(
+      { children: [], edges: [] },
+      env: { "RUBYOPT" => "-EUS-ASCII:US-ASCII" },
+    )
+
+    expect(status.exitstatus).to eq(1)
+    expect(stdout).to eq("")
+    expect(stderr).to match(/\A\[ERROR\] .+ has 1 error\(s\):\n/)
+    expect(stderr).to include(
+      "  - Graph missing 'id' field\n",
+      "Try: elkrb help validate\n",
+    )
   end
 
   it "rejects the corpus graph when node IDs are duplicated" do

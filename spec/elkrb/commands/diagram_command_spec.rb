@@ -382,7 +382,7 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
         ENV["ELKRB_DOT"] = "/usr/bin/true"
         expect do
           described_class.new(input_file, { output: output_file }).run
-        end.to raise_error(StandardError, /produced no image/)
+        end.to raise_error(StandardError, /produced no output/)
       ensure
         previous.nil? ? ENV.delete("ELKRB_DOT") : ENV["ELKRB_DOT"] = previous
       end
@@ -736,6 +736,31 @@ RSpec.describe Elkrb::Commands::DiagramCommand do
 
       expect(attempts).to eq(2)
       expect(Dir.exist?(scratch)).to be(true)
+    end
+  end
+
+  describe "preview launching" do
+    subject(:command) { described_class.allocate }
+
+    let(:output_file) { File.join(temp_dir, "diagram.svg") }
+
+    it "raises when the platform viewer cannot be launched" do
+      allow(RbConfig::CONFIG).to receive(:[]).with("host_os")
+        .and_return("linux")
+      allow(command).to receive(:system).with("xdg-open", output_file)
+        .and_return(false)
+
+      expect { command.send(:preview, output_file) }
+        .to raise_error(Elkrb::Error, /Unable to open preview/)
+    end
+
+    it "launches the Windows shell built-in with an empty window title" do
+      allow(RbConfig::CONFIG).to receive(:[]).with("host_os")
+        .and_return("mingw")
+      expect(command).to receive(:system)
+        .with("cmd", "/c", "start", "", output_file).and_return(true)
+
+      expect { command.send(:preview, output_file) }.not_to raise_error
     end
   end
 end

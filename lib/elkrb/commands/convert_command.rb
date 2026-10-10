@@ -2,8 +2,8 @@
 
 require "json"
 require "yaml"
-require "fileutils"
 
+require_relative "../atomic_destination"
 require_relative "../best_effort_write"
 
 module Elkrb
@@ -93,10 +93,7 @@ module Elkrb
       end
 
       def write_output(content, filename)
-        dir = File.dirname(filename)
-        FileUtils.mkdir_p(dir)
-
-        File.write(filename, content)
+        AtomicDestination.write(filename, content)
       end
     end
   end

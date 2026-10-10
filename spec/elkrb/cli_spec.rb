@@ -242,11 +242,14 @@ RSpec.describe "elkrb CLI" do
           end
           expect(log_entries).not_to be_empty
 
-          # The path survives as ONE argv element. `-o` and the path are a
-          # separate token pair now, so the exact string is asserted rather
-          # than an `-o<path>` alternative: an assertion that accepts both
-          # shapes cannot tell a fix from the shape it replaced.
-          expect(log_entries).to include(malicious_output)
+          # Rendering now targets a same-directory scratch file and commits it
+          # only after success. The caller's metacharacters therefore never
+          # enter the child process argv, and the complete result still lands
+          # at the requested path.
+          staged_output = log_entries.fetch(log_entries.index("-o") + 1)
+          expect(File.dirname(staged_output)).to eq(dir)
+          expect(log_entries).not_to include(malicious_output)
+          expect(File.read(malicious_output)).to eq("rendered")
           expect(File.exist?(File.join(dir, "PWNED"))).to be(false)
         end
       end

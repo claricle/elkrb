@@ -3144,7 +3144,6 @@
     "source": "java_elk",
     "category": "algorithm",
     "algorithm": "sporeOverlap",
-    "expect": "error",
     "graph": {
       "id": "root",
       "layoutOptions": {
@@ -3459,7 +3458,6 @@
     "source": "java_elk",
     "category": "algorithm",
     "algorithm": "sporeCompaction",
-    "expect": "error",
     "graph": {
       "id": "root",
       "layoutOptions": {

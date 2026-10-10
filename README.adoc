@@ -63,8 +63,9 @@ Labels:: automatic placement of node, edge and port labels.
 
 Export formats:: ELK JSON, YAML (Ruby-specific), Graphviz DOT and ELKT.
 
-Command-line interface:: `layout`, `algorithms`, `diagram`, `convert`,
-`render`, `validate`, `batch` and `version`; see <<command-line-interface>>.
+Command-line interface:: `layout`, `algorithms`, `options`, `diagram`,
+`convert`, `render`, `validate`, `batch` and `version`; see
+<<command-line-interface>>.
 
 == Architecture
 
@@ -947,9 +948,10 @@ $ elkrb layout input.json --format yaml --output result.yml
 $ elkrb layout input.json --algorithm layered --direction DOWN --spacing 50
 ----
 
-The output format is `--format` (`json` by default, or `yaml`); it is not
-inferred from the `--output` extension. Flags that set a layout option write it
-onto the root graph, where it outranks the same option in the file.
+The output format is `--format` when supplied. Otherwise, a `.yml` or `.yaml`
+`--output` extension selects YAML (case-insensitively); stdout and every other
+extension use JSON. Flags that set a layout option write it onto the root graph,
+where it outranks the same option in the file.
 
 [cols="1,3",options="header"]
 |===
@@ -957,7 +959,7 @@ onto the root graph, where it outranks the same option in the file.
 
 | `--algorithm NAME` | Layout algorithm. Without it, the file's own `elk.algorithm`, else `layered`.
 | `-o, --output FILE` | Output file (default: stdout).
-| `--format json\|yaml` | Output format (default: `json`).
+| `--format json\|yaml` | Explicit output format; otherwise `.yml`/`.yaml` selects YAML and every other destination selects JSON.
 | `--spacing N` | Node spacing (`elk.spacing.nodeNode`).
 | `--layer-spacing N` | Layer spacing, for the layered algorithm.
 | `--direction DIR` | `DOWN`, `RIGHT`, ...; applied by the layered and mrtree algorithms.
@@ -992,6 +994,18 @@ Available Layout Algorithms:
 
 `...` stands for the remaining algorithms. Categories other than `general`,
 and hierarchy support, are listed per algorithm.
+
+=== options
+
+Lists every known layout option and its implementation status. Pass an
+algorithm name to list only the options that algorithm supports; `--json`
+writes the same information as JSON.
+
+[source,sh]
+----
+$ elkrb options
+$ elkrb options layered --json
+----
 
 === diagram
 
@@ -1072,7 +1086,7 @@ file fails.
 [source,sh]
 ----
 $ elkrb version
-elkrb version 1.0.2
+elkrb version 2.0.0
 ----
 
 == Benchmarking

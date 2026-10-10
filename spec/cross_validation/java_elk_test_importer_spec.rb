@@ -60,8 +60,7 @@ RSpec.describe JavaElkTestImporter do
 
   # save_test_cases rewrites imported_tests.json wholesale, so anything
   # hand-added to that file is gone after the next
-  # `rake validate:import_java_elk` -- including the "expect": "error"
-  # markers the corpus reads to tell a tracked bug from a fresh regression.
+  # `rake validate:import_java_elk`.
   # Holding the committed file to what a regeneration produces is the only
   # thing that stops the two drifting apart silently.
   #
@@ -73,13 +72,15 @@ RSpec.describe JavaElkTestImporter do
     expect(generated).to eq(committed_fixture)
   end
 
-  it "marks the two SPOrE cases as expected errors" do
-    cases = described_class.new.sample_test_cases
-    by_id = cases.to_h { |kase| [kase[:id], kase] }
+  it "does not suppress failures from the working SPOrE cases" do
+    spore_cases = described_class.new.sample_test_cases.select do |kase|
+      kase[:algorithm]&.start_with?("spore")
+    end
 
-    expect(by_id["java_elk_sporeOverlap"][:expect]).to eq("error")
-    expect(by_id["java_elk_sporeCompaction"][:expect]).to eq("error")
-    expect(by_id["java_elk_layered"]).not_to have_key(:expect)
+    expect(spore_cases.map { |kase| kase[:algorithm] })
+      .to contain_exactly("sporeOverlap", "sporeCompaction")
+    expect(spore_cases)
+      .to all(satisfy("omit :expect") { |kase| !kase.key?(:expect) })
   end
 
   # A models checkout that exists but yields nothing -- an interrupted

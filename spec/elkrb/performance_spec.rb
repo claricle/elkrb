@@ -27,6 +27,14 @@ RSpec.describe "Performance budgets", :perf,
 
       expect(graph.children.size).to eq(size)
       expect(seconds).to be < budget_seconds
+
+      next unless algorithm == "stress"
+
+      expect(graph).to have_finite_coordinates
+      adjacent_lengths = graph.children.each_cons(2).map do |left, right|
+        Math.hypot(left.x - right.x, left.y - right.y)
+      end
+      expect(adjacent_lengths).to all(be_between(90.0, 110.0))
     end
   end
 

@@ -95,13 +95,23 @@ module Elkrb
       def all_edges
         edges = (@edges || []).dup
         (@children || []).each do |child|
-          edges.concat(child.edges) if child.edges
+          edges.concat(descendant_edges(child))
         end
         edges
       end
 
       def hierarchical?
         (@children || []).any?(&:hierarchical?)
+      end
+
+      private
+
+      def descendant_edges(node)
+        edges = (node.edges || []).dup
+        (node.children || []).each do |child|
+          edges.concat(descendant_edges(child))
+        end
+        edges
       end
     end
   end

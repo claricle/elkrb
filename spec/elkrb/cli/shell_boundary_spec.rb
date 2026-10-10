@@ -649,7 +649,7 @@ RSpec.describe "every command reads input through one path" do
 
       expect(status.exitstatus).to eq(1)
       expect(stdout).to eq("")
-      expect(stderr).to include("children[0]: Node must be a Hash")
+      expect(stderr).to include("children must be an Array")
     end
   end
 

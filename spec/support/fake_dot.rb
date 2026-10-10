@@ -6,8 +6,8 @@ require "fileutils"
 # Puts a fake `dot` executable first on PATH for the duration of a block.
 #
 # The fake script logs its argv (NUL-separated, one invocation per line) to
-# a log file and touches whatever file the real Graphviz `-o` flag would
-# have written, in both forms real Graphviz accepts: a separate `-o path`
+# a log file and writes a marker to whatever file the real Graphviz `-o` flag
+# would have written, in both forms real Graphviz accepts: a separate `-o path`
 # token pair, and the `-opath` suffix form. elkrb emits only the pair now,
 # and no example depends on the suffix branch -- it is kept so the fake
 # stays a faithful `dot`, not because it discriminates anything. Given
@@ -26,9 +26,9 @@ module FakeDot
 
     ARGV.each_with_index do |arg, i|
       if arg == "-o"
-        FileUtils.touch(ARGV[i + 1]) if ARGV[i + 1]
+        File.write(ARGV[i + 1], "rendered") if ARGV[i + 1]
       elsif arg.start_with?("-o") && arg.length > 2
-        FileUtils.touch(arg.delete_prefix("-o"))
+        File.write(arg.delete_prefix("-o"), "rendered")
       end
     end
   RUBY
