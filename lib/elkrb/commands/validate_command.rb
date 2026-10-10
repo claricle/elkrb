@@ -22,13 +22,16 @@ module Elkrb
         errors = validate_graph(graph)
 
         if errors.empty?
-          puts "✅ #{@file} is valid"
+          marker = stream_marker($stdout, "✅", "[OK]")
+          puts "#{marker} #{@file} is valid"
         else
           summary = "#{@file} has #{errors.length} error(s)"
+          marker = stream_marker($stderr, "❌", "[ERROR]")
+          bullet = stream_marker($stderr, "•", "-")
           BestEffortWrite.attempt do
-            $stderr.puts "❌ #{summary}:" # rubocop:disable Style/StderrPuts
+            $stderr.puts "#{marker} #{summary}:" # rubocop:disable Style/StderrPuts
             errors.each do |error|
-              $stderr.puts "  • #{error}" # rubocop:disable Style/StderrPuts
+              $stderr.puts "  #{bullet} #{error}" # rubocop:disable Style/StderrPuts
             end
           end
           raise Elkrb::CommandFailed, summary
@@ -36,6 +39,16 @@ module Elkrb
       end
 
       private
+
+      def stream_marker(stream, unicode, ascii)
+        encoding = stream.external_encoding
+        return unicode unless encoding
+
+        unicode.encode(encoding)
+        unicode
+      rescue EncodingError
+        ascii
+      end
 
       def load_any_format(file)
         raise ArgumentError, "File not found: #{file}" unless File.exist?(file)
