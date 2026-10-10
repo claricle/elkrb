@@ -25,6 +25,9 @@ module Elkrb
     #     rankdir: "TB"
     #   )
     class DotSerializer
+      HtmlValue = Data.define(:text)
+      private_constant :HtmlValue
+
       # Default indentation width for DOT output
       INDENT_WIDTH = 2
 
@@ -53,6 +56,7 @@ module Elkrb
         # Convert hash to Graph if needed
         @graph = graph.is_a?(Hash) ? hash_to_graph(graph) : graph
         index_endpoints(@graph)
+        @scope_stack = [@endpoint_scopes.fetch(@graph)]
 
         lines = []
         lines << graph_declaration
@@ -105,7 +109,7 @@ module Elkrb
       # Format graph-level attributes
       def format_graph_attributes(graph)
         attrs = @options[:graph_attrs].dup
-        attrs[:compound] = true if @compounds.any?
+        attrs[:compound] = true if @clusters.any?
 
         # Add rankdir from options or graph layout options
         if @options[:rankdir]
@@ -148,7 +152,7 @@ module Elkrb
       # Format a subgraph (hierarchical node)
       def format_subgraph(node)
         lines = []
-        cluster_id = @clusters.fetch(node.id)
+        cluster_id = @clusters.fetch(node)
 
         lines << indent("subgraph #{cluster_id} {")
         @indent_level += 1
@@ -158,17 +162,19 @@ module Elkrb
           lines << indent("label=#{quote_labels(node.labels.map(&:text))}")
         end
 
-        # Process children
-        if node.children && !node.children.empty?
-          node.children.each do |child|
-            lines.concat(format_node(child, node.id))
+        with_endpoint_scope(node) do
+          # Process children
+          if node.children && !node.children.empty?
+            node.children.each do |child|
+              lines.concat(format_node(child, node.id))
+            end
           end
-        end
 
-        # Process edges within this subgraph
-        if node.edges && !node.edges.empty?
-          node.edges.each do |edge|
-            lines.concat(format_edge(edge))
+          # Process edges within this subgraph
+          if node.edges && !node.edges.empty?
+            node.edges.each do |edge|
+              lines.concat(format_edge(edge))
+            end
           end
         end
 
@@ -213,7 +219,39 @@ module Elkrb
           attrs[:shape] = node.properties["dot.shape"]
         end
 
+        apply_port_label(attrs, node) if Array(node.ports).any?
+
         attrs
+      end
+
+      def apply_port_label(attrs, node)
+        attrs[:label] = HtmlValue.new(html_port_label(node))
+      end
+
+      def html_port_label(node)
+        labels = Array(node.labels).map(&:text)
+        labels = [node.id] if labels.empty?
+        label = labels.map { |text| html_escape(text) }.join("<BR/>")
+        ports = Array(node.ports).map do |port|
+          name = @port_names.fetch(node).fetch(port.id.to_s)
+          %(<TD PORT="#{name}" TOOLTIP="#{html_escape(port.id)}"></TD>)
+        end.join
+        "<<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\"" \
+          "#{html_table_dimensions(node)}>" \
+          "<TR><TD>#{label}</TD></TR><TR>#{ports}</TR></TABLE>>"
+      end
+
+      def html_table_dimensions(node)
+        return "" unless node.width&.positive? && node.height&.positive?
+
+        width = node.width.ceil
+        height = node.height.ceil
+        %( WIDTH="#{width}" HEIGHT="#{height}")
+      end
+
+      def html_escape(value)
+        value.to_s.gsub("&", "&amp;").gsub("<", "&lt;")
+          .gsub(">", "&gt;").gsub('"', "&quot;")
       end
 
       # Format an edge
@@ -285,6 +323,8 @@ module Elkrb
 
       # Quote a value appropriately for DOT
       def quote_value(value)
+        return value.text if value.is_a?(HtmlValue)
+
         value_str = value.to_s
 
         return value_str if bare_id?(value_str)
@@ -325,38 +365,107 @@ module Elkrb
 
       def edge_endpoint(id, role, attrs)
         text = id.to_s
-        if (owner = @port_owners[text])
-          return "#{quote_id(owner)}:#{quote_id(text)}"
+        endpoint = endpoint_entry(text)
+        if endpoint&.fetch(:type, nil) == :port
+          return "#{quote_id(endpoint[:owner])}:#{endpoint[:port]}"
         end
 
-        if (compound = @compounds[text])
-          attrs[role == :source ? :ltail : :lhead] = compound[:cluster]
-          return quote_id(compound[:representative])
+        if endpoint&.fetch(:type, nil) == :compound
+          attrs[role == :source ? :ltail : :lhead] = endpoint[:cluster]
+          return quote_id(endpoint[:representative])
         end
 
-        quote_id(text)
+        quote_id(endpoint ? endpoint[:id] : text)
       end
 
       def index_endpoints(graph)
-        @port_owners = {}
-        @compounds = {}
-        @clusters = {}
+        @endpoint_scopes = {}.compare_by_identity
+        @port_names = {}.compare_by_identity
+        @clusters = {}.compare_by_identity
         @cluster_counter = 0
-        Array(graph.children).each { |node| index_node(node) }
+        index_container(graph)
       end
 
-      def index_node(node)
-        Array(node.ports).each { |port| @port_owners[port.id] = node.id }
-        if node.hierarchical?
-          cluster = "cluster_#{@cluster_counter}"
+      def index_container(container)
+        children = Array(container.children)
+        children.select(&:hierarchical?).each do |node|
+          @clusters[node] = "cluster_#{@cluster_counter}"
           @cluster_counter += 1
-          @clusters[node.id] = cluster
-          @compounds[node.id] = {
-            cluster: cluster,
-            representative: representative_id(node),
-          }
         end
-        Array(node.children).each { |child| index_node(child) }
+        children.each { |node| index_ports(node) }
+        @endpoint_scopes[container] = build_endpoint_scope(children)
+        children.each { |node| index_container(node) }
+      end
+
+      def index_ports(node)
+        ports = Array(node.ports)
+        names = {}
+        used = ports.filter_map do |port|
+          port_id = port.id.to_s
+          port_id if bare_id?(port_id)
+        end.to_h { |port_id| [port_id, true] }
+
+        ports.each_with_index do |port, index|
+          port_id = port.id.to_s
+          next if names.key?(port_id)
+
+          port_name = bare_id?(port_id) ? port_id : available_port_name(index, used)
+          names[port_id] = port_name
+          used[port_name] = true
+        end
+        @port_names[node] = names
+      end
+
+      def available_port_name(index, used)
+        loop do
+          candidate = "port#{index}"
+          return candidate unless used.key?(candidate)
+
+          index += 1
+        end
+      end
+
+      def build_endpoint_scope(children)
+        scope = children.each_with_object({}) do |node, entries|
+          entries[node.id.to_s] ||= node_endpoint(node)
+        end
+
+        children.each do |node|
+          next if node.hierarchical?
+
+          Array(node.ports).each do |port|
+            scope[port.id.to_s] ||= {
+              type: :port, owner: node.id,
+              port: @port_names.fetch(node).fetch(port.id.to_s)
+            }
+          end
+        end
+
+        scope
+      end
+
+      def node_endpoint(node)
+        return { type: :node, id: node.id } unless node.hierarchical?
+
+        {
+          type: :compound, id: node.id,
+          cluster: @clusters.fetch(node),
+          representative: representative_id(node)
+        }
+      end
+
+      def endpoint_entry(id)
+        @scope_stack.reverse_each do |scope|
+          return scope[id] if scope.key?(id)
+        end
+        nil
+      end
+
+      def with_endpoint_scope(container)
+        @scope_stack << @endpoint_scopes.fetch(container)
+        yield
+      ensure
+        @scope_stack.pop
       end
 
       def representative_id(node)

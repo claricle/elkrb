@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "open3"
 require_relative "../../../lib/elkrb/serializers/dot_serializer"
 
 RSpec.describe Elkrb::Serializers::DotSerializer do
@@ -185,6 +186,149 @@ RSpec.describe Elkrb::Serializers::DotSerializer do
         result = serializer.serialize(graph)
 
         expect(result).to include('label="Edge Label"')
+      end
+
+      it "resolves repeated port ids in the edge container's scope" do
+        outer = Elkrb::Graph::Node.new(
+          id: "outer", ports: [Elkrb::Graph::Port.new(id: "p")],
+        )
+        inner = Elkrb::Graph::Node.new(
+          id: "inner", ports: [Elkrb::Graph::Port.new(id: "p")],
+        )
+        group = Elkrb::Graph::Node.new(
+          id: "group", children: [inner, Elkrb::Graph::Node.new(id: "sink")],
+          edges: [Elkrb::Graph::Edge.new(
+            id: "nested", sources: ["p"], targets: ["sink"],
+          )]
+        )
+        scoped = Elkrb::Graph::Graph.new(
+          id: "root",
+          children: [outer, group, Elkrb::Graph::Node.new(id: "outside")],
+          edges: [Elkrb::Graph::Edge.new(
+            id: "root_edge", sources: ["p"], targets: ["outside"],
+          )],
+        )
+
+        result = serializer.serialize(scoped)
+
+        expect(result).to include(
+          "inner:p -> sink",
+          "outer:p -> outside",
+        )
+      end
+
+      it "falls back to a port owner in an enclosing scope" do
+        outer = Elkrb::Graph::Node.new(
+          id: "outer", ports: [Elkrb::Graph::Port.new(id: "q")],
+        )
+        group = Elkrb::Graph::Node.new(
+          id: "group", children: [Elkrb::Graph::Node.new(id: "sink")],
+          edges: [Elkrb::Graph::Edge.new(
+            id: "nested", sources: ["q"], targets: ["sink"],
+          )]
+        )
+        scoped = Elkrb::Graph::Graph.new(
+          id: "root", children: [outer, group], edges: [],
+        )
+
+        expect(serializer.serialize(scoped))
+          .to include("outer:q -> sink")
+      end
+
+      it "declares escaped Graphviz ports without renderer warnings" do
+        source = Elkrb::Graph::Node.new(
+          id: "source", width: 720, height: 360,
+          ports: [Elkrb::Graph::Port.new(id: "port.with-dash")],
+          labels: [
+            Elkrb::Graph::Label.new(text: "A & <B>"),
+            Elkrb::Graph::Label.new(text: "Second"),
+          ]
+        )
+        rendered = Elkrb::Graph::Graph.new(
+          id: "root",
+          children: [source, Elkrb::Graph::Node.new(id: "target")],
+          edges: [Elkrb::Graph::Edge.new(
+            id: "e", sources: ["port.with-dash"], targets: ["target"],
+          )],
+        )
+
+        dot = serializer.serialize(rendered)
+        stdout, stderr, status = Open3.capture3(
+          "dot", "-Tplain", stdin_data: dot
+        )
+
+        expect(dot).to include(
+          "PORT=\"port0\"", "A &amp; &lt;B&gt;<BR/>Second",
+          "source:port0 -> target", "shape=box",
+          'WIDTH="720" HEIGHT="360"'
+        )
+        expect(status).to be_success, stderr
+        expect(stderr).to be_empty
+        source_line = stdout.lines.find do |line|
+          line.start_with?("node source ")
+        end
+        expect(source_line.split.values_at(4, 5).map(&:to_f))
+          .to contain_exactly(a_value_within(0.01).of(10.0),
+                              a_value_within(0.01).of(5.0))
+      rescue Errno::ENOENT
+        skip "Graphviz is not installed; skipping external DOT acceptance"
+      end
+
+      it "keeps declared dimensions when a port id is wider than its node" do
+        port_id = "port-#{'wide' * 30}"
+        source = Elkrb::Graph::Node.new(
+          id: "n", width: 72, height: 36,
+          ports: [Elkrb::Graph::Port.new(id: port_id)]
+        )
+        graph = Elkrb::Graph::Graph.new(
+          id: "root",
+          children: [source, Elkrb::Graph::Node.new(id: "target")],
+          edges: [Elkrb::Graph::Edge.new(
+            id: "e", sources: [port_id], targets: ["target"],
+          )],
+        )
+
+        dot = serializer.serialize(graph)
+        stdout, stderr, status = Open3.capture3(
+          "dot", "-Tplain", stdin_data: dot
+        )
+
+        expect(status).to be_success, stderr
+        expect(stderr).to be_empty
+        source_line = stdout.lines.find { |line| line.start_with?("node n ") }
+        expect(source_line.split.values_at(4, 5).map(&:to_f))
+          .to contain_exactly(a_value_within(0.01).of(1.0),
+                              a_value_within(0.01).of(0.5))
+      rescue Errno::ENOENT
+        skip "Graphviz is not installed; skipping external DOT acceptance"
+      end
+
+      it "keeps generated Graphviz port names distinct from declared names" do
+        source = Elkrb::Graph::Node.new(
+          id: "source",
+          ports: [
+            Elkrb::Graph::Port.new(id: "a-b"),
+            Elkrb::Graph::Port.new(id: "port0"),
+          ],
+        )
+        graph = Elkrb::Graph::Graph.new(
+          id: "root", children: [source, Elkrb::Graph::Node.new(id: "target")],
+          edges: [
+            Elkrb::Graph::Edge.new(
+              id: "invalid", sources: ["a-b"], targets: ["target"],
+            ),
+            Elkrb::Graph::Edge.new(
+              id: "valid", sources: ["port0"], targets: ["target"],
+            ),
+          ]
+        )
+
+        dot = serializer.serialize(graph)
+
+        expect(dot).to include(
+          'PORT="port1"', 'PORT="port0"',
+          "source:port1 -> target", "source:port0 -> target"
+        )
       end
     end
 
