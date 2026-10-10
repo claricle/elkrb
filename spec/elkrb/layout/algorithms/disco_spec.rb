@@ -440,6 +440,22 @@ RSpec.describe Elkrb::Layout::Algorithms::Disco do
         # Should apply box algorithm to each component
         expect(result.children.all? { |n| n.x && n.y }).to be true
       end
+
+      it "rejects an unknown component algorithm" do
+        graph = Elkrb::Graph::Graph.from_hash(
+          id: "root",
+          layoutOptions: { "disco.componentAlgorithm" => "layred" },
+          children: [
+            { id: "a", width: 20, height: 20 },
+            { id: "b", width: 20, height: 20 },
+          ],
+          edges: [{ id: "e", sources: ["a"], targets: ["b"] }],
+        )
+
+        expect { algorithm.layout(graph) }
+          .to raise_error(Elkrb::AlgorithmNotFoundError,
+                          "Unknown layout algorithm: layred")
+      end
     end
 
     context "with a JSON graph: a-b connected, c isolated" do

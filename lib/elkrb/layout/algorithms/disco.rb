@@ -99,7 +99,7 @@ module Elkrb
 
           # Get algorithm from registry
           algorithm_class = Layout::AlgorithmRegistry.get(algorithm_name)
-          return unless algorithm_class
+          raise Elkrb::AlgorithmNotFoundError, algorithm_name unless algorithm_class
 
           # Apply layout algorithm to component
           algorithm = algorithm_class.new
