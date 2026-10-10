@@ -24,7 +24,7 @@ Gem::Specification.new do |spec|
 
   spec.metadata["homepage_uri"] = spec.homepage
   spec.metadata["source_code_uri"] = "https://github.com/claricle/elkrb"
-  spec.metadata["changelog_uri"] = "https://github.com/claricle/elkrb/blob/main/CHANGELOG.adoc"
+  spec.metadata["changelog_uri"] = "https://github.com/claricle/elkrb/blob/v2/CHANGELOG.adoc"
   spec.metadata["rubygems_mfa_required"] = "true"
 
   spec.files = Dir.chdir(__dir__) do

@@ -5,6 +5,7 @@ require "tmpdir"
 
 RSpec.describe "elkrb.gemspec" do
   let(:root) { File.expand_path("..", __dir__) }
+  let(:gemspec) { Gem::Specification.load(File.join(root, "elkrb.gemspec")) }
   let(:packaged) do
     %w[
       lib/elkrb/version.rb
@@ -28,5 +29,10 @@ RSpec.describe "elkrb.gemspec" do
 
       expect(files).to match_array(packaged)
     end
+  end
+
+  it "links metadata to the changelog on the release branch" do
+    expect(gemspec.metadata.fetch("changelog_uri"))
+      .to eq("https://github.com/claricle/elkrb/blob/v2/CHANGELOG.adoc")
   end
 end
