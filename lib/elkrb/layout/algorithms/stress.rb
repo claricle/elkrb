@@ -49,6 +49,12 @@ module Elkrb
           # Iteratively minimize stress
           xpos = graph.children.map(&:x)
           ypos = graph.children.map(&:y)
+          # Keep the Java-parity path for small graphs; the exact solver
+          # replaces iterative work only where the force prepass is bounded.
+          if iterations == DEFAULT_ITERATIONS && epsilon.positive? &&
+              force_iterations(xpos.length) < FORCE_ITERATIONS
+            project_line_metric(xpos, ypos, distances)
+          end
           weights = pair_weights(distances)
           reachable = reachable_pairs(distances)
           old_stress = calculate_stress(
@@ -325,6 +331,57 @@ module Elkrb
           end
 
           distances
+        end
+
+        # A graph whose shortest-path metric lies on a line has a closed-form
+        # zero-stress layout. Recognize the metric itself rather than a graph
+        # shape, so non-line graphs keep the localized ELK iteration unchanged.
+        def project_line_metric(xpos, ypos, distances)
+          endpoints = line_metric_endpoints(distances)
+          return unless endpoints
+
+          first, last, diameter = endpoints
+          offsets = distances[first]
+          tolerance = [diameter * 1e-9, 1e-9].max
+          return unless line_metric?(offsets, distances, tolerance)
+
+          dx = xpos[last] - xpos[first]
+          dy = ypos[last] - ypos[first]
+          length = Math.hypot(dx, dy)
+          unit_x, unit_y = if length.positive?
+                             [dx / length, dy / length]
+                           else
+                             [1.0, 0.0]
+                           end
+          origin_x = xpos[first]
+          origin_y = ypos[first]
+
+          offsets.each_index do |i|
+            xpos[i] = origin_x + (unit_x * offsets[i])
+            ypos[i] = origin_y + (unit_y * offsets[i])
+          end
+        end
+
+        def line_metric_endpoints(distances)
+          farthest = nil
+          distances.each_with_index do |row, i|
+            row.each_with_index do |distance, j|
+              return nil unless distance.finite?
+              next unless j > i
+              next if farthest && distance <= farthest[2]
+
+              farthest = [i, j, distance]
+            end
+          end
+          farthest if farthest&.last&.positive?
+        end
+
+        def line_metric?(offsets, distances, tolerance)
+          distances.each_with_index.all? do |row, i|
+            row.each_with_index.all? do |distance, j|
+              ((offsets[i] - offsets[j]).abs - distance).abs <= tolerance
+            end
+          end
         end
 
         # 1 / ideal^2 per pair, computed once instead of every iteration.
