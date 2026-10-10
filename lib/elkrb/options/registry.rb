@@ -40,7 +40,7 @@ module Elkrb
         "elk.bendPoints" => { type: :kvector_chain, default: nil, aliases: %w[bendPoints], algorithms: :all, status: :partial, readers: %w[fixed], carriers: %i[edge call], note: "No other algorithm applies explicit bend points", description: "Manual bend points for an edge" },
         "elk.box.packingMode" => { type: :enum, values: %w[SIMPLE GROUP_DEC GROUP_MIXED GROUP_INC], default: "SIMPLE", algorithms: %w[box], status: :accepted, description: "Box layout packing mode; SIMPLE is implemented and GROUP_* values fall back to it" },
         "elk.compaction.orthogonal" => { type: :boolean, default: false, aliases: %w[compaction.orthogonal], algorithms: %w[spore_compaction], status: :honoured, description: "Whether SPOrE compaction slides subtrees along one axis only" },
-        "elk.direction" => { type: :enum, values: %w[UNDEFINED RIGHT LEFT DOWN UP], accepted_values: %w[UNDEFINED RIGHT LEFT DOWN UP HORIZONTAL VERTICAL], default: "RIGHT", aliases: %w[direction], algorithms: %w[layered mrtree], status: :partial, readers: %w[layered mrtree], carriers: %i[root compound call], note: "Parent and call options drive node placement; an edge's own direction, including the HORIZONTAL and VERTICAL elkrb spline aliases, or a call option under any registered spelling, can orient generic SPLINES routing; DOT export reads every registered spelling from the graph's layoutOptions", description: "Overall direction of layout" },
+        "elk.direction" => { type: :enum, values: %w[UNDEFINED RIGHT LEFT DOWN UP], value_aliases: { "HORIZONTAL" => "RIGHT", "VERTICAL" => "DOWN" }, default: "RIGHT", aliases: %w[direction], algorithms: %w[layered mrtree], status: :partial, readers: %w[layered mrtree], carriers: %i[root compound call], note: "Parent and call options drive node placement; HORIZONTAL and VERTICAL are accepted elkrb spline-orientation aliases and normalize to RIGHT and DOWN; DOT export reads every registered spelling from the graph's layoutOptions", description: "Overall direction of layout" },
         "elk.disco.componentCompaction.strategy" => { type: :enum, values: %w[POLYOMINO], accepted_values: %w[POLYOMINO ROW COLUMN GRID], default: "POLYOMINO", algorithms: %w[disco], status: :honoured, description: "DisCo component compaction; POLYOMINO packs components as polyominoes, with edges counted as straight lines between their end nodes. ROW, COLUMN and GRID are accepted elkrb extensions matching disco.componentArrangement" },
         "elk.edgeLabels.placement" => { type: :string, default: "CENTER", algorithms: :all, status: :honoured, description: "Edge label placement" },
         "elk.edgeRouting" => { type: :enum, values: %w[UNDEFINED POLYLINE ORTHOGONAL SPLINES], default: "UNDEFINED", aliases: %w[edgeRouting edge_routing edge.routing], algorithms: :all, status: :partial, readers: %w[box disco force layered mrtree radial rectpacking spore_compaction spore_overlap stress topdownpacking vertiflex], carriers: %i[root compound edge call], note: "Fixed preserves existing edge routes. libavoid routes every edge between two nodes of a level itself as an orthogonal route around the nodes and ignores the style for them; its self-loops and edges that leave the level follow the style like any other algorithm's edges", description: "Edge routing style" },
@@ -112,6 +112,7 @@ module Elkrb
         entry[:aliases]&.freeze
         entry[:values]&.freeze
         entry[:accepted_values]&.freeze
+        entry[:value_aliases]&.freeze
         entry[:algorithms].freeze if entry[:algorithms].is_a?(Array)
         entry[:readers]&.freeze
         entry[:carriers]&.freeze
@@ -280,6 +281,9 @@ module Elkrb
 
         def coerce_enum(value, entry, id)
           normalized = value.to_s.upcase
+          normalized = entry.fetch(:value_aliases, {}).fetch(
+            normalized, normalized
+          )
           allowed = entry[:accepted_values] || entry[:values]
           return normalized if allowed.include?(normalized)
 
