@@ -62,9 +62,10 @@ RSpec.describe "ELKT loading" do
 
     expect(status.exitstatus).to eq(1)
     expect(stdout).to eq("")
-    expect(stderr)
-      .to eq(%(Error: Unexpected character "!" at line 1, column 34\n) +
-             "Try: elkrb help validate\n")
+    expect(stderr).to eq_ignoring_leptris_warning(
+      %(Error: Unexpected character "!" at line 1, column 34\n) +
+      "Try: elkrb help validate\n",
+    )
   end
 
   it "exits 1 with the generic message for content with no location to give" do

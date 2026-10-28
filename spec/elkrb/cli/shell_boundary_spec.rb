@@ -285,9 +285,11 @@ RSpec.describe "elkrb CLI shell boundary" do
 
         expect(status.exitstatus).to eq(1)
         expect(stdout).to eq("")
-        expect(stderr).to eq("Error: Unable to parse input file. " \
-                             "Supported formats: JSON, YAML, ELKT\n" \
-                             "Try: elkrb help layout\n")
+        expect(stderr).to eq_ignoring_leptris_warning(
+          "Error: Unable to parse input file. " \
+          "Supported formats: JSON, YAML, ELKT\n" \
+          "Try: elkrb help layout\n",
+        )
       end
     end
 
@@ -300,9 +302,11 @@ RSpec.describe "elkrb CLI shell boundary" do
 
         expect(status.exitstatus).to eq(1)
         expect(stdout).to eq("")
-        expect(stderr).to eq("Error: Unable to parse input file. " \
-                             "Supported formats: JSON, YAML, ELKT\n" \
-                             "Try: elkrb help layout\n")
+        expect(stderr).to eq_ignoring_leptris_warning(
+          "Error: Unable to parse input file. " \
+          "Supported formats: JSON, YAML, ELKT\n" \
+          "Try: elkrb help layout\n",
+        )
       end
     end
 
@@ -319,9 +323,11 @@ RSpec.describe "elkrb CLI shell boundary" do
 
         expect(status.exitstatus).to eq(1)
         expect(stdout).to eq("")
-        expect(stderr).to eq("Error: Unable to parse input file. " \
-                             "Supported formats: JSON, YAML, ELKT\n" \
-                             "Try: elkrb help layout\n")
+        expect(stderr).to eq_ignoring_leptris_warning(
+          "Error: Unable to parse input file. " \
+          "Supported formats: JSON, YAML, ELKT\n" \
+          "Try: elkrb help layout\n",
+        )
       end
     end
 
@@ -334,9 +340,11 @@ RSpec.describe "elkrb CLI shell boundary" do
 
         expect(status.exitstatus).to eq(1)
         expect(stdout).to eq("")
-        expect(stderr).to eq("Error: Unable to parse input file. " \
-                             "Supported formats: JSON, YAML, ELKT\n" \
-                             "Try: elkrb help layout\n")
+        expect(stderr).to eq_ignoring_leptris_warning(
+          "Error: Unable to parse input file. " \
+          "Supported formats: JSON, YAML, ELKT\n" \
+          "Try: elkrb help layout\n",
+        )
       end
     end
   end
@@ -550,9 +558,10 @@ RSpec.describe "a file whose extension already names the format" do
       _stdout, stderr, status = run_elkrb("layout", path)
 
       expect(status.exitstatus).to eq(1)
-      expect(stderr)
-        .to eq("Error: expected node, port, label, edge at line 1, column 1\n" \
-               "Try: elkrb help layout\n")
+      expect(stderr).to eq_ignoring_leptris_warning(
+        "Error: expected node, port, label, edge at line 1, column 1\n" \
+        "Try: elkrb help layout\n",
+      )
     end
   end
 

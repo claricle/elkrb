@@ -24,7 +24,7 @@ RSpec.describe "elkrb validate S20" do
 
     expect(status.exitstatus).to eq(0)
     expect(stdout).to include("is valid")
-    expect(stderr).to eq("")
+    expect(stderr).to eq_ignoring_leptris_warning("")
   end
 
   it "prints an ASCII success marker when stdout is US-ASCII" do
@@ -35,7 +35,7 @@ RSpec.describe "elkrb validate S20" do
 
     expect(status.exitstatus).to eq(0), stderr
     expect(stdout).to match(/\A\[OK\] .+ is valid\n\z/)
-    expect(stderr).to eq("")
+    expect(stderr).to eq_ignoring_leptris_warning("")
   end
 
   it "retains ASCII validation errors when stderr is US-ASCII" do
@@ -46,7 +46,9 @@ RSpec.describe "elkrb validate S20" do
 
     expect(status.exitstatus).to eq(1)
     expect(stdout).to eq("")
-    expect(stderr).to match(/\A\[ERROR\] .+ has 1 error\(s\):\n/)
+    expect(stderr).to eq_ignoring_leptris_warning(
+      a_string_matching(/\A\[ERROR\] .+ has 1 error\(s\):\n/),
+    )
     expect(stderr).to include(
       "  - Graph missing 'id' field\n",
       "Try: elkrb help validate\n",

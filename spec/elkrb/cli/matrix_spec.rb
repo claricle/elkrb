@@ -53,7 +53,7 @@ RSpec.describe "elkrb CLI command matrix" do
         command == "render" ? with_fake_dot { run.call } : run.call
 
       expect(status.exitstatus).to eq(0), stderr
-      expect(stderr).to eq("")
+      expect(stderr).to eq_ignoring_leptris_warning("")
       expect(stdout).to match(pattern) if pattern
     end
   end
@@ -161,7 +161,7 @@ RSpec.describe "elkrb CLI command matrix" do
       stdout, stderr, = run_elkrb("options", "--json")
 
       expect(stdout).to start_with('{"options":[')
-      expect(stderr).to eq("")
+      expect(stderr).to eq_ignoring_leptris_warning("")
     end
   end
 

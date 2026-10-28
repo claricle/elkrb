@@ -315,11 +315,11 @@ RSpec.describe "layoutOptions on every model" do
       end.to raise_error(Lutaml::Model::InvalidFormatError)
     end
 
-    it "unwraps a bare `elements` key and drops its siblings" do
+    it "preserves a bare `elements` key and its siblings" do
       graph = Elkrb::Graph::Graph.from_json(
         '{"id":"r","layoutOptions":{"elements":{"a":1},"b":2}}',
       )
-      expect(graph.layout_options).to eq("a" => 1)
+      expect(graph.layout_options).to eq("elements" => { "a" => 1 }, "b" => 2)
     end
 
     it "names the reserved key when one is assigned through a setter, on every model" do

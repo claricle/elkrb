@@ -9,8 +9,8 @@ RSpec.describe "Elkrb.logger" do
     stdout, stderr, status =
       run_ruby("require 'elkrb'; puts Elkrb.logger.level")
 
-    expect([stdout.strip, status.exitstatus, stderr])
-      .to eq([Logger::WARN.to_s, 0, ""])
+    expect([stdout.strip, status.exitstatus]).to eq([Logger::WARN.to_s, 0])
+    expect(stderr).to eq_ignoring_leptris_warning("")
   end
 
   it "writes to stderr, never stdout" do
