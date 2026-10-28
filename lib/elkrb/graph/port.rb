@@ -11,11 +11,11 @@ module Elkrb
       attribute :width, :float
       attribute :height, :float
       attribute :labels, Label, collection: true
-      attribute :layout_options, LayoutOptions
+      attribute :layout_options, :hash
       attribute :properties, :hash
-      attribute :side, :string, default: -> { "UNDEFINED" }
-      attribute :index, :integer, default: -> { -1 }
-      attribute :offset, :float, default: -> { 0.0 }
+      attribute :side, :string
+      attribute :index, :integer
+      attribute :offset, :float
 
       # Port sides
       NORTH = "NORTH"
@@ -29,7 +29,7 @@ module Elkrb
       # Node reference (not serialized)
       attr_accessor :node
 
-      json do
+      key_value do
         map "id", to: :id
         map "x", to: :x
         map "y", to: :y
@@ -57,19 +57,21 @@ module Elkrb
         map "offset", to: :offset
       end
 
-      # Validate and set port side
-      #
-      # @param value [String] The port side (NORTH, SOUTH, EAST, WEST, UNDEFINED)
-      # @raise [ArgumentError] If the side value is invalid
-      def side=(value)
-        return if value.nil?
+      # Normalizes a Symbol key however the options arrive — a constructor,
+      # a plain setter, or lutaml's own deserialization, which routes through
+      # here too. This is the single normalization point: a :hash-typed
+      # attribute otherwise stores a raw, unnormalized Hash.
+      def layout_options=(value)
+        value_set_for(:layout_options)
+        attr = self.class.attributes(lutaml_register)[:layout_options]
+        cast = attr.cast_value(DeepStringifyKeys.call(value), lutaml_register)
+        instance_variable_set(:@layout_options, NormalizeOptionKeys.call(cast))
+      end
 
-        normalized = value.to_s.upcase
-        unless SIDES.include?(normalized)
-          raise ArgumentError,
-                "Invalid port side: #{value}. Must be one of #{SIDES.join(', ')}"
-        end
-        @side = normalized
+      # @param value [Object] candidate side
+      # @return [Boolean] whether the value is a canonical port side
+      def valid_side?(value)
+        SIDES.include?(value)
       end
 
       # Detect port side from position relative to node
@@ -82,11 +84,17 @@ module Elkrb
       # @return [String] The detected side (NORTH, SOUTH, EAST, WEST, UNDEFINED)
       def detect_side(node_width, node_height)
         return UNDEFINED if x.nil? || y.nil? || node_width.nil? || node_height.nil?
-        return UNDEFINED if node_width <= 0 || node_height <= 0
+        return UNDEFINED unless node_width.finite? && node_height.finite?
+        return UNDEFINED if node_width.zero? || node_height.zero?
 
-        # Calculate relative position (0.0 to 1.0)
-        rel_x = x / node_width.to_f
-        rel_y = y / node_height.to_f
+        # Relative position (0.0 to 1.0) from the real left/top edge, not
+        # from local x=0/y=0 -- for a negative dimension, local 0 is the
+        # real RIGHT/BOTTOM edge, so dividing by the raw signed value alone
+        # (as this used to) mislabels EAST ports as WEST and vice versa.
+        left = [0, node_width].min
+        top = [0, node_height].min
+        rel_x = (x - left) / node_width.abs.to_f
+        rel_y = (y - top) / node_height.abs.to_f
 
         # Calculate distance to each side
         distances = {

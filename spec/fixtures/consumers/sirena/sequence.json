@@ -1,0 +1,105 @@
+{
+  "id": "sequence",
+  "children": [
+    {
+      "id": "User",
+      "width": 120,
+      "height": 40,
+      "labels": [
+        {
+          "text": "User",
+          "width": 28.0,
+          "height": 14.0
+        }
+      ],
+      "metadata": {
+        "actor_type": "participant",
+        "index": 0,
+        "lifeline_length": 120
+      }
+    },
+    {
+      "id": "API",
+      "width": 120,
+      "height": 40,
+      "labels": [
+        {
+          "text": "API",
+          "width": 21.0,
+          "height": 14.0
+        }
+      ],
+      "metadata": {
+        "actor_type": "participant",
+        "index": 1,
+        "lifeline_length": 120
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "msg_0",
+      "sources": [
+        "User"
+      ],
+      "targets": [
+        "API"
+      ],
+      "labels": [
+        {
+          "text": "GET /items",
+          "width": 70.0,
+          "height": 14.0
+        }
+      ],
+      "metadata": {
+        "line_style": "solid",
+        "head_style": "filled",
+        "head_side": "target",
+        "message_index": 0,
+        "message_text": "GET /items"
+      }
+    },
+    {
+      "id": "msg_1",
+      "sources": [
+        "API"
+      ],
+      "targets": [
+        "User"
+      ],
+      "labels": [
+        {
+          "text": "200 OK",
+          "width": 42.0,
+          "height": 14.0
+        }
+      ],
+      "metadata": {
+        "line_style": "dotted",
+        "head_style": "filled",
+        "head_side": "target",
+        "message_index": 1,
+        "message_text": "200 OK"
+      }
+    }
+  ],
+  "layoutOptions": {
+    "algorithm": "layered",
+    "elk.direction": "DOWN",
+    "elk.spacing.nodeNode": 150,
+    "elk.spacing.edgeNode": 20,
+    "elk.spacing.edgeEdge": 15,
+    "elk.layered.spacing.nodeNodeBetweenLayers": 60,
+    "elk.layered.nodePlacement.strategy": "SIMPLE",
+    "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES"
+  },
+  "metadata": {
+    "participants": [
+      "User",
+      "API"
+    ],
+    "message_count": 2,
+    "notes": []
+  }
+}

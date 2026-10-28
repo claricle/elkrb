@@ -1,0 +1,3 @@
+node n {
+  label "outer" { label "inner" }
+}

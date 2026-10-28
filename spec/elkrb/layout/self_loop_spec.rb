@@ -3,12 +3,9 @@
 require "spec_helper"
 
 RSpec.describe "Self-loop Support" do
-  let(:router_class) do
-    Class.new do
-      include Elkrb::Layout::EdgeRouter
-    end
-  end
-  let(:router) { router_class.new }
+  let(:router) { RouterHost.new }
+  let(:loop_edge) { Elkrb::Graph::Edge.new(id: "le") }
+  let(:loop_node) { Elkrb::Graph::Node.new(id: "ln") }
 
   describe "self-loop detection" do
     it "detects self-loop when source equals target" do
@@ -79,76 +76,80 @@ RSpec.describe "Self-loop Support" do
 
     describe "orthogonal routing" do
       it "creates rectangular self-loop on EAST side" do
-        edge.layout_options = Elkrb::Graph::LayoutOptions.new
+        edge.layout_options = {}
         edge.layout_options["elk.selfLoopSide"] = "EAST"
 
         router.route_edges(graph, nil, "ORTHOGONAL")
 
         section = edge.sections.first
-        expect(section.start_point).to be_a(Elkrb::Geometry::Point)
-        expect(section.end_point).to be_a(Elkrb::Geometry::Point)
-        expect(section.bend_points.length).to eq(4)
-
-        # Start should be on right side of node
-        expect(section.start_point.x).to eq(180.0)
-        expect(section.start_point.y).to eq(130.0)
+        expect(section.start_point.to_h).to eq(x: 180.0, y: 125.0)
+        expect(section.bend_points.map(&:to_h)).to eq(
+          [{ x: 232.0, y: 125.0 }, { x: 232.0, y: 135.0 }],
+        )
+        expect(section.end_point.to_h).to eq(x: 180.0, y: 135.0)
       end
 
       it "creates rectangular self-loop on WEST side" do
-        edge.layout_options = Elkrb::Graph::LayoutOptions.new
+        edge.layout_options = {}
         edge.layout_options["elk.selfLoopSide"] = "WEST"
 
         router.route_edges(graph, nil, "ORTHOGONAL")
 
         section = edge.sections.first
-        expect(section.bend_points.length).to eq(4)
-
-        # Start should be on left side of node
-        expect(section.start_point.x).to eq(100.0)
+        expect(section.start_point.to_h).to eq(x: 100.0, y: 125.0)
+        expect(section.bend_points.map(&:to_h)).to eq(
+          [{ x: 48.0, y: 125.0 }, { x: 48.0, y: 135.0 }],
+        )
+        expect(section.end_point.to_h).to eq(x: 100.0, y: 135.0)
       end
 
       it "creates rectangular self-loop on NORTH side" do
-        edge.layout_options = Elkrb::Graph::LayoutOptions.new
+        edge.layout_options = {}
         edge.layout_options["elk.selfLoopSide"] = "NORTH"
 
         router.route_edges(graph, nil, "ORTHOGONAL")
 
         section = edge.sections.first
-        expect(section.bend_points.length).to eq(4)
-
-        # Start should be on top of node
-        expect(section.start_point.y).to eq(100.0)
+        expect(section.start_point.to_h).to eq(x: 135.0, y: 100.0)
+        expect(section.bend_points.map(&:to_h)).to eq(
+          [{ x: 135.0, y: 56.0 }, { x: 145.0, y: 56.0 }],
+        )
+        expect(section.end_point.to_h).to eq(x: 145.0, y: 100.0)
       end
 
       it "creates rectangular self-loop on SOUTH side" do
-        edge.layout_options = Elkrb::Graph::LayoutOptions.new
+        edge.layout_options = {}
         edge.layout_options["elk.selfLoopSide"] = "SOUTH"
 
         router.route_edges(graph, nil, "ORTHOGONAL")
 
         section = edge.sections.first
-        expect(section.bend_points.length).to eq(4)
-
-        # Start should be on bottom of node
-        expect(section.start_point.y).to eq(160.0)
+        expect(section.start_point.to_h).to eq(x: 135.0, y: 160.0)
+        expect(section.bend_points.map(&:to_h)).to eq(
+          [{ x: 135.0, y: 204.0 }, { x: 145.0, y: 204.0 }],
+        )
+        expect(section.end_point.to_h).to eq(x: 145.0, y: 160.0)
       end
 
       it "defaults to EAST side when not specified" do
         router.route_edges(graph, nil, "ORTHOGONAL")
 
         section = edge.sections.first
-        expect(section.start_point.x).to eq(180.0)
+        expect(section.start_point.to_h).to eq(x: 180.0, y: 125.0)
       end
 
       it "creates edge section with proper structure" do
         router.route_edges(graph, nil, "ORTHOGONAL")
 
-        expect(edge.sections).not_to be_empty
+        edge.sections = [Elkrb::Graph::EdgeSection.new(id: "stale")]
+
+        router.route_edges(graph, nil, "ORTHOGONAL")
+
+        expect(edge.sections.length).to eq(1)
         section = edge.sections.first
-        expect(section.id).to eq("e1_section_0")
-        expect(section.start_point).to be_a(Elkrb::Geometry::Point)
-        expect(section.end_point).to be_a(Elkrb::Geometry::Point)
-        expect(section.bend_points).to be_an(Array)
+        expect(section.id).to eq("e1_s0")
+        expect(section.incoming_shape).to eq("n1")
+        expect(section.outgoing_shape).to eq("n1")
       end
     end
 
@@ -163,7 +164,7 @@ RSpec.describe "Self-loop Support" do
       end
 
       it "creates spline on EAST side" do
-        edge.layout_options = Elkrb::Graph::LayoutOptions.new
+        edge.layout_options = {}
         edge.layout_options["elk.selfLoopSide"] = "EAST"
 
         router.route_edges(graph, nil, "SPLINES")
@@ -176,7 +177,7 @@ RSpec.describe "Self-loop Support" do
       end
 
       it "creates spline on WEST side" do
-        edge.layout_options = Elkrb::Graph::LayoutOptions.new
+        edge.layout_options = {}
         edge.layout_options["elk.selfLoopSide"] = "WEST"
 
         router.route_edges(graph, nil, "SPLINES")
@@ -189,7 +190,7 @@ RSpec.describe "Self-loop Support" do
       end
 
       it "creates spline on NORTH side" do
-        edge.layout_options = Elkrb::Graph::LayoutOptions.new
+        edge.layout_options = {}
         edge.layout_options["elk.selfLoopSide"] = "NORTH"
 
         router.route_edges(graph, nil, "SPLINES")
@@ -202,7 +203,7 @@ RSpec.describe "Self-loop Support" do
       end
 
       it "creates spline on SOUTH side" do
-        edge.layout_options = Elkrb::Graph::LayoutOptions.new
+        edge.layout_options = {}
         edge.layout_options["elk.selfLoopSide"] = "SOUTH"
 
         router.route_edges(graph, nil, "SPLINES")
@@ -221,7 +222,9 @@ RSpec.describe "Self-loop Support" do
 
         section = edge.sections.first
         # Polyline delegates to orthogonal
-        expect(section.bend_points.length).to eq(4)
+        expect(section.bend_points.map(&:to_h)).to eq(
+          [{ x: 232.0, y: 125.0 }, { x: 232.0, y: 135.0 }],
+        )
       end
     end
   end
@@ -275,9 +278,9 @@ RSpec.describe "Self-loop Support" do
     end
 
     it "applies increasing offsets to multiple loops" do
-      offset0 = router.send(:calculate_loop_offset, 0)
-      offset1 = router.send(:calculate_loop_offset, 1)
-      offset2 = router.send(:calculate_loop_offset, 2)
+      offset0 = router.send(:calculate_loop_offset, 0, loop_edge, loop_node)
+      offset1 = router.send(:calculate_loop_offset, 1, loop_edge, loop_node)
+      offset2 = router.send(:calculate_loop_offset, 2, loop_edge, loop_node)
 
       expect(offset0).to eq(20.0)
       expect(offset1).to eq(40.0)
@@ -427,6 +430,9 @@ RSpec.describe "Self-loop Support" do
       expect(section.start_point.y).to eq(120.0) # node.y + port.y
       expect(section.end_point.x).to eq(180.0)
       expect(section.end_point.y).to eq(140.0)
+      expect(section.bend_points.map(&:to_h)).to eq(
+        [{ x: 230.0, y: 120.0 }, { x: 230.0, y: 140.0 }],
+      )
     end
 
     it "routes spline self-loop between ports on same side" do
@@ -455,7 +461,7 @@ RSpec.describe "Self-loop Support" do
       expect(section.bend_points[1]).to be_a(Elkrb::Geometry::Point)
     end
 
-    it "handles ports on different sides" do
+    it "routes ports on different sides outside the node" do
       port1 = Elkrb::Graph::Port.new(id: "p1", x: 80.0, y: 30.0, side: "EAST")
       port2 = Elkrb::Graph::Port.new(id: "p2", x: 0.0, y: 30.0, side: "WEST")
       node.ports = [port1, port2]
@@ -475,7 +481,88 @@ RSpec.describe "Self-loop Support" do
       router.route_edges(graph, nil, "ORTHOGONAL")
 
       section = edge.sections.first
-      expect(section.bend_points).not_to be_empty
+      expect(section.start_point.to_h).to eq(x: 180.0, y: 130.0)
+      expect(section.end_point.to_h).to eq(x: 100.0, y: 130.0)
+      expect(section.bend_points.map(&:to_h)).to eq(
+        [
+          { x: 230.0, y: 130.0 },
+          { x: 230.0, y: 80.0 },
+          { x: 50.0, y: 80.0 },
+          { x: 50.0, y: 130.0 },
+        ],
+      )
+    end
+
+    it "routes a same-port loop with distinct points" do
+      port = Elkrb::Graph::Port.new(
+        id: "p1", x: 80.0, y: 20.0, width: 8.0, height: 8.0, side: "EAST",
+      )
+      node.ports = [port]
+      edge = Elkrb::Graph::Edge.new(
+        id: "e1", sources: ["p1"], targets: ["p1"],
+      )
+      graph = Elkrb::Graph::Graph.new(
+        id: "g1", children: [node], edges: [edge],
+      )
+
+      router.route_edges(graph, nil, "ORTHOGONAL")
+
+      section = edge.sections.first
+      points = [section.start_point, *section.bend_points, section.end_point]
+      expect(points.map(&:to_h).uniq.length).to eq(4)
+      expect(points.map(&:to_h)).to eq(
+        [
+          { x: 188.0, y: 124.0 },
+          { x: 238.0, y: 124.0 },
+          { x: 238.0, y: 134.0 },
+          { x: 188.0, y: 134.0 },
+          { x: 188.0, y: 124.0 },
+        ],
+      )
+    end
+
+    it "gives same-port loops distinct paths" do
+      port = Elkrb::Graph::Port.new(
+        id: "p1", x: 80.0, y: 20.0, width: 8.0, height: 8.0, side: "EAST",
+      )
+      node.ports = [port]
+      edges = %w[e1 e2].map do |id|
+        Elkrb::Graph::Edge.new(id: id, sources: ["p1"], targets: ["p1"])
+      end
+      graph = Elkrb::Graph::Graph.new(
+        id: "g1", children: [node], edges: edges,
+      )
+
+      router.route_edges(graph, nil, "ORTHOGONAL")
+
+      paths = edges.map do |loop|
+        section = loop.sections.first
+        [section.start_point, *section.bend_points, section.end_point]
+          .map(&:to_h)
+      end
+      expect(paths.first).not_to eq(paths.last)
+    end
+
+    it "anchors a node-to-port loop on both borders" do
+      port = Elkrb::Graph::Port.new(
+        id: "p1", x: 80.0, y: 20.0, width: 8.0, height: 8.0, side: "EAST",
+      )
+      node.ports = [port]
+      edge = Elkrb::Graph::Edge.new(
+        id: "e1", sources: ["n1"], targets: ["p1"],
+      )
+      graph = Elkrb::Graph::Graph.new(
+        id: "g1", children: [node], edges: [edge],
+      )
+
+      router.route_edges(graph, nil, "ORTHOGONAL")
+
+      section = edge.sections.first
+      expect(section.start_point.to_h).to eq(x: 180.0, y: 134.0)
+      expect(section.end_point.to_h).to eq(x: 188.0, y: 124.0)
+      expect(section.bend_points.map(&:to_h)).to eq(
+        [{ x: 230.0, y: 134.0 }, { x: 230.0, y: 124.0 }],
+      )
     end
   end
 
@@ -492,7 +579,7 @@ RSpec.describe "Self-loop Support" do
     let(:edge) { Elkrb::Graph::Edge.new(id: "e1") }
 
     it "uses edge layout option for side" do
-      edge.layout_options = Elkrb::Graph::LayoutOptions.new
+      edge.layout_options = {}
       edge.layout_options["elk.selfLoopSide"] = "WEST"
 
       side = router.send(:get_self_loop_side, edge, node)
@@ -500,7 +587,7 @@ RSpec.describe "Self-loop Support" do
     end
 
     it "uses shorthand option for side" do
-      edge.layout_options = Elkrb::Graph::LayoutOptions.new
+      edge.layout_options = {}
       edge.layout_options["selfLoopSide"] = "NORTH"
 
       side = router.send(:get_self_loop_side, edge, node)
@@ -508,7 +595,7 @@ RSpec.describe "Self-loop Support" do
     end
 
     it "uses node layout option when edge option not set" do
-      node.layout_options = Elkrb::Graph::LayoutOptions.new
+      node.layout_options = {}
       node.layout_options["elk.selfLoopSide"] = "SOUTH"
 
       side = router.send(:get_self_loop_side, edge, node)
@@ -523,14 +610,14 @@ RSpec.describe "Self-loop Support" do
 
   describe "self-loop offset calculation" do
     it "calculates base offset for first loop" do
-      offset = router.send(:calculate_loop_offset, 0)
+      offset = router.send(:calculate_loop_offset, 0, loop_edge, loop_node)
       expect(offset).to eq(20.0)
     end
 
     it "calculates increasing offset for subsequent loops" do
-      offset1 = router.send(:calculate_loop_offset, 1)
-      offset2 = router.send(:calculate_loop_offset, 2)
-      offset3 = router.send(:calculate_loop_offset, 3)
+      offset1 = router.send(:calculate_loop_offset, 1, loop_edge, loop_node)
+      offset2 = router.send(:calculate_loop_offset, 2, loop_edge, loop_node)
+      offset3 = router.send(:calculate_loop_offset, 3, loop_edge, loop_node)
 
       expect(offset1).to eq(40.0)
       expect(offset2).to eq(60.0)
@@ -563,6 +650,46 @@ RSpec.describe "Self-loop Support" do
 
       # Second loop should extend further
       expect(bend_x_1).to be > bend_x_0
+    end
+  end
+
+  describe "elk.selfLoopOffset" do
+    let(:node) do
+      Elkrb::Graph::Node.new(id: "n1", x: 0.0, y: 0.0, width: 100.0,
+                             height: 100.0)
+    end
+    let(:edge) do
+      Elkrb::Graph::Edge.new(id: "e1", sources: ["n1"], targets: ["n1"])
+    end
+
+    def east_bend_x(edge, node, loop_index)
+      section = Elkrb::Graph::EdgeSection.new(id: "s")
+      router.send(:route_orthogonal_self_loop, section, edge, node, loop_index)
+      section.bend_points.first.x
+    end
+
+    it "keeps the 20.0 default for every loop index" do
+      expect([0, 1, 2].map { |index| east_bend_x(edge, node, index) })
+        .to eq([160.0, 180.0, 200.0])
+    end
+
+    it "moves the bend points by the difference from the default" do
+      edge.layout_options = { "elk.selfLoopOffset" => 35.0 }
+
+      expect(east_bend_x(edge, node, 0)).to eq(175.0)
+    end
+
+    it "multiplies the configured offset by the loop index" do
+      edge.layout_options = { "elk.selfLoopOffset" => 35.0 }
+
+      expect(east_bend_x(edge, node, 1) - east_bend_x(edge, node, 0))
+        .to eq(35.0)
+    end
+
+    it "is read from the node when the edge names none" do
+      node.layout_options = { "selfLoopOffset" => 30.0 }
+
+      expect(router.send(:calculate_loop_offset, 1, edge, node)).to eq(60.0)
     end
   end
 
@@ -620,9 +747,7 @@ RSpec.describe "Self-loop Support" do
         id: "g1",
         children: [node],
         edges: [edge],
-        layout_options: Elkrb::Graph::LayoutOptions.new(
-          edge_routing: "SPLINES",
-        ),
+        layout_options: { "elk.edgeRouting" => "SPLINES" },
       )
 
       result = algorithm.layout(graph)
@@ -699,5 +824,36 @@ RSpec.describe "Self-loop Support" do
         )
       end
     end
+  end
+end
+
+RSpec.describe "Self-loop layering (regression)" do
+  let(:graph) do
+    Elkrb::Graph::Graph.new(
+      id: "g",
+      children: [Elkrb::Graph::Node.new(id: "a", width: 10.0, height: 10.0)],
+      edges: [Elkrb::Graph::Edge.new(id: "e", sources: ["a"], targets: ["a"])],
+    )
+  end
+
+  it "lays out a self-loop with the layered algorithm without SystemStackError" do
+    expect { Elkrb.layout(graph, algorithm: "layered") }
+      .not_to raise_error
+  end
+
+  it "still routes the self-loop edge" do
+    result = Elkrb.layout(graph, algorithm: "layered")
+    edge = result.edges.first
+
+    expect(edge.sections).not_to be_empty
+    expect(edge.sections.first.bend_points).not_to be_empty
+  end
+
+  it "lays out a self-loop parsed from a hash without SystemStackError" do
+    parsed = Elkrb::Graph::Graph.from_hash(
+      { id: "r", children: [{ id: "a", width: 10.0, height: 10.0 }],
+        edges: [{ id: "e", sources: ["a"], targets: ["a"] }] },
+    )
+    expect { Elkrb.layout(parsed, algorithm: "layered") }.not_to raise_error
   end
 end

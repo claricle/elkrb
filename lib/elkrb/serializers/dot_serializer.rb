@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "../options/resolver"
+
 module Elkrb
   module Serializers
     # Serializes ELK graphs to Graphviz DOT format
@@ -23,6 +25,9 @@ module Elkrb
     #     rankdir: "TB"
     #   )
     class DotSerializer
+      HtmlValue = Data.define(:text)
+      private_constant :HtmlValue
+
       # Default indentation width for DOT output
       INDENT_WIDTH = 2
 
@@ -43,14 +48,15 @@ module Elkrb
           graph_attrs: {},
           node_attrs: {},
           edge_attrs: {},
+          engine: nil,
         }.merge(options)
 
         @indent_level = 0
-        @node_counter = 0
-        @cluster_counter = 0
 
         # Convert hash to Graph if needed
         @graph = graph.is_a?(Hash) ? hash_to_graph(graph) : graph
+        index_endpoints(@graph)
+        @scope_stack = [@endpoint_scopes.fetch(@graph)]
 
         lines = []
         lines << graph_declaration
@@ -97,20 +103,20 @@ module Elkrb
       # Generate graph declaration
       def graph_declaration
         type = @options[:directed] ? "digraph" : "graph"
-        "#{type} #{@options[:graph_name]}"
+        "#{type} #{quote_id(@options[:graph_name])}"
       end
 
       # Format graph-level attributes
       def format_graph_attributes(graph)
         attrs = @options[:graph_attrs].dup
+        attrs[:compound] = true if @clusters.any?
 
         # Add rankdir from options or graph layout options
         if @options[:rankdir]
           attrs[:rankdir] = @options[:rankdir]
-        elsif graph.layout_options&.direction
-          attrs[:rankdir] = elk_direction_to_rankdir(
-            graph.layout_options.direction,
-          )
+        elsif (direction = option_resolver.get("elk.direction", graph,
+                                               default: nil))
+          attrs[:rankdir] = elk_direction_to_rankdir(direction)
         end
 
         # Add graph size if specified
@@ -134,17 +140,10 @@ module Elkrb
           lines.concat(format_subgraph(node))
         else
           # Simple node
-          node_id = sanitize_id(node.id)
+          node_id = quote_id(@node_names.fetch(node))
           attrs = build_node_attributes(node)
 
           lines << indent("#{node_id} #{format_attrs(attrs)}")
-        end
-
-        # Process child edges if any
-        if node.edges && !node.edges.empty?
-          node.edges.each do |edge|
-            lines.concat(format_edge(edge))
-          end
         end
 
         lines
@@ -153,29 +152,29 @@ module Elkrb
       # Format a subgraph (hierarchical node)
       def format_subgraph(node)
         lines = []
-        cluster_id = "cluster_#{@cluster_counter}"
-        @cluster_counter += 1
+        cluster_id = @clusters.fetch(node)
 
         lines << indent("subgraph #{cluster_id} {")
         @indent_level += 1
 
         # Subgraph label
         if node.labels && !node.labels.empty?
-          label_text = node.labels.first.text
-          lines << indent("label=#{quote_value(label_text)}")
+          lines << indent("label=#{quote_labels(node.labels.map(&:text))}")
         end
 
-        # Process children
-        if node.children && !node.children.empty?
-          node.children.each do |child|
-            lines.concat(format_node(child, node.id))
+        with_endpoint_scope(node) do
+          # Process children
+          if node.children && !node.children.empty?
+            node.children.each do |child|
+              lines.concat(format_node(child, node.id))
+            end
           end
-        end
 
-        # Process edges within this subgraph
-        if node.edges && !node.edges.empty?
-          node.edges.each do |edge|
-            lines.concat(format_edge(edge))
+          # Process edges within this subgraph
+          if node.edges && !node.edges.empty?
+            node.edges.each do |edge|
+              lines.concat(format_edge(edge))
+            end
           end
         end
 
@@ -191,10 +190,9 @@ module Elkrb
 
         # Label
         if node.labels && !node.labels.empty?
-          label_text = node.labels.map(&:text).join("\\n")
-          attrs[:label] = label_text
+          attrs[:label] = node.labels.map(&:text)
         elsif node.id
-          attrs[:label] = node.id
+          attrs[:label] = [node.id]
         end
 
         # Size (DOT uses inches)
@@ -205,7 +203,7 @@ module Elkrb
         end
 
         # Position (if laid out)
-        if node.x && node.y
+        if neato? && node.x && node.y
           # DOT uses center coordinates, ELK uses top-left
           # Also need to account for height since DOT y goes up
           center_x = node.x + ((node.width || 0) / 2.0)
@@ -221,7 +219,38 @@ module Elkrb
           attrs[:shape] = node.properties["dot.shape"]
         end
 
+        apply_port_label(attrs, node) if declared_ports(node).any?
+
         attrs
+      end
+
+      def apply_port_label(attrs, node)
+        attrs[:label] = HtmlValue.new(html_port_label(node))
+      end
+
+      def html_port_label(node)
+        labels = Array(node.labels).map(&:text)
+        labels = [node.id] if labels.empty?
+        label = labels.map { |text| html_escape(text) }.join("<BR/>")
+        ports = declared_ports(node).map do |port_id, name|
+          %(<TD PORT="#{name}" TOOLTIP="#{html_escape(port_id)}"></TD>)
+        end.join
+        "<<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\"" \
+          "#{html_table_dimensions(node)}>" \
+          "<TR><TD>#{label}</TD></TR><TR>#{ports}</TR></TABLE>>"
+      end
+
+      def html_table_dimensions(node)
+        return "" unless node.width&.positive? && node.height&.positive?
+
+        width = node.width.ceil
+        height = node.height.ceil
+        %( WIDTH="#{width}" HEIGHT="#{height}")
+      end
+
+      def html_escape(value)
+        value.to_s.gsub("&", "&amp;").gsub("<", "&lt;")
+          .gsub(">", "&gt;").gsub('"', "&quot;")
       end
 
       # Format an edge
@@ -232,11 +261,13 @@ module Elkrb
           !edge.targets || edge.targets.empty?
 
         # Get source and target
-        source_id = sanitize_id(edge.sources.first)
-        target_id = sanitize_id(edge.targets.first)
-
         # Build edge attributes
         attrs = build_edge_attributes(edge)
+        source = resolved_endpoint(edge.sources.first)
+        target = resolved_endpoint(edge.targets.first)
+        source_id = edge_endpoint(source)
+        target_id = edge_endpoint(target)
+        add_cluster_attributes(attrs, source, target)
 
         # Edge operator
         op = @options[:directed] ? "->" : "--"
@@ -252,12 +283,11 @@ module Elkrb
 
         # Label
         if edge.labels && !edge.labels.empty?
-          label_text = edge.labels.map(&:text).join("\\n")
-          attrs[:label] = label_text
+          attrs[:label] = edge.labels.map(&:text)
         end
 
         # Edge routing points
-        if edge.sections && !edge.sections.empty?
+        if neato? && edge.sections && !edge.sections.empty?
           section = edge.sections.first
           points = []
 
@@ -282,7 +312,12 @@ module Elkrb
         return "" if attrs.empty?
 
         attr_strs = attrs.map do |key, value|
-          "#{key}=#{quote_value(value)}"
+          rendered = if key == :label && value.is_a?(Array)
+                       quote_labels(value)
+                     else
+                       quote_value(value)
+                     end
+          "#{key}=#{rendered}"
         end
 
         "[#{attr_strs.join(', ')}]"
@@ -290,28 +325,281 @@ module Elkrb
 
       # Quote a value appropriately for DOT
       def quote_value(value)
+        return value.text if value.is_a?(HtmlValue)
+
         value_str = value.to_s
 
-        # Check if value needs quoting
-        if value_str.match?(/[^a-zA-Z0-9_]/) || value_str.empty?
-          # Escape quotes and backslashes
-          escaped = value_str.gsub("\\", "\\\\\\\\").gsub('"', '\\"')
-          "\"#{escaped}\""
-        else
-          value_str
+        return value_str if bare_id?(value_str)
+
+        quote_string(value_str)
+      end
+
+      def quote_id(id)
+        text = id.to_s
+        bare_id?(text) ? text : quote_string(text)
+      end
+
+      def bare_id?(text)
+        identifier = text.match?(/\A[A-Za-z_][A-Za-z0-9_]*\z/)
+        numeral = text.match?(/\A-?(?:\.\d+|\d+(?:\.\d*)?)\z/)
+        (identifier || numeral) && !dot_keyword?(text)
+      end
+
+      def dot_keyword?(text)
+        %w[node edge graph digraph subgraph strict].include?(text.downcase)
+      end
+
+      def quote_string(text)
+        escaped = text.gsub(/[\\"]/) do |char|
+          char == "\\" ? "\\\\" : '\\"'
+        end
+        "\"#{escaped}\""
+      end
+
+      def quote_labels(labels)
+        escaped = labels.map do |label|
+          label.to_s.gsub(/[\\"]/) do |char|
+            char == "\\" ? "\\\\" : '\\"'
+          end
+        end
+        "\"#{escaped.join('\\n')}\""
+      end
+
+      def resolved_endpoint(id)
+        endpoint_entry(id.to_s) || { type: :node, id: id.to_s, clusters: [] }
+      end
+
+      def edge_endpoint(endpoint)
+        if endpoint.fetch(:type) == :port
+          return "#{quote_id(endpoint[:owner])}:#{endpoint[:port]}"
+        end
+
+        if endpoint.fetch(:type) == :compound
+          return quote_id(endpoint[:representative])
+        end
+
+        quote_id(endpoint[:id])
+      end
+
+      def add_cluster_attributes(attrs, source, target)
+        source_cluster = source[:cluster]
+        target_cluster = target[:cluster]
+        if source_cluster && !target.fetch(:clusters).include?(source_cluster)
+          attrs[:ltail] = source_cluster
+        end
+        if target_cluster && !source.fetch(:clusters).include?(target_cluster)
+          attrs[:lhead] = target_cluster
         end
       end
 
-      # Sanitize ID for DOT format
-      def sanitize_id(id)
-        # DOT IDs can contain letters, digits, underscores
-        # If ID contains other characters, quote it
-        sanitized = id.to_s.gsub(/[^a-zA-Z0-9_]/, "_")
+      def index_endpoints(graph)
+        @endpoint_scopes = {}.compare_by_identity
+        @clusters = {}.compare_by_identity
+        nodes = descendant_nodes(graph)
+        index_node_names(nodes)
+        index_clusters(nodes)
+        index_cluster_memberships(graph)
+        index_all_ports(nodes)
+        index_container(graph)
+      end
 
-        # If starts with digit, prepend 'n'
-        sanitized = "n#{sanitized}" if sanitized.match?(/^[0-9]/)
+      def index_cluster_memberships(graph)
+        @cluster_memberships = {}.compare_by_identity
+        index_child_memberships(Array(graph.children), [])
+      end
 
-        sanitized
+      def index_child_memberships(children, clusters)
+        children.each do |node|
+          own_clusters = node.hierarchical? ? [*clusters, @clusters.fetch(node)] : clusters
+          @cluster_memberships[node] = own_clusters
+          index_child_memberships(Array(node.children), own_clusters)
+        end
+      end
+
+      def index_container(container)
+        children = Array(container.children)
+        @endpoint_scopes[container] = build_endpoint_scope(children)
+        children.each { |node| index_container(node) }
+      end
+
+      def descendant_nodes(container)
+        Array(container.children).flat_map do |node|
+          [node, *descendant_nodes(node)]
+        end
+      end
+
+      def index_node_names(nodes)
+        @node_names = {}.compare_by_identity
+        reserved = nodes.to_h { |node| [node.id.to_s, true] }
+        used = {}
+        nodes.each do |node|
+          name = node.id.to_s
+          name = available_node_name(name, reserved, used) if used.key?(name)
+          @node_names[node] = name
+          used[name] = true
+        end
+      end
+
+      def available_node_name(base, reserved, used)
+        index = 2
+        loop do
+          candidate = "#{base}_#{index}"
+          return candidate unless reserved.key?(candidate) || used.key?(candidate)
+
+          index += 1
+        end
+      end
+
+      def index_clusters(nodes)
+        nodes.select(&:hierarchical?).each_with_index do |node, index|
+          @clusters[node] = "cluster_#{index}"
+        end
+      end
+
+      def index_all_ports(nodes)
+        @port_names = {}.compare_by_identity
+        @declared_ports = {}.compare_by_identity
+        ports_by_owner = {}.compare_by_identity
+        nodes.each do |node|
+          owner = port_representative(node)
+          next unless owner
+
+          Array(node.ports).each do |port|
+            (ports_by_owner[owner] ||= []) << [node, port]
+          end
+        end
+        ports_by_owner.each { |owner, entries| index_owner_ports(owner, entries) }
+      end
+
+      def index_owner_ports(owner, entries)
+        reserved = entries.filter_map do |_node, port|
+          port_id = port.id.to_s
+          port_id if bare_id?(port_id)
+        end.to_h { |port_id| [port_id, true] }
+        used = {}
+        @declared_ports[owner] = entries.filter_map.with_index do |(node, port), index|
+          names = (@port_names[node] ||= {})
+          port_id = port.id.to_s
+          next if names.key?(port_id)
+
+          name = if bare_id?(port_id) && !used.key?(port_id)
+                   port_id
+                 else
+                   available_port_name(index, reserved.merge(used))
+                 end
+          names[port_id] = name
+          used[name] = true
+          [port.id, name]
+        end
+      end
+
+      def available_port_name(index, used)
+        loop do
+          candidate = "port#{index}"
+          return candidate unless used.key?(candidate)
+
+          index += 1
+        end
+      end
+
+      def build_endpoint_scope(children)
+        scope = children.each_with_object({}) do |node, entries|
+          entries[node.id.to_s] ||= node_endpoint(node)
+        end
+
+        children.each do |node|
+          add_ports_to_scope(scope, node)
+        end
+        add_descendant_scopes(scope, children)
+
+        scope
+      end
+
+      def add_descendant_scopes(scope, children)
+        children.each { |node| add_descendants_to_scope(scope, node) }
+      end
+
+      def add_descendants_to_scope(scope, node)
+        Array(node.children).each do |descendant|
+          scope[descendant.id.to_s] ||= node_endpoint(descendant)
+          add_ports_to_scope(scope, descendant)
+          add_descendants_to_scope(scope, descendant)
+        end
+      end
+
+      def add_ports_to_scope(scope, node)
+        owner = port_representative(node)
+        return unless owner
+
+        Array(node.ports).each do |port|
+          scope[port.id.to_s] ||= port_endpoint(node, owner, port)
+        end
+      end
+
+      def port_endpoint(node, owner, port)
+        {
+          type: :port, owner: @node_names.fetch(owner),
+          port: @port_names.fetch(node).fetch(port.id.to_s),
+          cluster: @clusters[node], clusters: @cluster_memberships.fetch(owner)
+        }
+      end
+
+      def node_endpoint(node)
+        unless node.hierarchical?
+          return {
+            type: :node, id: @node_names.fetch(node),
+            clusters: @cluster_memberships.fetch(node)
+          }
+        end
+
+        representative = representative_node(node)
+
+        {
+          type: :compound, id: @node_names.fetch(node),
+          cluster: @clusters.fetch(node),
+          representative: @node_names.fetch(representative),
+          clusters: @cluster_memberships.fetch(representative)
+        }
+      end
+
+      def endpoint_entry(id)
+        @scope_stack.reverse_each do |scope|
+          return scope[id] if scope.key?(id)
+        end
+        nil
+      end
+
+      def with_endpoint_scope(container)
+        @scope_stack << @endpoint_scopes.fetch(container)
+        yield
+      ensure
+        @scope_stack.pop
+      end
+
+      def port_representative(node)
+        node.hierarchical? ? representative_node(node) : node
+      end
+
+      def representative_node(node)
+        Array(node.children).each do |child|
+          return child unless child.hierarchical?
+
+          representative = representative_node(child)
+          return representative if representative
+        end
+        nil
+      end
+
+      def declared_ports(node)
+        @declared_ports.fetch(node, [])
+      end
+
+      def option_resolver
+        @option_resolver ||= Elkrb::Options::Resolver.new
+      end
+
+      def neato?
+        @options[:engine].to_s == "neato"
       end
 
       # Convert ELK direction to DOT rankdir

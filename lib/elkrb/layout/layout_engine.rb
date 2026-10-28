@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require_relative "algorithm_registry"
+require_relative "../options/registry"
+require_relative "../options/resolver"
 
 module Elkrb
   module Layout
@@ -45,10 +47,23 @@ module Elkrb
         # appropriate algorithm based on options, and computes node positions
         # and edge routes.
         #
-        # The algorithm is selected in this order:
-        # 1. options[:algorithm] or options["algorithm"]
-        # 2. graph.layoutOptions["elk.algorithm"]
+        # The algorithm is the first of these that names one:
+        # 1. The graph's own selector -- layoutOptions under "elk.algorithm",
+        #    "algorithm" or the "org.eclipse.elk.algorithm" long form, then
+        #    properties
+        # 2. The :algorithm call option, under a Symbol or String key
         # 3. Default: "layered"
+        #
+        # A graph that pins an algorithm keeps it; the caller's option is
+        # the fallback for graphs that pin none.
+        #
+        # With the call option strict: true, an option in the graph's
+        # layoutOptions that elkrb does not know, or does not fully honour,
+        # raises Elkrb::Error instead of logging a warning. So does a
+        # registered option in an element's properties or in +options+ that
+        # is not fully honoured; an unknown property name or key in +options+
+        # is not reported. An option only some algorithms read is accepted
+        # where the algorithm laying out its element is one of them.
         #
         # @param graph [Hash, Elkrb::Graph::Graph] The graph to layout. Can be:
         #   - A Hash with keys: :id, :children, :edges, :layoutOptions
@@ -57,7 +72,9 @@ module Elkrb
         #   - :algorithm (String) - Algorithm name (layered, force, etc.)
         #   - Algorithm-specific options
         # @return [Elkrb::Graph::Graph] The input graph with computed positions
-        # @raise [Elkrb::Error] If the specified algorithm is not found
+        # @raise [ArgumentError] If graph is neither a Hash nor a Graph::Graph
+        # @raise [Elkrb::AlgorithmNotFoundError] If the algorithm is not found
+        # @raise [Elkrb::Error] In strict mode, for an unknown or unhonoured option
         #
         # @example With specific algorithm
         #   result = Elkrb::Layout::LayoutEngine.layout(
@@ -66,27 +83,20 @@ module Elkrb
         #     "elk.force.repulsion" => 5.0
         #   )
         #
-        # @example With hierarchical layout
-        #   result = Elkrb::Layout::LayoutEngine.layout(
-        #     graph,
-        #     algorithm: "layered",
-        #     hierarchical: true
-        #   )
+        # Hierarchy is detected from compound nodes; no call flag is needed.
         def layout(graph, options = {})
-          # Convert hash to Graph if needed
-          graph = convert_to_graph(graph) if graph.is_a?(Hash)
+          graph = graph_argument(graph)
 
-          # Get algorithm name from options
-          algorithm_name = options[:algorithm] ||
-            options["algorithm"] ||
-            "layered"
+          resolver = Options::Resolver.new(options)
+          algorithm_name = resolver.get("elk.algorithm", graph)
 
           algorithm_class = AlgorithmRegistry.get(algorithm_name)
+          raise AlgorithmNotFoundError, algorithm_name unless algorithm_class
 
-          raise Error, "Unknown layout algorithm: #{algorithm_name}" unless
-            algorithm_class
+          resolver.report_unhonoured(
+            graph, algorithm_name: AlgorithmRegistry.method(:registered_name)
+          )
 
-          # Create and run algorithm with options
           algorithm = algorithm_class.new(options)
           algorithm.layout(graph)
 
@@ -104,6 +114,7 @@ module Elkrb
         #   - :description (String) - Brief description
         #   - :category (String, nil) - Algorithm category (e.g., "hierarchical", "force")
         #   - :supports_hierarchy (Boolean, nil) - Whether it supports hierarchical graphs
+        #   - :supported_options (Array<String>) - Canonical option ids scoped to this algorithm
         #
         # @example List all algorithms
         #   algorithms = Elkrb::Layout::LayoutEngine.known_layout_algorithms
@@ -152,17 +163,29 @@ module Elkrb
 
         # Returns metadata for all supported layout options.
         #
-        # @return [Array<Hash>] Array of option metadata
-        # @note Currently returns an empty array. Full implementation planned.
+        # @return [Hash{String => Hash}] Same shape and content as
+        #   Elkrb.known_layout_options, keyed by canonical id.
         def known_layout_options
-          # TODO: Build from all algorithms' supported options
-          []
+          Options::Registry.render_known_options(algorithm_values: AlgorithmRegistry.available_algorithms)
         end
 
         private
 
         def convert_to_graph(hash)
           Graph::Graph.from_hash(hash)
+        end
+
+        # Takes the two documented shapes and nothing else. The check lives
+        # here, not in Elkrb.layout, so the CLI and every other caller of the
+        # engine get the same clear error instead of a NoMethodError deep
+        # inside an algorithm.
+        def graph_argument(graph)
+          return convert_to_graph(graph) if graph.is_a?(::Hash)
+          return graph if graph.is_a?(Graph::Graph)
+
+          raise ArgumentError,
+                "graph must be a Hash or Elkrb::Graph::Graph, " \
+                "got #{graph.class}"
         end
       end
     end

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "decimal"
+
 module Elkrb
   module Options
     # ElkPadding parser for padding specifications
@@ -10,10 +12,10 @@ module Elkrb
       attr_reader :left, :top, :right, :bottom
 
       def initialize(left: 0, top: 0, right: 0, bottom: 0)
-        @left = left.to_f
-        @top = top.to_f
-        @right = right.to_f
-        @bottom = bottom.to_f
+        @left = Decimal.to_f(left)
+        @top = Decimal.to_f(top)
+        @right = Decimal.to_f(right)
+        @bottom = Decimal.to_f(bottom)
       end
 
       # Parse padding from string or hash
@@ -34,10 +36,9 @@ module Elkrb
       # @return [ElkPadding] Parsed padding object
       def self.from_hash(hash)
         new(
-          left: hash[:left] || hash["left"] || 0,
-          top: hash[:top] || hash["top"] || 0,
-          right: hash[:right] || hash["right"] || 0,
-          bottom: hash[:bottom] || hash["bottom"] || 0,
+          **%i[left top right bottom].to_h do |side|
+            [side, Decimal.component(hash, side, 0)]
+          end,
         )
       end
 
@@ -46,17 +47,22 @@ module Elkrb
       # @param str [String] String like "[left=2, top=3, right=3, bottom=2]"
       # @return [ElkPadding] Parsed padding object
       def self.from_string(str)
-        # Remove brackets and split by comma
         content = str.strip.gsub(/^\[|\]$/, "")
-        parts = {}
+        new(**content.split(",", -1).to_h { |entry| side_and_number(entry) })
+      end
 
-        content.split(",").each do |part|
-          key, value = part.split("=").map(&:strip)
-          parts[key.to_sym] = value.to_f
+      # One "side=number" entry, validated here so a repeated side cannot
+      # hide a malformed earlier value; an entry without exactly one '=' is
+      # malformed.
+      def self.side_and_number(entry)
+        key, value, extra = entry.split("=", -1).map(&:strip)
+        if extra || !value
+          raise ArgumentError, "Invalid padding entry: #{entry.inspect}"
         end
 
-        new(**parts)
+        [key.to_sym, Decimal.to_f(value)]
       end
+      private_class_method :side_and_number
 
       # Convert to hash
       #

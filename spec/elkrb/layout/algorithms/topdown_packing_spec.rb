@@ -10,10 +10,10 @@ RSpec.describe Elkrb::Layout::Algorithms::TopdownPacking do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
+          layout_options: {
             "algorithm" => "topdownpacking",
             "elk.spacing.nodeNode" => 10.0,
-          ),
+          },
         )
       end
 
@@ -47,15 +47,13 @@ RSpec.describe Elkrb::Layout::Algorithms::TopdownPacking do
         expect((nodes[2].y - nodes[3].y).abs).to be < 1.0
       end
 
-      it "creates nodes with uniform dimensions" do
+      it "keeps each node's own declared width and height" do
         algorithm.layout(graph)
 
-        # All nodes should have the same width and height in grid layout
-        widths = graph.children.map(&:width).uniq
-        heights = graph.children.map(&:height).uniq
-
-        expect(widths.size).to eq(1)
-        expect(heights.size).to eq(1)
+        # Every node here declared its own size; a size-less node is the
+        # only one that takes the grid cell size, so these stay as given.
+        expect(graph.children.map(&:width)).to eq([50.0, 40.0, 60.0, 30.0])
+        expect(graph.children.map(&:height)).to eq([40.0, 30.0, 35.0, 25.0])
       end
 
       it "verifies no overlaps between nodes" do
@@ -86,14 +84,368 @@ RSpec.describe Elkrb::Layout::Algorithms::TopdownPacking do
       end
     end
 
+    context "with declared node sizes (tree-family-14)" do
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "root",
+          layout_options: { "algorithm" => "topdownpacking" },
+        )
+      end
+
+      it "keeps every node's declared width and height instead of the cell size" do
+        graph.children = %w[a b c d].map do |id|
+          Elkrb::Graph::Node.new(id: id, width: 100, height: 50)
+        end
+
+        algorithm.layout(graph)
+
+        expect(graph.children.map { |n| [n.width, n.height] }.uniq).to eq([[100.0, 50.0]])
+      end
+
+      it "gives a size-less node the (width-averaged) cell size while declared nodes keep their own" do
+        graph.children = [
+          Elkrb::Graph::Node.new(id: "a", width: 100, height: 50),
+          Elkrb::Graph::Node.new(id: "b", width: 100, height: 50),
+          Elkrb::Graph::Node.new(id: "c", width: 100, height: 50),
+          Elkrb::Graph::Node.new(id: "d"),
+        ]
+
+        algorithm.layout(graph)
+
+        sized, sizeless = graph.children.partition { |n| n.id != "d" }
+
+        expect(sized.map { |n| [n.width, n.height] }).to eq([[100.0, 50.0]] * 3)
+        # avg width = (100+100+100+0.0)/4 = 75.0 -- the size-less node
+        # contributes 0.0, not its own size, to that average.
+        expect([sizeless.first.width, sizeless.first.height]).to eq([75.0, 75.0])
+      end
+
+      it "gives a size-less node the (height-averaged) cell size while declared nodes keep their own" do
+        graph.children = [
+          Elkrb::Graph::Node.new(id: "a", width: 20, height: 200),
+          Elkrb::Graph::Node.new(id: "b", width: 20, height: 200),
+          Elkrb::Graph::Node.new(id: "c", width: 20, height: 200),
+          Elkrb::Graph::Node.new(id: "d"),
+        ]
+
+        algorithm.layout(graph)
+
+        sized, sizeless = graph.children.partition { |n| n.id != "d" }
+
+        expect(sized.map { |n| [n.width, n.height] }).to eq([[20.0, 200.0]] * 3)
+        # avg height = (200+200+200+0.0)/4 = 150.0 here dominates the base
+        # dimension -- the size-less node's own (absent) height is 0.0,
+        # not its own size, in that average.
+        expect([sizeless.first.width, sizeless.first.height]).to eq([150.0, 150.0])
+      end
+
+      it "does not let a declared node larger than the average cell overlap its neighbours" do
+        # A declared node can be larger than the grid-cell size (which is
+        # only an average). Advancing the grid by the cell size regardless
+        # would let such a node overlap the node placed after it.
+        graph.children = [
+          Elkrb::Graph::Node.new(id: "tiny", width: 10, height: 10),
+          Elkrb::Graph::Node.new(id: "small", width: 30, height: 20),
+          Elkrb::Graph::Node.new(id: "medium", width: 50, height: 50),
+          Elkrb::Graph::Node.new(id: "large", width: 80, height: 60),
+          Elkrb::Graph::Node.new(id: "huge", width: 120, height: 100),
+        ]
+
+        algorithm.layout(graph)
+
+        # Uniform-grid code (e.g. resizing every node to one averaged cell
+        # size) never overlaps here either, so the overlap check alone
+        # would pass for the wrong reason. Pin each node's own declared
+        # size too, so a regression that clobbers declared sizes back to
+        # a uniform cell fails this example directly.
+        declared_sizes = {
+          "tiny" => [10.0, 10.0],
+          "small" => [30.0, 20.0],
+          "medium" => [50.0, 50.0],
+          "large" => [80.0, 60.0],
+          "huge" => [120.0, 100.0],
+        }
+        graph.children.each do |node|
+          expect([node.width, node.height]).to eq(declared_sizes[node.id])
+        end
+
+        graph.children.combination(2).each do |node1, node2|
+          overlap_x = (node1.x < node2.x + node2.width) &&
+            (node1.x + node1.width > node2.x)
+          overlap_y = (node1.y < node2.y + node2.height) &&
+            (node1.y + node1.height > node2.y)
+
+          expect(overlap_x && overlap_y).to be(false), "#{node1.id} and #{node2.id} overlap"
+        end
+      end
+    end
+
+    context "with degenerate declared sizes" do
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "root",
+          layout_options: { "algorithm" => "topdownpacking" },
+        )
+      end
+
+      it "falls back to a default cell size when no node declares any width or height" do
+        graph.children = %w[a b c d].map { |id| Elkrb::Graph::Node.new(id: id) }
+
+        algorithm.layout(graph)
+
+        # Every node is completely size-less and no nodeWidth option is
+        # set, so the width/height average degenerates to zero. Without a
+        # fallback every node would silently collapse to a 0x0 footprint.
+        expect(graph.children.map { |n| [n.width, n.height] }.uniq)
+          .to eq([[described_class::DEFAULT_CELL_SIZE, described_class::DEFAULT_CELL_SIZE]])
+      end
+
+      it "does not crash and keeps declared sizes when a declared width is NaN" do
+        # Heterogeneous declared sizes, deliberately not all equal to the
+        # cell size the algorithm computes -- code that clobbers every
+        # node to a uniform cell size (as unfixed code does, since it
+        # can't isolate the NaN node) would pass a vaguer assertion here
+        # even though it discards every OTHER node's declared size too.
+        graph.children = [
+          Elkrb::Graph::Node.new(id: "a", width: 30, height: 30),
+          Elkrb::Graph::Node.new(id: "h", width: Float::NAN, height: 80),
+          Elkrb::Graph::Node.new(id: "c", width: 60, height: 60),
+          Elkrb::Graph::Node.new(id: "d", width: 90, height: 40),
+        ]
+
+        expect { algorithm.layout(graph) }.not_to raise_error
+
+        by_id = graph.children.to_h { |n| [n.id, [n.width, n.height]] }
+        expect(by_id["a"]).to eq([30.0, 30.0])
+        expect(by_id["c"]).to eq([60.0, 60.0])
+        expect(by_id["d"]).to eq([90.0, 40.0])
+
+        # The NaN node's width is unusable and falls back to the computed
+        # cell width -- pinned to the exact value (not merely `be_finite`,
+        # which would also pass for a wrong-but-finite fallback) so a
+        # regression to the guard is caught directly: avg_height =
+        # (30+80+60+40)/4 = 52.5 dominates avg_width = (30+0+60+90)/4 = 45.0
+        # (the NaN node contributes 0.0), so node_height = 52.5 becomes the
+        # base dimension and node_width = 52.5 * aspect_ratio(1.0).
+        # Its own declared height is untouched.
+        expect(by_id["h"][0]).to eq(52.5)
+        expect(by_id["h"][1]).to eq(80.0)
+
+        graph.children.each do |node|
+          expect(node.x).to be_finite
+          expect(node.y).to be_finite
+        end
+      end
+
+      it "does not crash and does not propagate Infinity when a declared height is infinite" do
+        graph.children = [
+          Elkrb::Graph::Node.new(id: "a", width: 50, height: 50),
+          Elkrb::Graph::Node.new(id: "h", width: 50, height: Float::INFINITY),
+          Elkrb::Graph::Node.new(id: "c", width: 50, height: 50),
+          Elkrb::Graph::Node.new(id: "d", width: 50, height: 50),
+        ]
+
+        expect { algorithm.layout(graph) }.not_to raise_error
+
+        inf_node = graph.children.find { |n| n.id == "h" }
+        # Pinned to the exact value: avg_width = (50+50+50+50)/4 = 50.0
+        # dominates avg_height = (50+0+50+50)/4 = 37.5 (the Infinity node
+        # contributes 0.0), so node_width = 50.0 is the base dimension and
+        # node_height = 50.0 / aspect_ratio(1.0) becomes the fallback.
+        expect(inf_node.height).to eq(50.0)
+        expect(inf_node.x).to be_finite
+        expect(inf_node.y).to be_finite
+      end
+
+      it "does not let an Infinity-width node dominate the average and corrupt a sized peer's fallback" do
+        # This is the mutant-coverage gap: a spec whose fixture happens to
+        # land where the guarded and unguarded avg_width already coincide
+        # cannot kill a mutant that deletes the finite_dimension guard on
+        # the sum. Here the Infinity node's width is large enough relative
+        # to its peers that the guarded and unguarded averages genuinely
+        # diverge, so removing the guard changes the asserted value.
+        graph.children = [
+          Elkrb::Graph::Node.new(id: "inf", width: Float::INFINITY, height: 10),
+          Elkrb::Graph::Node.new(id: "p1", width: 100, height: 10),
+          Elkrb::Graph::Node.new(id: "p2", width: 100, height: 10),
+        ]
+
+        expect { algorithm.layout(graph) }.not_to raise_error
+
+        # Guarded: avg_width = (0+100+100)/3 = 66.666... (finite).
+        # Unguarded (Infinity included in the sum): avg_width = Infinity.
+        expected_cell_width = 200.0 / 3.0
+        by_id = graph.children.to_h { |n| [n.id, [n.width, n.height]] }
+
+        # The peers' own declared sizes are untouched.
+        expect(by_id["p1"]).to eq([100.0, 10.0])
+        expect(by_id["p2"]).to eq([100.0, 10.0])
+
+        # The Infinity node's own width is unusable and falls back to the
+        # computed cell width; its own declared height is untouched.
+        expect(by_id["inf"][0]).to eq(expected_cell_width)
+        expect(by_id["inf"][1]).to eq(10.0)
+      end
+
+      it "treats a negative declared width the same as size-less, instead of letting it invert its own box" do
+        # Before this file's declared-size-preserving change, every node
+        # got the SAME shared, uniformly-averaged cell size, so a negative
+        # declared value could corrupt the aggregate but no single node
+        # could ever show its OWN negative value while its neighbours
+        # stayed normal. Preserving each node's own size is exactly what
+        # lets one node's negative value flow into its own box for the
+        # first time -- inverting it ([x, x+width] with width < 0) and
+        # producing a false-negative overlap against a neighbour under the
+        # standard min/max overlap formula (used both below and in
+        # base_algorithm.rb's calculate_bounding_box). Rejecting non-
+        # positive values the same way NaN/Infinity are rejected closes
+        # this by falling back to the grid cell size instead.
+        graph.children = [
+          Elkrb::Graph::Node.new(id: "neg", width: -80.0, height: 70.0),
+          Elkrb::Graph::Node.new(id: "p1", width: 50.0, height: 50.0),
+          Elkrb::Graph::Node.new(id: "p2", width: 50.0, height: 50.0),
+          Elkrb::Graph::Node.new(id: "p3", width: 50.0, height: 50.0),
+        ]
+
+        algorithm.layout(graph)
+
+        # The peers' own declared sizes are untouched.
+        by_id = graph.children.to_h { |n| [n.id, [n.width, n.height]] }
+        expect(by_id["p1"]).to eq([50.0, 50.0])
+        expect(by_id["p2"]).to eq([50.0, 50.0])
+        expect(by_id["p3"]).to eq([50.0, 50.0])
+
+        # The negative-width node's own width is unusable and falls back
+        # to the computed cell width (avg_height = (70+50+50+50)/4 = 55.0
+        # dominates avg_width = (0+50+50+50)/4 = 37.5, since the negative
+        # value contributes 0.0, so node_width = 55.0). Its own declared
+        # height (70.0) is positive and finite, so it is kept as-is.
+        expect(by_id["neg"]).to eq([55.0, 70.0])
+
+        # No box is inverted, so the standard overlap formula finds none.
+        graph.children.combination(2).each do |node1, node2|
+          overlap_x = (node1.x < node2.x + node2.width) &&
+            (node1.x + node1.width > node2.x)
+          overlap_y = (node1.y < node2.y + node2.height) &&
+            (node1.y + node1.height > node2.y)
+
+          expect(overlap_x && overlap_y).to be(false), "#{node1.id} and #{node2.id} overlap"
+        end
+      end
+
+      it "puts a negative-size node's ports on the edges of the cell size it gets" do
+        port = ->(id, side) { Elkrb::Graph::Port.new(id: id, width: 4.0, height: 4.0, side: side) }
+        graph.children = [
+          Elkrb::Graph::Node.new(id: "neg", width: -80.0, height: -40.0,
+                                 ports: [port.("e", "EAST"), port.("w", "WEST"),
+                                         port.("n", "NORTH"), port.("s", "SOUTH")]),
+          Elkrb::Graph::Node.new(id: "peer", width: 30.0, height: 30.0),
+        ]
+
+        algorithm.layout(graph)
+
+        node = graph.children.first
+        edges = node.ports.to_h { |each| [each.id, each.side.match?(/EAST|WEST/) ? each.x : each.y] }
+        expect(edges).to eq("e" => node.width, "w" => 0.0, "n" => 0.0, "s" => node.height)
+      end
+
+      it "gives mixed-index ports the order and east edge a positive node of the same size gets" do
+        order_for = lambda do |width|
+          ports = [
+            # Declared out of final order, so a re-placement that trusts
+            # the declared order instead of the first pass's shows up.
+            Elkrb::Graph::Port.new(id: "a", side: "EAST", x: 0.0, y: 10.0, width: 4.0, height: 4.0),
+            Elkrb::Graph::Port.new(id: "b", side: "EAST", x: 0.0, y: 20.0, width: 4.0, height: 4.0),
+            Elkrb::Graph::Port.new(id: "explicit", side: "EAST", index: 2, x: 0.0, y: 5.0, width: 4.0, height: 4.0),
+          ]
+          graph.children = [
+            Elkrb::Graph::Node.new(id: "n", width: width, height: 40.0, ports: ports),
+            Elkrb::Graph::Node.new(id: "peer", width: 30.0, height: 30.0),
+          ]
+          algorithm.layout(graph)
+          node = graph.children.first
+          node.ports.sort_by(&:y).map { |each| [each.id, each.y, each.x - node.width] }
+        end
+
+        expect(order_for.call(-80.0)).to eq(order_for.call(80.0))
+        expect(order_for.call(80.0).map(&:first)).to eq(%w[explicit a b])
+      end
+
+      it "detects sides and places ports on the resized node when the other axis kept them from being placed" do
+        # A zero height meant no pass ran before the resize, so this port
+        # still has no side; only a full pass can give it one.
+        port = Elkrb::Graph::Port.new(id: "p", x: 1000.0, y: 20.0, width: 4.0, height: 4.0)
+        graph.children = [
+          Elkrb::Graph::Node.new(id: "neg", width: -80.0, height: 0.0, ports: [port]),
+          Elkrb::Graph::Node.new(id: "peer", width: 30.0, height: 30.0),
+        ]
+
+        algorithm.layout(graph)
+
+        node = graph.children.first
+        expect([port.side, port.x]).to eq(["EAST", node.width])
+      end
+
+      [0.0, nil, Float::NAN, Float::INFINITY].each do |declared|
+        it "places the ports on the resized node when the declared width is #{declared.inspect}" do
+          port = Elkrb::Graph::Port.new(id: "e", side: "EAST", width: 4.0, height: 4.0)
+          graph.children = [
+            Elkrb::Graph::Node.new(id: "n", width: declared, height: 40.0, ports: [port]),
+            Elkrb::Graph::Node.new(id: "peer", width: 30.0, height: 30.0),
+          ]
+
+          algorithm.layout(graph)
+
+          node = graph.children.first
+          expected_y = (node.height - port.height) / 2
+          expect([node.width.positive?, port.x, port.y]).to eq([true, node.width, expected_y])
+        end
+      end
+
+      it "does not carry a node's recorded port order into a later layout" do
+        port = ->(id) { Elkrb::Graph::Port.new(id: id, side: "EAST", width: 4.0, height: 4.0) }
+        node = Elkrb::Graph::Node.new(id: "n", width: 80.0, height: 40.0, ports: [port.("old")])
+        graph.children = [node, Elkrb::Graph::Node.new(id: "peer", width: 30.0, height: 30.0)]
+        algorithm.layout(graph)
+
+        # The same node, now size-less and with new ports: nothing was
+        # placed for it this time, so layout must place them from scratch.
+        node.width = 0.0
+        node.ports = [port.("new")]
+        algorithm.layout(graph)
+
+        expect(node.ports.first.x).to eq(node.width)
+      end
+
+      it "keeps the port order when the declared size is too small for positions to tell ports apart" do
+        order_for = lambda do |width|
+          ports = [
+            Elkrb::Graph::Port.new(id: "a", side: "NORTH", x: 10.0, y: 0.0, width: 4.0, height: 4.0),
+            Elkrb::Graph::Port.new(id: "b", side: "NORTH", x: 20.0, y: 0.0, width: 4.0, height: 4.0),
+            Elkrb::Graph::Port.new(id: "explicit", side: "NORTH", index: 2, x: 5.0, y: 0.0, width: 4.0, height: 4.0),
+          ]
+          graph.children = [
+            Elkrb::Graph::Node.new(id: "n", width: width, height: 40.0, ports: ports),
+            Elkrb::Graph::Node.new(id: "peer", width: 30.0, height: 30.0),
+          ]
+          algorithm.layout(graph)
+          graph.children.first.ports.sort_by(&:x).map(&:id)
+        end
+
+        subnormal = -(0.0.next_float)
+        expect(order_for.call(80.0)).to eq(%w[explicit a b])
+        expect(order_for.call(subnormal)).to eq(order_for.call(80.0))
+      end
+    end
+
     context "with many nodes (20+ nodes)" do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
+          layout_options: {
             "algorithm" => "topdownpacking",
             "elk.spacing.nodeNode" => 5.0,
-          ),
+          },
         )
       end
 
@@ -155,7 +507,7 @@ RSpec.describe Elkrb::Layout::Algorithms::TopdownPacking do
       let(:aspect_ratio) { 2.0 }
 
       let(:graph) do
-        opts = Elkrb::Graph::LayoutOptions.new
+        opts = {}
         opts["algorithm"] = "topdownpacking"
         opts["topdownpacking.aspectRatio"] = aspect_ratio
 
@@ -167,21 +519,18 @@ RSpec.describe Elkrb::Layout::Algorithms::TopdownPacking do
 
       before do
         graph.children = (1..9).map do |i|
-          Elkrb::Graph::Node.new(
-            id: "node#{i}",
-            width: 50,
-            height: 50,
-          )
+          Elkrb::Graph::Node.new(id: "node#{i}", width: 50, height: 50)
         end
       end
 
-      it "respects aspect ratio option" do
+      it "does not reshape declared node sizes" do
         algorithm.layout(graph)
 
-        # All nodes should have dimensions respecting the aspect ratio
+        # Every node already declared its own size, so the aspect ratio
+        # option — which only governs the grid cell size — never touches
+        # them; only a size-less node would take a reshaped cell size.
         graph.children.each do |node|
-          ratio = node.width / node.height
-          expect(ratio).to be_within(0.1).of(aspect_ratio)
+          expect([node.width, node.height]).to eq([50.0, 50.0])
         end
       end
 
@@ -198,9 +547,7 @@ RSpec.describe Elkrb::Layout::Algorithms::TopdownPacking do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "topdownpacking",
-          ),
+          layout_options: { "algorithm" => "topdownpacking" },
         )
       end
 
@@ -214,15 +561,11 @@ RSpec.describe Elkrb::Layout::Algorithms::TopdownPacking do
         ]
       end
 
-      it "normalizes node sizes in grid layout" do
+      it "keeps each node's own declared size instead of normalizing" do
         algorithm.layout(graph)
 
-        # All nodes should be resized to uniform dimensions
-        widths = graph.children.map(&:width).uniq
-        heights = graph.children.map(&:height).uniq
-
-        expect(widths.size).to eq(1)
-        expect(heights.size).to eq(1)
+        expect(graph.children.map(&:width)).to eq([10.0, 30.0, 50.0, 80.0, 120.0])
+        expect(graph.children.map(&:height)).to eq([10.0, 20.0, 50.0, 60.0, 100.0])
       end
 
       it "positions all nodes correctly" do
@@ -239,9 +582,7 @@ RSpec.describe Elkrb::Layout::Algorithms::TopdownPacking do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "topdownpacking",
-          ),
+          layout_options: { "algorithm" => "topdownpacking" },
         )
       end
 
@@ -272,9 +613,7 @@ RSpec.describe Elkrb::Layout::Algorithms::TopdownPacking do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "topdownpacking",
-          ),
+          layout_options: { "algorithm" => "topdownpacking" },
         )
       end
 
@@ -292,7 +631,7 @@ RSpec.describe Elkrb::Layout::Algorithms::TopdownPacking do
 
     context "with custom node width option" do
       let(:graph) do
-        opts = Elkrb::Graph::LayoutOptions.new
+        opts = {}
         opts["algorithm"] = "topdownpacking"
         opts["topdownpacking.nodeWidth"] = 100.0
         opts["topdownpacking.aspectRatio"] = 1.5
@@ -304,13 +643,9 @@ RSpec.describe Elkrb::Layout::Algorithms::TopdownPacking do
       end
 
       before do
-        graph.children = (1..6).map do |i|
-          Elkrb::Graph::Node.new(
-            id: "node#{i}",
-            width: 50,
-            height: 50,
-          )
-        end
+        # Size-less: topdownpacking.nodeWidth sets the grid cell size, which
+        # only ever applies to a node with no declared size of its own.
+        graph.children = (1..6).map { |i| Elkrb::Graph::Node.new(id: "node#{i}") }
       end
 
       it "respects custom node width" do
@@ -331,13 +666,83 @@ RSpec.describe Elkrb::Layout::Algorithms::TopdownPacking do
       end
     end
 
+    context "with a non-positive aspectRatio" do
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "root",
+          layout_options: { "algorithm" => "topdownpacking",
+                            "topdownpacking.nodeWidth" => 100.0,
+                            "topdownpacking.aspectRatio" => ratio },
+          children: (1..4).map { |i| Elkrb::Graph::Node.new(id: "n#{i}") },
+        )
+      end
+
+      [0.0, -2.0].each do |value|
+        context "of #{value}" do
+          let(:ratio) { value }
+
+          it "falls back to square cells" do
+            algorithm.layout(graph)
+
+            expect(graph.children.map(&:height)).to all(eq(100.0))
+          end
+        end
+      end
+    end
+
+    context "with a non-finite topdownpacking option" do
+      # The resolver rejects a non-finite number at the read, naming the
+      # option, before it can reach the position math or Array#max in
+      # calculate_bounding_box (ArgumentError: comparison of Float with NaN).
+      # The graph is fully size-less so the cell size is always computed.
+      let(:graph) do
+        Elkrb::Graph::Graph.new(
+          id: "root",
+          layout_options: { "algorithm" => "topdownpacking" }.merge(layout_option),
+        )
+      end
+
+      before do
+        graph.children = (1..4).map { |i| Elkrb::Graph::Node.new(id: "n#{i}") }
+      end
+
+      shared_examples "rejects the option by name" do |id|
+        it "raises a ValidationError naming #{id}" do
+          expect { algorithm.layout(graph) }
+            .to raise_error(Elkrb::ValidationError, /#{Regexp.escape(id)}/)
+        end
+      end
+
+      context "with aspectRatio: NaN" do
+        let(:layout_option) { { "topdownpacking.aspectRatio" => Float::NAN } }
+
+        include_examples "rejects the option by name", "topdownpacking.aspectRatio"
+      end
+
+      context "with aspectRatio: Infinity" do
+        let(:layout_option) { { "topdownpacking.aspectRatio" => Float::INFINITY } }
+
+        include_examples "rejects the option by name", "topdownpacking.aspectRatio"
+      end
+
+      context "with nodeWidth: NaN" do
+        let(:layout_option) { { "topdownpacking.nodeWidth" => Float::NAN } }
+
+        include_examples "rejects the option by name", "topdownpacking.nodeWidth"
+      end
+
+      context "with nodeWidth: Infinity" do
+        let(:layout_option) { { "topdownpacking.nodeWidth" => Float::INFINITY } }
+
+        include_examples "rejects the option by name", "topdownpacking.nodeWidth"
+      end
+    end
+
     context "grid dimension calculations" do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "topdownpacking",
-          ),
+          layout_options: { "algorithm" => "topdownpacking" },
         )
       end
 

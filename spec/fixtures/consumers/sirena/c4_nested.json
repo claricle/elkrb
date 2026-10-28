@@ -1,0 +1,342 @@
+{
+  "id": "c4",
+  "children": [
+    {
+      "id": "acme",
+      "width": 1420,
+      "height": 580,
+      "labels": [
+        {
+          "text": "Acme Corp",
+          "width": 72.0,
+          "height": 16.0
+        }
+      ],
+      "children": [
+        {
+          "id": "shop",
+          "width": 580,
+          "height": 350,
+          "labels": [
+            {
+              "text": "Shop System",
+              "width": 88.0,
+              "height": 16.0
+            }
+          ],
+          "children": [
+            {
+              "id": "webapp",
+              "width": 160,
+              "height": 120,
+              "labels": [
+                {
+                  "text": "Web Application",
+                  "width": 120.0,
+                  "height": 16.0
+                },
+                {
+                  "text": "React",
+                  "width": 30.0,
+                  "height": 12.0
+                },
+                {
+                  "text": "[Serves the UI]",
+                  "width": 78.0,
+                  "height": 12.0
+                }
+              ],
+              "metadata": {
+                "element_type": "Container",
+                "base_type": "Container",
+                "external": false,
+                "sprite": null,
+                "link": null,
+                "tags": null,
+                "person": false,
+                "system": false,
+                "container": true,
+                "component": false
+              }
+            },
+            {
+              "id": "api",
+              "width": 160,
+              "height": 120,
+              "labels": [
+                {
+                  "text": "API Gateway",
+                  "width": 88.0,
+                  "height": 16.0
+                },
+                {
+                  "text": "Node.js",
+                  "width": 42.0,
+                  "height": 12.0
+                },
+                {
+                  "text": "[Routes requests]",
+                  "width": 90.0,
+                  "height": 12.0
+                }
+              ],
+              "metadata": {
+                "element_type": "Container",
+                "base_type": "Container",
+                "external": false,
+                "sprite": null,
+                "link": null,
+                "tags": null,
+                "person": false,
+                "system": false,
+                "container": true,
+                "component": false
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.algorithm": "box",
+            "elk.box.packingMode": "GROUP_MIXED",
+            "elk.padding": "[top=40,left=40,bottom=40,right=40]",
+            "elk.spacing.nodeNode": "60"
+          },
+          "metadata": {
+            "boundary_type": "System_Boundary",
+            "type_param": null,
+            "link": null,
+            "tags": null
+          }
+        },
+        {
+          "id": "billing",
+          "width": 580,
+          "height": 350,
+          "labels": [
+            {
+              "text": "Billing System",
+              "width": 112.0,
+              "height": 16.0
+            }
+          ],
+          "children": [
+            {
+              "id": "ledger",
+              "width": 160,
+              "height": 120,
+              "labels": [
+                {
+                  "text": "Ledger Service",
+                  "width": 112.0,
+                  "height": 16.0
+                },
+                {
+                  "text": "Java",
+                  "width": 24.0,
+                  "height": 12.0
+                },
+                {
+                  "text": "[Records charges]",
+                  "width": 90.0,
+                  "height": 12.0
+                }
+              ],
+              "metadata": {
+                "element_type": "Container",
+                "base_type": "Container",
+                "external": false,
+                "sprite": null,
+                "link": null,
+                "tags": null,
+                "person": false,
+                "system": false,
+                "container": true,
+                "component": false
+              }
+            },
+            {
+              "id": "billdb",
+              "width": 160,
+              "height": 120,
+              "labels": [
+                {
+                  "text": "Billing Database",
+                  "width": 128.0,
+                  "height": 16.0
+                },
+                {
+                  "text": "PostgreSQL",
+                  "width": 60.0,
+                  "height": 12.0
+                },
+                {
+                  "text": "[Stores invoices]",
+                  "width": 90.0,
+                  "height": 12.0
+                }
+              ],
+              "metadata": {
+                "element_type": "ContainerDb",
+                "base_type": "ContainerDb",
+                "external": false,
+                "sprite": null,
+                "link": null,
+                "tags": null,
+                "person": false,
+                "system": false,
+                "container": true,
+                "component": false
+              }
+            }
+          ],
+          "layoutOptions": {
+            "elk.algorithm": "box",
+            "elk.box.packingMode": "GROUP_MIXED",
+            "elk.padding": "[top=40,left=40,bottom=40,right=40]",
+            "elk.spacing.nodeNode": "60"
+          },
+          "metadata": {
+            "boundary_type": "System_Boundary",
+            "type_param": null,
+            "link": null,
+            "tags": null
+          }
+        }
+      ],
+      "layoutOptions": {
+        "elk.algorithm": "box",
+        "elk.box.packingMode": "GROUP_MIXED",
+        "elk.padding": "[top=40,left=40,bottom=40,right=40]",
+        "elk.spacing.nodeNode": "60"
+      },
+      "metadata": {
+        "boundary_type": "Enterprise_Boundary",
+        "type_param": null,
+        "link": null,
+        "tags": null
+      }
+    },
+    {
+      "id": "customer",
+      "width": 140,
+      "height": 180,
+      "labels": [
+        {
+          "text": "Customer",
+          "width": 64.0,
+          "height": 16.0
+        },
+        {
+          "text": "Online shopper",
+          "width": 84.0,
+          "height": 12.0
+        }
+      ],
+      "metadata": {
+        "element_type": "Person",
+        "base_type": "Person",
+        "external": false,
+        "sprite": null,
+        "link": null,
+        "tags": null,
+        "person": true,
+        "system": false,
+        "container": false,
+        "component": false
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "rel_0",
+      "sources": [
+        "customer"
+      ],
+      "targets": [
+        "webapp"
+      ],
+      "labels": [
+        {
+          "text": "Uses",
+          "width": 28.0,
+          "height": 14.0
+        },
+        {
+          "text": "[HTTPS]",
+          "width": 42.0,
+          "height": 12.0
+        }
+      ],
+      "metadata": {
+        "rel_type": "Rel",
+        "bidirectional": false
+      }
+    },
+    {
+      "id": "rel_1",
+      "sources": [
+        "api"
+      ],
+      "targets": [
+        "ledger"
+      ],
+      "labels": [
+        {
+          "text": "Charges via",
+          "width": 77.0,
+          "height": 14.0
+        },
+        {
+          "text": "[REST/JSON]",
+          "width": 66.0,
+          "height": 12.0
+        }
+      ],
+      "metadata": {
+        "rel_type": "Rel",
+        "bidirectional": false
+      }
+    },
+    {
+      "id": "rel_2",
+      "sources": [
+        "ledger"
+      ],
+      "targets": [
+        "billdb"
+      ],
+      "labels": [
+        {
+          "text": "Reads/Writes",
+          "width": 84.0,
+          "height": 14.0
+        },
+        {
+          "text": "[SQL]",
+          "width": 30.0,
+          "height": 12.0
+        }
+      ],
+      "metadata": {
+        "rel_type": "Rel",
+        "bidirectional": false
+      }
+    }
+  ],
+  "layoutOptions": {
+    "algorithm": "layered",
+    "elk.direction": "DOWN",
+    "elk.spacing.nodeNode": 60,
+    "elk.spacing.edgeNode": 25,
+    "elk.spacing.edgeEdge": 20,
+    "elk.layered.spacing.nodeNodeBetweenLayers": 80,
+    "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
+    "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
+    "elk.hierarchyHandling": "INCLUDE_CHILDREN"
+  },
+  "metadata": {
+    "level": "Container",
+    "title": "Nested boundaries container diagram",
+    "element_count": 5,
+    "relationship_count": 3
+  }
+}

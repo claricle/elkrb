@@ -16,7 +16,7 @@ RSpec.describe Elkrb::Serializers::ElktSerializer do
 
       result = serializer.serialize(graph)
 
-      expect(result).to eq("\n")
+      expect(result).to eq("graph root\n")
     end
 
     it "serializes simple nodes" do
@@ -49,7 +49,7 @@ RSpec.describe Elkrb::Serializers::ElktSerializer do
 
       result = serializer.serialize(graph)
 
-      expect(result).to include("edge n1 -> n2")
+      expect(result).to include("edge e1: n1 -> n2")
     end
 
     it "serializes nodes with custom dimensions" do
@@ -181,7 +181,7 @@ RSpec.describe Elkrb::Serializers::ElktSerializer do
 
       result = serializer.serialize(graph)
 
-      expect(result).to include("layout [ position: 50, 100 ]")
+      expect(result).to include("layout [ position: 50, 100  size: 100, 60 ]")
     end
 
     it "serializes ports" do
@@ -223,7 +223,7 @@ RSpec.describe Elkrb::Serializers::ElktSerializer do
 
       result = serializer.serialize(graph)
 
-      expect(result).to include("edge n1.p1 -> n2.p2")
+      expect(result).to include("edge e1: n1.p1 -> n2.p2")
     end
 
     it "serializes edges with source port only" do
@@ -245,7 +245,7 @@ RSpec.describe Elkrb::Serializers::ElktSerializer do
 
       result = serializer.serialize(graph)
 
-      expect(result).to include("edge n1.p1 -> n2")
+      expect(result).to include("edge e1: n1.p1 -> n2")
     end
 
     it "serializes edges with target port only" do
@@ -267,10 +267,10 @@ RSpec.describe Elkrb::Serializers::ElktSerializer do
 
       result = serializer.serialize(graph)
 
-      expect(result).to include("edge n1 -> n2.p2")
+      expect(result).to include("edge e1: n1 -> n2.p2")
     end
 
-    it "omits auto-generated edge IDs" do
+    it "includes e-number edge IDs" do
       graph = {
         id: "root",
         children: [
@@ -284,8 +284,7 @@ RSpec.describe Elkrb::Serializers::ElktSerializer do
 
       result = serializer.serialize(graph)
 
-      expect(result).to include("edge n1 -> n2")
-      expect(result).not_to include("e0:")
+      expect(result).to include("edge e0: n1 -> n2")
     end
 
     it "includes custom edge IDs" do
@@ -378,7 +377,7 @@ RSpec.describe Elkrb::Serializers::ElktSerializer do
       expect(result).to include("spacing.nodeNode: 50")
       expect(result).to include("node n1 {")
       expect(result).to include('label "Node 1"')
-      expect(result).to include("edge n1 -> n2")
+      expect(result).to include("edge e1: n1 -> n2")
     end
 
     it "handles options without elk prefix" do
@@ -409,7 +408,7 @@ RSpec.describe Elkrb::Serializers::ElktSerializer do
 
       result = serializer.serialize(graph)
 
-      expect(result).to include("edge n1 -> n1")
+      expect(result).to include("edge e1: n1 -> n1")
     end
 
     it "serializes multiple edges" do
@@ -464,12 +463,8 @@ RSpec.describe Elkrb::Serializers::ElktSerializer do
       }
 
       result = serializer.serialize(graph)
-      lines = result.split("\n")
 
-      node_idx = lines.rindex { |l| l.include?("node") }
-      lines.index { |l| l.include?("edge") }
-
-      expect(lines[node_idx + 1].strip).to be_empty
+      expect(result).to include("}\n\nedge e1:")
     end
 
     it "supports custom indentation" do
@@ -543,11 +538,156 @@ RSpec.describe Elkrb::Serializers::ElktSerializer do
 
       result = serializer.serialize(graph)
 
-      expect(result).to include("edge child1 -> child2")
+      expect(result).to include("edge e1: child1 -> child2")
     end
   end
 
   describe "round-trip conversion" do
+    it "preserves the root id, geometry, and numeric precision" do
+      require_relative "../../../lib/elkrb/parsers/elkt_parser"
+
+      graph = {
+        id: "diagram", x: 1.23456789012345, y: 2.5,
+        width: 300.125, height: 400.75, children: [], edges: []
+      }
+
+      parsed = Elkrb::Parsers::ElktParser.parse(serializer.serialize(graph))
+
+      expect(parsed).to include(
+        id: "diagram", x: 1.23456789012345, y: 2.5,
+        width: 300.125, height: 400.75
+      )
+    end
+
+    it "preserves every ELKT-representable edge section field" do
+      require_relative "../../../lib/elkrb/parsers/elkt_parser"
+
+      graph = {
+        id: "root",
+        children: [{ id: "a" }, { id: "b" }],
+        edges: [{
+          id: "e", sources: ["a"], targets: ["b"],
+          sections: [
+            {
+              id: "s1", incomingShape: "a", outgoingShape: "b",
+              startPoint: { x: 0.123456789012345, y: 2.5 },
+              endPoint: { x: 30.25, y: 40.75 },
+              bendPoints: [{ x: 10.125, y: 20.875 }],
+              outgoingSections: ["s2"],
+              layoutOptions: { "custom.section" => 3 }
+            },
+            { id: "s2", startPoint: { x: 30.25, y: 40.75 } },
+          ]
+        }],
+      }
+
+      elkt = serializer.serialize(graph)
+      sections = Elkrb::Parsers::ElktParser.parse(elkt)
+        .dig(:edges, 0, :sections)
+
+      expect(elkt).to include("edge e: a -> b {", "layout [", "section s1")
+      expect(sections.first).to include(
+        id: "s1", incomingShape: "a", outgoingShape: "b",
+        startPoint: { x: 0.123456789012345, y: 2.5 },
+        endPoint: { x: 30.25, y: 40.75 },
+        bendPoints: [{ x: 10.125, y: 20.875 }],
+        outgoingSections: ["s2"],
+        layoutOptions: { "custom.section" => 3 }
+      )
+      expect(sections.last).to include(
+        id: "s2", startPoint: { x: 30.25, y: 40.75 },
+      )
+    end
+
+    it "keeps synthesized section ids distinct from explicit ids" do
+      require_relative "../../../lib/elkrb/parsers/elkt_parser"
+
+      graph = {
+        id: "root", children: [{ id: "a" }, { id: "b" }],
+        edges: [{
+          id: "e", sources: ["a"], targets: ["b"],
+          sections: [
+            { startPoint: { x: 0, y: 0 } },
+            { id: "_section1", startPoint: { x: 1, y: 1 } },
+          ]
+        }]
+      }
+
+      elkt = serializer.serialize(graph)
+      sections = Elkrb::Parsers::ElktParser.parse(elkt)
+        .dig(:edges, 0, :sections)
+
+      expect(sections.map { |section| section[:id] })
+        .to contain_exactly("_section1", "_section2")
+    end
+
+    it "rejects option keys outside the ELKT identifier grammar" do
+      graph = {
+        id: "root", layoutOptions: { "vendor-x.option" => true },
+        children: [], edges: []
+      }
+
+      expect { serializer.serialize(graph) }
+        .to raise_error(Elkrb::ValidationError, /vendor-x\.option/)
+    end
+
+    it "rejects non-finite ELKT numbers" do
+      graph = {
+        id: "root", x: -Float::INFINITY, y: 0,
+        layoutOptions: { "custom.value" => Float::NAN },
+        children: [], edges: []
+      }
+
+      expect { serializer.serialize(graph) }
+        .to raise_error(Elkrb::ValidationError, /finite/)
+    end
+
+    it "uses the local port owner when ids repeat across hierarchy levels" do
+      graph = {
+        id: "root",
+        children: [
+          { id: "outer", ports: [{ id: "p" }] },
+          {
+            id: "group",
+            children: [
+              { id: "inner", ports: [{ id: "p" }] },
+              { id: "sink" },
+            ],
+            edges: [{ id: "nested", sources: ["p"], targets: ["sink"] }],
+          },
+          { id: "outside" },
+        ],
+        edges: [{ id: "root_edge", sources: ["p"], targets: ["outside"] }],
+      }
+
+      elkt = serializer.serialize(graph)
+
+      expect(elkt).to include(
+        "edge nested: inner.p -> sink",
+        "edge root_edge: outer.p -> outside",
+      )
+      expect { Elkrb::Parsers::ElktParser.parse(elkt) }.not_to raise_error
+    end
+
+    it "falls back to a port owner in an enclosing scope" do
+      graph = {
+        id: "root",
+        children: [
+          { id: "outer", ports: [{ id: "q" }] },
+          {
+            id: "group", children: [{ id: "sink" }],
+            edges: [{ id: "nested", sources: ["q"], targets: ["sink"] }]
+          },
+        ],
+        edges: [],
+      }
+
+      elkt = serializer.serialize(graph)
+
+      expect(elkt).to include("edge nested: outer.q -> sink")
+      expect { Elkrb::Parsers::ElktParser.parse(elkt) }.not_to raise_error
+    end
+
     it "can parse its own output" do
       require_relative "../../../lib/elkrb/parsers/elkt_parser"
 
@@ -572,6 +712,26 @@ RSpec.describe Elkrb::Serializers::ElktSerializer do
       expect(parsed[:layoutOptions]["elk.algorithm"]).to eq("layered")
       expect(parsed[:children].length).to eq(2)
       expect(parsed[:edges].length).to eq(1)
+    end
+
+    it "can parse back a node that has both a position and a size" do
+      require_relative "../../../lib/elkrb/parsers/elkt_parser"
+
+      graph = {
+        id: "root",
+        layoutOptions: {},
+        children: [
+          { id: "n1", width: 30, height: 40, x: 5, y: 6 },
+        ],
+        edges: [],
+      }
+
+      elkt = serializer.serialize(graph)
+      parsed = Elkrb::Parsers::ElktParser.parse(elkt)
+
+      expect(elkt).to include("layout [ position: 5, 6  size: 30, 40 ]")
+      expect(parsed[:children].first)
+        .to include(x: 5, y: 6, width: 30, height: 40)
     end
   end
 end

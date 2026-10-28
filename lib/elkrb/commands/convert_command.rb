@@ -2,7 +2,9 @@
 
 require "json"
 require "yaml"
-require "fileutils"
+
+require_relative "../atomic_destination"
+require_relative "../best_effort_write"
 
 module Elkrb
   module Commands
@@ -17,6 +19,7 @@ module Elkrb
       def run
         # Load source file
         graph = load_any_format(@file)
+        graph = graph_from_hash(graph) if graph.is_a?(Hash)
 
         # Detect target format
         target_format = detect_format(@options[:output])
@@ -24,63 +27,28 @@ module Elkrb
         # Convert
         content = export_to_format(graph, target_format)
 
-        # Write output
+        # Write output -- this is the result. Everything after it is best-effort.
         write_output(content, @options[:output])
 
-        puts "✓ Converted #{@file} → #{@options[:output]} (#{target_format})"
+        report_success(target_format)
       end
 
       private
 
-      def load_any_format(file)
-        raise ArgumentError, "File not found: #{file}" unless File.exist?(file)
-
-        content = File.read(file)
-        ext = File.extname(file).downcase
-
-        case ext
-        when ".json"
-          require_relative "../graph/graph"
-          Elkrb::Graph::Graph.from_json(content)
-        when ".yml", ".yaml"
-          require_relative "../graph/graph"
-          Elkrb::Graph::Graph.from_yaml(content)
-        when ".elkt"
-          require_relative "../parsers/elkt_parser"
-          Elkrb::Parsers::ElktParser.parse(content)
-        when ".dot", ".gv"
-          raise ArgumentError,
-                "DOT format input not yet supported. Use JSON, YAML, or ELKT."
-        else
-          detect_and_parse(content)
+      # Best-effort: the file written above is already the result. This
+      # confirmation must not decide the exit status -- see
+      # Elkrb::BestEffortWrite.
+      def report_success(target_format)
+        BestEffortWrite.attempt do
+          puts "✓ Converted #{@file} → #{@options[:output]} (#{target_format})"
         end
       end
 
-      def detect_and_parse(content)
-        require_relative "../graph/graph"
+      def load_any_format(file)
+        raise ArgumentError, "File not found: #{file}" unless File.exist?(file)
 
-        # Try JSON first
-        begin
-          return Elkrb::Graph::Graph.from_json(content)
-        rescue JSON::ParserError
-          # Not JSON
-        end
-
-        # Try YAML
-        begin
-          return Elkrb::Graph::Graph.from_yaml(content)
-        rescue Psych::SyntaxError
-          # Not YAML
-        end
-
-        # Try ELKT
-        begin
-          require_relative "../parsers/elkt_parser"
-          Elkrb::Parsers::ElktParser.parse(content)
-        rescue StandardError
-          raise ArgumentError,
-                "Unable to parse input file. Supported formats: JSON, YAML, ELKT"
-        end
+        require_relative "../format_sniffer"
+        Elkrb::FormatSniffer.read(File.read(file), File.extname(file).downcase)
       end
 
       def detect_format(filename)
@@ -102,6 +70,11 @@ module Elkrb
         end
       end
 
+      def graph_from_hash(hash)
+        require_relative "../graph/graph"
+        Elkrb::Graph::Graph.from_hash(hash)
+      end
+
       def export_to_format(graph, format)
         case format
         when :json
@@ -120,10 +93,7 @@ module Elkrb
       end
 
       def write_output(content, filename)
-        dir = File.dirname(filename)
-        FileUtils.mkdir_p(dir)
-
-        File.write(filename, content)
+        AtomicDestination.write(filename, content)
       end
     end
   end

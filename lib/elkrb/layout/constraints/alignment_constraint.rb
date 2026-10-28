@@ -31,7 +31,17 @@ module Elkrb
       #     align_direction: "vertical"
       #   )
       #   # Both nodes will have same x coordinate
+      #
+      # Members that the average would stack on top of each other are moved
+      # apart along the other axis, in their current order.
       class AlignmentConstraint < BaseConstraint
+        # @param spacing [Numeric] minimum gap kept between group members
+        #   along the axis that is not aligned
+        def initialize(spacing: 0.0)
+          super()
+          @spacing = spacing
+        end
+
         # Apply alignment constraint
         #
         # Groups nodes by align_group and aligns them according to
@@ -102,24 +112,51 @@ module Elkrb
           end
         end
 
-        # Align nodes horizontally (same y)
+        # Align nodes horizontally (same y), then space them along x
         def align_horizontally(nodes)
-          # Use average y position
-          avg_y = nodes.filter_map(&:y).sum / nodes.length.to_f
+          placed = align_to_average(nodes, :y)
+          space_apart(placed, :x, :width)
+        end
 
-          nodes.each do |node|
-            node.y = avg_y
+        # Align nodes vertically (same x), then space them along y
+        def align_vertically(nodes)
+          placed = align_to_average(nodes, :x)
+          space_apart(placed, :y, :height)
+        end
+
+        # Moves every node that has a coordinate on +axis+ to the average of
+        # them. A node without one is left alone: it has nothing to align.
+        #
+        # @return [Array<Graph::Node>] the nodes that were aligned
+        def align_to_average(nodes, axis)
+          placed = nodes.reject { |node| node.public_send(axis).nil? }
+          return placed if placed.empty?
+
+          average = placed.sum { |node| node.public_send(axis) } /
+            placed.length.to_f
+          placed.each { |node| node.public_send(:"#{axis}=", average) }
+        end
+
+        # Pushes members apart along +axis+ so none overlaps the one before
+        # it. Order is the nodes' current order along the axis; ties keep
+        # the order they were given in.
+        def space_apart(nodes, axis, size)
+          ordered = nodes.each_with_index.sort_by do |node, index|
+            [coordinate(node, axis), index]
+          end.map(&:first)
+
+          ordered.each_cons(2) do |previous, node|
+            floor = coordinate(previous, axis) +
+              coordinate(previous, size) + @spacing
+            next unless coordinate(node, axis) < floor
+
+            node.public_send(:"#{axis}=", floor)
           end
         end
 
-        # Align nodes vertically (same x)
-        def align_vertically(nodes)
-          # Use average x position
-          avg_x = nodes.filter_map(&:x).sum / nodes.length.to_f
-
-          nodes.each do |node|
-            node.x = avg_x
-          end
+        # A coordinate or size that has not been set counts as 0.
+        def coordinate(node, attribute)
+          node.public_send(attribute) || 0.0
         end
 
         # Validate group alignment

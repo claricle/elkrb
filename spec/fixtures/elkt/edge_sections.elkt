@@ -1,0 +1,9 @@
+edge a -> b {
+  layout [
+    section ES1 [
+      end: 0, 30
+      start: 0, 0
+      bends: -20, -20 | -20, 51
+    ]
+  ]
+}

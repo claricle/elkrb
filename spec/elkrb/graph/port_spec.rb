@@ -3,15 +3,12 @@
 require "spec_helper"
 require "elkrb/graph/port"
 require "elkrb/graph/label"
-require "elkrb/graph/layout_options"
 
 RSpec.describe Elkrb::Graph::Port do
   describe "initialization" do
     it "creates a port with default attributes" do
       port = described_class.new
-      expect(port.side).to eq("UNDEFINED")
-      expect(port.index).to eq(-1)
-      expect(port.offset).to eq(0.0)
+      expect([port.side, port.index, port.offset]).to eq([nil, nil, nil])
     end
 
     it "creates a port with specified attributes" do
@@ -65,47 +62,21 @@ RSpec.describe Elkrb::Graph::Port do
     end
   end
 
-  describe "#side=" do
+  describe "#valid_side?" do
     let(:port) { described_class.new }
 
-    it "accepts valid uppercase side value" do
-      port.side = "NORTH"
-      expect(port.side).to eq("NORTH")
-    end
-
-    it "accepts valid lowercase side value and converts to uppercase" do
-      port.side = "south"
-      expect(port.side).to eq("SOUTH")
-    end
-
-    it "accepts valid mixed case side value and converts to uppercase" do
-      port.side = "EaSt"
-      expect(port.side).to eq("EAST")
-    end
-
-    it "raises ArgumentError for invalid side value" do
-      expect { port.side = "INVALID" }.to raise_error(
-        ArgumentError, /Invalid port side: INVALID/
-      )
-    end
-
-    it "accepts nil value without error" do
-      expect { port.side = nil }.not_to raise_error
-    end
-
-    it "accepts all valid side constants" do
-      described_class::SIDES.each do |side|
-        expect { port.side = side }.not_to raise_error
-        expect(port.side).to eq(side)
-      end
+    it "accepts every canonical side and rejects other values" do
+      expect(described_class::SIDES).to all(satisfy { |side| port.valid_side?(side) })
+      expect(port.valid_side?("INVALID")).to be(false)
+      expect(port.valid_side?(nil)).to be(false)
     end
   end
 
   describe "#index attribute" do
     let(:port) { described_class.new }
 
-    it "defaults to -1" do
-      expect(port.index).to eq(-1)
+    it "is unset by default" do
+      expect(port.index).to be_nil
     end
 
     it "can be set to positive value" do
@@ -127,8 +98,8 @@ RSpec.describe Elkrb::Graph::Port do
   describe "#offset attribute" do
     let(:port) { described_class.new }
 
-    it "defaults to 0.0" do
-      expect(port.offset).to eq(0.0)
+    it "is unset by default" do
+      expect(port.offset).to be_nil
     end
 
     it "can be set to positive value" do
@@ -199,6 +170,22 @@ RSpec.describe Elkrb::Graph::Port do
         expect(port.detect_side(node_width, 0))
           .to eq(described_class::UNDEFINED)
       end
+
+      [Float::NAN, Float::INFINITY, -Float::INFINITY].each do |bad|
+        it "returns UNDEFINED when node_width is #{bad}" do
+          port.x = 50.0
+          port.y = 30.0
+          expect(port.detect_side(bad, node_height))
+            .to eq(described_class::UNDEFINED)
+        end
+
+        it "returns UNDEFINED when node_height is #{bad}" do
+          port.x = 50.0
+          port.y = 30.0
+          expect(port.detect_side(node_width, bad))
+            .to eq(described_class::UNDEFINED)
+        end
+      end
     end
 
     context "with valid port and node dimensions" do
@@ -258,6 +245,28 @@ RSpec.describe Elkrb::Graph::Port do
         expect([described_class::SOUTH, described_class::EAST]).to include(side)
       end
     end
+
+    context "with a negative node dimension" do
+      # A negative width/height node has a real footprint too, but local 0
+      # is its real RIGHT/BOTTOM edge, not its left/top one.
+      it "detects EAST at local x = 0, the real right edge" do
+        port.x = 0.0
+        port.y = 50.0
+        expect(port.detect_side(-20.0, 100.0)).to eq(described_class::EAST)
+      end
+
+      it "detects WEST at local x = width, the real left edge" do
+        port.x = -20.0
+        port.y = 50.0
+        expect(port.detect_side(-20.0, 100.0)).to eq(described_class::WEST)
+      end
+
+      it "detects SOUTH at local y = 0, the real bottom edge" do
+        port.x = 50.0
+        port.y = 0.0
+        expect(port.detect_side(100.0, -60.0)).to eq(described_class::SOUTH)
+      end
+    end
   end
 
   describe "JSON serialization" do
@@ -294,6 +303,18 @@ RSpec.describe Elkrb::Graph::Port do
       expect(port.side).to eq("NORTH")
       expect(port.index).to eq(2)
       expect(port.offset).to eq(15.0)
+    end
+
+    it "preserves an assigned side through the generated setter" do
+      json = described_class.from_json('{"id":"p","side":"WEST"}').to_json
+
+      expect(JSON.parse(json)).to eq("id" => "p", "side" => "WEST")
+    end
+
+    it "omits side, index, and offset when they were not provided" do
+      json = described_class.from_json('{"id":"p"}').to_json
+
+      expect(JSON.parse(json)).to eq("id" => "p")
     end
   end
 

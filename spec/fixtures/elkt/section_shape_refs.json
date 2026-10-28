@@ -1,0 +1,1 @@
+{"id":"root","children":[{"id":"a","width":40.0,"height":40.0,"ports":[{"id":"p"},{"id":"q"}]}],"edges":[{"id":"e0","sources":["x"],"targets":["y"],"sections":[{"id":"S","incomingShape":"p","outgoingShape":"q"}]}]}

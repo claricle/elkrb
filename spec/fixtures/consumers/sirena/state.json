@@ -1,0 +1,201 @@
+{
+  "id": "state_diagram",
+  "children": [
+    {
+      "id": "start_1",
+      "width": 30,
+      "height": 30,
+      "labels": [
+        {
+          "text": "[*]",
+          "width": 21.0,
+          "height": 14.0
+        }
+      ],
+      "metadata": {
+        "state_type": "start",
+        "description": null
+      }
+    },
+    {
+      "id": "Idle",
+      "width": 100,
+      "height": 50,
+      "labels": [
+        {
+          "text": "Idle",
+          "width": 28.0,
+          "height": 14.0
+        }
+      ],
+      "metadata": {
+        "state_type": "normal",
+        "description": null
+      }
+    },
+    {
+      "id": "Connected",
+      "width": 103.0,
+      "height": 50,
+      "labels": [
+        {
+          "text": "Connected",
+          "width": 63.0,
+          "height": 14.0
+        }
+      ],
+      "metadata": {
+        "state_type": "normal",
+        "description": null
+      }
+    },
+    {
+      "id": "Active",
+      "width": 100,
+      "height": 50,
+      "labels": [
+        {
+          "text": "Active",
+          "width": 42.0,
+          "height": 14.0
+        }
+      ],
+      "metadata": {
+        "state_type": "normal",
+        "description": null
+      }
+    },
+    {
+      "id": "Suspended",
+      "width": 103.0,
+      "height": 50,
+      "labels": [
+        {
+          "text": "Suspended",
+          "width": 63.0,
+          "height": 14.0
+        }
+      ],
+      "metadata": {
+        "state_type": "normal",
+        "description": null
+      }
+    },
+    {
+      "id": "end_2",
+      "width": 30,
+      "height": 30,
+      "labels": [
+        {
+          "text": "[*]",
+          "width": 21.0,
+          "height": 14.0
+        }
+      ],
+      "metadata": {
+        "state_type": "end",
+        "description": null
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "start_1_to_Idle",
+      "sources": [
+        "start_1"
+      ],
+      "targets": [
+        "Idle"
+      ],
+      "labels": [],
+      "metadata": {
+        "trigger": null,
+        "guard_condition": null
+      }
+    },
+    {
+      "id": "Idle_to_Connected",
+      "sources": [
+        "Idle"
+      ],
+      "targets": [
+        "Connected"
+      ],
+      "labels": [
+        {
+          "text": "connect()",
+          "width": 63.0,
+          "height": 14.0
+        }
+      ],
+      "metadata": {
+        "trigger": "connect()",
+        "guard_condition": null
+      }
+    },
+    {
+      "id": "start_1_to_Active",
+      "sources": [
+        "start_1"
+      ],
+      "targets": [
+        "Active"
+      ],
+      "labels": [],
+      "metadata": {
+        "trigger": null,
+        "guard_condition": null
+      }
+    },
+    {
+      "id": "Active_to_Suspended",
+      "sources": [
+        "Active"
+      ],
+      "targets": [
+        "Suspended"
+      ],
+      "labels": [
+        {
+          "text": "suspend()",
+          "width": 63.0,
+          "height": 14.0
+        }
+      ],
+      "metadata": {
+        "trigger": "suspend()",
+        "guard_condition": null
+      }
+    },
+    {
+      "id": "Connected_to_end_2",
+      "sources": [
+        "Connected"
+      ],
+      "targets": [
+        "end_2"
+      ],
+      "labels": [
+        {
+          "text": "disconnect()",
+          "width": 84.0,
+          "height": 14.0
+        }
+      ],
+      "metadata": {
+        "trigger": "disconnect()",
+        "guard_condition": null
+      }
+    }
+  ],
+  "layoutOptions": {
+    "algorithm": "layered",
+    "elk.direction": "DOWN",
+    "elk.spacing.nodeNode": 60,
+    "elk.spacing.edgeNode": 40,
+    "elk.spacing.edgeEdge": 30,
+    "elk.layered.spacing.nodeNodeBetweenLayers": 60,
+    "elk.layered.nodePlacement.strategy": "SIMPLE",
+    "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES"
+  }
+}

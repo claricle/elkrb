@@ -10,10 +10,10 @@ RSpec.describe Elkrb::Layout::Algorithms::RectPacking do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
+          layout_options: {
             "algorithm" => "rectpacking",
             "elk.spacing.nodeNode" => 10.0,
-          ),
+          },
         )
       end
 
@@ -87,9 +87,7 @@ RSpec.describe Elkrb::Layout::Algorithms::RectPacking do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "rectpacking",
-          ),
+          layout_options: { "algorithm" => "rectpacking" },
         )
       end
 
@@ -121,9 +119,7 @@ RSpec.describe Elkrb::Layout::Algorithms::RectPacking do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "rectpacking",
-          ),
+          layout_options: { "algorithm" => "rectpacking" },
         )
       end
 
@@ -147,10 +143,10 @@ RSpec.describe Elkrb::Layout::Algorithms::RectPacking do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
+          layout_options: {
             "algorithm" => "rectpacking",
             "elk.spacing.nodeNode" => 5.0,
-          ),
+          },
         )
       end
 
@@ -181,15 +177,25 @@ RSpec.describe Elkrb::Layout::Algorithms::RectPacking do
           expect(overlap_x && overlap_y).to be false
         end
       end
+
+      it "opens more than one row for twenty equal nodes" do
+        graph.children = Array.new(20) do |index|
+          Elkrb::Graph::Node.new(
+            id: "equal#{index}", width: 100, height: 60,
+          )
+        end
+
+        algorithm.layout(graph)
+
+        expect(graph.children.map(&:y).uniq.size).to be > 1
+      end
     end
 
     context "with no nodes" do
       let(:graph) do
         Elkrb::Graph::Graph.new(
           id: "root",
-          layout_options: Elkrb::Graph::LayoutOptions.new(
-            "algorithm" => "rectpacking",
-          ),
+          layout_options: { "algorithm" => "rectpacking" },
         )
       end
 

@@ -11,13 +11,13 @@ require_relative "../lib/elkrb"
 def create_sample_graph(routing_style, curvature = 0.5)
   Elkrb::Graph::Graph.new(
     id: "root",
-    layout_options: Elkrb::Graph::LayoutOptions.new(
-      algorithm: "layered",
-      direction: "RIGHT",
-      edge_routing: routing_style,
-      spline_curvature: curvature,
-      spacing_node_node: 80.0,
-    ),
+    layout_options: {
+      "elk.algorithm" => "layered",
+      "elk.direction" => "RIGHT",
+      "elk.edgeRouting" => routing_style,
+      "elk.spline.curvature" => curvature,
+      "elk.spacing.nodeNode" => 80.0,
+    },
     children: [
       Elkrb::Graph::Node.new(
         id: "n1",
@@ -159,12 +159,12 @@ puts "-" * 70
 
 port_graph = Elkrb::Graph::Graph.new(
   id: "port_demo",
-  layout_options: Elkrb::Graph::LayoutOptions.new(
-    algorithm: "layered",
-    direction: "RIGHT",
-    edge_routing: "SPLINES",
-    spline_curvature: 0.6,
-  ),
+  layout_options: {
+    "elk.algorithm" => "layered",
+    "elk.direction" => "RIGHT",
+    "elk.edgeRouting" => "SPLINES",
+    "elk.spline.curvature" => 0.6,
+  },
   children: [
     Elkrb::Graph::Node.new(
       id: "source",
@@ -231,5 +231,5 @@ puts "  • POLYLINE:   Simple connections, space-constrained layouts"
 puts "  • SPLINES:    Presentation diagrams, organic layouts, visual appeal"
 
 puts "\n#{'=' * 70}"
-puts "Demo complete! See SPLINE_ROUTING_GUIDE.md for more information."
+puts "Demo complete! See README.adoc's Edge routing section for more information."
 puts "=" * 70

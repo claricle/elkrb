@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "logger"
+
 require_relative "elkrb/version"
 require_relative "elkrb/errors"
 
@@ -10,7 +12,9 @@ require_relative "elkrb/geometry/rectangle"
 require_relative "elkrb/geometry/vector"
 
 # Graph models
-require_relative "elkrb/graph/layout_options"
+require_relative "elkrb/graph/deep_stringify_keys"
+require_relative "elkrb/graph/normalize_option_keys"
+require_relative "elkrb/graph/read_only_mapping"
 require_relative "elkrb/graph/label"
 require_relative "elkrb/graph/port"
 require_relative "elkrb/graph/node_constraints"
@@ -20,11 +24,17 @@ require_relative "elkrb/graph/graph"
 
 # Serializers
 require_relative "elkrb/serializers/dot_serializer"
+require_relative "elkrb/serializers/elkt_serializer"
+
+# Parsers
+require_relative "elkrb/parsers/elkt_parser"
 
 # Options parsers
 require_relative "elkrb/options/elk_padding"
 require_relative "elkrb/options/k_vector"
 require_relative "elkrb/options/k_vector_chain"
+require_relative "elkrb/options/registry"
+require_relative "elkrb/options/resolver"
 
 # Layout constraints
 require_relative "elkrb/layout/constraints/base_constraint"
@@ -57,7 +67,7 @@ require_relative "elkrb/layout/algorithms/vertiflex"
 # ElkRb - Pure Ruby implementation of the Eclipse Layout Kernel
 #
 # ElkRb provides automatic graph layout algorithms for node-link diagrams.
-# It implements 12 layout algorithms from the Eclipse Layout Kernel (ELK),
+# It implements the layout algorithms from the Eclipse Layout Kernel (ELK),
 # supporting hierarchical graphs, port-based connections, and automatic
 # label placement.
 #
@@ -77,7 +87,7 @@ require_relative "elkrb/layout/algorithms/vertiflex"
 #   }
 #
 #   result = Elkrb.layout(graph)
-#   puts result[:children][0][:x]  # Node positions computed
+#   puts result.children[0].x  # Node positions computed
 #
 # @example Using model classes
 #   graph = Elkrb::Graph::Graph.new(id: "root")
@@ -94,6 +104,19 @@ require_relative "elkrb/layout/algorithms/vertiflex"
 # @see https://www.eclipse.org/elk/ Eclipse Layout Kernel
 # @see https://github.com/kieler/elkjs elkjs - JavaScript port
 module Elkrb
+  # The logger every elkrb warning goes through. Defaults to WARN on $stderr;
+  # assign your own to redirect or silence it.
+  #
+  # @return [Logger]
+  def self.logger
+    @logger ||= Logger.new($stderr, level: Logger::WARN)
+  end
+
+  # @param logger [Logger] replaces the default logger
+  def self.logger=(logger)
+    @logger = logger
+  end
+
   # Register basic layout algorithms
   Layout::AlgorithmRegistry.register(
     "random",
@@ -237,7 +260,9 @@ module Elkrb
     Layout::Algorithms::Libavoid,
     {
       name: "Libavoid",
-      description: "Orthogonal connector routing with obstacle avoidance",
+      description: "Orthogonal connector routing with bounded A* obstacle " \
+                   "avoidance (falls back to a direct connector if no path " \
+                   "is found within the search limit)",
       category: "routing",
       supports_hierarchy: false,
     },
@@ -248,8 +273,8 @@ module Elkrb
     Layout::Algorithms::VertiFlex,
     {
       name: "VertiFlex",
-      description: "Vertical flexible layout with column-based arrangement",
-      category: "layered",
+      description: "Column-grid arrangement that ignores edges",
+      category: "packing",
       supports_hierarchy: false,
       experimental: true,
     },
@@ -261,11 +286,27 @@ module Elkrb
   # a Graph model object and applies the chosen layout algorithm to compute
   # node positions and edge routes.
   #
+  # A Graph argument is mutated in place and returned, so the caller's object
+  # carries the computed positions. A Hash argument is converted to a fresh
+  # Graph and left untouched.
+  #
   # @param graph [Hash, Graph::Graph] The graph to layout
+  # Options are read in one order: the graph's own layoutOptions, then its
+  # properties, then these call-level options, then the registry default. A
+  # graph that pins an algorithm keeps it, whatever :algorithm says here.
+  #
   # @param options [Hash] Layout options including:
-  #   - :algorithm (String) - Algorithm name (default: "layered")
+  #   - :algorithm (String) - Algorithm name, used when the graph pins none
+  #     (default: "layered")
+  #   - :strict (Boolean) - Raise instead of warn when the graph carries an
+  #     option elkrb does not know or does not fully honour, or the call
+  #     passes a registered option that is not fully honoured (default: false)
   #   - Algorithm-specific options (e.g., "elk.spacing.nodeNode")
   # @return [Graph::Graph] The input graph with computed positions
+  # @raise [ArgumentError] If graph is neither a Hash nor a Graph::Graph
+  # @raise [Elkrb::AlgorithmNotFoundError] If the algorithm is not registered
+  # @raise [Elkrb::ValidationError] If an option value has the wrong type
+  # @raise [Elkrb::Error] In strict mode, for an unknown or unhonoured option
   #
   # @example With hash input
   #   result = Elkrb.layout({
@@ -357,7 +398,7 @@ module Elkrb
 
   # Returns metadata for all available layout algorithms.
   #
-  # This includes the 12 built-in algorithms plus any custom algorithms
+  # This includes the built-in algorithms plus any custom algorithms
   # registered via {register_algorithm}.
   #
   # @return [Array<Hash>] Array of algorithm metadata with keys:
@@ -366,6 +407,7 @@ module Elkrb
   #   - :description (String) - Brief description
   #   - :category (String) - Algorithm category
   #   - :supports_hierarchy (Boolean) - Whether it supports nested graphs
+  #   - :supported_options (Array<String>) - Canonical option ids scoped to this algorithm
   #
   # @example List all algorithms
   #   Elkrb.known_layout_algorithms.each do |alg|
@@ -376,29 +418,22 @@ module Elkrb
   #   force_algorithms = Elkrb.known_layout_algorithms
   #     .select { |alg| alg[:category] == "force" }
   def self.known_layout_algorithms
-    Layout::AlgorithmRegistry.all.map do |name, data|
-      {
-        id: name,
-        name: data[:metadata][:name] || name.capitalize,
-        description: data[:metadata][:description] || "",
-        category: data[:metadata][:category] || "general",
-        supports_hierarchy: data[:metadata][:supports_hierarchy] || false,
-      }
-    end
+    Layout::AlgorithmRegistry.all_algorithm_info
   end
 
-  # Returns metadata for all supported layout options.
+  # Returns metadata for all supported layout options, sourced from
+  # Elkrb::Options::Registry (the single source of truth every algorithm
+  # and the CLI eventually read from).
   #
-  # This includes common options like algorithm selection, spacing,
-  # direction, and padding, as well as algorithm-specific options.
-  #
-  # @return [Hash{String => Hash}] Hash mapping option names to metadata.
+  # @return [Hash{String => Hash}] Hash mapping canonical option ids to metadata.
   #   Each metadata hash contains:
-  #   - :type (String) - Option value type
+  #   - :type (Symbol) - Option value type (:string, :float, :integer,
+  #     :boolean, :enum, :padding, :kvector, :kvector_chain)
   #   - :description (String) - Brief description
   #   - :default - Default value
   #   - :values (Array, nil) - Allowed values for enum types
   #   - :parser (String, nil) - Parser class for complex types
+  #   - :status (Symbol) - :honoured, :partial, :accepted, or :unsupported
   #
   # @example Query options
   #   options = Elkrb.known_layout_options
@@ -407,45 +442,9 @@ module Elkrb
   #
   # @example Get allowed values
   #   directions = Elkrb.known_layout_options["elk.direction"][:values]
-  #   # => ["UP", "DOWN", "LEFT", "RIGHT"]
+  #   # => ["UNDEFINED", "RIGHT", "LEFT", "DOWN", "UP"]
   def self.known_layout_options
-    {
-      "algorithm" => {
-        type: "string",
-        description: "The layout algorithm to use",
-        default: "layered",
-        values: Layout::AlgorithmRegistry.all.keys,
-      },
-      "elk.direction" => {
-        type: "string",
-        description: "Overall direction of layout",
-        default: "RIGHT",
-        values: %w[UP DOWN LEFT RIGHT],
-      },
-      "elk.spacing.nodeNode" => {
-        type: "float",
-        description: "Spacing between nodes",
-        default: 20.0,
-      },
-      "elk.padding" => {
-        type: "ElkPadding",
-        description: "Padding around the graph",
-        default: "[left=12, top=12, right=12, bottom=12]",
-        parser: "Elkrb::Options::ElkPadding",
-      },
-      "position" => {
-        type: "KVector",
-        description: "Fixed position for nodes (when using fixed algorithm)",
-        default: nil,
-        parser: "Elkrb::Options::KVector",
-      },
-      "bendPoints" => {
-        type: "KVectorChain",
-        description: "Bend points for edges",
-        default: nil,
-        parser: "Elkrb::Options::KVectorChain",
-      },
-    }
+    Options::Registry.render_known_options(algorithm_values: Layout::AlgorithmRegistry.available_algorithms)
   end
 
   # Returns metadata for layout option categories.

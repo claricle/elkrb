@@ -1,0 +1,20 @@
+C4Container
+    title Nested boundaries container diagram
+
+    Person(customer, "Customer", "Online shopper")
+
+    Enterprise_Boundary(acme, "Acme Corp") {
+        System_Boundary(shop, "Shop System") {
+            Container(webapp, "Web Application", "React", "Serves the UI")
+            Container(api, "API Gateway", "Node.js", "Routes requests")
+        }
+
+        System_Boundary(billing, "Billing System") {
+            Container(ledger, "Ledger Service", "Java", "Records charges")
+            ContainerDb(billdb, "Billing Database", "PostgreSQL", "Stores invoices")
+        }
+    }
+
+    Rel(customer, webapp, "Uses", "HTTPS")
+    Rel(api, ledger, "Charges via", "REST/JSON")
+    Rel(ledger, billdb, "Reads/Writes", "SQL")

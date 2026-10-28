@@ -5,6 +5,7 @@ require_relative "../hierarchical_processor"
 require_relative "../label_placer"
 require_relative "../port_constraint_processor"
 require_relative "../constraints/constraint_processor"
+require_relative "../../options/resolver"
 
 module Elkrb
   module Layout
@@ -20,45 +21,57 @@ module Elkrb
         include LabelPlacer
         include PortConstraintProcessor
 
-        attr_reader :options
+        attr_reader :options, :resolver
 
         def initialize(options = {})
           @options = options
+          @resolver = Options::Resolver.new(options)
         end
 
-        # Main layout method - automatically handles hierarchical graphs and labels
+        # Default a node's unset x/y to 0.0, matching Java ELK's treatment
+        # of an unset position. Shared by algorithms (currently SporeOverlap
+        # and SporeCompaction) that read node.x/node.y arithmetically before
+        # any other pass has had a chance to assign them. A class method
+        # because it depends only on its argument, never on an instance's
+        # state (reek: UtilityFunction fires on the instance-method form).
+        #
+        # @param nodes [Array<Elkrb::Graph::Node>] The nodes to normalize
+        def self.normalize_nil_positions(nodes)
+          nodes.each do |node|
+            node.x ||= 0.0
+            node.y ||= 0.0
+          end
+        end
+
+        # Main layout method - handles hierarchical graphs and labels.
         #
         # Subclasses should implement #layout_flat for their specific
-        # algorithm logic. This method will automatically handle hierarchical
-        # graphs by calling layout_hierarchical when needed, and place labels
-        # after layout is complete.
+        # algorithm logic. This method sizes compound children bottom-up, then
+        # lays out this level and places its labels.
         #
         # @param graph [Elkrb::Graph::Graph] The graph to layout
         # @return [Elkrb::Graph::Graph] The graph with updated positions
         def layout(graph)
-          # Apply port constraints before layout
+          @graph = graph
+
+          # Compound sizes must be known before their own ports or the parent
+          # level are laid out. Each child algorithm recursively sizes deeper
+          # compounds before returning.
+          size_compound_children(graph) if graph.hierarchical?
+
           apply_port_constraints(graph)
+          processor = apply_pre_layout_constraints(graph)
 
-          # Apply pre-layout constraints (marks nodes)
-          apply_pre_layout_constraints(graph)
-
-          # Perform layout
-          if option("hierarchical", false) || graph.hierarchical?
-            layout_hierarchical(graph, @options)
-          else
-            layout_flat(graph, @options)
-          end
-
-          # Enforce post-layout constraints (adjust positions)
-          enforce_post_layout_constraints(graph)
-
-          # Apply edge routing
+          # Only nil (children key absent from deserialized
+          # input) skips dispatch — an explicit empty array still reaches
+          # layout_flat, preserving its documented NotImplementedError
+          # contract for subclasses that don't override it.
+          layout_flat(graph, @options) if graph.children
+          enforce_post_layout_constraints(graph, processor)
           apply_edge_routing(graph)
-
-          # Place labels after layout (unless disabled)
-          unless option("label.placement.disabled", false)
-            place_labels(graph)
-          end
+          route_cross_level_edges(graph)
+          place_labels(graph) unless
+            option("label.placement.disabled", default: false)
 
           graph
         end
@@ -78,35 +91,33 @@ module Elkrb
 
         protected
 
-        # Get an option value with a default fallback
+        # Get an option value, resolved against the graph being laid out and
+        # then the call-level options (see Options::Resolver for the rule).
         #
-        # @param key [String, Symbol] The option key
-        # @param default [Object] The default value if option is not set
+        # @param key [String, Symbol] The option id, alias, or custom key
+        # @param default [Object] Returned when nothing names the option;
+        #   :registry means the registry default, nil means nil
         # @return [Object] The option value or default
-        def option(key, default = nil)
-          key_str = key.to_s
-          @options[key_str] || @options[key.to_sym] || default
+        def option(key, default: :registry)
+          @resolver.get(key, @graph, default: default)
+        end
+
+        def rng
+          @rng ||= ::Random.new(option("elk.randomSeed").to_i)
         end
 
         # Get spacing between nodes
         #
         # @return [Float] The node spacing value
         def node_spacing
-          option("spacing_node_node", 20.0).to_f
+          option("elk.spacing.nodeNode").to_f
         end
 
         # Get padding values
         #
         # @return [Hash] Padding values for top, bottom, left, right
         def padding
-          default_padding = { top: 12, bottom: 12, left: 12, right: 12 }
-          padding_opt = option("padding", default_padding)
-
-          if padding_opt.is_a?(Hash)
-            default_padding.merge(padding_opt)
-          else
-            default_padding
-          end
+          option("elk.padding").to_h
         end
 
         # Calculate the bounding box for a set of nodes
@@ -116,10 +127,10 @@ module Elkrb
         def calculate_bounding_box(nodes)
           return Elkrb::Geometry::Rectangle.new(0, 0, 0, 0) if nodes.empty?
 
-          min_x = nodes.map(&:x).min
-          min_y = nodes.map(&:y).min
-          max_x = nodes.map { |n| n.x + n.width }.max
-          max_y = nodes.map { |n| n.y + n.height }.max
+          min_x = nodes.map { |n| n.x || 0.0 }.min
+          min_y = nodes.map { |n| n.y || 0.0 }.min
+          max_x = nodes.map { |n| (n.x || 0.0) + (n.width || 0.0) }.max
+          max_y = nodes.map { |n| (n.y || 0.0) + (n.height || 0.0) }.max
 
           Elkrb::Geometry::Rectangle.new(
             min_x,
@@ -153,34 +164,28 @@ module Elkrb
         #
         # @param graph [Elkrb::Graph::Graph] The graph
         def apply_edge_routing(graph)
-          routing_style = get_edge_routing_style(graph)
-          route_edges(graph, nil, routing_style)
+          route_edges(graph)
         end
 
-        # Get edge routing style from graph options
-        #
-        # @param graph [Elkrb::Graph::Graph] The graph
-        # @return [String] Routing style (ORTHOGONAL, POLYLINE, SPLINES)
-        def get_edge_routing_style(graph)
-          return "ORTHOGONAL" unless graph.layout_options
-
-          style = graph.layout_options["elk.edgeRouting"] ||
-            graph.layout_options["edgeRouting"] ||
-            graph.layout_options.edge_routing ||
-            option("elk.edgeRouting") ||
-            option("edgeRouting")
-
-          style ? style.to_s.upcase : "ORTHOGONAL"
-        end
+        # Defined in EdgeRouter. Released as a protected method here, so
+        # subclasses override it and call super.
+        protected :get_edge_routing_style
 
         # Apply pre-layout constraints
         #
-        # These constraints mark nodes for special algorithm handling.
-        #
         # @param graph [Elkrb::Graph::Graph] The graph
+        # @return [Constraints::ConstraintProcessor] the processor holding the
+        #   state #enforce_post_layout_constraints needs
         def apply_pre_layout_constraints(graph)
-          processor = Constraints::ConstraintProcessor.new
+          # Only read the spacing option when a constraint needs it, so a
+          # graph without constraints never resolves an option it did not
+          # resolve before.
+          constrained = graph.children&.any?(&:constraints)
+          processor = Constraints::ConstraintProcessor.new(
+            spacing: constrained ? node_spacing : 0.0,
+          )
           processor.apply_pre_layout(graph)
+          processor
         end
 
         # Enforce post-layout constraints
@@ -188,18 +193,13 @@ module Elkrb
         # These constraints adjust positions after layout algorithm runs.
         #
         # @param graph [Elkrb::Graph::Graph] The graph
-        def enforce_post_layout_constraints(graph)
-          processor = Constraints::ConstraintProcessor.new
+        # @param processor [Constraints::ConstraintProcessor] the processor
+        #   returned by #apply_pre_layout_constraints
+        def enforce_post_layout_constraints(graph, processor)
           processor.enforce_post_layout(graph)
 
-          # Validate all constraints
-          errors = processor.validate_all(graph)
-
-          return if errors.empty?
-
-          # Log warnings for constraint violations
-          errors.each do |error|
-            warn "Layout constraint violation: #{error}"
+          processor.validate_all(graph).each do |error|
+            Elkrb.logger.warn("Layout constraint violation: #{error}")
           end
         end
       end

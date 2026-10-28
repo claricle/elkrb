@@ -268,5 +268,5 @@ puts
 
 puts "=" * 70
 puts "All examples completed successfully!"
-puts "See docs/LAYOUT_CONSTRAINTS_GUIDE.md for detailed documentation"
+puts "See README.adoc's Node section for the constraints attribute"
 puts "=" * 70

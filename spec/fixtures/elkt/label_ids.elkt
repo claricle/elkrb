@@ -1,0 +1,4 @@
+node n {
+  label L1: "with"
+  label "without"
+}

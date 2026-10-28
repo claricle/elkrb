@@ -5,11 +5,51 @@ permissions:
 
 on:
   push:
-    branches: [ master, main ]
-    tags: [ v* ]
+    branches: [master, main, v2]
+    tags: [v*]
   pull_request:
   workflow_dispatch:
 
 jobs:
   rake:
-    uses: metanorma/ci/.github/workflows/generic-rake.yml@main
+    name: Test on Ruby ${{ matrix.ruby }} ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.ruby == '4.0' }}
+    concurrency:
+      group: >-
+        ${{ github.workflow }}-${{ matrix.os }}-${{ matrix.ruby }}-${{
+        github.head_ref || github.ref_name }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        ruby: ["3.3", "3.4", "4.0"]
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: ruby/setup-ruby@e81a8fa391b11a595c1b7ed84177cc0fe02faf83 # v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          rubygems: latest
+          bundler: default
+          bundler-cache: false
+      - run: bundle install --jobs 4 --retry 3
+      - run: bundle exec rake
+
+  tests-passed:
+    name: tests-passed
+    if: always()
+    needs: rake
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require the supported matrix
+        env:
+          MATRIX_RESULT: ${{ needs.rake.result }}
+        run: test "$MATRIX_RESULT" = success

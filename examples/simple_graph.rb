@@ -8,8 +8,13 @@ require "elkrb"
 # This demonstrates the basic usage of ElkRb with a simple node graph
 
 # Create a graph with 4 nodes connected in sequence
-graph = Elkrb::Graph.new(
+graph = {
   id: "root",
+  layoutOptions: {
+    "elk.algorithm" => "layered",
+    "elk.direction" => "DOWN",
+    "elk.spacing.nodeNode" => 50,
+  },
   children: [
     { id: "n1", width: 100, height: 50 },
     { id: "n2", width: 100, height: 50 },
@@ -21,18 +26,10 @@ graph = Elkrb::Graph.new(
     { id: "e2", sources: ["n2"], targets: ["n3"] },
     { id: "e3", sources: ["n3"], targets: ["n4"] },
   ],
-)
-
-# Configure layout options
-graph.layout_options = {
-  "algorithm" => "layered",
-  "elk.direction" => "DOWN",
-  "spacing.nodeNode" => 50,
 }
 
 # Perform layout
-engine = Elkrb::Layout::LayoutEngine.new
-result = engine.layout(graph)
+result = Elkrb.layout(graph)
 
 # Display results
 puts "Graph layout completed!"

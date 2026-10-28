@@ -10,17 +10,21 @@ module Elkrb
       attribute :y, :float
       attribute :width, :float
       attribute :height, :float
+      attribute :labels, Label, collection: true
+      attribute :ports, Port, collection: true
       attribute :children, Node, collection: true
       attribute :edges, Edge, collection: true
-      attribute :layout_options, LayoutOptions
+      attribute :layout_options, :hash
       attribute :properties, :hash
 
-      json do
+      key_value do
         map "id", to: :id
         map "x", to: :x
         map "y", to: :y
         map "width", to: :width
         map "height", to: :height
+        map "labels", to: :labels
+        map "ports", to: :ports
         map "children", to: :children
         map "edges", to: :edges
         map "layoutOptions", to: :layout_options
@@ -33,6 +37,8 @@ module Elkrb
         map "y", to: :y
         map "width", to: :width
         map "height", to: :height
+        map "labels", to: :labels
+        map "ports", to: :ports
         map "children", to: :children
         map "edges", to: :edges
         map "layout_options", to: :layout_options
@@ -46,10 +52,28 @@ module Elkrb
         @y ||= 0.0
         @width ||= 0.0
         @height ||= 0.0
-        @children ||= []
-        @edges ||= []
+        set_collection_defaults
         @properties ||= {}
-        @layout_options ||= LayoutOptions.new
+        @layout_options ||= {}
+      end
+
+      def set_collection_defaults
+        @labels = [] if @labels.nil?
+        @ports = [] if @ports.nil?
+        @children = [] if @children.nil?
+        @edges = [] if @edges.nil?
+      end
+      private :set_collection_defaults
+
+      # Normalizes a Symbol key however the options arrive — a constructor,
+      # a plain setter, or lutaml's own deserialization, which routes through
+      # here too. This is the single normalization point: a :hash-typed
+      # attribute otherwise stores a raw, unnormalized Hash.
+      def layout_options=(value)
+        value_set_for(:layout_options)
+        attr = self.class.attributes(lutaml_register)[:layout_options]
+        cast = attr.cast_value(DeepStringifyKeys.call(value), lutaml_register)
+        instance_variable_set(:@layout_options, NormalizeOptionKeys.call(cast))
       end
 
       def find_node(node_id)
@@ -69,21 +93,25 @@ module Elkrb
       end
 
       def all_edges
-        edges = @edges.dup
-        @children.each do |child|
-          edges.concat(child.edges) if child.respond_to?(:edges)
-          next unless child.respond_to?(:children)
-
-          child.children.each do |grandchild|
-            edges.concat(grandchild.all_edges) if
-              grandchild.respond_to?(:all_edges)
-          end
+        edges = (@edges || []).dup
+        (@children || []).each do |child|
+          edges.concat(descendant_edges(child))
         end
         edges
       end
 
       def hierarchical?
-        @children.any?(&:hierarchical?)
+        (@children || []).any?(&:hierarchical?)
+      end
+
+      private
+
+      def descendant_edges(node)
+        edges = (node.edges || []).dup
+        (node.children || []).each do |child|
+          edges.concat(descendant_edges(child))
+        end
+        edges
       end
     end
   end

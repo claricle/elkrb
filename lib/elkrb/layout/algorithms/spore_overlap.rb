@@ -1,28 +1,43 @@
 # frozen_string_literal: true
 
+require_relative "../spore/placement"
+require_relative "../spore/edge_cost"
+require_relative "../spore/overlap_sweep"
+require_relative "../spore/triangulation"
+require_relative "../spore/spanning_tree"
+
 module Elkrb
   module Layout
     module Algorithms
-      # SPOrE Overlap Removal algorithm
+      # SPOrE overlap removal ("Node Overlap Removal by Growing a Tree").
       #
-      # Removes node overlaps while preserving the overall structure
-      # of the layout by applying constrained positioning.
+      # Each pass sweeps for overlapping pairs, joins the node centres by a
+      # minimum spanning tree over the overlap edges plus a Delaunay
+      # triangulation, then walks the tree from the most central node and
+      # stretches every tree edge just far enough that the two rectangles
+      # stop overlapping. Passes repeat until a pass stretches nothing or
+      # the cap is reached.
+      #
+      # Ties between equally cheap tree edges are broken by discovery order,
+      # where Java ELK breaks them by hash-set order.
       class SporeOverlap < BaseAlgorithm
+        include Spore::Placement
+
         def layout_flat(graph, _options = {})
           return graph if graph.children.empty?
 
-          # Iteratively remove overlaps
-          max_iterations = graph.layout_options&.[]("spore.maxIterations") || 50
-          min_spacing = graph.layout_options&.[]("spore.nodeSpacing") || 10.0
+          self.class.normalize_nil_positions(graph.children)
 
-          max_iterations.times do
-            overlaps = find_overlaps(graph.children, min_spacing)
-            break if overlaps.empty?
+          max_iterations = resolver.get("spore.maxIterations", graph)
+          spacing = resolver.get("spore.nodeSpacing", graph,
+                                 default: DEFAULT_SPACING)
 
-            resolve_overlaps(overlaps, min_spacing)
-          end
+          bodies = build_bodies(graph.children, spacing)
+          root = most_central(bodies, graph)
+          remove_overlaps(bodies, root, max_iterations)
+          warn_if_overlaps_remain(bodies, max_iterations)
 
-          # Apply padding
+          bodies.each { |body| place(body) }
           apply_padding(graph)
 
           graph
@@ -30,86 +45,65 @@ module Elkrb
 
         private
 
-        def find_overlaps(nodes, min_spacing)
-          overlaps = []
+        def remove_overlaps(bodies, root, max_iterations)
+          max_iterations.times do
+            pairs = Spore::OverlapSweep.pairs(bodies)
+            break if pairs.empty?
 
-          nodes.each_with_index do |node1, i|
-            nodes[(i + 1)..].each do |node2|
-              if overlapping?(node1, node2, min_spacing)
-                overlaps << [node1, node2]
-              end
-            end
+            tree = Spore::SpanningTree.build(
+              tree_edges(bodies, pairs), root
+            ) { |first, second| Spore::EdgeCost.inverted_overlap(first, second) }
+            grown = grow(tree)
+            bodies.each(&:rebase)
+            break unless grown
           end
-
-          overlaps
         end
 
-        def overlapping?(node1, node2, min_spacing)
-          # Calculate bounding boxes with spacing
-          left1 = node1.x - (min_spacing / 2.0)
-          right1 = node1.x + node1.width + (min_spacing / 2.0)
-          top1 = node1.y - (min_spacing / 2.0)
-          bottom1 = node1.y + node1.height + (min_spacing / 2.0)
-
-          left2 = node2.x - (min_spacing / 2.0)
-          right2 = node2.x + node2.width + (min_spacing / 2.0)
-          top2 = node2.y - (min_spacing / 2.0)
-          bottom2 = node2.y + node2.height + (min_spacing / 2.0)
-
-          # Check for overlap
-          !(right1 <= left2 || left1 >= right2 || bottom1 <= top2 || top1 >= bottom2)
+        def tree_edges(bodies, pairs)
+          by_origin = bodies.to_h { |body| [body.origin, body] }
+          triangulated = Spore::Triangulation.triangulate(by_origin.keys)
+            .map { |u, v| [by_origin[u], by_origin[v]] }
+          (pairs + triangulated).uniq { |edge| edge.map(&:object_id).sort }
         end
 
-        def resolve_overlaps(overlaps, min_spacing)
-          overlaps.each do |node1, node2|
-            # Calculate overlap amounts
-            center1_x = node1.x + (node1.width / 2.0)
-            center1_y = node1.y + (node1.height / 2.0)
-            center2_x = node2.x + (node2.width / 2.0)
-            center2_y = node2.y + (node2.height / 2.0)
-
-            dx = center2_x - center1_x
-            dy = center2_y - center1_y
-
-            # Calculate minimum required distance
-            min_dist_x = ((node1.width + node2.width) / 2.0) + min_spacing
-            min_dist_y = ((node1.height + node2.height) / 2.0) + min_spacing
-
-            # Determine movement direction
-            if dx.abs > dy.abs
-              # Move horizontally
-              if dx.positive?
-                # node2 is to the right
-                overlap = min_dist_x - dx
-                if overlap.positive?
-                  node2.x += overlap / 2.0
-                  node1.x -= overlap / 2.0
-                end
-              else
-                # node2 is to the left
-                overlap = min_dist_x + dx
-                if overlap.positive?
-                  node2.x -= overlap / 2.0
-                  node1.x += overlap / 2.0
-                end
-              end
-            elsif dy.positive?
-              # Move vertically
-              overlap = min_dist_y - dy
-              if overlap.positive?
-                node2.y += overlap / 2.0
-                node1.y -= overlap / 2.0
-              end
-            # node2 is below
-            else
-              # node2 is above
-              overlap = min_dist_y + dy
-              if overlap.positive?
-                node2.y -= overlap / 2.0
-                node1.y += overlap / 2.0
-              end
+        # Walks the tree from the root, moving each child to where its
+        # parent's move put it and then stretching the edge to the parent.
+        # @return [Boolean] whether any edge needed stretching
+        def grow(tree)
+          stretched = false
+          pending = [tree]
+          until pending.empty?
+            parent = pending.pop
+            parent.children.each do |child|
+              stretched |= stretch(parent.body, child.body) > 1.0
             end
+            pending.concat(parent.children.reverse)
           end
+          stretched
+        end
+
+        # @return [Float] the factor the edge was stretched by
+        def stretch(parent, child)
+          child.translate(parent.center_x - parent.origin_x,
+                          parent.center_y - parent.origin_y)
+          factor = Spore::Geometry.overlap(parent, child)
+          child.center_at(
+            parent.center_x + ((child.origin_x - parent.origin_x) * factor),
+            parent.center_y + ((child.origin_y - parent.origin_y) * factor),
+          )
+          factor
+        end
+
+        def warn_if_overlaps_remain(bodies, max_iterations)
+          # Sides that only touch can still sweep as overlapping through
+          # rounding, so the warning counts real intersections only.
+          remaining = Spore::OverlapSweep.pairs(bodies).select do |pair|
+            Spore::Geometry.intersect?(*pair)
+          end
+          return if remaining.empty?
+
+          warn "SporeOverlap: max_iterations (#{max_iterations}) exhausted " \
+               "with #{remaining.size} overlap(s) still remaining"
         end
       end
     end

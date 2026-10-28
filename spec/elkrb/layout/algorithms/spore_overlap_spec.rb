@@ -128,6 +128,113 @@ RSpec.describe Elkrb::Layout::Algorithms::SporeOverlap do
         # Should complete without infinite loop
         expect { algorithm.layout(graph) }.not_to raise_error
       end
+
+      it "warns when the cap is exhausted with overlaps still remaining" do
+        graph = Elkrb::Graph::Graph.new
+        graph.layout_options = { "spore.maxIterations" => 1 }
+
+        # 20 nodes stacked at the same point: one pairwise half-push pass
+        # cannot separate them all, so the cap is exhausted with overlaps
+        # left -- this must not fail silently.
+        nodes = Array.new(20) do |i|
+          Elkrb::Graph::Node.new(id: "n#{i}", x: 0, y: 0, width: 50, height: 30)
+        end
+
+        graph.children = nodes
+        graph.edges = []
+
+        expect { algorithm.layout(graph) }.to output(
+          /SporeOverlap.*max_iterations \(1\) exhausted.*overlap/i,
+        ).to_stderr
+      end
+
+      # Keep this test even though a whole-file revert can't distinguish it
+      # from doing nothing: it is the sole detector for the guard's other
+      # direction (warning when nothing needs it), paired with the "warns
+      # when the cap is exhausted" example above for the direction that does.
+      it "does not warn when overlaps are fully resolved before the cap" do
+        graph = Elkrb::Graph::Graph.new
+
+        node1 = Elkrb::Graph::Node.new(id: "n1", x: 0, y: 0, width: 50,
+                                       height: 30)
+        node2 = Elkrb::Graph::Node.new(id: "n2", x: 25, y: 0, width: 50,
+                                       height: 30)
+
+        graph.children = [node1, node2]
+        graph.edges = []
+
+        expect { algorithm.layout(graph) }.not_to output.to_stderr
+      end
+    end
+
+    context "with the node box grown by spacing" do
+      it "stretches the line between the centres until the boxes touch" do
+        a, b = spore_pair({ id: "b", x: 10, y: 10, width: 30, height: 30 })
+          .children
+
+        expect([b.x - a.x, b.y - a.y]).to eq([38.0, 38.0])
+      end
+
+      it "carries a child along with its parent before stretching it" do
+        row = Array.new(3) do |i|
+          { id: "n#{i}", x: i * 25, y: 0, width: 30, height: 30 }
+        end
+        result = Elkrb.layout({ id: "root", children: row },
+                              algorithm: "spore_overlap")
+
+        expect(result.children.each_cons(2).map { |a, b| b.x - a.x })
+          .to eq([38.0, 38.0])
+      end
+
+      it "keeps the direction between the centres" do
+        a, b = spore_pair({ id: "b", x: 20, y: 5, width: 30, height: 30 })
+          .children
+
+        expect((b.y - a.y) / (b.x - a.x)).to be_within(1e-9).of(5.0 / 20.0)
+      end
+    end
+
+    context "with generated inputs" do
+      let(:seeds) { 0...40 }
+
+      it "leaves no two nodes closer than the spacing, without warning" do
+        seeds.each do |seed|
+          result = nil
+          expect do
+            result = Elkrb.layout(spore_scatter(seed),
+                                  algorithm: "spore_overlap")
+          end
+            .not_to output.to_stderr
+
+          result.children.combination(2).each do |first, second|
+            expect(box_gap(first, second)).to(
+              be >= 8.0 - 1e-3,
+              "seed #{seed}: #{first.id} and #{second.id} overlap",
+            )
+          end
+        end
+      end
+    end
+
+    context "with nil positions" do
+      it "does not crash on nil x/y and lays out with finite coordinates" do
+        result = Elkrb.layout(
+          {
+            id: "root",
+            children: [
+              { id: "n1", width: 100, height: 60 },
+              { id: "n2", width: 100, height: 60 },
+            ],
+          },
+          algorithm: "spore_overlap",
+        )
+
+        expect(result.children.size).to eq(2)
+        result.children.each do |node|
+          expect(node.x).to be_finite
+          expect(node.y).to be_finite
+        end
+      end
     end
 
     context "with non-overlapping nodes" do

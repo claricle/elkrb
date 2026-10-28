@@ -7,15 +7,12 @@ module Elkrb
     module Algorithms
       # VertiFlex layout algorithm
       #
-      # A vertical flexible layout algorithm that arranges nodes in vertical
-      # columns with optimized spacing. Ideal for timeline-style layouts,
-      # Kanban boards, and vertical flowcharts.
+      # Approximates a column-grid layout: it distributes nodes into a fixed
+      # number of vertical columns (round-robin or sequential) and stacks
+      # each column top to bottom, sizing each column to its widest node.
       #
-      # The algorithm distributes nodes into vertical columns and positions
-      # them with flexible column widths based on the widest node in each
-      # column.
-      #
-      # This is an experimental algorithm matching the Java ELK implementation.
+      # It never reads the graph's edges -- node positions are identical
+      # whether edges are present or not.
       class VertiFlex < BaseAlgorithm
         def initialize(options = {})
           super
@@ -38,34 +35,18 @@ module Elkrb
           end
 
           nodes = graph.children
-          layout_opts = graph.layout_options || {}
 
           # Get layout options
-          column_count = get_option(layout_opts, "vertiflex.columnCount",
-                                    3).to_i
-          column_count = 1 if column_count < 1
-
-          column_spacing = get_option(
-            layout_opts,
-            "vertiflex.columnSpacing",
-            50.0,
-          ).to_f
-
-          vertical_spacing = get_option(
-            layout_opts,
-            "vertiflex.verticalSpacing",
-            30.0,
-          ).to_f
+          column_count = [resolver.get("vertiflex.columnCount", graph), 1].max
+          column_spacing = resolver.get("vertiflex.columnSpacing", graph)
+          vertical_spacing = resolver.get("vertiflex.verticalSpacing", graph)
 
           # Override with elk.spacing.nodeNode if present
-          node_node_spacing = get_option(layout_opts, "elk.spacing.nodeNode")
-          vertical_spacing = node_node_spacing.to_f if node_node_spacing
+          node_node_spacing = resolver.get("elk.spacing.nodeNode", graph,
+                                           default: nil)
+          vertical_spacing = node_node_spacing if node_node_spacing
 
-          balance_columns = get_option(
-            layout_opts,
-            "vertiflex.balanceColumns",
-            true,
-          )
+          balance_columns = resolver.get("vertiflex.balanceColumns", graph)
 
           # Distribute nodes into columns
           columns = distribute_nodes(nodes, column_count, balance_columns)
@@ -79,22 +60,6 @@ module Elkrb
         end
 
         private
-
-        # Get option value from layout options or default
-        #
-        # @param layout_opts [Hash, LayoutOptions] The layout options
-        # @param key [String] The option key
-        # @param default [Object] The default value
-        # @return [Object] The option value or default
-        def get_option(layout_opts, key, default = nil)
-          return default unless layout_opts
-
-          value = if layout_opts.respond_to?(:[])
-                    layout_opts[key]
-                  end
-
-          value.nil? ? default : value
-        end
 
         # Distribute nodes into columns
         #

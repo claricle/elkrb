@@ -1,0 +1,27 @@
+{
+  "options": {},
+  "graph": {
+    "id": "root",
+    "layoutOptions": {
+      "elk.algorithm": "box"
+    },
+    "children": [
+      {
+        "id": "a",
+        "width": 60,
+        "height": 30
+      },
+      {
+        "id": "b",
+        "width": 30,
+        "height": 30
+      },
+      {
+        "id": "c",
+        "width": 20,
+        "height": 20
+      }
+    ],
+    "edges": []
+  }
+}

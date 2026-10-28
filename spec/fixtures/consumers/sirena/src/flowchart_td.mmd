@@ -1,0 +1,5 @@
+graph TD
+    Start([Start]) --> Process[Process Data]
+    Process --> Decision{Valid?}
+    Decision -->|Yes| Success[Success]
+    Decision -->|No| Failure[Report Failure]

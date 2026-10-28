@@ -32,14 +32,6 @@ module Elkrb
           []
         end
 
-        # Check if constraint applies to this node
-        #
-        # @param node [Graph::Node] The node to check
-        # @return [Boolean] True if constraint applies
-        def applies_to?(node)
-          node.constraints.present?
-        end
-
         protected
 
         # Find node by ID in graph
@@ -50,21 +42,17 @@ module Elkrb
         def find_node(graph, node_id)
           return nil unless graph.children
 
-          graph.children.each do |node|
-            found = node.find_node(node_id)
-            return found if found
-          end
-          nil
+          graph.children.find { |node| node.id == node_id }
         end
 
-        # Get all nodes from graph (including nested)
+        # Get all nodes at this hierarchy level.
         #
         # @param graph [Graph::Graph] The graph
         # @return [Array<Graph::Node>] All nodes
         def all_nodes(graph)
           return [] unless graph.children
 
-          graph.children.flat_map(&:all_nodes)
+          graph.children
         end
       end
     end

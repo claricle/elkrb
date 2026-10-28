@@ -1,0 +1,3 @@
+node n1 { label "One" }
+node n2
+edge n1 -> n2

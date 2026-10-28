@@ -1,6 +1,7 @@
 *.gem
 *.rbc
 /.config
+/.mutant/
 /coverage/
 /InstalledFiles
 /pkg/
@@ -58,6 +59,14 @@ Gemfile.lock
 .DS_Store
 .vscode/
 .idea/
+.claude/
 *.swp
 *.tmp
 *.log
+
+/spec/cross_validation/validation_report.json
+# Sibling lock file taken by GoldenFixtures.with_directory_lock (Rakefile)
+# around `rake golden:generate`'s publish step only -- `rake golden:check`
+# never calls `publish_into`/`with_directory_lock` at all, and this file is
+# never a fixture itself.
+/spec/fixtures/golden.lock

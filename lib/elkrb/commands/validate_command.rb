@@ -3,6 +3,9 @@
 require "json"
 require "yaml"
 
+require_relative "../errors"
+require_relative "../best_effort_write"
+
 module Elkrb
   module Commands
     # Command for validating ELK graph structure
@@ -19,68 +22,74 @@ module Elkrb
         errors = validate_graph(graph)
 
         if errors.empty?
-          puts "✅ #{@file} is valid"
+          marker = stream_marker($stdout, "✅", "[OK]")
+          puts "#{marker} #{@file} is valid"
         else
-          puts "❌ #{@file} has #{errors.length} error(s):"
-          errors.each { |e| puts "  • #{e}" }
-          exit 1
+          summary = "#{@file} has #{errors.length} error(s)"
+          marker = stream_marker($stderr, "❌", "[ERROR]")
+          bullet = stream_marker($stderr, "•", "-")
+          BestEffortWrite.attempt do
+            $stderr.puts "#{marker} #{summary}:" # rubocop:disable Style/StderrPuts
+            errors.each do |error|
+              $stderr.puts "  #{bullet} #{error}" # rubocop:disable Style/StderrPuts
+            end
+          end
+          raise Elkrb::CommandFailed, summary
         end
       end
 
       private
 
+      def stream_marker(stream, unicode, ascii)
+        encoding = stream.external_encoding
+        return unicode unless encoding
+
+        unicode.encode(encoding)
+        unicode
+      rescue EncodingError
+        ascii
+      end
+
       def load_any_format(file)
         raise ArgumentError, "File not found: #{file}" unless File.exist?(file)
 
-        require_relative "../graph/graph"
         content = File.read(file)
-        ext = File.extname(file).downcase
 
-        graph = case ext
-                when ".json"
-                  Elkrb::Graph::Graph.from_json(content)
-                when ".yml", ".yaml"
-                  Elkrb::Graph::Graph.from_yaml(content)
-                when ".elkt"
-                  require_relative "../parsers/elkt_parser"
-                  Elkrb::Parsers::ElktParser.parse(content)
-                else
-                  detect_and_parse(content)
-                end
-
-        # Convert to hash for validation
-        if graph.is_a?(Hash)
-          graph
-        else
-          JSON.parse(graph.to_json,
-                     symbolize_names: true)
+        case File.extname(file).downcase
+        when ".json" then parse_json(content)
+        when ".yml", ".yaml" then YAML.safe_load(content)
+        when ".elkt" then parse_elkt(content)
+        else sniff_format(content)
         end
       end
 
-      def detect_and_parse(content)
-        require_relative "../graph/graph"
+      def parse_json(content)
+        JSON.parse(content, symbolize_names: true)
+      end
 
-        # Try JSON first
-        begin
-          return Elkrb::Graph::Graph.from_json(content)
-        rescue JSON::ParserError
-          # Not JSON
+      def parse_elkt(content)
+        require_relative "../parsers/elkt_parser"
+        Elkrb::Parsers::ElktParser.parse(content)
+      end
+
+      def sniff_format(content)
+        stripped = content.lstrip
+
+        if stripped.start_with?("{", "[")
+          begin
+            return parse_json(content)
+          rescue JSON::ParserError
+            nil
+          end
         end
 
-        # Try YAML
-        begin
-          return Elkrb::Graph::Graph.from_yaml(content)
-        rescue Psych::SyntaxError
-          # Not YAML
-        end
+        yaml = YAML.safe_load(content)
+        return yaml if yaml.is_a?(Hash) || yaml.is_a?(Array)
 
-        # Try ELKT
-        begin
-          require_relative "../parsers/elkt_parser"
-          Elkrb::Parsers::ElktParser.parse(content)
-        rescue StandardError
-          raise ArgumentError, "Unable to parse input file"
-        end
+        parse_elkt(content)
+      rescue Psych::SyntaxError, Elkrb::ParseError
+        raise ArgumentError,
+              "Unable to parse input file. Supported formats: JSON, YAML, ELKT"
       end
 
       def validate_graph(graph)
@@ -93,24 +102,25 @@ module Elkrb
         # Check required fields
         errors << "Graph missing 'id' field" unless graph[:id] || graph["id"]
 
-        # Validate children (nodes)
-        children = graph[:children] || graph["children"] || []
+        errors.concat(validate_container(graph))
+
+        errors
+      end
+
+      def validate_container(container, path = nil)
+        errors = []
+        children = collection(container, :children, path, errors)
+        edges = collection(container, :edges, path, errors)
+        endpoint_ids = descendant_endpoint_ids(children)
+
+        errors.concat(duplicate_id_errors(children, edges))
         children.each_with_index do |node, idx|
-          errors.concat(validate_node(node, "children[#{idx}]"))
+          errors.concat(validate_node(node, child_path(path, idx)))
         end
-
-        # Validate edges
-        edges = graph[:edges] || graph["edges"] || []
         edges.each_with_index do |edge, idx|
-          errors.concat(validate_edge(edge, "edges[#{idx}]",
-                                      collect_node_ids(graph)))
+          errors.concat(validate_edge(edge, edge_path(path, idx), endpoint_ids))
         end
-
-        # Strict mode: additional checks
-        if @options[:strict]
-          errors.concat(validate_strict(graph))
-        end
-
+        errors.concat(validate_strict(container, path)) if @options[:strict]
         errors
       end
 
@@ -132,31 +142,26 @@ module Elkrb
           errors << "#{path}: Node '#{node_id}' missing 'width'" unless width
           errors << "#{path}: Node '#{node_id}' missing 'height'" unless height
 
-          if width && (!width.is_a?(Numeric) || width <= 0)
+          if width && !positive_finite_number?(width)
             errors << "#{path}: Node '#{node_id}' has invalid width: #{width}"
           end
 
-          if height && (!height.is_a?(Numeric) || height <= 0)
+          if height && !positive_finite_number?(height)
             errors << "#{path}: Node '#{node_id}' has invalid height: #{height}"
           end
         end
 
-        # Validate nested children
-        children = node[:children] || node["children"] || []
-        children.each_with_index do |child, idx|
-          errors.concat(validate_node(child, "#{path}.children[#{idx}]"))
-        end
-
         # Validate ports
-        ports = node[:ports] || node["ports"] || []
+        ports = collection(node, :ports, path, errors)
         ports.each_with_index do |port, idx|
           errors.concat(validate_port(port, "#{path}.ports[#{idx}]"))
         end
 
+        errors.concat(validate_container(node, path))
         errors
       end
 
-      def validate_edge(edge, path, valid_node_ids)
+      def validate_edge(edge, path, valid_ids)
         errors = []
 
         errors << "#{path}: Edge must be a Hash" unless edge.is_a?(Hash)
@@ -180,17 +185,17 @@ module Elkrb
           errors << "#{path}: Edge '#{edge_id}' targets must be an array"
         end
 
-        # Check that sources and targets reference valid nodes (in strict mode)
-        if @options[:strict] && sources.is_a?(Array) && targets.is_a?(Array)
-          sources.each do |source|
-            unless valid_node_ids.include?(source)
-              errors << "#{path}: Edge '#{edge_id}' references unknown source node '#{source}'"
-            end
-          end
+        { source: sources, target: targets }.each do |role, endpoints|
+          next unless endpoints.is_a?(Array)
 
-          targets.each do |target|
-            unless valid_node_ids.include?(target)
-              errors << "#{path}: Edge '#{edge_id}' references unknown target node '#{target}'"
+          endpoints.each do |endpoint|
+            matches = valid_ids.fetch(endpoint, 0)
+            if matches.zero?
+              errors << "#{path}: Edge '#{edge_id}' references unknown " \
+                        "#{role} node or port '#{endpoint}'"
+            elsif matches > 1
+              errors << "#{path}: Edge '#{edge_id}' references ambiguous " \
+                        "#{role} node or port '#{endpoint}'"
             end
           end
         end
@@ -211,30 +216,80 @@ module Elkrb
         errors
       end
 
-      def validate_strict(graph)
+      def validate_strict(graph, path)
         errors = []
 
         # Check for layout options
-        layout_options = graph[:layoutOptions] || graph["layoutOptions"]
-        if layout_options && !layout_options.is_a?(Hash)
-          errors << "layoutOptions must be a Hash"
+        layout_options = value(graph, :layoutOptions)
+        if !layout_options.nil? && !layout_options.is_a?(Hash)
+          prefix = path ? "#{path}." : ""
+          errors << "#{prefix}layoutOptions must be a Hash"
         end
 
         errors
       end
 
-      def collect_node_ids(graph, ids = [])
-        children = graph[:children] || graph["children"] || []
+      def collection(container, key, path, errors)
+        items = value(container, key)
+        return [] if items.nil?
+        return items if items.is_a?(Array)
 
+        prefix = path ? "#{path}." : ""
+        errors << "#{prefix}#{key} must be an Array"
+        []
+      end
+
+      def value(hash, key)
+        return hash[key] if hash.key?(key)
+
+        hash[key.to_s]
+      end
+
+      def child_path(path, index)
+        [path, "children[#{index}]"].compact.join(".")
+      end
+
+      def edge_path(path, index)
+        [path, "edges[#{index}]"].compact.join(".")
+      end
+
+      def positive_finite_number?(number)
+        number.is_a?(Numeric) && number.finite? && number.positive?
+      end
+
+      def descendant_endpoint_ids(children, ids = Hash.new(0))
         children.each do |node|
-          node_id = node[:id] || node["id"]
-          ids << node_id if node_id
+          next unless node.is_a?(Hash)
 
-          # Recursively collect from nested children
-          collect_node_ids(node, ids)
+          ids[value(node, :id)] += 1 if value(node, :id)
+          Array(value(node, :ports)).each do |port|
+            id = value(port, :id) if port.is_a?(Hash)
+            ids[id] += 1 if id
+          end
+          descendant_endpoint_ids(Array(value(node, :children)), ids)
         end
-
         ids
+      end
+
+      def duplicate_id_errors(children, edges)
+        ids = Set.new
+        errors = []
+        children.each do |node|
+          next unless node.is_a?(Hash)
+
+          record_id(value(node, :id), ids, errors)
+          Array(value(node, :ports)).each do |port|
+            record_id(value(port, :id), ids, errors) if port.is_a?(Hash)
+          end
+        end
+        edges.each do |edge|
+          record_id(value(edge, :id), ids, errors) if edge.is_a?(Hash)
+        end
+        errors
+      end
+
+      def record_id(id, ids, errors)
+        errors << "duplicate id: #{id}" if id && !ids.add?(id)
       end
     end
   end

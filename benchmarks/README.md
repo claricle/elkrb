@@ -24,7 +24,7 @@ benchmarks/
 
 ### Prerequisites
 
-* Ruby 3.0+ with ElkRb installed
+* Ruby 3.3+ with ElkRb installed
 * Node.js 14+ (optional, for elkjs comparison)
 * elkjs npm package (optional, install with `npm install elkjs`)
 
@@ -115,15 +115,16 @@ The benchmarks collect:
 * `radial` - Radial/circular layout
 * `rectpacking` - Rectangle packing
 * `disco` - Disconnected graph handling
+* `sporeOverlap` - Overlap removal
+* `sporeCompaction` - Whitespace compaction
 * `topdownpacking` - Top-down packing
 * `libavoid` - Orthogonal routing (libavoid-inspired)
 * `vertiflex` - Vertical flex layout
 
-Note: `sporeOverlap` and `sporeCompaction` are not yet implemented in ElkRb.
-
 ## Performance Report
 
-The generated performance report (`docs/PERFORMANCE.adoc`) includes:
+The generated performance report (`docs/PERFORMANCE.adoc`, created along with
+`docs/` if absent) includes:
 
 * Benchmark environment details
 * Methodology description

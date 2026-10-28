@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "../best_effort_write"
+
 module Elkrb
   module Commands
     # Command for rendering DOT files to images using Graphviz
@@ -28,7 +30,10 @@ module Elkrb
         graphviz.render(@dot_file, @options[:output], format, engine: engine,
                                                               dpi: dpi)
 
-        puts "✓ Rendered #{@dot_file} → #{@options[:output]}"
+        # Best-effort: the image above is already the result. This
+        # confirmation must not decide the exit status -- see
+        # Elkrb::BestEffortWrite.
+        BestEffortWrite.attempt { puts "✓ Rendered #{@dot_file} → #{@options[:output]}" }
       end
 
       private

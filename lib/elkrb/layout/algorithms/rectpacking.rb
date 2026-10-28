@@ -20,7 +20,6 @@ module Elkrb
             return graph
           end
 
-          # Pack rectangles using shelf algorithm
           pack_rectangles(graph.children)
 
           apply_padding(graph)
@@ -33,48 +32,31 @@ module Elkrb
         def pack_rectangles(nodes)
           return if nodes.empty?
 
-          spacing = node_spacing
+          spacing = option("elk.spacing.nodeNode", default: 15.0).to_f
+          budget = packing_width(nodes, spacing)
+          shelf = new_shelf(0.0)
 
-          # Sort nodes by height (tallest first) for better packing
-          sorted_nodes = nodes.sort_by { |n| -n.height }
-
-          # Initialize first shelf
-          shelves = []
-          current_shelf = {
-            y: 0.0,
-            height: 0.0,
-            width: 0.0,
-            nodes: [],
-          }
-
-          sorted_nodes.each do |node|
-            # Try to fit on current shelf
-            unless can_fit_on_shelf?(node, current_shelf, spacing)
-              # Start a new shelf
-              shelves << current_shelf unless current_shelf[:nodes].empty?
-
-              current_shelf = {
-                y: shelves.empty? ? 0.0 : shelves.last[:y] + shelves.last[:height] + spacing,
-                height: node.height,
-                width: 0.0,
-                nodes: [],
-              }
-
+          nodes.each do |node|
+            if shelf[:width].positive? &&
+                (shelf[:width] + (node.width || 0.0)) > budget
+              shelf = new_shelf(
+                shelf[:y] + shelf[:height] + spacing,
+              )
             end
-            place_on_shelf(node, current_shelf, spacing)
+            place_on_shelf(node, shelf, spacing)
           end
-
-          # Add the last shelf
-          shelves << current_shelf unless current_shelf[:nodes].empty?
         end
 
-        def can_fit_on_shelf?(node, shelf, _spacing)
-          # First node always fits
-          return true if shelf[:nodes].empty?
+        def packing_width(nodes, spacing)
+          area = nodes.sum do |node|
+            ((node.width || 0.0) + (2 * spacing)) *
+              ((node.height || 0.0) + (2 * spacing))
+          end
+          Math.sqrt(area * option("elk.aspectRatio").to_f)
+        end
 
-          # Check if adding this node would make the shelf too tall
-          # (we want relatively uniform shelf heights)
-          shelf[:height] >= node.height * 0.8
+        def new_shelf(y_position)
+          { y: y_position, height: 0.0, width: 0.0 }
         end
 
         def place_on_shelf(node, shelf, spacing)
@@ -83,9 +65,15 @@ module Elkrb
           node.y = shelf[:y]
 
           # Update shelf dimensions
-          shelf[:nodes] << node
-          shelf[:width] += node.width + spacing
-          shelf[:height] = [shelf[:height], node.height].max
+          shelf[:width] += (node.width || 0.0) + spacing
+          shelf[:height] = [shelf[:height], node.height || 0.0].max
+        end
+
+        def padding
+          option(
+            "elk.padding",
+            default: { left: 15.0, top: 15.0, right: 15.0, bottom: 15.0 },
+          ).to_h
         end
       end
     end

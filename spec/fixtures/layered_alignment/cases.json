@@ -1,0 +1,555 @@
+[
+  {
+    "name": "fuzz 33 LEFT",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered",
+        "elk.direction": "LEFT"
+      },
+      "children": [
+        {
+          "id": "n0",
+          "width": 30,
+          "height": 50
+        },
+        {
+          "id": "n1",
+          "width": 40,
+          "height": 40
+        },
+        {
+          "id": "n2",
+          "width": 50,
+          "height": 40
+        }
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "sources": [
+            "n0"
+          ],
+          "targets": [
+            "n2"
+          ]
+        },
+        {
+          "id": "e2",
+          "sources": [
+            "n0"
+          ],
+          "targets": [
+            "n1"
+          ]
+        }
+      ]
+    },
+    "positions": {
+      "n0": [
+        82,
+        15.333333333333332
+      ],
+      "n1": [
+        22,
+        72
+      ],
+      "n2": [
+        12,
+        12
+      ]
+    }
+  },
+  {
+    "name": "fuzz 66 DOWN",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered",
+        "elk.direction": "DOWN"
+      },
+      "children": [
+        {
+          "id": "n0",
+          "width": 50,
+          "height": 50
+        },
+        {
+          "id": "n1",
+          "width": 50,
+          "height": 30
+        },
+        {
+          "id": "n2",
+          "width": 30,
+          "height": 40
+        },
+        {
+          "id": "n3",
+          "width": 30,
+          "height": 40
+        },
+        {
+          "id": "n4",
+          "width": 50,
+          "height": 50
+        },
+        {
+          "id": "n5",
+          "width": 40,
+          "height": 40
+        }
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "sources": [
+            "n0"
+          ],
+          "targets": [
+            "n3"
+          ]
+        },
+        {
+          "id": "e1",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n2"
+          ]
+        },
+        {
+          "id": "e2",
+          "sources": [
+            "n2"
+          ],
+          "targets": [
+            "n5"
+          ]
+        },
+        {
+          "id": "e3",
+          "sources": [
+            "n3"
+          ],
+          "targets": [
+            "n5"
+          ]
+        },
+        {
+          "id": "e4",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n5"
+          ]
+        },
+        {
+          "id": "e8",
+          "sources": [
+            "n0"
+          ],
+          "targets": [
+            "n4"
+          ]
+        }
+      ]
+    },
+    "positions": {
+      "n0": [
+        122,
+        12
+      ],
+      "n1": [
+        12,
+        32
+      ],
+      "n2": [
+        30.333333333333343,
+        87
+      ],
+      "n3": [
+        80.33333333333334,
+        87
+      ],
+      "n4": [
+        130.33333333333334,
+        82
+      ],
+      "n5": [
+        25.333333333333343,
+        152
+      ]
+    }
+  },
+  {
+    "name": "fuzz 111 UP",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered",
+        "elk.direction": "UP"
+      },
+      "children": [
+        {
+          "id": "n0",
+          "width": 50,
+          "height": 30
+        },
+        {
+          "id": "n1",
+          "width": 30,
+          "height": 50
+        },
+        {
+          "id": "n2",
+          "width": 40,
+          "height": 30
+        },
+        {
+          "id": "n3",
+          "width": 30,
+          "height": 30
+        },
+        {
+          "id": "n4",
+          "width": 30,
+          "height": 30
+        }
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "sources": [
+            "n2"
+          ],
+          "targets": [
+            "n3"
+          ]
+        },
+        {
+          "id": "e1",
+          "sources": [
+            "n0"
+          ],
+          "targets": [
+            "n1"
+          ]
+        },
+        {
+          "id": "e2",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n4"
+          ]
+        },
+        {
+          "id": "e5",
+          "sources": [
+            "n3"
+          ],
+          "targets": [
+            "n4"
+          ]
+        }
+      ]
+    },
+    "positions": {
+      "n0": [
+        72,
+        132
+      ],
+      "n1": [
+        82,
+        62
+      ],
+      "n2": [
+        12,
+        132
+      ],
+      "n3": [
+        17,
+        72
+      ],
+      "n4": [
+        22,
+        12
+      ]
+    }
+  },
+  {
+    "name": "fuzz 160 RIGHT",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered",
+        "elk.direction": "RIGHT"
+      },
+      "children": [
+        {
+          "id": "n0",
+          "width": 40,
+          "height": 30
+        },
+        {
+          "id": "n1",
+          "width": 30,
+          "height": 40
+        },
+        {
+          "id": "n2",
+          "width": 40,
+          "height": 30
+        }
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "sources": [
+            "n0"
+          ],
+          "targets": [
+            "n2"
+          ]
+        },
+        {
+          "id": "e1",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n2"
+          ]
+        }
+      ]
+    },
+    "positions": {
+      "n0": [
+        12,
+        72
+      ],
+      "n1": [
+        22,
+        12
+      ],
+      "n2": [
+        72,
+        22
+      ]
+    }
+  },
+  {
+    "name": "fuzz 174 DOWN",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered",
+        "elk.direction": "DOWN"
+      },
+      "children": [
+        {
+          "id": "n0",
+          "width": 40,
+          "height": 30
+        },
+        {
+          "id": "n1",
+          "width": 50,
+          "height": 40
+        },
+        {
+          "id": "n2",
+          "width": 50,
+          "height": 40
+        },
+        {
+          "id": "n3",
+          "width": 50,
+          "height": 50
+        }
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "sources": [
+            "n0"
+          ],
+          "targets": [
+            "n2"
+          ]
+        },
+        {
+          "id": "e1",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n2"
+          ]
+        },
+        {
+          "id": "e2",
+          "sources": [
+            "n2"
+          ],
+          "targets": [
+            "n3"
+          ]
+        },
+        {
+          "id": "e3",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n3"
+          ]
+        }
+      ]
+    },
+    "positions": {
+      "n0": [
+        82,
+        22
+      ],
+      "n1": [
+        12,
+        12
+      ],
+      "n2": [
+        68.66666666666666,
+        72
+      ],
+      "n3": [
+        12,
+        132
+      ]
+    }
+  },
+  {
+    "name": "fuzz 181 LEFT",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered",
+        "elk.direction": "LEFT"
+      },
+      "children": [
+        {
+          "id": "n0",
+          "width": 50,
+          "height": 30
+        },
+        {
+          "id": "n1",
+          "width": 50,
+          "height": 30
+        },
+        {
+          "id": "n2",
+          "width": 40,
+          "height": 30
+        }
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "sources": [
+            "n0"
+          ],
+          "targets": [
+            "n1"
+          ]
+        },
+        {
+          "id": "e3",
+          "sources": [
+            "n0"
+          ],
+          "targets": [
+            "n2"
+          ]
+        }
+      ]
+    },
+    "positions": {
+      "n0": [
+        82,
+        17
+      ],
+      "n1": [
+        12,
+        12
+      ],
+      "n2": [
+        22,
+        62
+      ]
+    }
+  },
+  {
+    "name": "fuzz 196 RIGHT",
+    "graph": {
+      "id": "root",
+      "layoutOptions": {
+        "elk.algorithm": "layered",
+        "elk.direction": "RIGHT"
+      },
+      "children": [
+        {
+          "id": "n0",
+          "width": 40,
+          "height": 40
+        },
+        {
+          "id": "n1",
+          "width": 50,
+          "height": 40
+        },
+        {
+          "id": "n2",
+          "width": 30,
+          "height": 50
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "sources": [
+            "n0"
+          ],
+          "targets": [
+            "n2"
+          ]
+        },
+        {
+          "id": "e2",
+          "sources": [
+            "n1"
+          ],
+          "targets": [
+            "n2"
+          ]
+        }
+      ]
+    },
+    "positions": {
+      "n0": [
+        22,
+        72
+      ],
+      "n1": [
+        12,
+        12
+      ],
+      "n2": [
+        82,
+        15.333333333333332
+      ]
+    }
+  }
+]

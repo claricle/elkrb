@@ -17,53 +17,30 @@ module Elkrb
       #   database.constraints = NodeConstraints.new(layer: 2)   # Bottom
       #   # Enforces tier structure
       class LayerConstraint < BaseConstraint
-        # Apply layer constraint
-        #
-        # Marks nodes with layer assignment that layered algorithm
-        # must respect.
+        # Nothing to do before layout: the layered algorithm reads
+        # `constraints.layer` itself when it assigns layers.
         #
         # @param graph [Graph::Graph] The graph
-        # @return [Graph::Graph] The modified graph
+        # @return [Graph::Graph] The graph, unchanged
         def apply(graph)
-          all_nodes(graph).each do |node|
-            next unless node.constraints&.layer
-
-            # Mark node with its required layer
-            node.properties ||= {}
-            node.properties["_constraint_layer"] = node.constraints.layer
-          end
-
           graph
         end
 
         # Validate layer constraints
         #
-        # Checks that nodes assigned to layers are in correct layers.
-        # Note: This validation only applies if the layered algorithm
-        # was used and layer information is available.
+        # A layer index below 0 names no layer, so the layered algorithm
+        # places such a node in layer 0.
         #
         # @param graph [Graph::Graph] The graph to validate
         # @return [Array<String>] List of validation errors
         def validate(graph)
-          errors = []
+          all_nodes(graph).filter_map do |node|
+            layer = node.constraints&.layer
+            next unless layer&.negative?
 
-          # Check if layer information is available
-          # (only present if layered algorithm was used)
-          all_nodes(graph).each do |node|
-            next unless node.constraints&.layer
-            next unless node.properties&.[]("_assigned_layer")
-
-            expected_layer = node.constraints.layer
-            actual_layer = node.properties["_assigned_layer"]
-
-            if expected_layer != actual_layer
-              errors << "Node '#{node.id}' constrained to layer " \
-                        "#{expected_layer} but assigned to layer " \
-                        "#{actual_layer}"
-            end
+            "Node '#{node.id}' constrained to layer #{layer}, " \
+              "which does not exist; layers start at 0"
           end
-
-          errors
         end
       end
     end

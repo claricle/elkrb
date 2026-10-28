@@ -1,0 +1,9 @@
+node n1 {
+  layout [
+    position: -10, 12
+    size: 30, 40
+  ]
+}
+node n2 {
+  layout [ size: 3, 3  position: 1, 1 ]
+}
