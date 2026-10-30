@@ -499,7 +499,12 @@ module Elkrb
           placer.index = index
           placer.port_order = @port_order
           placer.orthogonal = get_edge_routing_style(graph) == "ORTHOGONAL"
+          placer.alignment_of = method(:node_alignment)
           placer.place_nodes
+        end
+
+        def node_alignment(node)
+          resolver.get("elk.alignment", node)
         end
 
         def validate_edges(index)

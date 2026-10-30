@@ -45,6 +45,9 @@ RSpec.describe "option plumbing" do
       at: :root,
       value: ->(name) { name == "radial" ? "box" : "radial" },
     },
+    "elk.alignment" => {
+      at: :node, value: "RIGHT", variant: :narrow_first
+    },
     "elk.aspectRatio" => {
       at: :root, value: ->(name) { name == "layered" ? 0.1 : 10.0 }
     },
