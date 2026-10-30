@@ -60,6 +60,14 @@ module OptionPlumbing
         node["y"] = i * 5
       end
     end,
+    # The first node (the one a `node` place writes to) becomes the narrow
+    # node c, sharing a layer with the wider b: its alignment has room to act.
+    narrow_first: lambda do |nodes|
+      first = nodes.first
+      third = nodes[2]
+      first["id"], third["id"] = third["id"], first["id"]
+      first["width"], third["width"] = third["width"], first["width"]
+    end,
     # Four nodes far apart in both directions, so compaction has room to move.
     spread: lambda do |nodes|
       nodes.zip(SPREAD_AT) do |node, (x, y)|

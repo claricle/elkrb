@@ -18,7 +18,24 @@ module Elkrb
           # Gap between a long edge and a node, or another long edge, beside it.
           EDGE_SPACING = 10.0
 
+          # Where `elk.alignment` puts a node across its layer, as the share
+          # of the free room before it, in the unmirrored layout. Named by
+          # the side of the picture: LEFT and RIGHT mean the start and end of
+          # a RIGHT layer, TOP and BOTTOM those of a DOWN layer. A side across
+          # the layers, and AUTOMATIC, leave the node to its ports.
+          ALIGNMENT_RATIOS = {
+            "CENTER" => 0.5,
+            "LEFT" => 0.0, "RIGHT" => 1.0,
+            "TOP" => 0.0, "BOTTOM" => 1.0
+          }.freeze
+          LAYER_SIDES = {
+            horizontal: %w[LEFT RIGHT CENTER],
+            vertical: %w[TOP BOTTOM CENTER],
+          }.freeze
+
           attr_writer :index, :port_order, :orthogonal
+          # @return [#call] the `elk.alignment` of a node, given the node
+          attr_writer :alignment_of
 
           # @param layer_spacing [Numeric] gap between consecutive layers
           # @param node_spacing [Numeric] gap between nodes in one layer
@@ -96,6 +113,26 @@ module Elkrb
           end
 
           def alignment_ratio(node)
+            explicit_ratio(node) || port_ratio(node)
+          end
+
+          def explicit_ratio(node)
+            alignment = @alignment_of&.call(node).to_s
+            return unless layer_sides.include?(alignment)
+
+            ratio = ALIGNMENT_RATIOS.fetch(alignment)
+            mirrored? ? 1.0 - ratio : ratio
+          end
+
+          def layer_sides
+            LAYER_SIDES.fetch(horizontal? ? :horizontal : :vertical)
+          end
+
+          def mirrored?
+            %w[LEFT UP].include?(@direction)
+          end
+
+          def port_ratio(node)
             outgoing = port_order.visual(node.id, :east).size
             incoming = port_order.visual(node.id, :west).size
             total = outgoing + incoming
@@ -216,7 +253,7 @@ module Elkrb
           end
 
           def mirror_layers(layer_positions, layer_extents)
-            return unless %w[LEFT UP].include?(@direction)
+            return unless mirrored?
 
             bound = layer_positions.zip(layer_extents)
               .map { |position, extent| position + extent }.max

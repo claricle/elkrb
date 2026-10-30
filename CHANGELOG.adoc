@@ -2,6 +2,13 @@
 
 All notable changes to Elkrb are recorded here.
 
+== Unreleased
+
+* The layered algorithm honours `elk.alignment` on a node: LEFT or RIGHT in a
+  horizontal layout, TOP or BOTTOM in a vertical one, and CENTER, place the
+  node at that side of its layer instead of centring it. The default,
+  AUTOMATIC, is unchanged.
+
 == 2.0.0 (2026-10-10)
 
 === Breaking changes
